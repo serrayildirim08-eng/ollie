@@ -13,6 +13,8 @@ import { WorkModule } from '../modules/work/WorkModule';
 import { BodyModule } from '../modules/body/BodyModule';
 import { GoalsModule } from '../modules/goals/GoalsModule';
 import { AdminModule } from '../modules/admin/AdminModule';
+import { DumpModule } from '../modules/dump/DumpModule';
+import { AstrologyModule } from '../modules/astrology/AstrologyModule';
 
 // ─── types ────────────────────────────────────────────────────────────────────
 
@@ -143,6 +145,26 @@ export function ModuleScreen({
     return (
       <>
         <AdminModule onBack={() => onNavigate('dashboard')} />
+        <BrainDumpInput onSubmit={onBrainDump} />
+      </>
+    );
+  }
+
+  // Dump: full-screen takeover — paper/ink layout, no sky video
+  if (moduleId === 'dump') {
+    return (
+      <>
+        <DumpModule onBack={() => onNavigate('dashboard')} />
+        <BrainDumpInput onSubmit={onBrainDump} />
+      </>
+    );
+  }
+
+  // Astrology: full-screen takeover — dark editorial, owns its own layout
+  if (moduleId === 'astrology') {
+    return (
+      <>
+        <AstrologyModule onBack={() => onNavigate('dashboard')} />
         <BrainDumpInput onSubmit={onBrainDump} />
       </>
     );

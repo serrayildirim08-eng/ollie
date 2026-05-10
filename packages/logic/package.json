@@ -16,7 +16,9 @@
     "./work": "./src/work/index.ts",
     "./body": "./src/body/index.ts",
     "./goals": "./src/goals/index.ts",
-    "./admin": "./src/admin/index.ts"
+    "./admin": "./src/admin/index.ts",
+    "./journal": "./src/journal/index.ts",
+    "./astrology": "./src/astrology/index.ts"
   },
   "scripts": {
     "test": "vitest run",
