@@ -17,3 +17,5 @@ export * as ritual from './ritual';
 export * as patterns from './patterns';
 export * as prompts from './prompts';
 export * as consumption from './consumption';
+export * as finance from './finance';
+export * as pets from './pets';
