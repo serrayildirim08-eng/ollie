@@ -25,3 +25,5 @@ export * as grocery from './grocery';
 export * as sleep from './sleep';
 export * as predict from './predict';
 export * as body from './body';
+export * as goals from './goals';
+export * as habits from './habits';
