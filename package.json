@@ -1,0 +1,19 @@
+{
+  "name": "ollie",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Life operating system for ADHD brains. Monorepo.",
+  "scripts": {
+    "dev": "pnpm --filter @ollie/web dev",
+    "build": "pnpm --filter @ollie/web build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0"
+  },
+  "packageManager": "pnpm@11.0.9",
+  "engines": {
+    "node": ">=20"
+  }
+}
