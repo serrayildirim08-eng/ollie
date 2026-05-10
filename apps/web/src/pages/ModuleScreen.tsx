@@ -11,6 +11,8 @@ import { HabitsModule } from '../modules/habits/HabitsModule';
 import { SleepModule } from '../modules/sleep/SleepModule';
 import { WorkModule } from '../modules/work/WorkModule';
 import { BodyModule } from '../modules/body/BodyModule';
+import { GoalsModule } from '../modules/goals/GoalsModule';
+import { AdminModule } from '../modules/admin/AdminModule';
 
 // ─── types ────────────────────────────────────────────────────────────────────
 
@@ -131,6 +133,26 @@ export function ModuleScreen({
     return (
       <>
         <BodyModule onBack={() => onNavigate('dashboard')} />
+        <BrainDumpInput onSubmit={onBrainDump} />
+      </>
+    );
+  }
+
+  // Admin: full-screen takeover — paper/ink layout, no sky video
+  if (moduleId === 'admin') {
+    return (
+      <>
+        <AdminModule onBack={() => onNavigate('dashboard')} />
+        <BrainDumpInput onSubmit={onBrainDump} />
+      </>
+    );
+  }
+
+  // Goals: full-screen takeover — paper/ink layout, no sky video
+  if (moduleId === 'goals') {
+    return (
+      <>
+        <GoalsModule onBack={() => onNavigate('dashboard')} />
         <BrainDumpInput onSubmit={onBrainDump} />
       </>
     );
