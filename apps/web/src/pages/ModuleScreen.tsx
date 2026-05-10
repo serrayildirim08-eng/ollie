@@ -9,6 +9,8 @@ import { GroceryModule } from '../modules/grocery/GroceryModule';
 import { FinanceModule } from '../modules/finance/FinanceModule';
 import { HabitsModule } from '../modules/habits/HabitsModule';
 import { SleepModule } from '../modules/sleep/SleepModule';
+import { WorkModule } from '../modules/work/WorkModule';
+import { BodyModule } from '../modules/body/BodyModule';
 
 // ─── types ────────────────────────────────────────────────────────────────────
 
@@ -109,6 +111,26 @@ export function ModuleScreen({
     return (
       <>
         <CycleModule onBack={() => onNavigate('dashboard')} />
+        <BrainDumpInput onSubmit={onBrainDump} />
+      </>
+    );
+  }
+
+  // Work: full-screen takeover — paper/ink layout, no sky video
+  if (moduleId === 'work') {
+    return (
+      <>
+        <WorkModule onBack={() => onNavigate('dashboard')} />
+        <BrainDumpInput onSubmit={onBrainDump} />
+      </>
+    );
+  }
+
+  // Body: full-screen takeover — paper/ink layout, no sky video
+  if (moduleId === 'body') {
+    return (
+      <>
+        <BodyModule onBack={() => onNavigate('dashboard')} />
         <BrainDumpInput onSubmit={onBrainDump} />
       </>
     );

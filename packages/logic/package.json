@@ -12,7 +12,9 @@
     "./grocery": "./src/grocery/index.ts",
     "./finance": "./src/finance/index.ts",
     "./habits": "./src/habits/index.ts",
-    "./sleep": "./src/sleep/index.ts"
+    "./sleep": "./src/sleep/index.ts",
+    "./work": "./src/work/index.ts",
+    "./body": "./src/body/index.ts"
   },
   "scripts": {
     "test": "vitest run",
