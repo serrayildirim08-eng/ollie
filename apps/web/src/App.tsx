@@ -1,4 +1,7 @@
+import { REGISTRY } from '@ollie/events';
 import { getString } from './i18n';
+
+const eventCount = Object.keys(REGISTRY).length;
 
 export function App() {
   return (
@@ -22,7 +25,18 @@ export function App() {
           maxWidth: '40ch',
         }}
       >
-        ollie · workspace scaffold · phase 2 · design tokens + strings wired
+        ollie · workspace scaffold · phase 3a
+      </p>
+      <p
+        style={{
+          color: 'var(--ink-faint)',
+          fontSize: 'var(--t-caption)',
+          marginTop: '2rem',
+          fontFamily: 'var(--font-system)',
+          letterSpacing: '0.04em',
+        }}
+      >
+        @ollie/events · {eventCount} events registered
       </p>
     </main>
   );

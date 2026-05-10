@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@ollie/events": "workspace:*",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
