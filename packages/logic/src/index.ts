@@ -23,3 +23,5 @@ export * as admin from './admin';
 export * as work from './work';
 export * as grocery from './grocery';
 export * as sleep from './sleep';
+export * as predict from './predict';
+export * as body from './body';
