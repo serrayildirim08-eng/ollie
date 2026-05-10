@@ -27,3 +27,5 @@ export * as predict from './predict';
 export * as body from './body';
 export * as goals from './goals';
 export * as habits from './habits';
+export * as astrology from './astrology';
+export * as journal from './journal';
