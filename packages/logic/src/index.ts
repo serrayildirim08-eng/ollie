@@ -19,3 +19,5 @@ export * as prompts from './prompts';
 export * as consumption from './consumption';
 export * as finance from './finance';
 export * as pets from './pets';
+export * as admin from './admin';
+export * as work from './work';
