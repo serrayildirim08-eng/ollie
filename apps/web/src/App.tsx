@@ -1,9 +1,12 @@
 import { REGISTRY } from '@ollie/events';
 import { getString } from './i18n';
+import { useStoreSlice } from './store';
 
 const eventCount = Object.keys(REGISTRY).length;
 
 export function App() {
+  const [visits, setVisits] = useStoreSlice<number>('shared', 'visit_count', 0);
+
   return (
     <main
       style={{
@@ -25,8 +28,9 @@ export function App() {
           maxWidth: '40ch',
         }}
       >
-        ollie · workspace scaffold · phase 3a
+        ollie · workspace scaffold · phase 3b
       </p>
+
       <p
         style={{
           color: 'var(--ink-faint)',
@@ -37,7 +41,27 @@ export function App() {
         }}
       >
         @ollie/events · {eventCount} events registered
+        <br />
+        @ollie/store · you've opened this page {visits} {visits === 1 ? 'time' : 'times'}
       </p>
+
+      <button
+        type="button"
+        onClick={() => setVisits(visits + 1)}
+        style={{
+          marginTop: '1.5rem',
+          padding: '0.5rem 1rem',
+          background: 'transparent',
+          color: 'var(--ink)',
+          border: '1px solid var(--rule)',
+          borderRadius: '4px',
+          fontFamily: 'var(--font-system)',
+          fontSize: 'var(--t-caption)',
+          cursor: 'pointer',
+        }}
+      >
+        bump visit count
+      </button>
     </main>
   );
 }

@@ -17,6 +17,9 @@ importers:
       '@ollie/events':
         specifier: workspace:*
         version: link:../../packages/events
+      '@ollie/store':
+        specifier: workspace:*
+        version: link:../../packages/store
       react:
         specifier: ^18.3.1
         version: 18.3.1
@@ -53,7 +56,20 @@ importers:
 
   packages/orchestrator: {}
 
-  packages/store: {}
+  packages/store:
+    devDependencies:
+      '@types/react':
+        specifier: ^18.3.12
+        version: 18.3.28
+      react:
+        specifier: ^18.3.1
+        version: 18.3.1
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.5
+        version: 2.1.9
 
 packages:
 
