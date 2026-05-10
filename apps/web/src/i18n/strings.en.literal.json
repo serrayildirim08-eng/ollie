@@ -1,0 +1,146 @@
+{
+  "_meta": {
+    "locale": "en",
+    "voice": "literal",
+    "_doc": "ollie · english strings · literal voice (accessibility). idiom and metaphor stripped. used when settings.literal_voice = true. every key in strings.en.json must exist here."
+  },
+
+  "onb": {
+    "intro": {
+      "title": "Welcome.",
+      "body": "Ollie organizes what you write into the right modules. There are 7 setup questions. You can skip any of them.",
+      "placeholder": "What name should I use for you?"
+    },
+    "age": {
+      "title": "What is your age range?",
+      "sub": "This helps adjust some defaults. You can skip this question."
+    },
+    "country": {
+      "title": "What country do you live in?",
+      "sub": "If you have a mental health crisis, I will show the local hotline number."
+    },
+    "locale": {
+      "title": "Which language do you prefer?",
+      "sub": "English or Turkish. You can change this later in settings."
+    },
+    "menstr": {
+      "title": "Do you track a menstrual cycle?",
+      "sub": "If you select 'No', the cycle module will not appear in the app.",
+      "yes": "Yes",
+      "no": "No",
+      "not_anymore": "Not anymore",
+      "postpartum": "Postpartum or pregnant"
+    },
+    "goals": {
+      "title": "What topics interest you most?",
+      "sub": "Select as many as you want. You can change this later.",
+      "brain_dump": "Brain dump",
+      "sleep": "Sleep tracking",
+      "body": "Body and hydration",
+      "cycle": "Menstrual cycle",
+      "mental_health": "Mental health",
+      "episodes": "Illness or chronic conditions",
+      "work_focus": "Work and focus",
+      "finance": "Finance"
+    },
+    "confirm": {
+      "with_name": "OK, ${0}.",
+      "no_name": "OK.",
+      "body": "Type whatever you want into the box below. Ollie will sort it into the correct module. If you write about a mental health crisis, Ollie will show a hotline number instead of analyzing the text."
+    },
+    "btn": {
+      "skip": "Skip",
+      "back": "Back",
+      "next": "Next",
+      "start": "Begin"
+    }
+  },
+
+  "consent": {
+    "title": "Module permissions.",
+    "sub": "Select the modules you want to use.",
+    "done": "Open Ollie",
+    "summary": "${0} of ${1} enabled"
+  },
+
+  "home": {
+    "headline": "What is on your mind?",
+    "headline_what": "What is ",
+    "headline_up": "on your mind?",
+    "input_placeholder": "Type here...",
+    "hint": "Type to begin. Press ${0} to see commands."
+  },
+
+  "confirmation": {
+    "grocery_add": "Added ${0} to your shopping list.",
+    "grocery_running_low": "Your toilet paper is running low. Added to shopping list.",
+    "finance_bill_upcoming": "Your ${0} bill is due in ${1} days.",
+    "finance_tx_added": "Transaction added: ${0}. Unaccounted total: ${1}.",
+    "cycle_logged": "Logged for cycle day ${0}.",
+    "pets_fed": "Logged: ${0} was fed. Last feeding was ${1} hours ago.",
+    "sleep_logged": "Logged ${0} hours ${1} minutes of sleep for last night.",
+    "admin_renewal": "${0} renewal is in ${1} days.",
+    "journal_saved": "Saved as journal entry number ${0}.",
+    "fallback_no_match": "I could not match this to a module. Saved as a journal entry."
+  },
+
+  "empty": {
+    "cycle_cold": "Enter the start date of your last period. Approximate is fine.",
+    "sleep_cold": "Log a few more nights. Patterns will appear after about 14 nights.",
+    "pets_none": "Add a pet to begin.",
+    "reminders_none": "No reminders today.",
+    "finance_none": "No transactions logged yet.",
+    "journal_none": "No journal entries yet. Type to begin.",
+    "focus_idle": "What task are you working on?",
+    "pantry_none": "No items running low.",
+    "body_water_none": "0 of 8 glasses today.",
+    "rites_none": "0 of 7 habits done today.",
+    "admin_none": "No tasks need attention.",
+    "goals_none": "No goals added yet.",
+    "doktor_none": "No active health concerns.",
+    "work_none": "No tasks today.",
+    "astrology_no_birth": "Enter your birth date, time, and location.",
+    "consumption_none": "No brands detected this week."
+  },
+
+  "push": {
+    "whisper": {
+      "passport_renewal": "${0} renewal in ${1} days",
+      "vet_annual": "${0} annual vet appointment in ${1} days"
+    },
+    "nudge": {
+      "rent_due": "Rent due in ${0} days",
+      "appointment_this_week": "${0} appointment ${1}",
+      "cycle_projected": "Period predicted between ${0} and ${1}"
+    },
+    "insist": {
+      "rent_due_today": "Rent is due in ${0} days.",
+      "vet_today": "${0} vet appointment today at ${1}.",
+      "pet_water_low": "${0} water bottle low. ${1} hours since last refill."
+    },
+    "fire": {
+      "pet_water_critical": "${0} water bottle empty for ${1} hours.",
+      "passport_expiring": "${0} expires tomorrow. Last day to renew.",
+      "pet_meds_missed": "${0} missed medication yesterday and today."
+    }
+  },
+
+  "crisis": {
+    "opener_with_name": "${0}, this seems difficult. You are not alone.",
+    "opener_no_name": "This seems difficult. You are not alone.",
+    "contact": "${0} is in your emergency contacts.",
+    "hotline_line": "${0} (${1}), available 24 hours a day, every day.",
+    "hotline_TR": "182 Mental Health Support Line",
+    "hotline_US": "988 Suicide and Crisis Lifeline",
+    "hotline_GB": "Samaritans · 116 123",
+    "close": "You can return to the journal when ready."
+  },
+
+  "doktor": {
+    "active_label": "Active concerns",
+    "resolved_label": "Resolved in the last 30 days",
+    "log_label": "Symptom log · last 10 entries",
+    "day_counter": "Day ${0}",
+    "resolved_meta": "Resolved · lasted ${0} days · ended ${1} ago"
+  }
+}

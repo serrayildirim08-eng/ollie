@@ -1,8 +1,29 @@
+import { getString } from './i18n';
+
 export function App() {
   return (
-    <main style={{ fontFamily: 'system-ui', padding: '2rem' }}>
-      <h1>ollie</h1>
-      <p>workspace scaffold · phase 1</p>
+    <main
+      style={{
+        minHeight: '100vh',
+        background: 'var(--bone)',
+        color: 'var(--ink)',
+        fontFamily: 'var(--font-editor)',
+        padding: '4rem 2rem',
+      }}
+    >
+      <h1 style={{ fontSize: 'var(--t-h1)', fontWeight: 400, margin: 0 }}>
+        {getString('en', 'onb.intro.title')}
+      </h1>
+      <p
+        style={{
+          color: 'var(--ink-soft)',
+          fontSize: 'var(--t-body)',
+          marginTop: '1rem',
+          maxWidth: '40ch',
+        }}
+      >
+        ollie · workspace scaffold · phase 2 · design tokens + strings wired
+      </p>
     </main>
   );
 }

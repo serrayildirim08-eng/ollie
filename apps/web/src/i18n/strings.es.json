@@ -1,0 +1,148 @@
+{
+  "_meta": {
+    "locale": "es",
+    "voice": "editorial",
+    "_doc": "ollie · spanish strings · editorial voice. lowercase deadpan tone matches strings.en.json. all keys must mirror strings.en.json. created 2026-05-08 phase A i18n migration."
+  },
+
+  "onb": {
+    "intro": {
+      "title": "hola.",
+      "body": "ollie ordena lo que tienes en la cabeza en su sitio. siete preguntas pequeñas antes de empezar — todas se pueden saltar.",
+      "placeholder": "¿cómo te llamo?"
+    },
+    "age": {
+      "title": "¿en qué rango de edad estás?",
+      "sub": "solo para que el copy y los ajustes encajen un poco mejor. se puede saltar."
+    },
+    "country": {
+      "title": "¿dónde vives?",
+      "sub": "para que en un día duro pueda mostrarte la línea de crisis correcta."
+    },
+    "locale": {
+      "title": "¿idioma?",
+      "sub": "english / español · cambiable en ajustes."
+    },
+    "menstr": {
+      "title": "¿llevas un ciclo menstrual?",
+      "sub": "si dices que no, el módulo de ciclo y los patrones ligados al ciclo no aparecen.",
+      "yes": "sí",
+      "no": "no",
+      "not_anymore": "ya no",
+      "postpartum": "posparto / embarazo"
+    },
+    "goals": {
+      "title": "¿qué te trae aquí?",
+      "sub": "elige lo que resuene · varios está bien.",
+      "brain_dump": "volcado mental",
+      "sleep": "sueño",
+      "body": "cuerpo",
+      "cycle": "ciclo",
+      "mental_health": "salud mental",
+      "episodes": "enfermedad · crónica",
+      "work_focus": "trabajo · foco",
+      "finance": "finanzas"
+    },
+    "confirm": {
+      "with_name": "vale, ${0}.",
+      "no_name": "vale.",
+      "body": "escribe lo que tengas en la cabeza en la caja de abajo. ollie lo ordena. si estás en crisis, no va al motor de patrones — sale una línea de ayuda en silencio."
+    },
+    "btn": {
+      "skip": "saltar",
+      "back": "← atrás",
+      "next": "siguiente",
+      "start": "empezar"
+    }
+  },
+
+  "consent": {
+    "title": "permisos por módulo.",
+    "sub": "elige lo que quieras usar.",
+    "done": "listo · abrir ollie",
+    "summary": "${0} de ${1} encendidos"
+  },
+
+  "home": {
+    "headline": "¿qué pasa?",
+    "headline_what": "¿qué ",
+    "headline_up": "pasa?",
+    "input_placeholder": "qué tienes en la cabeza...",
+    "hint": "escribe · o pulsa ${0} para comandos"
+  },
+
+  "confirmation": {
+    "grocery_add": "${0}. añadido a tu lista.",
+    "grocery_running_low": "se acerca temporada de papel. añadido a tu lista.",
+    "finance_bill_upcoming": "${0} vence en ${1} días. solo aviso.",
+    "finance_tx_added": "${0}. sin contar bajó a ${1}.",
+    "cycle_logged": "registrado. día de ciclo ${0}.",
+    "pets_fed": "${0} alimentado. última vez hace ${1} horas.",
+    "sleep_logged": "dormiste ${0}h ${1}m. registrado para anoche.",
+    "admin_renewal": "${0} · ${1} días. tienes tiempo.",
+    "journal_saved": "anotado. volcado n° ${0}.",
+    "fallback_no_match": "no encajó en ningún sitio. lo dejé como volcado."
+  },
+
+  "empty": {
+    "cycle_cold": "dime cuándo empezó tu última regla.\nsin presión con la fecha — cerca vale.",
+    "sleep_cold": "unas noches más. después esto significará algo.",
+    "pets_none": "¿quién vive contigo?",
+    "reminders_none": "nada hoy. disfruta.",
+    "finance_none": "aún no hay dinero entrando ni saliendo.",
+    "journal_none": "nada todavía. empieza por donde quieras.",
+    "focus_idle": "¿con qué estás ahora?",
+    "pantry_none": "no hay nada bajo mínimos.",
+    "body_water_none": "nada aún, hoy.",
+    "rites_none": "nada aún, hoy.",
+    "admin_none": "ningún cabo suelto.",
+    "goals_none": "nada aún. está bien.",
+    "doktor_none": "nada que registrar. eso es bueno.",
+    "work_none": "sin tareas. día tranquilo.",
+    "astrology_no_birth": "dime cuándo y dónde naciste.",
+    "consumption_none": "esta semana no se detectaron marcas."
+  },
+
+  "push": {
+    "whisper": {
+      "passport_renewal": "${0} · ${1} días",
+      "vet_annual": "${0} · vet anual · ${1} días"
+    },
+    "nudge": {
+      "rent_due": "alquiler · en ${0} días",
+      "appointment_this_week": "${0} · ${1}",
+      "cycle_projected": "regla probable ${0}–${1}"
+    },
+    "insist": {
+      "rent_due_today": "el alquiler vence en ${0} días. solo aviso.",
+      "vet_today": "${0} · vet a las ${1}.",
+      "pet_water_low": "botella de agua de ${0} baja — ${1} horas."
+    },
+    "fire": {
+      "pet_water_critical": "botella de agua de ${0} vacía hace ${1} horas.",
+      "passport_expiring": "${0} caduca mañana. último día.",
+      "pet_meds_missed": "${0} se saltó la medicación de ayer. y la de hoy."
+    }
+  },
+
+  "crisis": {
+    "opener_with_name": "${0}, esto se ve duro. no estás solo.",
+    "opener_no_name": "esto se ve duro. no estás solo.",
+    "contact": "${0} está en tu lista.",
+    "hotline_line": "${0} (${1}), 24/7.",
+    "hotline_TR": "182 línea de salud mental",
+    "hotline_US": "988 suicide & crisis lifeline",
+    "hotline_GB": "samaritans · 116 123",
+    "hotline_ES": "024 línea de atención a la conducta suicida",
+    "hotline_MX": "800 290 0024 saptel",
+    "close": "el volcado está aquí cuando estés listo."
+  },
+
+  "doktor": {
+    "active_label": "activo",
+    "resolved_label": "resuelto · últimos 30 días",
+    "log_label": "registro de síntomas · últimos 10",
+    "day_counter": "día ${0}",
+    "resolved_meta": "resuelto · ${0} días, hace ${1}"
+  }
+}

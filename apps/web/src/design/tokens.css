@@ -1,0 +1,166 @@
+/*
+ * ollie · design tokens · vol 1
+ * source of truth: pod-b-pitch.html + masterplan.html
+ *
+ * usage:
+ *   import (or @import) into the root stylesheet · all surfaces inherit these.
+ *   tokens are scoped to :root · use var(--token) everywhere · do not hardcode values.
+ *
+ * audit:
+ *   no role · no token. before adding a new color, name what it does in voice-library terms.
+ *   before adding a new size, justify it by the type-scale ratio (1.250 step / 1.618 hero jump).
+ *
+ * exception zones:
+ *   .cycle-module — owns its own ceramic cycle palette extension (see cycle-cycle.css)
+ *   .finance-module — was scoped dark in v0; pod b unified it into the bone palette · do not re-dark.
+ */
+
+:root {
+  /* ───────────────────────────────────────── */
+  /* PALETTE · 8 tokens · scoped to one role each */
+  /* ───────────────────────────────────────── */
+
+  --bone:        #FAFAF7;   /* page background · everywhere */
+  --paper:       #F4F1E8;   /* secondary background · pull-quote bleeds, callouts, inner cards */
+  --paper-2:     #EFEBE0;   /* tertiary background · menu sections, sticky headers */
+
+  --ink:         #14140F;   /* primary text · headlines, body when bold, ui-on-ink */
+  --ink-soft:    #5A574E;   /* secondary text · standfirst, captions in italic, kicker eyebrow */
+  --ink-faint:   #9C9890;   /* tertiary text · meta lines, small caps, hints */
+  --ink-ghost:   #C8C4BA;   /* quaternary · drop caps, fade text, decorative numerals */
+
+  --accent:      #2E5D43;   /* sage · single accent role · active state, kicker rules, italic display em */
+  --umber:       #8A4B2C;   /* cycle bleeding-day dots · finance unaccounted · pattern card markers */
+  --water:       #5B8FB5;   /* body water glasses · ONLY · do not extend */
+  --warn:        #C9974C;   /* amber ledger flags · tier-3 push (insist) labels */
+  --pink:        #B86A8A;   /* pink · tier-4 push (fire) only · crisis path label only */
+
+  /* hairlines */
+  --rule:        rgba(20, 20, 15, 0.10);   /* primary divider */
+  --rule-soft:   rgba(20, 20, 15, 0.05);   /* secondary divider · within sections */
+
+  /* ───────────────────────────────────────── */
+  /* TYPOGRAPHY · 17px body anchor · 1.250 + 1.618 hybrid */
+  /* ───────────────────────────────────────── */
+
+  /* font families */
+  --font-system:    'Courier New', Courier, monospace;
+  --font-editor:    'Fraunces', Georgia, serif;
+
+  /* type scale · use these as the only sizes */
+  --t-hero:         96px;   /* one per page · cover, manifesto break · 1.02 leading */
+  --t-display:      64px;   /* section openers · 1.05 leading */
+  --t-h1:           42px;   /* spread headline · 1.10 leading */
+  --t-h2:           28px;   /* sub-section · 1.20 leading */
+  --t-h3:           22px;   /* lede / standfirst · 1.40 leading */
+  --t-body:         17px;   /* running text · 1.55 leading */
+  --t-caption:      13px;   /* image caption, footnote · 1.45 leading · 0.01em tracking */
+  --t-kicker:       11px;   /* eyebrow, page number · 1.30 leading · +0.16em tracking */
+  --t-meta:          9px;   /* mono small caps · meta data, fig numbers · +0.20em+ */
+
+  /* line heights */
+  --lh-tight:       1.02;
+  --lh-display:     1.05;
+  --lh-headline:    1.10;
+  --lh-h2:          1.20;
+  --lh-lede:        1.40;
+  --lh-body:        1.55;
+  --lh-caption:     1.45;
+
+  /* letter-spacing · "designed not templated" lever */
+  --ls-display:    -0.025em;   /* big serif · tighten */
+  --ls-h1:         -0.018em;
+  --ls-h2:         -0.012em;
+  --ls-body:        0;
+  --ls-caps:        0.16em;    /* all caps · 11px+ */
+  --ls-caps-small:  0.20em;    /* all caps · 9–10px */
+
+  /* ───────────────────────────────────────── */
+  /* SPACING · base unit 4px · use multiples */
+  /* ───────────────────────────────────────── */
+
+  --s-1:    4px;
+  --s-2:    8px;
+  --s-3:   12px;
+  --s-4:   16px;
+  --s-6:   24px;
+  --s-8:   32px;
+  --s-10:  40px;
+  --s-14:  56px;
+  --s-20:  80px;
+  --s-30: 120px;   /* spread · loose */
+  --s-50: 200px;   /* spread · breathing */
+
+  /* page rhythm · do not equalize section paddings */
+  --pad-tight:      64px 0;
+  --pad-spread:    140px 0;
+  --pad-loose:     200px 0;
+
+  /* ───────────────────────────────────────── */
+  /* MOTION · 6 durations · 4 easings */
+  /* ───────────────────────────────────────── */
+
+  /* durations · see motion-library.html for the system */
+  --d-tap:        120ms;   /* button press · chip select · row hover */
+  --d-flick:      220ms;   /* drawer open · tab switch · menu reveal */
+  --d-slide:      400ms;   /* page transition · home → dashboard · home → module */
+  --d-flight:     600ms;   /* chip flight · the marquee animation */
+  --d-settle:     800ms;   /* first-launch fade-in · garden entrance stagger */
+  --d-breathe:      6s;    /* burhan canopy sway · ambient color cycles · 5–8s spread */
+  --d-drift:       18s;    /* leaf particles · sky video · 15–20s spread */
+
+  /* easings · 4 named curves */
+  --e-calm-out:   cubic-bezier(0.18, 0, 0.22, 1);    /* default ui · arrives without announcing */
+  --e-lift-set:   cubic-bezier(0.42, 0, 0.18, 1);    /* asymmetric · chip flight only */
+  --e-breathe:    cubic-bezier(0.45, 0, 0.55, 1);    /* ease-in-out · ambient + burhan loops only */
+  --e-step:       linear;                             /* color swaps · numeric counters */
+
+  /* ───────────────────────────────────────── */
+  /* RADII · used very sparingly */
+  /* ───────────────────────────────────────── */
+
+  --r-0:    0;
+  --r-sm:   4px;     /* form inputs, small chips */
+  --r-md:   12px;    /* select dropdowns */
+  --r-pill: 999px;   /* chips, pills */
+  /* note · pod b uses border-radius:0 for almost everything · sharp edges are the brand */
+
+  /* ───────────────────────────────────────── */
+  /* SHADOWS · max one drop-shadow level */
+  /* ───────────────────────────────────────── */
+
+  --sh-0:    none;
+  --sh-sm:   0 1px 0 rgba(20, 20, 15, 0.04);   /* keyboard chips, kbd elements */
+  --sh-md:   0 4px 16px rgba(20, 20, 15, 0.06);
+  --sh-lg:   0 12px 40px rgba(20, 20, 15, 0.08);   /* command palette, menu */
+  /* note · CLAUDE.md rule · "no box shadows heavier than drop-shadow(0 4px 16px rgba(0,0,0,0.08))" */
+
+  /* ───────────────────────────────────────── */
+  /* Z-INDEX · only 4 levels */
+  /* ───────────────────────────────────────── */
+
+  --z-bg:        0;
+  --z-content:   1;
+  --z-overlay:  10;
+  --z-mast:    100;   /* persistent magazine masthead */
+  --z-modal:   200;   /* command palette, sheets */
+}
+
+/* dark · for the focus committed state, finance v0 mode (deprecated), and editorial dark spreads
+ * not a full theme — scoped only where deliberately inverted */
+[data-theme="dark"] {
+  --bg:    var(--ink);
+  --fg:    var(--bone);
+}
+
+/* reduce-motion · honor os preference automatically */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --d-tap:    0ms;
+    --d-flick:  0ms;
+    --d-slide:  0ms;
+    --d-flight: 0ms;
+    --d-settle: 0ms;
+    /* --d-breathe and --d-drift are kept off entirely · see animations.css */
+  }
+}

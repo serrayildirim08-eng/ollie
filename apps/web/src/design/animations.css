@@ -1,0 +1,228 @@
+/*
+ * ollie · animation library · vol 1
+ * source of truth: motion-library.html
+ *
+ * usage:
+ *   import after tokens.css · all keyframes use --d-* and --e-* from tokens.
+ *   apply via animation: <name> <duration> <easing> <iteration>;
+ *
+ * audit:
+ *   no spring bounce. no overshoot. no parallax. no marquee scroll.
+ *   if you'd notice it on a hard day, it shouldn't be there.
+ *
+ * reduce-motion:
+ *   every animation in this file is overridden in the @media block at the bottom.
+ *   nothing is replaced with opacity flicker · only instant cuts and static color swaps.
+ */
+
+/* ───────────────────────────────────────── */
+/* CHIP FLIGHT · the marquee animation */
+/* ───────────────────────────────────────── */
+
+@keyframes ollie-chip-fly {
+  0%   { transform: translate(0, 0)        scale(1)    ; opacity: 1; }
+  20%  { transform: translate(0, -8px)     scale(1)    ; opacity: 1; }   /* lift */
+  85%  { transform: var(--chip-target-end) scale(0.85) ; opacity: 0.9; } /* fly */
+  100% { transform: var(--chip-target-end) scale(0.6)  ; opacity: 0; }   /* settle + fade */
+}
+
+.chip-flying {
+  animation: ollie-chip-fly var(--d-flight) var(--e-lift-set) forwards;
+}
+
+/* ───────────────────────────────────────── */
+/* PAGE TRANSITION · home → module · slide up */
+/* ───────────────────────────────────────── */
+
+@keyframes ollie-slide-up-in {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0);     }
+}
+@keyframes ollie-slide-down-out {
+  from { transform: translateY(0);     }
+  to   { transform: translateY(100%); }
+}
+
+.module-page-enter { animation: ollie-slide-up-in    var(--d-slide) var(--e-calm-out) forwards; }
+.module-page-exit  { animation: ollie-slide-down-out var(--d-slide) var(--e-calm-out) forwards; }
+
+/* ───────────────────────────────────────── */
+/* DRAWER · 220ms flick · for inline expand */
+/* ───────────────────────────────────────── */
+
+@keyframes ollie-drawer-open {
+  from { max-height: 0;     opacity: 0; }
+  to   { max-height: 800px; opacity: 1; }
+}
+.drawer-open { animation: ollie-drawer-open var(--d-flick) var(--e-calm-out) forwards; }
+
+/* ───────────────────────────────────────── */
+/* AMBIENT · sage state shift on focus committed */
+/* color, not motion · 8s breathe ease */
+/* ───────────────────────────────────────── */
+
+@keyframes ollie-ambient-sage {
+  0%   { background-color: var(--bone);                 }
+  50%  { background-color: rgba(46, 93, 67, 0.06);      } /* idle → committed (5min) */
+  100% { background-color: rgba(46, 93, 67, 0.18);      } /* session-end at 25min */
+}
+/* trigger via JS by adding .ambient-sage to focus-page when threshold met */
+.ambient-sage { animation: ollie-ambient-sage 8s var(--e-breathe) forwards; }
+
+/* umber pulse · cycle bleeding day rows · used once per render */
+@keyframes ollie-ambient-umber {
+  0%, 100% { background-color: rgba(138, 75, 44, 0.04); }
+  50%      { background-color: rgba(138, 75, 44, 0.10); }
+}
+.row-bleeding { animation: ollie-ambient-umber 4s var(--e-breathe) infinite; }
+
+/* ───────────────────────────────────────── */
+/* BURHAN · the olive tree · multi-layer breathe */
+/* trunk + pot stay completely still · only canopy and leaves animate */
+/* ───────────────────────────────────────── */
+
+@keyframes ollie-canopy-sway-1 {
+  0%, 100% { transform: rotate(-1deg);  }
+  50%      { transform: rotate(1deg);   }
+}
+@keyframes ollie-canopy-sway-2 {
+  0%, 100% { transform: rotate(0.8deg); }
+  50%      { transform: rotate(-1.2deg);}
+}
+@keyframes ollie-canopy-sway-3 {
+  0%, 100% { transform: rotate(-1.4deg);}
+  50%      { transform: rotate(0.6deg); }
+}
+@keyframes ollie-leaf-flutter {
+  0%, 100% { transform: rotate(0deg);   }
+  50%      { transform: rotate(3deg);   }
+}
+@keyframes ollie-leaf-shimmer {
+  0%, 100% { opacity: 0.5; }
+  50%      { opacity: 0.8; }
+}
+@keyframes ollie-leaf-drift {
+  0%   { transform: translate(0, 0)       rotate(0deg);  opacity: 0.7; }
+  100% { transform: translate(80px, 200px) rotate(80deg); opacity: 0;   }
+}
+@keyframes ollie-tree-breathe {
+  0%, 100% { transform: scaleY(1);     }
+  50%      { transform: scaleY(1.005); }
+}
+
+.canopy-1   { transform-origin: 55% 65%; animation: ollie-canopy-sway-1   5s   var(--e-breathe) infinite; }
+.canopy-2   { transform-origin: 55% 65%; animation: ollie-canopy-sway-2   6s   var(--e-breathe) infinite; }
+.canopy-3   { transform-origin: 55% 65%; animation: ollie-canopy-sway-3   6.5s var(--e-breathe) infinite; }
+.canopy-4   { transform-origin: 55% 65%; animation: ollie-canopy-sway-1   7s   var(--e-breathe) infinite; }
+.canopy-5   { transform-origin: 55% 65%; animation: ollie-canopy-sway-2   7.5s var(--e-breathe) infinite; }
+.canopy-6   { transform-origin: 55% 65%; animation: ollie-canopy-sway-3   8s   var(--e-breathe) infinite; }
+.leaf-stray { animation: ollie-leaf-flutter 3s var(--e-breathe) infinite; }
+.leaf-shim  { animation: ollie-leaf-shimmer 4s var(--e-breathe) infinite; }
+.leaf-drift { animation: ollie-leaf-drift   18s var(--e-step)    infinite; }
+.tree       { animation: ollie-tree-breathe 7s   var(--e-breathe) infinite; }
+
+/* ───────────────────────────────────────── */
+/* FIRST-LAUNCH BURHAN GLOW · 3-second sage pulse, once */
+/* ───────────────────────────────────────── */
+
+@keyframes ollie-first-glow {
+  0%   { filter: drop-shadow(0 0 0  rgba(46, 93, 67, 0));   }
+  30%  { filter: drop-shadow(0 0 24px rgba(46, 93, 67, 0.5)); }
+  100% { filter: drop-shadow(0 0 0  rgba(46, 93, 67, 0));   }
+}
+.tree-first-launch { animation: ollie-first-glow 3s var(--e-breathe) forwards; }
+
+/* ───────────────────────────────────────── */
+/* HOME CURSOR · the only blink in the app */
+/* ───────────────────────────────────────── */
+
+@keyframes ollie-cursor-blink {
+  0%, 50%   { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+.cursor-blink { animation: ollie-cursor-blink 1s var(--e-step) infinite; }
+
+/* ───────────────────────────────────────── */
+/* CONFIRMATION RECEIPT · soft fade in below the chip */
+/* ───────────────────────────────────────── */
+
+@keyframes ollie-receipt-fadein {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0);   }
+}
+.receipt-fadein { animation: ollie-receipt-fadein var(--d-flick) var(--e-calm-out) forwards; }
+
+/* ───────────────────────────────────────── */
+/* GARDEN ENTRANCE · stagger 800ms */
+/* layered entrance: sky → arches → ground → burhan → pool → petals */
+/* ───────────────────────────────────────── */
+
+@keyframes ollie-garden-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.garden-sky    { animation: ollie-garden-fade-in 800ms var(--e-calm-out) forwards; animation-delay: 0ms;   }
+.garden-arches { animation: ollie-garden-fade-in 800ms var(--e-calm-out) forwards; animation-delay: 120ms; }
+.garden-ground { animation: ollie-garden-fade-in 800ms var(--e-calm-out) forwards; animation-delay: 240ms; }
+.garden-burhan { animation: ollie-garden-fade-in 800ms var(--e-calm-out) forwards; animation-delay: 360ms; }
+.garden-pool   { animation: ollie-garden-fade-in 800ms var(--e-calm-out) forwards; animation-delay: 480ms; }
+.garden-petals { animation: ollie-garden-fade-in 800ms var(--e-calm-out) forwards; animation-delay: 600ms; }
+
+/* ───────────────────────────────────────── */
+/* BANNED · do not add to this file */
+/* ───────────────────────────────────────── */
+/*
+ * × spring bounce on every interaction
+ * × parallax-scroll backgrounds
+ * × marquee scroll · auto-rotating banners
+ * × confetti · fireworks · particle bursts on completion
+ * × progress rings filling up
+ * × mascots that emote at the user
+ * × sound on any animation
+ * × haptic feedback on routine taps
+ *
+ * if a request matches any of the above, decline · log a decision-log entry · ask serra.
+ */
+
+/* ───────────────────────────────────────── */
+/* REDUCE-MOTION · everything off · static fallbacks */
+/* ───────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+
+  /* instant transitions · no opacity flicker · no easing */
+  .chip-flying,
+  .module-page-enter,
+  .module-page-exit,
+  .drawer-open,
+  .receipt-fadein,
+  .garden-sky, .garden-arches, .garden-ground, .garden-burhan, .garden-pool, .garden-petals {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  /* burhan goes still · all sway, leaf, particle animations off */
+  .canopy-1, .canopy-2, .canopy-3, .canopy-4, .canopy-5, .canopy-6,
+  .leaf-stray, .leaf-shim, .leaf-drift, .tree {
+    animation: none !important;
+  }
+
+  /* ambient becomes a static color swap · no crossfade */
+  .ambient-sage {
+    animation: none !important;
+    background-color: rgba(46, 93, 67, 0.18);
+  }
+  .row-bleeding {
+    animation: none !important;
+    background-color: rgba(138, 75, 44, 0.10);
+  }
+
+  /* first-launch glow becomes a still 1.5s tint */
+  .tree-first-launch {
+    animation: none !important;
+    filter: drop-shadow(0 0 18px rgba(46, 93, 67, 0.4));
+  }
+
+  /* cursor still blinks · it's the only animation that signals input is alive */
+  /* keep cursor-blink as-is */
+}

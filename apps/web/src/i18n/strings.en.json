@@ -1,0 +1,146 @@
+{
+  "_meta": {
+    "locale": "en",
+    "voice": "editorial",
+    "_doc": "ollie · english strings · editorial voice. literal voice variants live in strings.en.literal.json. all keys must exist in both files."
+  },
+
+  "onb": {
+    "intro": {
+      "title": "hi.",
+      "body": "ollie sorts what's in your head into the right places. seven small questions before we start — all skippable.",
+      "placeholder": "what should i call you?"
+    },
+    "age": {
+      "title": "what's your age range?",
+      "sub": "just so the copy and defaults fit a bit better. skippable."
+    },
+    "country": {
+      "title": "where do you live?",
+      "sub": "so on a hard day i can show the right hotline."
+    },
+    "locale": {
+      "title": "language preference?",
+      "sub": "english / türkçe · changeable in settings."
+    },
+    "menstr": {
+      "title": "do you track a menstrual cycle?",
+      "sub": "if no, the cycle module and cycle-related patterns won't show up at all.",
+      "yes": "yes",
+      "no": "no",
+      "not_anymore": "not anymore",
+      "postpartum": "postpartum / pregnant"
+    },
+    "goals": {
+      "title": "what brings you here?",
+      "sub": "pick anything that resonates · multiple is fine.",
+      "brain_dump": "brain dump",
+      "sleep": "sleep",
+      "body": "body",
+      "cycle": "cycle",
+      "mental_health": "mental health",
+      "episodes": "illness · chronic",
+      "work_focus": "work · focus",
+      "finance": "finance"
+    },
+    "confirm": {
+      "with_name": "ok, ${0}.",
+      "no_name": "ok.",
+      "body": "write whatever's on your mind into the box below. ollie sorts it. if you're in a crisis, it doesn't go to the pattern engine — a quiet hotline number appears."
+    },
+    "btn": {
+      "skip": "skip",
+      "back": "← back",
+      "next": "next",
+      "start": "let's start"
+    }
+  },
+
+  "consent": {
+    "title": "module consents.",
+    "sub": "choose what you want to use.",
+    "done": "i'm ready · open ollie",
+    "summary": "${0} of ${1} on"
+  },
+
+  "home": {
+    "headline": "what's up?",
+    "headline_what": "what's ",
+    "headline_up": "up?",
+    "input_placeholder": "what's on your mind...",
+    "hint": "type · or hit ${0} for commands"
+  },
+
+  "confirmation": {
+    "grocery_add": "${0}. adding to your list.",
+    "grocery_running_low": "toilet paper szn approaching. adding to your list.",
+    "finance_bill_upcoming": "${0} is due in ${1} days. just saying.",
+    "finance_tx_added": "${0}. unaccounted dropped to ${1}.",
+    "cycle_logged": "logged. cycle day ${0}.",
+    "pets_fed": "${0} fed. last fed ${1} hours ago.",
+    "sleep_logged": "slept ${0}h ${1}m. logged for last night.",
+    "admin_renewal": "${0} · ${1} days. you've got time.",
+    "journal_saved": "noted. dump n° ${0}.",
+    "fallback_no_match": "didn't fit anywhere. kept it as a dump."
+  },
+
+  "empty": {
+    "cycle_cold": "tell me when your last period started.\nno pressure on the date — close is enough.",
+    "sleep_cold": "a few more nights. then this means something.",
+    "pets_none": "who lives with you?",
+    "reminders_none": "nothing today. enjoy.",
+    "finance_none": "no money in or out yet.",
+    "journal_none": "nothing yet. start anywhere.",
+    "focus_idle": "what are you with right now",
+    "pantry_none": "no things are running thin.",
+    "body_water_none": "none yet, today.",
+    "rites_none": "none yet, today.",
+    "admin_none": "no loose ends.",
+    "goals_none": "none yet. that's fine.",
+    "doktor_none": "nothing to track. that's good.",
+    "work_none": "no tasks. quiet day.",
+    "astrology_no_birth": "tell me when and where you were born.",
+    "consumption_none": "no brands detected this week."
+  },
+
+  "push": {
+    "whisper": {
+      "passport_renewal": "${0} · ${1} days",
+      "vet_annual": "${0} · annual vet · ${1} days"
+    },
+    "nudge": {
+      "rent_due": "rent · in ${0} days",
+      "appointment_this_week": "${0} · ${1}",
+      "cycle_projected": "period likely ${0}–${1}"
+    },
+    "insist": {
+      "rent_due_today": "rent is due in ${0} days. just saying.",
+      "vet_today": "${0} · vet at ${1}.",
+      "pet_water_low": "${0}'s water bottle low — ${1} hours."
+    },
+    "fire": {
+      "pet_water_critical": "${0}'s water bottle empty for ${1} hours.",
+      "passport_expiring": "${0} expires tomorrow. last day.",
+      "pet_meds_missed": "${0} missed yesterday's meds. and today's."
+    }
+  },
+
+  "crisis": {
+    "opener_with_name": "${0}, this looks rough. you're not alone.",
+    "opener_no_name": "this looks rough. you're not alone.",
+    "contact": "${0} is on your list.",
+    "hotline_line": "${0} (${1}), 24/7.",
+    "hotline_TR": "182 mental health line",
+    "hotline_US": "988 suicide & crisis lifeline",
+    "hotline_GB": "samaritans · 116 123",
+    "close": "the dump is here when you're ready."
+  },
+
+  "doktor": {
+    "active_label": "active",
+    "resolved_label": "resolved · last 30 days",
+    "log_label": "symptom log · last 10",
+    "day_counter": "day ${0}",
+    "resolved_meta": "resolved · ${0} days, ${1} ago"
+  }
+}
