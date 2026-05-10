@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { REGISTRY } from '@ollie/events';
 import { cycle } from '@ollie/logic';
 import { getString } from './i18n';
@@ -11,6 +11,10 @@ import { ToastProvider, useToast } from './components/ToastContext';
 import { BurhanTree } from './components/BurhanTree';
 import { BrainDumpInput } from './components/BrainDumpInput';
 import { ChipFlyHost, chipFly } from './components/ChipFly';
+import { HomeScreen } from './pages/HomeScreen';
+import { DashboardScreen } from './pages/DashboardScreen';
+
+type Screen = 'home' | 'dashboard' | 'demo';
 
 const eventCount = Object.keys(REGISTRY).length;
 
@@ -22,9 +26,42 @@ const SAMPLE_STARTS = [0, 28, 56, 84, 112, 140].map((d) => ({
 const samplePrediction = cycle.predictNextPeriod(cycle.detectBoundaries(SAMPLE_STARTS));
 
 function AppInner() {
+  const [screen, setScreen] = useState<Screen>('home');
   const [visits, setVisits] = useStoreSlice<number>('shared', 'visit_count', 0);
   const toast = useToast();
   const demoTileRef = React.useRef<HTMLDivElement>(null);
+
+  if (screen === 'home') {
+    return (
+      <>
+        <HomeScreen
+          onNavigate={(to) => {
+            if (to === 'dashboard') setScreen('dashboard');
+            // garden navigation: placeholder — no-op for now
+          }}
+          onBrainDump={(text) => toast.show(`routed → ${text}`, { module: 'demo' })}
+        />
+        <ToastHost />
+      </>
+    );
+  }
+
+  if (screen === 'dashboard') {
+    return (
+      <>
+        <DashboardScreen
+          onNavigate={(to, moduleId) => {
+            if (to === 'home') setScreen('home');
+            else if (to === 'garden') setScreen('home'); // garden placeholder
+            else if (to === 'module') toast.show(`opening module → ${moduleId ?? ''}`, { module: moduleId ?? 'demo' });
+          }}
+          onBrainDump={(text) => toast.show(`routed → ${text}`, { module: 'demo' })}
+        />
+        <ToastHost />
+        <ChipFlyHost />
+      </>
+    );
+  }
 
   return (
     <main
@@ -103,6 +140,23 @@ function AppInner() {
             }}
           >
             show toast
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setScreen('home')}
+            style={{
+              padding: '0.5rem 1rem',
+              background: 'transparent',
+              color: 'var(--ink)',
+              border: '1px solid var(--rule)',
+              borderRadius: '4px',
+              fontFamily: 'var(--font-system)',
+              fontSize: 'var(--t-caption)',
+              cursor: 'pointer',
+            }}
+          >
+            ← home screen
           </button>
         </div>
       </FrostedCard>
