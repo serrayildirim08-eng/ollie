@@ -7,6 +7,8 @@ import { PetsModule } from '../modules/pets/PetsModule';
 import { CycleModule } from '../modules/cycle/CycleModule';
 import { GroceryModule } from '../modules/grocery/GroceryModule';
 import { FinanceModule } from '../modules/finance/FinanceModule';
+import { HabitsModule } from '../modules/habits/HabitsModule';
+import { SleepModule } from '../modules/sleep/SleepModule';
 
 // ─── types ────────────────────────────────────────────────────────────────────
 
@@ -81,6 +83,26 @@ export function ModuleScreen({
   children,
 }: ModuleScreenProps) {
   const cfg = getBgConfig(moduleId);
+
+  // Sleep: full-screen takeover — owns its own paper/ink layout
+  if (moduleId === 'sleep') {
+    return (
+      <>
+        <SleepModule onBack={() => onNavigate('dashboard')} />
+        <BrainDumpInput onSubmit={onBrainDump} />
+      </>
+    );
+  }
+
+  // Habits: full-screen takeover — owns its own paper/ink layout
+  if (moduleId === 'habits') {
+    return (
+      <>
+        <HabitsModule onBack={() => onNavigate('dashboard')} />
+        <BrainDumpInput onSubmit={onBrainDump} />
+      </>
+    );
+  }
 
   // Cycle: full-screen takeover with its own ceramic header — bypass wrapper
   if (moduleId === 'cycle') {

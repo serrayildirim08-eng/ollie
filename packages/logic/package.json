@@ -10,7 +10,9 @@
     "./cycle": "./src/cycle/index.ts",
     "./pets": "./src/pets/index.ts",
     "./grocery": "./src/grocery/index.ts",
-    "./finance": "./src/finance/index.ts"
+    "./finance": "./src/finance/index.ts",
+    "./habits": "./src/habits/index.ts",
+    "./sleep": "./src/sleep/index.ts"
   },
   "scripts": {
     "test": "vitest run",
