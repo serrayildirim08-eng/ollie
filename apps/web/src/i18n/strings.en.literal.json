@@ -100,7 +100,10 @@
     "doktor_none": "No active health concerns.",
     "work_none": "No tasks today.",
     "astrology_no_birth": "Enter your birth date, time, and location.",
-    "consumption_none": "No brands detected this week."
+    "consumption_none": "No brands detected this week.",
+    "cta": {
+      "cycle": "Log your last period to begin."
+    }
   },
 
   "push": {
@@ -232,6 +235,147 @@
       "b3": "Pattern language, not predictions.",
       "b4": "Log: your birth time and location once.",
       "b5": "Data stays on your device."
+    }
+  },
+
+  "cycle": {
+    "title": "Cycle",
+    "btn": {
+      "settings": "Settings",
+      "back": "Back"
+    },
+    "phase": {
+      "menstrual": "Menstrual",
+      "follicular": "Follicular",
+      "ovulation_window": "Ovulation window",
+      "luteal": "Luteal",
+      "late_luteal": "Late-luteal or overdue",
+      "unknown": "Unknown"
+    },
+    "adherence": {
+      "body": "Your last cycle was ${0} days, which is unusually long. Did you miss logging a period, or was it actually that long?",
+      "btn": {
+        "was_long": "Period was long",
+        "missed": "I missed one"
+      }
+    },
+    "irregular": {
+      "copy": "Cycle pattern is variable. No useful phase estimate this month."
+    },
+    "day": {
+      "aria": "Cycle day ${0}, ${1} phase",
+      "aria_empty": "No cycle day logged",
+      "sub": "Cycle day ${0} of approximately ${1}",
+      "empty_sub": "No period logged yet. Use the record section below to start."
+    },
+    "section": {
+      "next_period": "Next period",
+      "patterns": "Patterns",
+      "clinician": "Worth a clinician conversation",
+      "fertile_window": "Fertile window",
+      "record_one": "Record — last ${0} cycle",
+      "record_many": "Record — last ${0} cycles",
+      "ask_partner": "Ask partner — signal without explaining"
+    },
+    "next": {
+      "approximately": "Approximately ${0}",
+      "need_logged": "Log a period to get a prediction.",
+      "cycles_logged_one": "${0} cycle logged",
+      "cycles_logged_many": "${0} cycles logged"
+    },
+    "confidence": {
+      "cold": "First prediction — based on typical cycle length.",
+      "warming": "Learning your pattern.",
+      "personalized": "Personalized to your cycle.",
+      "variable": "Variable pattern — this is a rough estimate only.",
+      "shifting": "Pattern changed recently — using last 6 cycles.",
+      "fallback": "Learning your pattern."
+    },
+    "pattern": {
+      "body": "${0} has clustered in your ${1} phase across ${2} cycles. This is a pattern, not a medical conclusion."
+    },
+    "fertile": {
+      "detail": "This is a range, not a specific day."
+    },
+    "record": {
+      "unit_d": "d",
+      "btn": {
+        "close": "Close",
+        "open": "Record today",
+        "save": "Save",
+        "cancel": "Cancel"
+      },
+      "note_ph": "Anything else worth noting",
+      "tag": {
+        "cramps": "Cramps",
+        "bloating": "Bloating",
+        "fatigue": "Fatigue",
+        "headache": "Headache",
+        "mood_shift": "Mood shift",
+        "bleeding_day_1": "Bleeding day 1",
+        "bleeding": "Bleeding",
+        "spotting": "Spotting",
+        "clear": "Clear",
+        "energy": "Energy"
+      }
+    },
+    "partner": {
+      "cat": {
+        "material": "Material",
+        "touch": "Touch",
+        "labor": "Labor",
+        "emotional": "Emotional"
+      },
+      "material": {
+        "flowers": "Flowers",
+        "chocolate": "Chocolate",
+        "takeout": "Takeout",
+        "advil": "Advil and a heating pad"
+      },
+      "touch": {
+        "hug": "A hug",
+        "held": "To be held",
+        "back_rub": "A back rub",
+        "space": "Space, no touching"
+      },
+      "labor": {
+        "dishes": "Dishes tonight",
+        "cook": "Cook dinner",
+        "grocery": "A grocery run",
+        "laundry": "Laundry"
+      },
+      "emotional": {
+        "listen": "To be listened to",
+        "distract": "A distraction",
+        "reassure": "Reassurance",
+        "alone": "To be left alone"
+      },
+      "summary_one": "${0} request noted.",
+      "summary_many": "${0} requests noted.",
+      "empty": "Nothing selected."
+    },
+    "settings": {
+      "title": "Settings",
+      "sub": "Cycle module preferences.",
+      "fertility": {
+        "label": "Tracking for fertility",
+        "sub": "Shows fertile window estimate when enabled."
+      },
+      "dial": {
+        "label": "Show moon dial",
+        "sub": "The visual cycle position indicator."
+      },
+      "passphrase": {
+        "label": "Backup passphrase hint",
+        "sub": "A hint to help you remember your .void file password."
+      },
+      "aria": {
+        "close": "Close settings"
+      }
+    },
+    "archive": {
+      "export": "Export archive",
+      "import": "Import archive"
     }
   }
 }

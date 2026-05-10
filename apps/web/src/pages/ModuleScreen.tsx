@@ -3,6 +3,8 @@ import { FrostedCard } from '../components/FrostedCard';
 import { BrainDumpInput } from '../components/BrainDumpInput';
 import { ModuleHelp } from '../components/ModuleHelp';
 import { getString } from '../i18n';
+import { PetsModule } from '../modules/pets/PetsModule';
+import { CycleModule } from '../modules/cycle/CycleModule';
 
 // ─── types ────────────────────────────────────────────────────────────────────
 
@@ -40,6 +42,24 @@ function getBgConfig(moduleId: string): {
       dark: false,
     };
   }
+  if (moduleId === 'pets') {
+    return {
+      bg: '#F2EEE4',
+      text: '#14130F',
+      muted: 'rgba(20,19,15,0.5)',
+      showSkyVideo: false,
+      dark: false,
+    };
+  }
+  if (moduleId === 'cycle') {
+    return {
+      bg: '#E8DED0',
+      text: '#1E1E1E',
+      muted: '#8A8377',
+      showSkyVideo: false,
+      dark: false,
+    };
+  }
   // All other modules: sky video behind, translucent text
   return {
     bg: 'transparent',
@@ -60,17 +80,24 @@ export function ModuleScreen({
 }: ModuleScreenProps) {
   const cfg = getBgConfig(moduleId);
 
+  // Cycle: full-screen takeover with its own ceramic header — bypass wrapper
+  if (moduleId === 'cycle') {
+    return (
+      <>
+        <CycleModule onBack={() => onNavigate('dashboard')} />
+        <BrainDumpInput onSubmit={onBrainDump} />
+      </>
+    );
+  }
+
   // i18n title / sub — fall back to moduleId / empty string
   const titleKey = `module.tiles.${moduleId}.label`;
   const subKey = `module.tiles.${moduleId}.sub`;
   const title = getString('en', titleKey) !== titleKey ? getString('en', titleKey) : moduleId;
   const sub = getString('en', subKey) !== subKey ? getString('en', subKey) : '';
 
-  const isCycle = moduleId === 'cycle';
-
   return (
     <div
-      className={isCycle ? 'cycle-module' : undefined}
       style={{
         position: 'relative',
         width: '100vw',
@@ -233,7 +260,9 @@ export function ModuleScreen({
         </header>
 
         {/* ── Content ──────────────────────────────────────────────────── */}
-        {children ?? <PlaceholderContent moduleId={moduleId} dark={cfg.dark} showSkyVideo={cfg.showSkyVideo} />}
+        {moduleId === 'pets'
+          ? <PetsModule />
+          : (children ?? <PlaceholderContent moduleId={moduleId} dark={cfg.dark} showSkyVideo={cfg.showSkyVideo} />)}
       </div>
 
       {/* ── BrainDumpInput ───────────────────────────────────────────── */}
