@@ -21,3 +21,5 @@ export * as finance from './finance';
 export * as pets from './pets';
 export * as admin from './admin';
 export * as work from './work';
+export * as grocery from './grocery';
+export * as sleep from './sleep';
