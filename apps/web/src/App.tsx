@@ -1,11 +1,16 @@
+import React from 'react';
 import { REGISTRY } from '@ollie/events';
 import { cycle } from '@ollie/logic';
 import { getString } from './i18n';
 import { useStoreSlice } from './store';
 import { FrostedCard } from './components/FrostedCard';
+import { ModuleHelp } from './components/ModuleHelp';
+import { SourcesLink } from './components/SourcesLink';
 import { ToastHost } from './components/ToastHost';
 import { ToastProvider, useToast } from './components/ToastContext';
 import { BurhanTree } from './components/BurhanTree';
+import { BrainDumpInput } from './components/BrainDumpInput';
+import { ChipFlyHost, chipFly } from './components/ChipFly';
 
 const eventCount = Object.keys(REGISTRY).length;
 
@@ -19,6 +24,7 @@ const samplePrediction = cycle.predictNextPeriod(cycle.detectBoundaries(SAMPLE_S
 function AppInner() {
   const [visits, setVisits] = useStoreSlice<number>('shared', 'visit_count', 0);
   const toast = useToast();
+  const demoTileRef = React.useRef<HTMLDivElement>(null);
 
   return (
     <main
@@ -101,12 +107,74 @@ function AppInner() {
         </div>
       </FrostedCard>
 
-      <div style={{ marginTop: '3rem', display: 'flex', alignItems: 'flex-end', gap: '2rem' }}>
+      {/* ModuleHelp + SourcesLink demo */}
+      <div
+        style={{
+          marginTop: '2rem',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '1.5rem',
+          flexWrap: 'wrap',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span
+            style={{
+              fontFamily: 'var(--font-system)',
+              fontSize: 'var(--t-meta)',
+              letterSpacing: 'var(--ls-caps-small)',
+              textTransform: 'uppercase',
+              color: 'var(--ink-faint)',
+            }}
+          >
+            cycle module
+          </span>
+          <ModuleHelp moduleId="cycle" />
+        </div>
+        <SourcesLink
+          sources={['https://www.acog.org/womens-health/faqs/abnormal-uterine-bleeding']}
+        />
+      </div>
+
+      {/* Demo tile — target for chipFly. data-magic-tile lets the chip navigate to it. */}
+      <div
+        ref={demoTileRef}
+        data-magic-tile="demo"
+        style={{
+          marginTop: '2rem',
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '8px',
+          padding: '10px 20px',
+          border: '1px solid var(--rule)',
+          borderRadius: 'var(--r-sm)',
+          fontFamily: "'DM Mono', monospace",
+          fontSize: 'var(--t-meta)',
+          letterSpacing: 'var(--ls-caps-small)',
+          textTransform: 'uppercase',
+          color: 'var(--ink-faint)',
+          transition: 'background-color 300ms ease',
+        }}
+      >
+        demo tile · chipFly target
+      </div>
+
+      <div style={{ marginTop: '3rem', display: 'flex', alignItems: 'flex-end', gap: '2rem', paddingBottom: '120px' }}>
         <BurhanTree height={220} tone="home" />
         <BurhanTree height={320} tone="garden" />
       </div>
 
       <ToastHost />
+      <ChipFlyHost />
+
+      <BrainDumpInput
+        onSubmit={(text) => {
+          toast.show(`routed → ${text}`, { module: 'demo' });
+          const rect = demoTileRef.current?.getBoundingClientRect();
+          if (rect) chipFly('demo', rect);
+        }}
+        placeholder="type something and press enter..."
+      />
     </main>
   );
 }

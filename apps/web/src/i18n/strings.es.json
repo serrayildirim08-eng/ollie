@@ -144,5 +144,96 @@
     "log_label": "registro de síntomas · últimos 10",
     "day_counter": "día ${0}",
     "resolved_meta": "resuelto · ${0} días, hace ${1}"
+  },
+
+  "help": {
+    "btn_aria": "¿qué hace este módulo?",
+    "heading": "qué es esto",
+    "close": "cerrar",
+    "sources_label": "fuentes",
+    "work": {
+      "b1": "sesiones de foco y densidad de reuniones.",
+      "b2": "fechas límite que parecen abstractas hasta que no lo son.",
+      "b3": "coste de cambio de tarea, crash de hiperfoco, fatiga post-reunión.",
+      "b4": "registra: tareas, minutos de foco, lo que terminaste.",
+      "b5": "los patrones aparecen con suficientes sesiones."
+    },
+    "habits": {
+      "b1": "check-ins diarios. sin rachas, sin cadenas.",
+      "b2": "detección de deriva — hábitos que se fueron callando.",
+      "b3": "colapso luteal, preflight sensorial, firma de fricción.",
+      "b4": "registra: marca la fila cuando lo hagas.",
+      "b5": "los patrones aparecen con unas 2 semanas de datos."
+    },
+    "goals": {
+      "b1": "1 cosa a la vez. por qué importa. para cuándo.",
+      "b2": "cementerio de lo que dejaste ir, a propósito.",
+      "b3": "investigación como progreso, deriva de identidad, descuento de novedad.",
+      "b4": "registra: un objetivo, un obstáculo, una etiqueta de sesión.",
+      "b5": "máximo 5 activos. más diluye la atención."
+    },
+    "finance": {
+      "b1": "compras impulsivas después de un día duro.",
+      "b2": "suscripciones que olvidaste que siguen activas.",
+      "b3": "devoluciones que nunca se hacen.",
+      "b4": "registra: una factura recurrente, una compra reciente.",
+      "b5": "sin conexión bancaria. tú decides qué rastrear."
+    },
+    "admin": {
+      "b1": "miedo a llamar por teléfono. ceguera de renovación.",
+      "b2": "papeleo que necesita dividirse en mitades.",
+      "b3": "el último 5% — terminar lo que ya empezaste.",
+      "b4": "registra: una tarea, aunque sea pequeña.",
+      "b5": "el coste de demora aparece cuando una tarea envejece."
+    },
+    "cycle": {
+      "b1": "día del ciclo, fase, próxima regla predicha como rango.",
+      "b2": "señales de salud que citan fuentes clínicas. nunca diagnóstico.",
+      "b3": "información de fertilidad solo si lo activas.",
+      "b4": "registra: día 1 de sangrado, calambres, estado de ánimo, fatiga.",
+      "b5": "los patrones aparecen con 3+ ciclos."
+    },
+    "sleep": {
+      "b1": "hora de dormir, hora de despertar, deuda acumulada.",
+      "b2": "cómo la falta de sueño afecta el ánimo y el foco al día siguiente.",
+      "b3": "triángulo cafeína × sueño × hidratación.",
+      "b4": "registra: cuándo te acostaste, cuándo te levantaste.",
+      "b5": "sin puntuación de sueño. solo datos de reloj en bruto."
+    },
+    "body": {
+      "b1": "agua, suplementos, movimiento.",
+      "b2": "deriva de interocepción — cuando tu cuerpo pide y olvidas.",
+      "b3": "hidratación × dolor de cabeza, movimiento × estado cognitivo.",
+      "b4": "registra: un vaso de agua, una pastilla, un paseo.",
+      "b5": "sin calorías, nunca."
+    },
+    "pets": {
+      "b1": "alimentación, veterinario, suministros para cada residente.",
+      "b2": "lapsos de cuidado en días de baja energía.",
+      "b3": "retraso en citas veterinarias, lapsos de horario bajo estrés.",
+      "b4": "registra: añade una mascota, marca una comida, registra una visita al vet.",
+      "b5": "los recordatorios se pausan cuando te marcas como ausente."
+    },
+    "dump": {
+      "b1": "lanza cualquier pensamiento aquí. ollie lo ordena.",
+      "b2": "el centinela clasifica: registrar, enrutar, ignorar.",
+      "b3": "útil para capturar antes de que la memoria de trabajo lo pierda.",
+      "b4": "registra: escribe lo que sea. una línea o un párrafo.",
+      "b5": "el modo revisión te deja comprobar antes de que ollie lo confirme."
+    },
+    "grocery": {
+      "b1": "qué hay en tu despensa, por nivel de llenado.",
+      "b2": "crítico, vigilando, abastecido. fin de existencias predicho.",
+      "b3": "modo compra para la tienda. recetas con lo que tienes.",
+      "b4": "registra: vuelca la compra — leche, huevos, papel higiénico.",
+      "b5": "sin rachas. sin recompensas. solo niveles de llenado."
+    },
+    "astrology": {
+      "b1": "horóscopo en tono seco.",
+      "b2": "tránsitos, mercurio retrógrado, fase lunar.",
+      "b3": "sin predicciones, solo lenguaje de patrones.",
+      "b4": "registra: tu hora y lugar de nacimiento una vez.",
+      "b5": "los datos se quedan en el dispositivo."
+    }
   }
 }

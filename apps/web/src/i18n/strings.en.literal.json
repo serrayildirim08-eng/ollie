@@ -142,5 +142,96 @@
     "log_label": "Symptom log · last 10 entries",
     "day_counter": "Day ${0}",
     "resolved_meta": "Resolved · lasted ${0} days · ended ${1} ago"
+  },
+
+  "help": {
+    "btn_aria": "What does this module do?",
+    "heading": "About this module",
+    "close": "Close",
+    "sources_label": "Sources",
+    "work": {
+      "b1": "Focus sessions and meeting density.",
+      "b2": "Deadlines that are abstract until close.",
+      "b3": "Task-switching cost, hyperfocus crash, post-meeting fatigue.",
+      "b4": "Log: tasks, focus minutes, completed items.",
+      "b5": "Patterns appear after enough sessions."
+    },
+    "habits": {
+      "b1": "Daily check-ins. No streaks, no chains.",
+      "b2": "Drift detection — habits that quietly stopped.",
+      "b3": "Luteal phase collapse, sensory load, friction patterns.",
+      "b4": "Log: check the row when you complete a habit.",
+      "b5": "Patterns appear after about 2 weeks of data."
+    },
+    "goals": {
+      "b1": "One goal at a time. Why it matters. Target date.",
+      "b2": "Archive of goals you chose to stop.",
+      "b3": "Research-as-progress, identity drift, novelty discount.",
+      "b4": "Log: a goal, an obstacle, a session tag.",
+      "b5": "Maximum 5 active goals. More than that dilutes attention."
+    },
+    "finance": {
+      "b1": "Impulse spending after a hard day.",
+      "b2": "Subscriptions you forgot are still active.",
+      "b3": "Returns that never happen.",
+      "b4": "Log: a recurring bill or a recent purchase.",
+      "b5": "No bank connection. You tell Ollie what to track."
+    },
+    "admin": {
+      "b1": "Avoidance of phone calls. Missing renewal dates.",
+      "b2": "Paperwork that needs breaking into steps.",
+      "b3": "The last 5% — finishing what you already started.",
+      "b4": "Log: a task, even a small one.",
+      "b5": "Cost of delay appears when a task gets old."
+    },
+    "cycle": {
+      "b1": "Cycle day, phase, predicted next period as a range.",
+      "b2": "Health flags that cite a clinical source. Not diagnostic.",
+      "b3": "Fertility information only if you opt in.",
+      "b4": "Log: first day of bleeding, cramps, mood, fatigue.",
+      "b5": "Patterns appear after 3 or more cycles."
+    },
+    "sleep": {
+      "b1": "Bedtime, wake time, cumulative sleep debt.",
+      "b2": "How sleep loss affects mood and focus the next day.",
+      "b3": "Caffeine, sleep, and hydration relationship.",
+      "b4": "Log: when you went to bed and when you woke up.",
+      "b5": "No sleep score. Raw clock data only."
+    },
+    "body": {
+      "b1": "Water, supplements, movement.",
+      "b2": "Interoception drift — missing body signals.",
+      "b3": "Hydration and headaches, movement and cognitive state.",
+      "b4": "Log: a glass of water, a supplement, a walk.",
+      "b5": "No calorie tracking, ever."
+    },
+    "pets": {
+      "b1": "Feeding, vet appointments, and supplies for each pet.",
+      "b2": "Care gaps during low-energy days.",
+      "b3": "Delayed vet appointments, schedule lapses under stress.",
+      "b4": "Log: add a pet, mark a feeding, log a vet visit.",
+      "b5": "Reminders pause when you mark yourself as away."
+    },
+    "dump": {
+      "b1": "Write any thought here. Ollie sorts it.",
+      "b2": "Sentinel sorts entries: log, route, or ignore.",
+      "b3": "Useful for capturing thoughts before working memory loses them.",
+      "b4": "Log: type anything. One line or a paragraph.",
+      "b5": "Review mode lets you check before Ollie commits."
+    },
+    "grocery": {
+      "b1": "What is in your pantry, shown by fill level.",
+      "b2": "Critical, watching, and stocked categories. Predicted run-out.",
+      "b3": "Shopping mode for the store. Recipes from what you have.",
+      "b4": "Log: type groceries — milk, eggs, paper towels.",
+      "b5": "No streaks. No rewards. Just fill levels."
+    },
+    "astrology": {
+      "b1": "Horoscope in a neutral tone.",
+      "b2": "Transits, Mercury retrograde, moon phase.",
+      "b3": "Pattern language, not predictions.",
+      "b4": "Log: your birth time and location once.",
+      "b5": "Data stays on your device."
+    }
   }
 }

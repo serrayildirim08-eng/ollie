@@ -142,5 +142,96 @@
     "log_label": "symptom log · last 10",
     "day_counter": "day ${0}",
     "resolved_meta": "resolved · ${0} days, ${1} ago"
+  },
+
+  "help": {
+    "btn_aria": "what does this module do",
+    "heading": "what this is",
+    "close": "close",
+    "sources_label": "sources",
+    "work": {
+      "b1": "focus sessions and meeting density.",
+      "b2": "deadlines that feel abstract until they are not.",
+      "b3": "task-switch tax, hyperfocus crash, post-meeting drag.",
+      "b4": "log: tasks, focus minutes, what you finished.",
+      "b5": "patterns surface after enough sessions to see a shape."
+    },
+    "habits": {
+      "b1": "daily check-ins. no streaks, no chains.",
+      "b2": "drift detection — patterns that quietly stopped.",
+      "b3": "luteal collapse, sensory preflight, friction signature.",
+      "b4": "log: a quick check on the row when you do it.",
+      "b5": "patterns surface around 2 weeks of data."
+    },
+    "goals": {
+      "b1": "1 thing at a time. why it matters. when by.",
+      "b2": "graveyard for what you let go of, on purpose.",
+      "b3": "research-as-progress mirror, identity drift, novelty discount.",
+      "b4": "log: a goal, an obstacle, a session tag.",
+      "b5": "cap of 5 active. anything more dilutes attention."
+    },
+    "finance": {
+      "b1": "doom-buying after a hard day.",
+      "b2": "subscriptions you forgot are still active.",
+      "b3": "returns that never get returned.",
+      "b4": "log: a recurring bill, a recent purchase.",
+      "b5": "no bank link. you tell ollie what to track."
+    },
+    "admin": {
+      "b1": "phone call dread. renewal blindness.",
+      "b2": "paperwork that needs splitting in half.",
+      "b3": "the last 5% — finishing what you've already started.",
+      "b4": "log: a task, even something tiny.",
+      "b5": "cost-of-delay surfaces when a task ages out."
+    },
+    "cycle": {
+      "b1": "cycle day, phase, predicted next period as a range.",
+      "b2": "health flags that cite a clinician source. never diagnostic.",
+      "b3": "fertility framing only if you opt in.",
+      "b4": "log: bleed day 1, cramps, mood, fatigue.",
+      "b5": "patterns surface across 3+ cycles."
+    },
+    "sleep": {
+      "b1": "bedtime, wake time, cumulative debt.",
+      "b2": "how sleep loss bleeds into mood and focus the next day.",
+      "b3": "caffeine × sleep × hydration triangle.",
+      "b4": "log: when you went to bed, when you woke up.",
+      "b5": "no scoring, no quality star. raw clock only."
+    },
+    "body": {
+      "b1": "water, supplements, movement.",
+      "b2": "interoception drift — when your body asks and you forget.",
+      "b3": "hydration × headache, movement × cognitive state.",
+      "b4": "log: a glass of water, a pill, a walk.",
+      "b5": "no calories, ever."
+    },
+    "pets": {
+      "b1": "feeding, vet, supplies for each resident.",
+      "b2": "care lapse during low-EF days.",
+      "b3": "vet adherence delay, schedule lapse under stress.",
+      "b4": "log: add a pet, mark a feed, log a vet visit.",
+      "b5": "reminders pause when you mark yourself away."
+    },
+    "dump": {
+      "b1": "throw any thought here. ollie sorts it.",
+      "b2": "sentinel triages: log, route, ignore.",
+      "b3": "good for capturing before working memory drops it.",
+      "b4": "log: type whatever. one line or a paragraph.",
+      "b5": "review mode lets you check ollie before it commits."
+    },
+    "grocery": {
+      "b1": "what is in your pantry, by fill level.",
+      "b2": "critical, watching, stocked. predicted run-out.",
+      "b3": "shopping mode for in-store. recipes for what you have.",
+      "b4": "log: dump groceries — milk, eggs, paper towels.",
+      "b5": "no streaks. no rewards. just fill levels."
+    },
+    "astrology": {
+      "b1": "horoscope in dry tone.",
+      "b2": "transits, mercury retrograde, moon phase.",
+      "b3": "no predictions, just pattern language.",
+      "b4": "log: your birth time and place once.",
+      "b5": "data stays on device."
+    }
   }
 }
