@@ -10,3 +10,15 @@ export {
 } from './prediction';
 export { computePhaseForDate, deriveCycleStats, correlateSymptom } from './phase';
 export { detectHealthFlags } from './flags';
+export {
+  SYMPTOM_BUCKETS,
+  bucketSymptom,
+  findCorrelations,
+  type CycleInsight,
+} from './symptom-clustering';
+export {
+  detectSyndromePatterns,
+  type SyndromeFlag,
+  type SyndromeKey,
+  type SyndromeSeverity,
+} from './syndromes';
