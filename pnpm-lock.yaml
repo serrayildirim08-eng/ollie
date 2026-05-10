@@ -64,7 +64,24 @@ importers:
         specifier: ^2.1.5
         version: 2.1.9
 
-  packages/orchestrator: {}
+  packages/orchestrator:
+    dependencies:
+      '@ollie/events':
+        specifier: workspace:*
+        version: link:../events
+      '@ollie/logic':
+        specifier: workspace:*
+        version: link:../logic
+      '@ollie/store':
+        specifier: workspace:*
+        version: link:../store
+    devDependencies:
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.5
+        version: 2.1.9
 
   packages/store:
     devDependencies:

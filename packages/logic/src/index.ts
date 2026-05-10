@@ -29,3 +29,4 @@ export * as goals from './goals';
 export * as habits from './habits';
 export * as astrology from './astrology';
 export * as journal from './journal';
+export * as dissection from './dissection';
