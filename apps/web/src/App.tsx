@@ -13,8 +13,10 @@ import { BrainDumpInput } from './components/BrainDumpInput';
 import { ChipFlyHost, chipFly } from './components/ChipFly';
 import { HomeScreen } from './pages/HomeScreen';
 import { DashboardScreen } from './pages/DashboardScreen';
+import { GardenScreen } from './pages/GardenScreen';
+import { ModuleScreen } from './pages/ModuleScreen';
 
-type Screen = 'home' | 'dashboard' | 'demo';
+type Screen = 'home' | 'dashboard' | 'garden' | 'module' | 'demo';
 
 const eventCount = Object.keys(REGISTRY).length;
 
@@ -27,6 +29,7 @@ const samplePrediction = cycle.predictNextPeriod(cycle.detectBoundaries(SAMPLE_S
 
 function AppInner() {
   const [screen, setScreen] = useState<Screen>('home');
+  const [selectedModule, setSelectedModule] = useState<string>('');
   const [visits, setVisits] = useStoreSlice<number>('shared', 'visit_count', 0);
   const toast = useToast();
   const demoTileRef = React.useRef<HTMLDivElement>(null);
@@ -37,12 +40,22 @@ function AppInner() {
         <HomeScreen
           onNavigate={(to) => {
             if (to === 'dashboard') setScreen('dashboard');
-            // garden navigation: placeholder — no-op for now
+            else if (to === 'garden') setScreen('garden');
           }}
           onBrainDump={(text) => toast.show(`routed → ${text}`, { module: 'demo' })}
         />
         <ToastHost />
       </>
+    );
+  }
+
+  if (screen === 'garden') {
+    return (
+      <GardenScreen
+        onNavigate={(to) => {
+          if (to === 'home') setScreen('home');
+        }}
+      />
     );
   }
 
@@ -52,10 +65,31 @@ function AppInner() {
         <DashboardScreen
           onNavigate={(to, moduleId) => {
             if (to === 'home') setScreen('home');
-            else if (to === 'garden') setScreen('home'); // garden placeholder
-            else if (to === 'module') toast.show(`opening module → ${moduleId ?? ''}`, { module: moduleId ?? 'demo' });
+            else if (to === 'garden') setScreen('garden');
+            else if (to === 'module' && moduleId) {
+              setSelectedModule(moduleId);
+              setScreen('module');
+            }
           }}
           onBrainDump={(text) => toast.show(`routed → ${text}`, { module: 'demo' })}
+        />
+        <ToastHost />
+        <ChipFlyHost />
+      </>
+    );
+  }
+
+  if (screen === 'module') {
+    return (
+      <>
+        <ModuleScreen
+          moduleId={selectedModule}
+          onNavigate={(to) => {
+            if (to === 'dashboard') setScreen('dashboard');
+            else if (to === 'home') setScreen('home');
+            else if (to === 'garden') setScreen('garden');
+          }}
+          onBrainDump={(text) => toast.show(`routed → ${text}`, { module: selectedModule })}
         />
         <ToastHost />
         <ChipFlyHost />
