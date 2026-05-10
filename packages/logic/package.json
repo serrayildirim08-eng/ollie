@@ -8,7 +8,9 @@
   "exports": {
     ".": "./src/index.ts",
     "./cycle": "./src/cycle/index.ts",
-    "./pets": "./src/pets/index.ts"
+    "./pets": "./src/pets/index.ts",
+    "./grocery": "./src/grocery/index.ts",
+    "./finance": "./src/finance/index.ts"
   },
   "scripts": {
     "test": "vitest run",

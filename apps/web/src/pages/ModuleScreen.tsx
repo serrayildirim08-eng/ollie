@@ -5,6 +5,8 @@ import { ModuleHelp } from '../components/ModuleHelp';
 import { getString } from '../i18n';
 import { PetsModule } from '../modules/pets/PetsModule';
 import { CycleModule } from '../modules/cycle/CycleModule';
+import { GroceryModule } from '../modules/grocery/GroceryModule';
+import { FinanceModule } from '../modules/finance/FinanceModule';
 
 // ─── types ────────────────────────────────────────────────────────────────────
 
@@ -85,6 +87,39 @@ export function ModuleScreen({
     return (
       <>
         <CycleModule onBack={() => onNavigate('dashboard')} />
+        <BrainDumpInput onSubmit={onBrainDump} />
+      </>
+    );
+  }
+
+  // Grocery: full-screen takeover — owns its own warm-cream layout + header
+  if (moduleId === 'grocery') {
+    return (
+      <>
+        <div style={{ position: 'relative', width: '100vw', minHeight: '100vh', background: '#F5F0E8' }}>
+          {/* Back arrow */}
+          <button
+            type="button"
+            aria-label="back to dashboard"
+            onClick={() => onNavigate('dashboard')}
+            style={{
+              position: 'fixed',
+              top: 24,
+              left: 32,
+              zIndex: 10,
+              background: 'transparent',
+              border: 'none',
+              fontFamily: "'DM Mono', monospace",
+              fontSize: 13,
+              color: 'rgba(20,19,15,0.5)',
+              cursor: 'pointer',
+              letterSpacing: '0.04em',
+            }}
+          >
+            ←
+          </button>
+          <GroceryModule />
+        </div>
         <BrainDumpInput onSubmit={onBrainDump} />
       </>
     );
@@ -262,6 +297,8 @@ export function ModuleScreen({
         {/* ── Content ──────────────────────────────────────────────────── */}
         {moduleId === 'pets'
           ? <PetsModule />
+          : moduleId === 'finance'
+          ? <FinanceModule />
           : (children ?? <PlaceholderContent moduleId={moduleId} dark={cfg.dark} showSkyVideo={cfg.showSkyVideo} />)}
       </div>
 
