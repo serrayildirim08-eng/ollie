@@ -1,0 +1,38 @@
+/**
+ * @ollie/logic · cycle constants
+ *
+ * All cycle-related thresholds and priors live here so they can be
+ * surfaced in research docs and tweaked without hunting through code.
+ */
+
+import type { Prior } from './types';
+
+/** Population prior — Urteaga 2021 / Bull 2019 on Natural Cycles data. */
+export const DEFAULT_PRIOR: Prior = { mean: 28.5, sd: 4.0 };
+
+/** Milliseconds in one day. */
+export const DAY_MS = 86_400_000;
+
+/**
+ * Medical-impossibility floor: two "period started" events less than this
+ * many days apart cannot both be real cycle starts. Drops the later one.
+ */
+export const MIN_CYCLE_DAYS = 10;
+
+/** EWMA decay for sufficient stats — most recent cycle weighted 1.0. */
+export const EWMA_ALPHA = 0.85;
+
+/** Minimum within-user sigma even when sample sd is tiny — prevents collapse. */
+export const MIN_SIGMA_USER = 2.0;
+
+/** Standard luteal phase length, in days. */
+export const LUTEAL_DAYS = 14;
+
+/** Health-flag cooldown — suppress flags for cycles edited in the last 72h. */
+export const HEALTH_FLAG_COOLDOWN_MS = 72 * 3600 * 1000;
+
+/** Robust-stats kicks in when empirical sd exceeds this many days. */
+export const ROBUST_SD_THRESHOLD = 7;
+
+/** MAD scaling factor to estimate sd from MAD under Normal assumption. */
+export const MAD_TO_SD = 1.4826;
