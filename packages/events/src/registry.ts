@@ -142,4 +142,37 @@ export const REGISTRY: Registry = {
   'admin:defer_chain':                 { payload: '{ task_id: string, defer_count: number, ts: number }' },
   'admin:two_minute_tasks':            { payload: '{ count: number, batch: boolean, ts: number }' },
   'admin:recurring_pattern':           { payload: '{ category_or_label: string, predicted_next_ts: number, ts: number }' },
+  'admin:appointment_completed':       { payload: '{ task_id: string, kind?: "doctor"|"appointment"|"other", ts: number }' },
+  'admin:reflect_upcoming':            { payload: '{ source_event: string, source_module: string, kind: string, due_at: number, message: string, ts: number }' },
+
+  // ─── Sprint 3 / D1 burhan life-event tree ───────────────────────
+  // Constitutional: tree never decays. Elements are append-only.
+  'burhan:element_added':              { payload: '{ id: string, type: "leaf"|"gold_leaf"|"fruit"|"flower"|"canopy_fruit", source_module: string, source_event_id: string, ts: number }' },
+  'burhan:add_leaf':                   { payload: '{ source_module: string, source_event_id: string, ts: number }' },
+  'burhan:add_gold_leaf':              { payload: '{ source_module: string, source_event_id: string, ts: number }' },
+  'burhan:add_fruit':                  { payload: '{ source_module: string, source_event_id: string, ts: number }' },
+  'burhan:add_flower':                 { payload: '{ source_module: string, source_event_id: string, ts: number }' },
+  'burhan:add_canopy_fruit':           { payload: '{ source_module: string, source_event_id: string, ts: number }' },
+
+  // ─── Sprint 3 / D3 finance pattern alerts (Canva-style) ─────────
+  'finance:subscription_detected':     { payload: '{ pattern_id: string, merchant: string, amount: number, cadence: "monthly"|"quarterly"|"yearly", occurrence_count: number, ts: number }' },
+  'finance:adhd_tax_updated':          { payload: '{ total_30d: number, count_30d: number, ts: number }' },
+  'finance:cycle_spending_pattern_detected': { payload: '{ luteal_ratio: number, follicular_median: number, luteal_median: number, cycle_count: number, ts: number }' },
+  'finance:spending_spike_detected':   { payload: '{ amount: number, baseline_median: number, ratio: number, ts: number }' },
+  'finance:reminder_set':              { payload: '{ pattern_id: string, due_at: number, kind: "bill"|"subscription"|"goal", message: string, ts: number }' },
+  'finance:subscription_cancelled':    { payload: '{ pattern_id: string, merchant: string, ts: number }' },
+  'finance:bill_paid_on_time':         { payload: '{ pattern_id: string, merchant: string, ts: number }' },
+
+  // ─── Sprint 3 / D2 cross-module wires ───────────────────────────
+  'cycle:period_logged':               { payload: '{ ts: number, source: "user"|"braindump"|"import" }' },
+  'sleep:pacing_breach_detected':      { payload: '{ severity: "info"|"watch", run_length: number, ts: number }' },
+  'habits:reduce_motion_on':           { payload: '{ reason: string, ts: number }' },
+  'work:suggest_break':                { payload: '{ reason: string, ts: number }' },
+  'body:suggest_rest_check':           { payload: '{ reason: string, ts: number }' },
+  'habits:interest_capture_detected':  { payload: '{ habit_id?: string, ts: number }' },
+  'work:suggest_pause_marked_missed':  { payload: '{ reason: string, ts: number }' },
+  'body:hydration_drop_detected':      { payload: '{ drop_pct: number, ts: number }' },
+  'habits:surface_water_habit':        { payload: '{ reason: string, ts: number }' },
+  'body:doctor_visit_completed':       { payload: '{ ts: number }' },
+  'grocery:auto_added':                { payload: '{ source_event: string, item_ids: string[], category: string, ts: number }' },
 };

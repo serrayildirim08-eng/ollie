@@ -320,6 +320,7 @@ export function DashboardScreen({ onNavigate, onBrainDump, stats }: DashboardScr
         <div
           role="list"
           aria-label="clusters"
+          className="cluster-grid"
           style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(2, 1fr)',

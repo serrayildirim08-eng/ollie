@@ -189,8 +189,16 @@ export function ModuleScreen({
     );
   }
 
-  // Astrology: full-screen takeover — dark editorial, owns its own layout
+  // Astrology: cut from launch — only accessible with ?astrology=1
   if (moduleId === 'astrology') {
+    const astrologyEnabled =
+      typeof window !== 'undefined' &&
+      new URLSearchParams(window.location.search).get('astrology') === '1';
+    if (!astrologyEnabled) {
+      // Silently redirect to dashboard rather than showing a dead page.
+      onNavigate('dashboard');
+      return null;
+    }
     return (
       <>
         <Suspense fallback={<ModuleLoading />}>

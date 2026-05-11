@@ -79,6 +79,26 @@ export function createCycleOrchestrator(store: Store): Orchestrator & {
       'cycle', 'prediction', null,
     );
 
+    // Sprint 3 / D1+D4 — emit cycle:period_logged for each newly logged
+    // "started" item. We compare against a high-water mark in the store
+    // so a reload doesn't re-fire for items the user has already logged.
+    const prevHighTs = store.get<number>('cycle', '_periodLoggedHighTs', 0) ?? 0;
+    let highTs = prevHighTs;
+    for (const it of items) {
+      if (!it || it.action !== 'started' || typeof it.ts !== 'number') continue;
+      if (it.ts <= prevHighTs) continue;
+      try {
+        events.emit('cycle:period_logged', {
+          ts: it.ts,
+          source: (it as { source?: 'user' | 'braindump' | 'import' }).source ?? 'user',
+        });
+      } catch { /* non-fatal */ }
+      if (it.ts > highTs) highTs = it.ts;
+    }
+    if (highTs > prevHighTs) {
+      store.set('cycle', '_periodLoggedHighTs', highTs);
+    }
+
     const cycles = cycle.detectBoundaries(items);
     const prediction = cycle.predictNextPeriod(cycles);
     const insights = cycle.findCorrelations(symptomEvents, cycles);

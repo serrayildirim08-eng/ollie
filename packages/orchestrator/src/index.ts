@@ -23,6 +23,7 @@ import { createDumpOrchestrator } from './dump';
 import { createHabitsOrchestrator } from './habits';
 import { createWorkOrchestrator } from './work';
 import { createGoalsOrchestrator } from './goals';
+import { createBurhanOrchestrator } from './burhan';
 
 export type { Orchestrator } from './types';
 export { createCycleOrchestrator } from './cycle';
@@ -37,6 +38,7 @@ export { createDumpOrchestrator } from './dump';
 export { createHabitsOrchestrator } from './habits';
 export { createWorkOrchestrator } from './work';
 export { createGoalsOrchestrator } from './goals';
+export { createBurhanOrchestrator } from './burhan';
 
 export interface RootOrchestrator extends Orchestrator {
   cycle: ReturnType<typeof createCycleOrchestrator>;
@@ -51,6 +53,7 @@ export interface RootOrchestrator extends Orchestrator {
   habits: ReturnType<typeof createHabitsOrchestrator>;
   work: ReturnType<typeof createWorkOrchestrator>;
   goals: ReturnType<typeof createGoalsOrchestrator>;
+  burhan: ReturnType<typeof createBurhanOrchestrator>;
 }
 
 /**
@@ -71,6 +74,7 @@ export function createOrchestrator(store: Store): RootOrchestrator {
   const habitsOrch = createHabitsOrchestrator(store);
   const workOrch = createWorkOrchestrator(store);
   const goalsOrch = createGoalsOrchestrator(store);
+  const burhanOrch = createBurhanOrchestrator(store);
 
   return {
     cycle: cycleOrch,
@@ -85,6 +89,7 @@ export function createOrchestrator(store: Store): RootOrchestrator {
     habits: habitsOrch,
     work: workOrch,
     goals: goalsOrch,
+    burhan: burhanOrch,
 
     init() {
       cycleOrch.init();
@@ -99,6 +104,7 @@ export function createOrchestrator(store: Store): RootOrchestrator {
       habitsOrch.init();
       workOrch.init();
       goalsOrch.init();
+      burhanOrch.init();
     },
 
     teardown() {
@@ -114,6 +120,7 @@ export function createOrchestrator(store: Store): RootOrchestrator {
       habitsOrch.teardown();
       workOrch.teardown();
       goalsOrch.teardown();
+      burhanOrch.teardown();
     },
   };
 }

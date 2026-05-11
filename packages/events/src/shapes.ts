@@ -35,6 +35,17 @@ export const SHAPES: Record<string, ShapeSpec> = {
   'pets:care_logged':          { pet_id: 'string', task: 'string', source: 'string', occurred_at: 'number' },
   'void:reminder:scheduled':   { id: 'string', fireAt: 'number', message: 'string', module: 'string', source: 'string' },
   'void:crisis:detected':      { text: 'string', matchedLine: 'string', ts: 'number' },
+
+  // Sprint 3 / D1 burhan
+  'burhan:element_added':      { id: 'string', type: 'string', source_module: 'string', source_event_id: 'string', ts: 'number' },
+
+  // Sprint 3 / D3 finance pattern alerts
+  'finance:subscription_detected':           { pattern_id: 'string', merchant: 'string', amount: 'number', cadence: 'string', occurrence_count: 'number', ts: 'number' },
+  'finance:adhd_tax_updated':                { total_30d: 'number', count_30d: 'number', ts: 'number' },
+  'finance:cycle_spending_pattern_detected': { luteal_ratio: 'number', cycle_count: 'number', ts: 'number' },
+
+  // Sprint 3 / D2 cross-module wires
+  'cycle:period_logged':       { ts: 'number', source: 'string' },
 };
 
 export type ValidationResult = { ok: true } | { ok: false; reason: string };

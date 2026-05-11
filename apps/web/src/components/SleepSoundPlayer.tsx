@@ -1,8 +1,8 @@
 /**
  * SleepSoundPlayer — wind-down audio player for the sleep module.
  *
- * 6 sounds in a 2×3 grid. Real placeholders: brown-noise, rain, ocean (silent CC0 stubs
- * — swap with licensed assets when available). Stubbed: white-noise, pink-noise, fire.
+ * 6 sounds in a 2×3 grid: brown-noise, white-noise, pink-noise, rain, ocean, fire.
+ * All assets are CC0 synthetic loops generated via Python + ffmpeg.
  *
  * Autoplay quirk: browsers block audio without a prior user gesture. We initialise
  * Howler lazily on the first button tap (no eagerly-unlocked AudioContext) so Chrome's
@@ -59,15 +59,12 @@ interface SoundDef {
 const SOUNDS: SoundDef[] = [
   // Row 1
   { id: 'brown-noise', label: 'brown noise', src: '/audio/brown-noise.mp3', stub: false },
-  // TODO(license): replace null with real white-noise .mp3 path once licensed
-  { id: 'white-noise', label: 'white noise', src: null,                    stub: true  },
-  // TODO(license): replace null with real pink-noise .mp3 path once licensed
-  { id: 'pink-noise',  label: 'pink noise',  src: null,                    stub: true  },
+  { id: 'white-noise', label: 'white noise', src: '/audio/white-noise.mp3', stub: false },
+  { id: 'pink-noise',  label: 'pink noise',  src: '/audio/pink-noise.mp3',  stub: false },
   // Row 2
   { id: 'rain',        label: 'rain',        src: '/audio/rain.mp3',        stub: false },
   { id: 'ocean',       label: 'ocean',       src: '/audio/ocean.mp3',       stub: false },
-  // TODO(license): replace null with real fire .mp3 path once licensed
-  { id: 'fire',        label: 'fire',        src: null,                    stub: true  },
+  { id: 'fire',        label: 'fire',        src: '/audio/fire.mp3',        stub: false },
 ];
 
 // ─── sleep timer chips ────────────────────────────────────────────────────────

@@ -120,6 +120,76 @@ export function createGroceryOrchestrator(
     schedule();
   }
 
+  // ── D4 · cycle → grocery auto-routing ────────────────────────────────────
+  //
+  // When the user logs a period, drop 1–3 period-product items onto the
+  // shopping list flagged shelf=watching. The user gets a 5-minute undo
+  // window via `auto_added_at` on the items.
+  //
+  // Reads `shared.settings.period_products` for preferred brand/types.
+  // Default: generic tampons + pads + liners (3 items).
+  //
+  // Idempotent: if a period_logged ts has already produced items, we skip.
+
+  interface PeriodProductPref { name: string; normalizedName?: string; }
+
+  const DEFAULT_PERIOD_PRODUCTS: PeriodProductPref[] = [
+    { name: 'tampons', normalizedName: 'tampons' },
+    { name: 'pads',    normalizedName: 'pads' },
+    { name: 'liners',  normalizedName: 'liners' },
+  ];
+
+  function getPeriodPrefs(): PeriodProductPref[] {
+    const settings = store.get<{ period_products?: PeriodProductPref[] }>(
+      'shared', 'settings', {},
+    ) ?? {};
+    const prefs = Array.isArray(settings.period_products) && settings.period_products.length
+      ? settings.period_products
+      : DEFAULT_PERIOD_PRODUCTS;
+    return prefs.slice(0, 3);
+  }
+
+  function onPeriodLogged(payload: unknown): void {
+    const p = (payload ?? {}) as { ts?: number; source?: string };
+    const periodTs = typeof p.ts === 'number' ? p.ts : nowFn();
+
+    // Idempotency: dedupe by the period ts we routed for.
+    const routedAt = store.get<number[]>('grocery', '_periodRoutedTs', []) ?? [];
+    if (routedAt.includes(periodTs)) return;
+
+    const prefs = getPeriodPrefs();
+    if (!prefs.length) return;
+
+    const ts = nowFn();
+    const items = store.get<ShoppingItem[]>('grocery', 'items', []) ?? [];
+    const newItems = prefs.map((pref, i) => ({
+      name: pref.name,
+      normalizedName: pref.normalizedName ?? pref.name,
+      id: `auto-period-${periodTs}-${i}`,
+      category: 'period_products',
+      shelf: 'watching',
+      checked: false,
+      addedTs: ts,
+      ts,
+      auto_added_at: ts,
+      auto_added_source: 'period log',
+      auto_added_source_event: 'cycle:period_logged',
+      auto_added_period_ts: periodTs,
+    })) as unknown as ShoppingItem[];
+
+    store.set('grocery', 'items', [...items, ...newItems]);
+    store.set('grocery', '_periodRoutedTs', [...routedAt, periodTs]);
+
+    try {
+      events.emit('grocery:auto_added', {
+        source_event: 'cycle:period_logged',
+        item_ids: newItems.map((it) => (it as { id?: string }).id ?? ''),
+        category: 'period_products',
+        ts,
+      });
+    } catch { /* non-fatal */ }
+  }
+
   // ── lifecycle ─────────────────────────────────────────────────────────────
 
   function init(): void {
@@ -128,6 +198,10 @@ export function createGroceryOrchestrator(
 
     unsubs.push(store.subscribeKey('grocery', 'items', onItemsChanged));
     unsubs.push(store.subscribeKey('grocery', 'pantry', () => schedule()));
+    unsubs.push(events.on('cycle:period_logged', (p) => {
+      try { onPeriodLogged(p); }
+      catch (err) { console.error('[orchestrator/grocery] period_logged tick failed', err); }
+    }));
 
     // Check duplicates for any pre-existing bought items before subscribing.
     const items = getItems();

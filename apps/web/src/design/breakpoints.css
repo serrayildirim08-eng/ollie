@@ -176,6 +176,16 @@ html { font-size: 17px; }   /* anchor · same across all breakpoints */
 }
 
 /* ───────────────────────────────────────── */
+/* DASHBOARD CLUSTER GRID · single-column on small screens */
+/* ───────────────────────────────────────── */
+
+@media (max-width: 640px) {
+  .cluster-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* ───────────────────────────────────────── */
 /* SAFE AREA · iphone notch + home indicator */
 /* ───────────────────────────────────────── */
 

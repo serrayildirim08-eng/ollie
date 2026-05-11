@@ -21,7 +21,8 @@
     "./astrology": "./src/astrology/index.ts",
     "./patterns": "./src/patterns/index.ts",
     "./crisis": "./src/crisis/index.ts",
-    "./dissection": "./src/dissection/index.ts"
+    "./dissection": "./src/dissection/index.ts",
+    "./burhan": "./src/burhan/index.ts"
   },
   "scripts": {
     "test": "vitest run",
