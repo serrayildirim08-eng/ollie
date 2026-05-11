@@ -21,9 +21,7 @@ import {
   runMigrations,
 } from '@ollie/store';
 import { useStoreSlice as baseUseStoreSlice } from '@ollie/store/react';
-import { computeNatalChart, currentTransits } from '@ollie/logic/astrology';
 import type { BirthData } from '@ollie/logic/astrology';
-import { astronomyAPI } from './lib/astronomy';
 import { createOrchestrator } from '@ollie/orchestrator';
 
 runMigrations(browserAdapter);
@@ -39,44 +37,72 @@ export function useStoreSlice<T>(
   return baseUseStoreSlice<T>(store, mod, key, defaultValue);
 }
 
-// ─── Astrology orchestrator ───────────────────────────────────────────────────
+// ─── Astrology orchestrator (deferred) ───────────────────────────────────────
+// Only loads astronomy-engine + @ollie/logic/astrology when the user has
+// birth data stored, or when they add it for the first time.
 
-function recomputeChart(birth: BirthData | null | undefined): void {
-  if (!birth?.date) {
-    store.set('astrology', 'chart', null);
-    return;
+async function bootAstrology(): Promise<void> {
+  const [{ computeNatalChart, currentTransits }, { astronomyAPI }] =
+    await Promise.all([
+      import('@ollie/logic/astrology'),
+      import('./lib/astronomy'),
+    ]);
+
+  function recomputeChart(birth: BirthData | null | undefined): void {
+    if (!birth?.date) {
+      store.set('astrology', 'chart', null);
+      return;
+    }
+    try {
+      const chart = computeNatalChart(birth, astronomyAPI);
+      store.set('astrology', 'chart', chart);
+    } catch (err) {
+      console.warn('[astrology orchestrator] computeNatalChart failed:', err);
+      store.set('astrology', 'chart', null);
+    }
   }
-  try {
-    const chart = computeNatalChart(birth, astronomyAPI);
-    store.set('astrology', 'chart', chart);
-  } catch (err) {
-    console.warn('[astrology orchestrator] computeNatalChart failed:', err);
-    store.set('astrology', 'chart', null);
+
+  function recomputeTransits(): void {
+    try {
+      const snapshot = currentTransits(new Date(), astronomyAPI);
+      store.set('astrology', 'currentTransits', snapshot);
+    } catch (err) {
+      console.warn('[astrology orchestrator] currentTransits failed:', err);
+    }
   }
-}
 
-function recomputeTransits(): void {
-  try {
-    const snapshot = currentTransits(new Date(), astronomyAPI);
-    store.set('astrology', 'currentTransits', snapshot);
-  } catch (err) {
-    console.warn('[astrology orchestrator] currentTransits failed:', err);
-  }
-}
-
-// Run once on load with whatever birth data is already stored.
-recomputeChart(store.get<BirthData | null>('astrology', 'birth', null));
-recomputeTransits();
-
-// Subscribe to birth changes.
-store.subscribeKey<BirthData | null>('astrology', 'birth', recomputeChart);
-
-// Daily transit tick (every 24 h); also refresh chart in case DST shifted anything.
-const TRANSIT_INTERVAL_MS = 24 * 60 * 60 * 1000;
-setInterval(() => {
-  recomputeTransits();
+  // Run once for the existing birth data that triggered the boot.
   recomputeChart(store.get<BirthData | null>('astrology', 'birth', null));
-}, TRANSIT_INTERVAL_MS);
+  recomputeTransits();
+
+  // Subscribe to future birth changes.
+  store.subscribeKey<BirthData | null>('astrology', 'birth', recomputeChart);
+
+  // Daily transit tick (every 24 h).
+  const TRANSIT_INTERVAL_MS = 24 * 60 * 60 * 1000;
+  setInterval(() => {
+    recomputeTransits();
+    recomputeChart(store.get<BirthData | null>('astrology', 'birth', null));
+  }, TRANSIT_INTERVAL_MS);
+}
+
+// Boot if birth data already exists on load; otherwise wait for it to appear.
+const hasBirthOnLoad = Boolean(store.get<BirthData | null>('astrology', 'birth', null)?.date);
+if (hasBirthOnLoad) {
+  void bootAstrology();
+} else {
+  // One-shot subscription: boot as soon as birth data is set, then unsub.
+  const unsubBirth = store.subscribeKey<BirthData | null>(
+    'astrology',
+    'birth',
+    (birth) => {
+      if (birth?.date) {
+        unsubBirth();
+        void bootAstrology();
+      }
+    },
+  );
+}
 
 // ─── Root orchestrator boot ───────────────────────────────────────────────────
 // Starts cycle, pets, body, grocery, sleep, finance, patterns.

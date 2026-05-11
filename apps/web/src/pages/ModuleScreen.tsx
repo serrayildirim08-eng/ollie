@@ -1,20 +1,35 @@
-import React from 'react';
+import React, { lazy, Suspense } from 'react';
 import { FrostedCard } from '../components/FrostedCard';
 import { BrainDumpInput } from '../components/BrainDumpInput';
 import { ModuleHelp } from '../components/ModuleHelp';
 import { getString } from '../i18n';
-import { PetsModule } from '../modules/pets/PetsModule';
-import { CycleModule } from '../modules/cycle/CycleModule';
-import { GroceryModule } from '../modules/grocery/GroceryModule';
-import { FinanceModule } from '../modules/finance/FinanceModule';
-import { HabitsModule } from '../modules/habits/HabitsModule';
-import { SleepModule } from '../modules/sleep/SleepModule';
-import { WorkModule } from '../modules/work/WorkModule';
-import { BodyModule } from '../modules/body/BodyModule';
-import { GoalsModule } from '../modules/goals/GoalsModule';
-import { AdminModule } from '../modules/admin/AdminModule';
-import { DumpModule } from '../modules/dump/DumpModule';
-import { AstrologyModule } from '../modules/astrology/AstrologyModule';
+
+// ─── lazy module imports ──────────────────────────────────────────────────────
+
+const PetsModule      = lazy(() => import('../modules/pets/PetsModule').then(m => ({ default: m.PetsModule })));
+const CycleModule     = lazy(() => import('../modules/cycle/CycleModule').then(m => ({ default: m.CycleModule })));
+const GroceryModule   = lazy(() => import('../modules/grocery/GroceryModule').then(m => ({ default: m.GroceryModule })));
+const FinanceModule   = lazy(() => import('../modules/finance/FinanceModule').then(m => ({ default: m.FinanceModule })));
+const HabitsModule    = lazy(() => import('../modules/habits/HabitsModule').then(m => ({ default: m.HabitsModule })));
+const SleepModule     = lazy(() => import('../modules/sleep/SleepModule').then(m => ({ default: m.SleepModule })));
+const WorkModule      = lazy(() => import('../modules/work/WorkModule').then(m => ({ default: m.WorkModule })));
+const BodyModule      = lazy(() => import('../modules/body/BodyModule').then(m => ({ default: m.BodyModule })));
+const GoalsModule     = lazy(() => import('../modules/goals/GoalsModule').then(m => ({ default: m.GoalsModule })));
+const AdminModule     = lazy(() => import('../modules/admin/AdminModule').then(m => ({ default: m.AdminModule })));
+const DumpModule      = lazy(() => import('../modules/dump/DumpModule').then(m => ({ default: m.DumpModule })));
+const AstrologyModule = lazy(() => import('../modules/astrology/AstrologyModule').then(m => ({ default: m.AstrologyModule })));
+
+// ─── fallback ─────────────────────────────────────────────────────────────────
+
+function ModuleLoading() {
+  return (
+    <div
+      style={{ minHeight: '100vh', background: 'var(--bone)' }}
+      aria-busy="true"
+      aria-label="loading module"
+    />
+  );
+}
 
 // ─── types ────────────────────────────────────────────────────────────────────
 
@@ -94,7 +109,9 @@ export function ModuleScreen({
   if (moduleId === 'sleep') {
     return (
       <>
-        <SleepModule onBack={() => onNavigate('dashboard')} />
+        <Suspense fallback={<ModuleLoading />}>
+          <SleepModule onBack={() => onNavigate('dashboard')} />
+        </Suspense>
         <BrainDumpInput onSubmit={onBrainDump} />
       </>
     );
@@ -104,7 +121,9 @@ export function ModuleScreen({
   if (moduleId === 'habits') {
     return (
       <>
-        <HabitsModule onBack={() => onNavigate('dashboard')} />
+        <Suspense fallback={<ModuleLoading />}>
+          <HabitsModule onBack={() => onNavigate('dashboard')} />
+        </Suspense>
         <BrainDumpInput onSubmit={onBrainDump} />
       </>
     );
@@ -114,7 +133,9 @@ export function ModuleScreen({
   if (moduleId === 'cycle') {
     return (
       <>
-        <CycleModule onBack={() => onNavigate('dashboard')} />
+        <Suspense fallback={<ModuleLoading />}>
+          <CycleModule onBack={() => onNavigate('dashboard')} />
+        </Suspense>
         <BrainDumpInput onSubmit={onBrainDump} />
       </>
     );
@@ -124,7 +145,9 @@ export function ModuleScreen({
   if (moduleId === 'work') {
     return (
       <>
-        <WorkModule onBack={() => onNavigate('dashboard')} />
+        <Suspense fallback={<ModuleLoading />}>
+          <WorkModule onBack={() => onNavigate('dashboard')} />
+        </Suspense>
         <BrainDumpInput onSubmit={onBrainDump} />
       </>
     );
@@ -134,7 +157,9 @@ export function ModuleScreen({
   if (moduleId === 'body') {
     return (
       <>
-        <BodyModule onBack={() => onNavigate('dashboard')} />
+        <Suspense fallback={<ModuleLoading />}>
+          <BodyModule onBack={() => onNavigate('dashboard')} />
+        </Suspense>
         <BrainDumpInput onSubmit={onBrainDump} />
       </>
     );
@@ -144,7 +169,9 @@ export function ModuleScreen({
   if (moduleId === 'admin') {
     return (
       <>
-        <AdminModule onBack={() => onNavigate('dashboard')} />
+        <Suspense fallback={<ModuleLoading />}>
+          <AdminModule onBack={() => onNavigate('dashboard')} />
+        </Suspense>
         <BrainDumpInput onSubmit={onBrainDump} />
       </>
     );
@@ -154,7 +181,9 @@ export function ModuleScreen({
   if (moduleId === 'dump') {
     return (
       <>
-        <DumpModule onBack={() => onNavigate('dashboard')} />
+        <Suspense fallback={<ModuleLoading />}>
+          <DumpModule onBack={() => onNavigate('dashboard')} />
+        </Suspense>
         <BrainDumpInput onSubmit={onBrainDump} />
       </>
     );
@@ -164,7 +193,9 @@ export function ModuleScreen({
   if (moduleId === 'astrology') {
     return (
       <>
-        <AstrologyModule onBack={() => onNavigate('dashboard')} />
+        <Suspense fallback={<ModuleLoading />}>
+          <AstrologyModule onBack={() => onNavigate('dashboard')} />
+        </Suspense>
         <BrainDumpInput onSubmit={onBrainDump} />
       </>
     );
@@ -174,7 +205,9 @@ export function ModuleScreen({
   if (moduleId === 'goals') {
     return (
       <>
-        <GoalsModule onBack={() => onNavigate('dashboard')} />
+        <Suspense fallback={<ModuleLoading />}>
+          <GoalsModule onBack={() => onNavigate('dashboard')} />
+        </Suspense>
         <BrainDumpInput onSubmit={onBrainDump} />
       </>
     );
@@ -206,7 +239,9 @@ export function ModuleScreen({
           >
             ←
           </button>
-          <GroceryModule />
+          <Suspense fallback={<ModuleLoading />}>
+            <GroceryModule />
+          </Suspense>
         </div>
         <BrainDumpInput onSubmit={onBrainDump} />
       </>
@@ -383,11 +418,13 @@ export function ModuleScreen({
         </header>
 
         {/* ── Content ──────────────────────────────────────────────────── */}
-        {moduleId === 'pets'
-          ? <PetsModule />
-          : moduleId === 'finance'
-          ? <FinanceModule />
-          : (children ?? <PlaceholderContent moduleId={moduleId} dark={cfg.dark} showSkyVideo={cfg.showSkyVideo} />)}
+        <Suspense fallback={<ModuleLoading />}>
+          {moduleId === 'pets'
+            ? <PetsModule />
+            : moduleId === 'finance'
+            ? <FinanceModule />
+            : (children ?? <PlaceholderContent moduleId={moduleId} dark={cfg.dark} showSkyVideo={cfg.showSkyVideo} />)}
+        </Suspense>
       </div>
 
       {/* ── BrainDumpInput ───────────────────────────────────────────── */}

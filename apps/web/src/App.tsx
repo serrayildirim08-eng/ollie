@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { lazy, Suspense, useState } from 'react';
 import { REGISTRY } from '@ollie/events';
 import { cycle } from '@ollie/logic';
 import { getString } from './i18n';
@@ -11,12 +11,19 @@ import { ToastProvider, useToast } from './components/ToastContext';
 import { BurhanTree } from './components/BurhanTree';
 import { BrainDumpInput } from './components/BrainDumpInput';
 import { ChipFlyHost, chipFly } from './components/ChipFly';
-import { HomeScreen } from './pages/HomeScreen';
-import { DashboardScreen } from './pages/DashboardScreen';
-import { GardenScreen } from './pages/GardenScreen';
-import { ModuleScreen } from './pages/ModuleScreen';
 import { OnboardingScreen } from './pages/OnboardingScreen';
 import { useApplyBrainDump } from './hooks/useApplyBrainDump';
+
+// ─── lazy page imports ────────────────────────────────────────────────────────
+
+const HomeScreen      = lazy(() => import('./pages/HomeScreen').then(m => ({ default: m.HomeScreen })));
+const DashboardScreen = lazy(() => import('./pages/DashboardScreen').then(m => ({ default: m.DashboardScreen })));
+const GardenScreen    = lazy(() => import('./pages/GardenScreen').then(m => ({ default: m.GardenScreen })));
+const ModuleScreen    = lazy(() => import('./pages/ModuleScreen').then(m => ({ default: m.ModuleScreen })));
+
+function PageLoading() {
+  return <div style={{ minHeight: '100vh', background: 'var(--bone)' }} aria-busy="true" />;
+}
 
 type Screen = 'home' | 'dashboard' | 'garden' | 'module' | 'demo' | 'onboarding';
 
@@ -73,47 +80,55 @@ function AppInner() {
 
   if (screen === 'home') {
     content = (
-      <HomeScreen
-        onNavigate={(to) => {
-          if (to === 'dashboard') setScreen('dashboard');
-          else if (to === 'garden') setScreen('garden');
-        }}
-        onBrainDump={homeDump}
-      />
+      <Suspense fallback={<PageLoading />}>
+        <HomeScreen
+          onNavigate={(to) => {
+            if (to === 'dashboard') setScreen('dashboard');
+            else if (to === 'garden') setScreen('garden');
+          }}
+          onBrainDump={homeDump}
+        />
+      </Suspense>
     );
   } else if (screen === 'garden') {
     content = (
-      <GardenScreen
-        onNavigate={(to) => {
-          if (to === 'home') setScreen('home');
-        }}
-      />
+      <Suspense fallback={<PageLoading />}>
+        <GardenScreen
+          onNavigate={(to) => {
+            if (to === 'home') setScreen('home');
+          }}
+        />
+      </Suspense>
     );
   } else if (screen === 'dashboard') {
     content = (
-      <DashboardScreen
-        onNavigate={(to, moduleId) => {
-          if (to === 'home') setScreen('home');
-          else if (to === 'garden') setScreen('garden');
-          else if (to === 'module' && moduleId) {
-            setSelectedModule(moduleId);
-            setScreen('module');
-          }
-        }}
-        onBrainDump={dashDump}
-      />
+      <Suspense fallback={<PageLoading />}>
+        <DashboardScreen
+          onNavigate={(to, moduleId) => {
+            if (to === 'home') setScreen('home');
+            else if (to === 'garden') setScreen('garden');
+            else if (to === 'module' && moduleId) {
+              setSelectedModule(moduleId);
+              setScreen('module');
+            }
+          }}
+          onBrainDump={dashDump}
+        />
+      </Suspense>
     );
   } else if (screen === 'module') {
     content = (
-      <ModuleScreen
-        moduleId={selectedModule}
-        onNavigate={(to) => {
-          if (to === 'dashboard') setScreen('dashboard');
-          else if (to === 'home') setScreen('home');
-          else if (to === 'garden') setScreen('garden');
-        }}
-        onBrainDump={moduleDump}
-      />
+      <Suspense fallback={<PageLoading />}>
+        <ModuleScreen
+          moduleId={selectedModule}
+          onNavigate={(to) => {
+            if (to === 'dashboard') setScreen('dashboard');
+            else if (to === 'home') setScreen('home');
+            else if (to === 'garden') setScreen('garden');
+          }}
+          onBrainDump={moduleDump}
+        />
+      </Suspense>
     );
   } else {
     // demo screen

@@ -14,8 +14,22 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Howl } from 'howler';
 import { FrostedCard } from './FrostedCard';
+
+// ─── lazy Howler import ───────────────────────────────────────────────────────
+// Loaded on first user tap so Chrome's autoplay policy is never hit and the
+// howler bundle is not fetched until the sleep module is actually used.
+
+type HowlClass = typeof import('howler').Howl;
+
+let howlModulePromise: Promise<HowlClass> | null = null;
+
+async function getHowlClass(): Promise<HowlClass> {
+  if (!howlModulePromise) {
+    howlModulePromise = import('howler').then((m) => m.Howl);
+  }
+  return howlModulePromise;
+}
 
 // ─── palette (mirrors SleepModule C tokens) ──────────────────────────────────
 
@@ -92,7 +106,9 @@ export function SleepSoundPlayer() {
   const [remaining, setRemaining]   = useState<number>(0);
 
   // Howl instance cache — keyed by sound id.
-  const howlCache = useRef<Record<string, Howl>>({});
+  // Using InstanceType<HowlClass> avoids importing Howl at module load time.
+  type HowlInstance = InstanceType<HowlClass>;
+  const howlCache = useRef<Record<string, HowlInstance>>({});
   // setTimeout handle for the timer fade.
   const timerHandleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // setInterval handle for the countdown display.
@@ -102,12 +118,15 @@ export function SleepSoundPlayer() {
   // Duration of the active timer in ms (set once on start).
   const timerDurationRef = useRef<number>(0);
 
-  // ── get or create Howl ──────────────────────────────────────────────────
+  // ── get or create Howl (lazy — loads howler on first call) ─────────────
 
-  const getHowl = useCallback((def: SoundDef): Howl | null => {
+  const getHowl = useCallback(async (def: SoundDef): Promise<HowlInstance | null> => {
     if (!def.src) return null;
     if (howlCache.current[def.id]) return howlCache.current[def.id];
-    const h = new Howl({
+    const HowlClass = await getHowlClass();
+    // Double-check cache in case two concurrent calls raced.
+    if (howlCache.current[def.id]) return howlCache.current[def.id];
+    const h = new HowlClass({
       src:    [def.src],
       loop:   true,
       volume: volume / 100,
@@ -211,13 +230,13 @@ export function SleepSoundPlayer() {
       }
     }
 
-    const h = getHowl(def);
-    if (!h) return;
-
-    // Set correct volume before play (Howl may have been cached at different vol).
-    h.volume(volume / 100);
-    h.play();
-    setPlaying(def.id);
+    void getHowl(def).then((h) => {
+      if (!h) return;
+      // Set correct volume before play (Howl may have been cached at different vol).
+      h.volume(volume / 100);
+      h.play();
+      setPlaying(def.id);
+    });
   }, [playing, stopCurrent, clearTimer, getHowl, volume]);
 
   // ── cleanup on unmount ───────────────────────────────────────────────────
