@@ -24,6 +24,7 @@ import { useStoreSlice as baseUseStoreSlice } from '@ollie/store/react';
 import { computeNatalChart, currentTransits } from '@ollie/logic/astrology';
 import type { BirthData } from '@ollie/logic/astrology';
 import { astronomyAPI } from './lib/astronomy';
+import { createOrchestrator } from '@ollie/orchestrator';
 
 runMigrations(browserAdapter);
 
@@ -76,3 +77,9 @@ setInterval(() => {
   recomputeTransits();
   recomputeChart(store.get<BirthData | null>('astrology', 'birth', null));
 }, TRANSIT_INTERVAL_MS);
+
+// ─── Root orchestrator boot ───────────────────────────────────────────────────
+// Starts cycle, pets, body, grocery, sleep, finance, patterns.
+// Astrology runs via the inline orchestrator above; createOrchestrator does not
+// duplicate it. habits / work / goals / admin / dump are UI-only (no sub-orchestrator files).
+createOrchestrator(store).init();

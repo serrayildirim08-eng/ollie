@@ -22,6 +22,10 @@ export const REGISTRY: Registry = {
   'void:cycle:started':            { payload: '{ ts: number, source: "user" | "braindump" | "import" }' },
   'void:cycle:closed':             { payload: '{ cycleStartTs: number, cycleEndTs: number, cycleLengthDays: number }' },
 
+  // ─── crisis pathway ─────────────────────────────────────────────
+  // Fired before routing; downstream pipeline must not process crisis text.
+  'void:crisis:detected':        { payload: '{ text: string, matchedLine: string, ts: number }' },
+
   // ─── brain dump spine ───────────────────────────────────────────
   'void:braindump:submitted':      { payload: '{ v: 2, items: Array<{module,text,intent,extracted?,confidence,horizon?}>, raw: string, ts: number, idempotency_key: string, route_path: string }  // legacy v:1 shape: { id, text, moduleContext, ts } only on bypassed entrypoints' },
   'void:dump:receipt':             { payload: '{ idempotency_key: string, modules: string[], ts: number, raw: string, source: string|null, route_path: string }' },

@@ -34,6 +34,7 @@ export const SHAPES: Record<string, ShapeSpec> = {
   'void:prediction:updated':   { confidence: 'number', explanation: 'string' },
   'pets:care_logged':          { pet_id: 'string', task: 'string', source: 'string', occurred_at: 'number' },
   'void:reminder:scheduled':   { id: 'string', fireAt: 'number', message: 'string', module: 'string', source: 'string' },
+  'void:crisis:detected':      { text: 'string', matchedLine: 'string', ts: 'number' },
 };
 
 export type ValidationResult = { ok: true } | { ok: false; reason: string };
