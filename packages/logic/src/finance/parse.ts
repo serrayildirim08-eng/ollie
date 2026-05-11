@@ -21,6 +21,7 @@ const ADHD_TAX_MARKERS: Record<string, string[]> = {
   replacement: ['replaced', 'replacement', 'lost again', 'bought another'],
   unused: ['never used', 'havent used', "haven't used"],
   duplicate: ['bought twice', 'duplicate', 'double charged'],
+  impulse: ['impulse', 'impulsively', 'impulsive', 'impulse buy'],
 };
 
 const DEFAULT_KEYWORDS: Record<string, string[]> = {

@@ -3,13 +3,19 @@ import path from 'path';
 
 export default defineConfig({
   resolve: {
-    alias: {
+    alias: [
+      // Subpath aliases must come before the bare-package alias.
+      { find: '@ollie/logic/finance', replacement: path.resolve(__dirname, '../../packages/logic/src/finance/index.ts') },
+      { find: '@ollie/logic/dissection', replacement: path.resolve(__dirname, '../../packages/logic/src/dissection/index.ts') },
+      { find: '@ollie/logic/cycle', replacement: path.resolve(__dirname, '../../packages/logic/src/cycle/index.ts') },
+      { find: '@ollie/logic/grocery', replacement: path.resolve(__dirname, '../../packages/logic/src/grocery/index.ts') },
+      { find: '@ollie/logic/body', replacement: path.resolve(__dirname, '../../packages/logic/src/body/index.ts') },
       // Resolve workspace packages to their source so vitest can transform them.
-      '@ollie/store': path.resolve(__dirname, '../../packages/store/src/index.ts'),
-      '@ollie/logic': path.resolve(__dirname, '../../packages/logic/src/index.ts'),
-      '@ollie/events': path.resolve(__dirname, '../../packages/events/src/index.ts'),
-      '@ollie/orchestrator': path.resolve(__dirname, '../../packages/orchestrator/src/index.ts'),
-    },
+      { find: '@ollie/store', replacement: path.resolve(__dirname, '../../packages/store/src/index.ts') },
+      { find: '@ollie/logic', replacement: path.resolve(__dirname, '../../packages/logic/src/index.ts') },
+      { find: '@ollie/events', replacement: path.resolve(__dirname, '../../packages/events/src/index.ts') },
+      { find: '@ollie/orchestrator', replacement: path.resolve(__dirname, '../../packages/orchestrator/src/index.ts') },
+    ],
   },
   test: {
     environment: 'jsdom',

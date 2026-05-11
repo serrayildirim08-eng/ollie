@@ -5,7 +5,8 @@
  * UI components read already-computed values from @ollie/store.
  *
  * Phase 3d: cycle orchestrator wired.
- * Pets / body / grocery / sleep / finance / patterns come in follow-up phases.
+ * Pets / body / grocery / sleep / finance / patterns / admin / dump composed.
+ * Sprint 0 CL1a: habits / work / goals sub-orchestrators added.
  */
 
 import type { Store } from '@ollie/store';
@@ -17,6 +18,11 @@ import { createGroceryOrchestrator } from './grocery';
 import { createSleepOrchestrator } from './sleep';
 import { createFinanceOrchestrator } from './finance';
 import { createPatternsOrchestrator } from './patterns';
+import { createAdminOrchestrator } from './admin';
+import { createDumpOrchestrator } from './dump';
+import { createHabitsOrchestrator } from './habits';
+import { createWorkOrchestrator } from './work';
+import { createGoalsOrchestrator } from './goals';
 
 export type { Orchestrator } from './types';
 export { createCycleOrchestrator } from './cycle';
@@ -26,6 +32,11 @@ export { createGroceryOrchestrator } from './grocery';
 export { createSleepOrchestrator } from './sleep';
 export { createFinanceOrchestrator } from './finance';
 export { createPatternsOrchestrator } from './patterns';
+export { createAdminOrchestrator } from './admin';
+export { createDumpOrchestrator } from './dump';
+export { createHabitsOrchestrator } from './habits';
+export { createWorkOrchestrator } from './work';
+export { createGoalsOrchestrator } from './goals';
 
 export interface RootOrchestrator extends Orchestrator {
   cycle: ReturnType<typeof createCycleOrchestrator>;
@@ -35,6 +46,11 @@ export interface RootOrchestrator extends Orchestrator {
   sleep: ReturnType<typeof createSleepOrchestrator>;
   finance: ReturnType<typeof createFinanceOrchestrator>;
   patterns: ReturnType<typeof createPatternsOrchestrator>;
+  admin: ReturnType<typeof createAdminOrchestrator>;
+  dump: ReturnType<typeof createDumpOrchestrator>;
+  habits: ReturnType<typeof createHabitsOrchestrator>;
+  work: ReturnType<typeof createWorkOrchestrator>;
+  goals: ReturnType<typeof createGoalsOrchestrator>;
 }
 
 /**
@@ -50,6 +66,11 @@ export function createOrchestrator(store: Store): RootOrchestrator {
   const sleepOrch = createSleepOrchestrator(store);
   const financeOrch = createFinanceOrchestrator(store);
   const patternsOrch = createPatternsOrchestrator(store);
+  const adminOrch = createAdminOrchestrator(store);
+  const dumpOrch = createDumpOrchestrator(store);
+  const habitsOrch = createHabitsOrchestrator(store);
+  const workOrch = createWorkOrchestrator(store);
+  const goalsOrch = createGoalsOrchestrator(store);
 
   return {
     cycle: cycleOrch,
@@ -59,6 +80,11 @@ export function createOrchestrator(store: Store): RootOrchestrator {
     sleep: sleepOrch,
     finance: financeOrch,
     patterns: patternsOrch,
+    admin: adminOrch,
+    dump: dumpOrch,
+    habits: habitsOrch,
+    work: workOrch,
+    goals: goalsOrch,
 
     init() {
       cycleOrch.init();
@@ -68,6 +94,11 @@ export function createOrchestrator(store: Store): RootOrchestrator {
       sleepOrch.init();
       financeOrch.init();
       patternsOrch.init();
+      adminOrch.init();
+      dumpOrch.init();
+      habitsOrch.init();
+      workOrch.init();
+      goalsOrch.init();
     },
 
     teardown() {
@@ -78,6 +109,11 @@ export function createOrchestrator(store: Store): RootOrchestrator {
       sleepOrch.teardown();
       financeOrch.teardown();
       patternsOrch.teardown();
+      adminOrch.teardown();
+      dumpOrch.teardown();
+      habitsOrch.teardown();
+      workOrch.teardown();
+      goalsOrch.teardown();
     },
   };
 }

@@ -110,6 +110,7 @@ export const REGISTRY: Registry = {
   'habits:self_talk_drop':             { payload: '{ confidence: string, ts: number }' },
 
   // ─── goals ──────────────────────────────────────────────────────
+  'goals:pattern_detected':            { payload: '{ pattern: string, confidence: string, sample_n: number, ts: number }' },
   'goals:low_mood_detected':           { payload: '{ confidence: string, ts: number, lock_until_ts: number }' },
   'goals:obstacle_echo_detected':      { payload: '{ goal_id: string, dump_id: string, matches: number, ts: number }' },
   'goals:premortem_echo_detected':     { payload: '{ goal_id: string, dump_id: string, ts: number }' },
