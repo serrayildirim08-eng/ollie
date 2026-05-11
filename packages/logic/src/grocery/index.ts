@@ -26,3 +26,5 @@ export {
 } from './patterns';
 export { inferRecipe } from './recipes';
 export { learnKnownStore } from './store';
+export { detectInterestCapture } from './interest-capture';
+export type { InterestCaptureSignal } from './interest-capture';

@@ -20,6 +20,7 @@ import * as events from '@ollie/events';
 import {
   detectPatterns,
   detectDuplicate,
+  detectInterestCapture,
 } from '@ollie/logic/grocery';
 import type {
   GroceryPattern,
@@ -76,6 +77,28 @@ export function createGroceryOrchestrator(
           ts: now,
         });
       }
+    }
+
+    // ── Sprint 4 / E8 · interest-capture (novelty) ───────────────────────
+    try {
+      const captures = detectInterestCapture({ items, pantry, now });
+      const prevCaptures = store.get<Array<{ category?: string }>>('grocery', 'interest_captures', []) ?? [];
+      const prevCats = new Set(prevCaptures.map((c) => c.category).filter(Boolean));
+      store.set('grocery', 'interest_captures', captures);
+      for (const c of captures) {
+        if (!prevCats.has(c.category)) {
+          try {
+            events.emit('grocery:interest_capture_detected', {
+              category: c.category,
+              count: c.count,
+              window_days: c.window_days,
+              ts: now,
+            });
+          } catch { /* non-fatal */ }
+        }
+      }
+    } catch (err) {
+      console.error('[orchestrator/grocery] interest-capture failed', err);
     }
   }
 

@@ -22,7 +22,8 @@
     "./patterns": "./src/patterns/index.ts",
     "./crisis": "./src/crisis/index.ts",
     "./dissection": "./src/dissection/index.ts",
-    "./burhan": "./src/burhan/index.ts"
+    "./burhan": "./src/burhan/index.ts",
+    "./medication": "./src/medication/index.ts"
   },
   "scripts": {
     "test": "vitest run",

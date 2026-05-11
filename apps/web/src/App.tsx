@@ -7,6 +7,7 @@ import { FrostedCard } from './components/FrostedCard';
 import { ModuleHelp } from './components/ModuleHelp';
 import { SourcesLink } from './components/SourcesLink';
 import { ToastHost } from './components/ToastHost';
+import { MicButton } from './components/MicButton';
 import { ToastProvider, useToast } from './components/ToastContext';
 import { Burhan3D } from './components/Burhan3D';
 import { BrainDumpInput } from './components/BrainDumpInput';
@@ -19,6 +20,7 @@ import { useApplyBrainDump } from './hooks/useApplyBrainDump';
 const HomeScreen      = lazy(() => import('./pages/HomeScreen').then(m => ({ default: m.HomeScreen })));
 const DashboardScreen = lazy(() => import('./pages/DashboardScreen').then(m => ({ default: m.DashboardScreen })));
 const GardenScreen    = lazy(() => import('./pages/GardenScreen').then(m => ({ default: m.GardenScreen })));
+const GardenConsentScreen = lazy(() => import('./pages/GardenConsentScreen').then(m => ({ default: m.GardenConsentScreen })));
 const ModuleScreen    = lazy(() => import('./pages/ModuleScreen').then(m => ({ default: m.ModuleScreen })));
 
 function PageLoading() {
@@ -91,12 +93,23 @@ function AppInner() {
       </Suspense>
     );
   } else if (screen === 'garden') {
-    content = (
+    // Decision #15: garden gated on shared.consent.spending_research.
+    // Mini-burhan stays in dashboard for everyone; full /garden requires
+    // the anonymous-research opt-in. The garden is the gift in exchange.
+    const consent = store.get<boolean>('shared', 'consent.spending_research', false);
+    content = consent ? (
       <Suspense fallback={<PageLoading />}>
         <GardenScreen
           onNavigate={(to) => {
             if (to === 'home') setScreen('home');
           }}
+        />
+      </Suspense>
+    ) : (
+      <Suspense fallback={<PageLoading />}>
+        <GardenConsentScreen
+          onAccept={() => setScreen('garden')}
+          onDecline={() => setScreen('dashboard')}
         />
       </Suspense>
     );
@@ -301,6 +314,10 @@ function AppInner() {
       {/* ToastHost + ChipFlyHost are top-level so chips/toasts work on every screen */}
       <ToastHost />
       <ChipFlyHost />
+      {/* MicButton — push-to-talk, hidden when onboarding */}
+      {onboarded && screen !== 'onboarding' && (
+        <MicButton onTranscript={(text) => { void apply(text); }} />
+      )}
     </>
   );
 }

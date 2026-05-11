@@ -19,6 +19,14 @@ compatibility_date = "2026-05-01"
 
 [vars]
 APNS_USE_SANDBOX = "0"
+# Set to "1" once Supabase credentials are configured and the
+# scheduled_jobs table is live (Sprint 4 / E4).
+SCHEDULED_JOBS_ENABLED = "0"
+
+# Run the cron handler every minute. Cloudflare bills per invocation
+# but the workload is bounded (LIMIT 100 jobs per tick).
+[triggers]
+crons = ["* * * * *"]
 
 # Device-token store (D1 or KV — KV is simpler for the registration use case)
 [[kv_namespaces]]

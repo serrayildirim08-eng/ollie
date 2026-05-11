@@ -4,7 +4,7 @@
 // loads apps/web/dist/index.html in prod, localhost:5173 in dev.
 // single-instance lock, macOS menu, auto-updater in prod.
 
-const { app, BrowserWindow, Menu, Notification, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, Menu, Notification, globalShortcut, ipcMain, shell } = require('electron');
 const path = require('path');
 
 const isDev = !app.isPackaged;
@@ -247,6 +247,28 @@ ipcMain.handle('ollie:notify:requestPermission', () => {
   return Notification.isSupported() ? 'granted' : 'denied';
 });
 
+// ----- voice + wake-word IPC (Sprint 4 · E2 + E3) -----------------------
+// Mac doesn't ship a native dictation API as accessible as iOS's SFSpeech,
+// so we forward "start dictation" to the renderer which uses the Web Speech
+// API (Chromium ships it). The cmd+ctrl+space global shortcut just brings
+// the window forward + emits an event the renderer subscribes to.
+
+function focusMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  if (!mainWindow.isVisible()) mainWindow.show();
+  mainWindow.focus();
+  if (process.platform === 'darwin') app.focus({ steal: true });
+}
+
+ipcMain.handle('ollie:voice:startDictation', () => {
+  // Renderer-side capture lives in voice-capture.ts. Main process here is
+  // a hook for future native macOS SFSpeech integration (post-Sprint 5).
+  return { ok: true, strategy: 'renderer-web-speech' };
+});
+
+ipcMain.handle('ollie:voice:stopDictation', () => ({ ok: true }));
+
 // ----- lifecycle --------------------------------------------------------
 if (gotTheLock) {
   app.whenReady().then(() => {
@@ -254,9 +276,27 @@ if (gotTheLock) {
     createMainWindow();
     setupAutoUpdater();
 
+    // E3 · Mac hot-key for "Hey Ollie" equivalent. Renderer listens for
+    // `ollie:hotkey` and triggers the MicButton's start flow.
+    try {
+      const ok = globalShortcut.register('CommandOrControl+Control+Space', () => {
+        focusMainWindow();
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('ollie:hotkey', { source: 'mac-shortcut' });
+        }
+      });
+      if (!ok) console.warn('[ollie] global shortcut not registered (already in use?)');
+    } catch (err) {
+      console.warn('[ollie] globalShortcut.register failed', err && err.message);
+    }
+
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
     });
+  });
+
+  app.on('will-quit', () => {
+    try { globalShortcut.unregisterAll(); } catch (_err) { /* noop */ }
   });
 
   app.on('window-all-closed', () => {

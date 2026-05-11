@@ -143,6 +143,88 @@ export const CROSS_MODULE_RULES: CrossModuleRule[] = [
       return { reason: `hydration drop ${(r.drop_pct ?? 0).toFixed(0)}%`, ts: r.ts ?? Date.now() };
     },
   },
+
+  // ───────────────────────────────────────────────────────────────────────
+  // Sprint 4 · E5 cross-protective chains
+  //
+  // Each one is a quiet card or muted surface — never demanding, always
+  // factual. Tone is constitutional: name the pattern, don't prescribe.
+  // ───────────────────────────────────────────────────────────────────────
+
+  // short sleep run (≥3 nights ≤5h) → finance spending caution card.
+  // "you slept 4h × 3 nights, be gentle with finance today" — surfaced
+  // as a quiet card, not a push.
+  {
+    source: 'sleep:short_sleep_run_detected',
+    target: 'finance:spending_caution_surfaced',
+    action: 'short-sleep run → finance spending caution',
+    transform: (p) => {
+      const r = (p ?? {}) as { nights?: number; mean_hours?: number; ts?: number };
+      return {
+        reason: `${r.nights ?? 3} nights at ~${(r.mean_hours ?? 4).toFixed(1)}h — easy on finance today`,
+        ts: r.ts ?? Date.now(),
+      };
+    },
+    reflect: (p) => ({
+      module: 'finance',
+      key: 'protective_cards',
+      entry: { id: `protect:short-sleep:${(p.ts as number) ?? Date.now()}`, kind: 'short-sleep', ...p },
+    }),
+    ttlMs: 24 * 60 * 60 * 1000,
+  },
+
+  // pacing breach → reduce motion mode on (auto for today).
+  // Existing rule above already routes pacing → habits:reduce_motion_on;
+  // this rule additionally flips a global app-wide preference for the day.
+  {
+    source: 'sleep:pacing_breach_detected',
+    target: 'app:reduce_motion_mode_on',
+    action: 'pacing breach → app reduce-motion mode for today',
+    transform: (p) => {
+      const r = (p ?? {}) as { severity?: string; ts?: number };
+      return { reason: `pacing breach (${r.severity ?? 'info'})`, ts: r.ts ?? Date.now() };
+    },
+    reflect: (p) => ({
+      module: 'shared',
+      key: 'reduce_motion_today',
+      entry: { id: `reduce-motion:${(p.ts as number) ?? Date.now()}`, ...p },
+    }),
+    ttlMs: 12 * 60 * 60 * 1000,
+  },
+
+  // hyperfocus detected (≥3h sustained focus session) → body fatigue warning.
+  {
+    source: 'work:hyperfocus_detected',
+    target: 'body:fatigue_warning_surfaced',
+    action: 'hyperfocus → body fatigue warning',
+    transform: (p) => {
+      const r = (p ?? {}) as { minutes?: number; ts?: number };
+      return { reason: `${Math.round((r.minutes ?? 180) / 60)}h sustained focus — water, stand up`, ts: r.ts ?? Date.now() };
+    },
+    reflect: (p) => ({
+      module: 'body',
+      key: 'protective_cards',
+      entry: { id: `protect:hyperfocus:${(p.ts as number) ?? Date.now()}`, kind: 'hyperfocus', ...p },
+    }),
+  },
+
+  // luteal phase entered → surface cycle-spending card IF pattern exists.
+  // The reflect target reads finance.d3_cycle_spending; if null, the UI
+  // simply doesn't render the card. No notification path — quiet surface.
+  {
+    source: 'cycle:luteal_phase_entered',
+    target: 'finance:surface_cycle_spending_card',
+    action: 'luteal entered → surface cycle-spending card if pattern exists',
+    transform: (p) => {
+      const r = (p ?? {}) as { ts?: number };
+      return { reason: 'luteal phase began', ts: r.ts ?? Date.now() };
+    },
+    reflect: (p) => ({
+      module: 'finance',
+      key: 'cycle_card_visible',
+      entry: { id: `cycle-card:${(p.ts as number) ?? Date.now()}`, visible: true, ...p },
+    }),
+  },
 ];
 
 export interface CrossModuleRouter {

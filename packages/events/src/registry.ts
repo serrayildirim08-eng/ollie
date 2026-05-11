@@ -198,4 +198,26 @@ export const REGISTRY: Registry = {
   'research:event_queued':             { payload: '{ event_id: string, ts: number }' },
   'research:flush_succeeded':          { payload: '{ count: number, ts: number }' },
   'research:flush_failed':             { payload: '{ count: number, reason: string, ts: number }' },
+
+  // ─── Sprint 4 / E1+E7 · medication ──────────────────────────────
+  'medication:logged':                 { payload: '{ item_id: string, name: string, ts: number }' },
+  'medication:overdue_detected':       { payload: '{ item_id: string, name: string, slot_hhmm: string, ts: number }' },
+  'medication:adherence_drift':        { payload: '{ item_id: string, name: string, ratio: number, ts: number }' },
+
+  // ─── Sprint 4 / E5 cross-protective chains ──────────────────────
+  'sleep:short_sleep_run_detected':    { payload: '{ nights: number, mean_hours: number, ts: number }' },
+  'finance:spending_caution_surfaced': { payload: '{ reason: string, ts: number }' },
+  'app:reduce_motion_mode_on':         { payload: '{ reason: string, ts: number }' },
+  'work:hyperfocus_detected':          { payload: '{ minutes: number, ts: number }' },
+  'body:fatigue_warning_surfaced':     { payload: '{ reason: string, ts: number }' },
+  'cycle:luteal_phase_entered':        { payload: '{ ts: number }' },
+  'finance:surface_cycle_spending_card': { payload: '{ reason: string, ts: number }' },
+
+  // ─── Sprint 4 / E2-E3 · voice ───────────────────────────────────
+  'voice:capture_started':             { payload: '{ source: "mic-button"|"hotkey"|"siri", ts: number }' },
+  'voice:capture_transcribed':         { payload: '{ text: string, source: string, ts: number }' },
+  'voice:capture_cancelled':           { payload: '{ reason: string, ts: number }' },
+
+  // ─── Sprint 4 / E8 · grocery interest capture ───────────────────
+  'grocery:interest_capture_detected': { payload: '{ category: string, count: number, window_days: number, ts: number }' },
 };

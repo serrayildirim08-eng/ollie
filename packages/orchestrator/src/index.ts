@@ -24,6 +24,7 @@ import { createHabitsOrchestrator } from './habits';
 import { createWorkOrchestrator } from './work';
 import { createGoalsOrchestrator } from './goals';
 import { createBurhanOrchestrator } from './burhan';
+import { createMedicationOrchestrator } from './medication';
 
 export type { Orchestrator } from './types';
 export { createCycleOrchestrator } from './cycle';
@@ -39,6 +40,7 @@ export { createHabitsOrchestrator } from './habits';
 export { createWorkOrchestrator } from './work';
 export { createGoalsOrchestrator } from './goals';
 export { createBurhanOrchestrator } from './burhan';
+export { createMedicationOrchestrator } from './medication';
 
 export interface RootOrchestrator extends Orchestrator {
   cycle: ReturnType<typeof createCycleOrchestrator>;
@@ -54,6 +56,7 @@ export interface RootOrchestrator extends Orchestrator {
   work: ReturnType<typeof createWorkOrchestrator>;
   goals: ReturnType<typeof createGoalsOrchestrator>;
   burhan: ReturnType<typeof createBurhanOrchestrator>;
+  medication: ReturnType<typeof createMedicationOrchestrator>;
 }
 
 /**
@@ -75,6 +78,7 @@ export function createOrchestrator(store: Store): RootOrchestrator {
   const workOrch = createWorkOrchestrator(store);
   const goalsOrch = createGoalsOrchestrator(store);
   const burhanOrch = createBurhanOrchestrator(store);
+  const medicationOrch = createMedicationOrchestrator(store);
 
   return {
     cycle: cycleOrch,
@@ -90,6 +94,7 @@ export function createOrchestrator(store: Store): RootOrchestrator {
     work: workOrch,
     goals: goalsOrch,
     burhan: burhanOrch,
+    medication: medicationOrch,
 
     init() {
       cycleOrch.init();
@@ -105,6 +110,7 @@ export function createOrchestrator(store: Store): RootOrchestrator {
       workOrch.init();
       goalsOrch.init();
       burhanOrch.init();
+      medicationOrch.init();
     },
 
     teardown() {
@@ -121,6 +127,7 @@ export function createOrchestrator(store: Store): RootOrchestrator {
       workOrch.teardown();
       goalsOrch.teardown();
       burhanOrch.teardown();
+      medicationOrch.teardown();
     },
   };
 }

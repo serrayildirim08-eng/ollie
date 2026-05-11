@@ -208,6 +208,9 @@ importers:
 
   packages/notifications:
     dependencies:
+      '@ollie/api':
+        specifier: workspace:*
+        version: link:../api
       '@ollie/events':
         specifier: workspace:*
         version: link:../events

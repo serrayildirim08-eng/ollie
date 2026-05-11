@@ -40,6 +40,10 @@ export interface Env {
   APNS_TEAM_ID: string;
   APNS_BUNDLE_ID: string;
   APNS_AUTH_KEY: string;
+  // Supabase wiring for E4 cron — required only when SCHEDULED_JOBS_ENABLED='1'.
+  SUPABASE_URL?: string;
+  SUPABASE_SERVICE_ROLE_KEY?: string;
+  SCHEDULED_JOBS_ENABLED?: string;
   APNS_USE_SANDBOX: string;
   REGISTER_SHARED_SECRET: string;
   DEVICE_TOKENS: KVNamespace;
@@ -62,9 +66,167 @@ export default {
     if (url.pathname === '/health') {
       return new Response('ok', { status: 200 });
     }
+    // Manual cron trigger — for local testing without waiting for the
+    // cron schedule. Same auth as /send.
+    if (req.method === 'POST' && url.pathname === '/cron/tick') {
+      const auth = req.headers.get('authorization') ?? '';
+      if (!auth.startsWith('Bearer ') || auth.slice(7) !== env.REGISTER_SHARED_SECRET) {
+        return new Response('unauthorized', { status: 401 });
+      }
+      const result = await runCron(env);
+      return Response.json(result);
+    }
     return new Response('not found', { status: 404 });
   },
+
+  /**
+   * Cloudflare Cron trigger. Invoked once per minute by the
+   * `[triggers].crons = ["* * * * *"]` schedule in wrangler.toml.
+   */
+  async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(runCron(env).then((r) => {
+      console.log('[cron]', JSON.stringify(r));
+    }).catch((err) => {
+      console.error('[cron] failed', err);
+    }));
+  },
 };
+
+// ──────────────────────────────────────────────────────────────────────────
+// E4 · cron loop · scans scheduled_jobs for due rows + dispatches
+// ──────────────────────────────────────────────────────────────────────────
+
+interface ScheduledJobRow {
+  id: string;
+  user_id: string;
+  fire_at: string;
+  job_type: string;
+  payload: Record<string, unknown> | null;
+  status: string;
+  attempts: number;
+  dedupe_key: string | null;
+}
+
+interface CronResult {
+  ok: boolean;
+  scanned: number;
+  fired: number;
+  failed: number;
+  skipped_no_token: number;
+  reason?: string;
+}
+
+async function runCron(env: Env): Promise<CronResult> {
+  if (env.SCHEDULED_JOBS_ENABLED !== '1') {
+    return { ok: true, scanned: 0, fired: 0, failed: 0, skipped_no_token: 0, reason: 'disabled' };
+  }
+  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
+    return { ok: false, scanned: 0, fired: 0, failed: 0, skipped_no_token: 0, reason: 'missing-supabase-config' };
+  }
+
+  // Pull due jobs. We cap at 100 per tick to bound the worker's CPU.
+  const nowIso = new Date().toISOString();
+  const due = await supabaseSelect<ScheduledJobRow[]>(env, 'scheduled_jobs', {
+    select: '*',
+    status: 'eq.pending',
+    fire_at: `lte.${nowIso}`,
+    order: 'fire_at.asc',
+    limit: '100',
+  });
+  if (!due) return { ok: false, scanned: 0, fired: 0, failed: 0, skipped_no_token: 0, reason: 'select-failed' };
+
+  let fired = 0;
+  let failed = 0;
+  let skippedNoToken = 0;
+  const jwt = (env.APNS_AUTH_KEY && env.APNS_KEY_ID && env.APNS_TEAM_ID) ? await getApnsJwt(env) : null;
+
+  for (const job of due) {
+    try {
+      const spec = jobToSpec(job);
+      if (!spec) { await updateJob(env, job.id, { status: 'failed', last_error: 'unknown job_type' }); failed++; continue; }
+      const tokens = await tokensForUser(env, job.user_id);
+      if (tokens.length === 0) {
+        // No registered device tokens — mark fired anyway so we don't retry forever.
+        // Client-side fallback timers handle delivery when the app is open.
+        await updateJob(env, job.id, { status: 'fired', last_error: 'no-tokens' });
+        skippedNoToken++;
+        continue;
+      }
+      if (!jwt) {
+        await updateJob(env, job.id, { status: 'failed', last_error: 'no-apns-jwt' });
+        failed++;
+        continue;
+      }
+      const results = await Promise.all(tokens.map((t) => sendApns(env, jwt, t, spec)));
+      const anyOk = results.some((r) => r.ok);
+      await updateJob(env, job.id, { status: anyOk ? 'fired' : 'failed', last_error: anyOk ? null : (results.find((r) => !r.ok)?.reason ?? 'unknown') });
+      if (anyOk) fired++; else failed++;
+    } catch (err) {
+      await updateJob(env, job.id, { status: 'failed', last_error: String((err as Error).message ?? err).slice(0, 200) });
+      failed++;
+    }
+  }
+
+  return { ok: true, scanned: due.length, fired, failed, skipped_no_token: skippedNoToken };
+}
+
+function jobToSpec(job: ScheduledJobRow): NotificationSpec | null {
+  const p = (job.payload ?? {}) as Partial<NotificationSpec> & { title?: string; body?: string };
+  if (!p.title) return null;
+  const category: NotificationSpec['category'] =
+    job.job_type === 'med_nudge' ? 'REMINDER' :
+    job.job_type === 'monthly_digest' ? 'PATTERN_ALERT' :
+    job.job_type === 'daily_reading' ? 'CONTENT_DELIVERY' :
+    'REMINDER';
+  return {
+    title: p.title,
+    body: p.body,
+    category,
+    dedupe_key: job.dedupe_key ?? `job:${job.id}`,
+    action_url: (p.action_url as string | undefined),
+    extra: { job_id: job.id, job_type: job.job_type, ...(p.extra ?? {}) },
+  };
+}
+
+async function supabaseSelect<T>(env: Env, table: string, params: Record<string, string>): Promise<T | null> {
+  const qs = new URLSearchParams(params).toString();
+  const url = `${env.SUPABASE_URL}/rest/v1/${table}?${qs}`;
+  try {
+    const res = await fetch(url, {
+      headers: {
+        apikey: env.SUPABASE_SERVICE_ROLE_KEY ?? '',
+        authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY ?? ''}`,
+        accept: 'application/json',
+      },
+    });
+    if (!res.ok) {
+      console.error('[cron] supabaseSelect failed', table, res.status, await res.text());
+      return null;
+    }
+    return (await res.json()) as T;
+  } catch (err) {
+    console.error('[cron] supabaseSelect threw', err);
+    return null;
+  }
+}
+
+async function updateJob(env: Env, id: string, patch: Record<string, unknown>): Promise<void> {
+  const url = `${env.SUPABASE_URL}/rest/v1/scheduled_jobs?id=eq.${id}`;
+  try {
+    await fetch(url, {
+      method: 'PATCH',
+      headers: {
+        apikey: env.SUPABASE_SERVICE_ROLE_KEY ?? '',
+        authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY ?? ''}`,
+        'content-type': 'application/json',
+        prefer: 'return=minimal',
+      },
+      body: JSON.stringify({ ...patch, attempts: (patch.attempts as number | undefined) ?? 1, fired_at: patch.status === 'fired' ? new Date().toISOString() : null }),
+    });
+  } catch (err) {
+    console.error('[cron] updateJob failed', id, err);
+  }
+}
 
 // ──────────────────────────────────────────────────────────────────────────
 // /register-token

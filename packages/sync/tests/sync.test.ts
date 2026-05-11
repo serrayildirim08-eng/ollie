@@ -94,6 +94,8 @@ describe('sync · outbound', () => {
 
     store.set('cycle', 'items', [{ ts: 1, action: 'started' }]);
     await vi.advanceTimersByTimeAsync(500); // > 300ms debounce
+    // Flush microtasks — pushModule chains through encrypt → enqueue → drain.
+    await vi.runAllTimersAsync();
     expect(captured.upserts.length).toBe(1);
     const row = (captured.upserts[0].rows as Array<{ module: string; ciphertext: string; iv: string }>)[0];
     expect(row.module).toBe('cycle');
@@ -113,6 +115,7 @@ describe('sync · outbound', () => {
     await vi.advanceTimersByTimeAsync(100);
     store.set('cycle', 'items', [{ ts: 1, action: 'started' }, { ts: 2, action: 'symptom' }]);
     await vi.advanceTimersByTimeAsync(500);
+    await vi.runAllTimersAsync();
     // Single upsert for the latest snapshot
     expect(captured.upserts.length).toBe(1);
     sync.stop();

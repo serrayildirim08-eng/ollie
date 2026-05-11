@@ -16,4 +16,20 @@ contextBridge.exposeInMainWorld('ollie', {
     cancel: (key) => ipcRenderer.invoke('ollie:notify:cancel', key),
     requestPermission: () => ipcRenderer.invoke('ollie:notify:requestPermission'),
   },
+  voice: {
+    // Sprint 4 · E2 — bridge for future native SFSpeech path. Current
+    // path is renderer-side Web Speech; this exists so voice-capture.ts
+    // can detect "electron" platform and route appropriately.
+    startDictation: (_cb) => ipcRenderer.invoke('ollie:voice:startDictation'),
+    stopDictation: () => ipcRenderer.invoke('ollie:voice:stopDictation'),
+  },
+  hotkey: {
+    // Sprint 4 · E3 — cmd+ctrl+space → main process focuses window +
+    // emits this event. Renderer subscribes to trigger MicButton.
+    onHotkey: (cb) => {
+      const handler = (_e, payload) => cb(payload);
+      ipcRenderer.on('ollie:hotkey', handler);
+      return () => ipcRenderer.removeListener('ollie:hotkey', handler);
+    },
+  },
 });
