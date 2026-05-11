@@ -13,11 +13,15 @@ import { useCallback } from 'react';
 import { detectCrisis } from '@ollie/logic/crisis';
 import { extract } from '@ollie/logic/dissection';
 import { emit } from '@ollie/events';
+import * as appEvents from '@ollie/events';
 import { getString, type Locale } from '../i18n';
 import { store as appStore, useStoreSlice } from '../store';
 import { chipFly } from '../components/ChipFly';
 import { useToast } from '../components/ToastContext';
 import { applyRoute } from './applyRoute';
+import { parseReminder, createReminderScheduler } from '@ollie/router';
+
+const reminderScheduler = createReminderScheduler(appStore, appEvents);
 
 // Re-export so callers only need one import.
 export { applyRoute } from './applyRoute';
@@ -59,6 +63,16 @@ export function useApplyBrainDump(): (text: string, fromRect?: DOMRect) => Promi
         const close = getString(locale, 'crisis.close');
         toast.show(`${opener} ${hotline} ${close}`, { module: 'crisis', ttl: 30000 });
         return;
+      }
+
+      // ── 1b. Reminder intercept ────────────────────────────────────────────
+      // If the text contains a time phrase, create a reminder. Both paths can
+      // coexist: a reminder is added AND normal routing continues below.
+      const reminderLocale = (settings?.locale ?? 'en') === 'tr' ? 'tr' : 'en';
+      const parsed = parseReminder(text, Date.now(), reminderLocale);
+      if (parsed) {
+        reminderScheduler.add(parsed);
+        toast.show(`reminder set · ${parsed.body}`, { module: parsed.module });
       }
 
       // ── 2. Route ───────────────────────────────────────────────────────────

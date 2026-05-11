@@ -83,3 +83,7 @@ setInterval(() => {
 // Astrology runs via the inline orchestrator above; createOrchestrator does not
 // duplicate it. habits / work / goals / admin / dump are UI-only (no sub-orchestrator files).
 createOrchestrator(store).init();
+
+import { createReminderScheduler } from '@ollie/router';
+import * as appEvents from '@ollie/events';
+createReminderScheduler(store, appEvents).init();

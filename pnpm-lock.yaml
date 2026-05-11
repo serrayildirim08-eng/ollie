@@ -44,6 +44,9 @@ importers:
       '@ollie/orchestrator':
         specifier: workspace:*
         version: link:../../packages/orchestrator
+      '@ollie/router':
+        specifier: workspace:*
+        version: link:../../packages/router
       '@ollie/store':
         specifier: workspace:*
         version: link:../../packages/store
@@ -79,6 +82,19 @@ importers:
         specifier: ^2.1.9
         version: 2.1.9(@types/node@25.6.2)(jsdom@29.1.1)
 
+  packages/api:
+    dependencies:
+      '@ollie/logic':
+        specifier: workspace:*
+        version: link:../logic
+    devDependencies:
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.5
+        version: 2.1.9(@types/node@25.6.2)(jsdom@29.1.1)
+
   packages/events:
     devDependencies:
       typescript:
@@ -105,6 +121,22 @@ importers:
       '@ollie/logic':
         specifier: workspace:*
         version: link:../logic
+      '@ollie/store':
+        specifier: workspace:*
+        version: link:../store
+    devDependencies:
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.5
+        version: 2.1.9(@types/node@25.6.2)(jsdom@29.1.1)
+
+  packages/router:
+    dependencies:
+      '@ollie/events':
+        specifier: workspace:*
+        version: link:../events
       '@ollie/store':
         specifier: workspace:*
         version: link:../store
