@@ -297,6 +297,28 @@ export function createFinanceOrchestrator(
       }
       setKey('anomalies', anomalyCards);
 
+      // Credibility audit NC2: emit spending-spike on a NEW anomaly card
+      // (transition only, not on every recompute). Routes to body
+      // suggest-rest-check via the cross-module router.
+      try {
+        const seen = new Set(store.get<string[]>('finance', '_anomalyEmittedIds', []) ?? []);
+        const fresh: string[] = [];
+        for (const card of anomalyCards) {
+          if (!seen.has(card.id) && card.modZ != null) {
+            events.emit('finance:spending_spike_detected', {
+              amount: card.amount,
+              baseline_median: card.median ?? card.amount,
+              ratio: card.median ? card.amount / card.median : (card.modZ ?? 1),
+              ts: now,
+            });
+            fresh.push(card.id);
+          }
+        }
+        if (fresh.length) {
+          store.set('finance', '_anomalyEmittedIds', [...seen, ...fresh]);
+        }
+      } catch { /* non-fatal */ }
+
       const discRecs = records.filter(
         (r) => r?.direction === 'out' && r.kind !== 'bill' && r.kind !== 'sub' && r.amount != null,
       );

@@ -1,21 +1,26 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { Burhan3D } from '../components/Burhan3D';
+import { useStoreSlice } from '../store';
+import type { BurhanState } from '@ollie/logic/burhan';
 
 // ─── types ────────────────────────────────────────────────────────────────────
+//
+// Constitutional rule: Burhan never decays. The previous `water`/`health`
+// fields encoded a decay state and have been removed (Credibility audit
+// NH8 + NH9). `growth` is now derived from the count of life-event
+// elements — purely additive.
 
 export interface GardenStats {
-  growth: number;   // 0–1
-  water: number;    // 0–1
-  health: 'thriving' | 'thirsty';
+  /** Number of life-event elements on the tree. Always increases. */
+  elementCount: number;
 }
 
 export interface GardenScreenProps {
   onNavigate: (to: 'home') => void;
-  onWater?: () => void;
   stats?: GardenStats;
 }
 
-const DEFAULT_STATS: GardenStats = { growth: 0.42, water: 0.72, health: 'thriving' };
+const DEFAULT_STATS: GardenStats = { elementCount: 0 };
 
 // ─── CSS keyframes (injected once) ───────────────────────────────────────────
 
@@ -425,33 +430,21 @@ function WaterDroplets({ active }: { active: boolean }) {
 
 // ─── main component ───────────────────────────────────────────────────────────
 
-export function GardenScreen({ onNavigate, onWater, stats }: GardenScreenProps) {
-  const s = stats ?? DEFAULT_STATS;
-  const [watering, setWatering] = useState(false);
-  const [treeGlow, setTreeGlow] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+export function GardenScreen({ onNavigate, stats }: GardenScreenProps) {
+  const [burhanState] = useStoreSlice<BurhanState>('burhan', 'state', { events: [] });
+  const elementCount = stats?.elementCount ?? burhanState.events.length;
 
   useEffect(() => {
     injectStyles();
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-    };
   }, []);
 
-  function handleWater() {
-    if (watering) return;
-    setWatering(true);
-    setTreeGlow(true);
-    onWater?.();
-    timerRef.current = setTimeout(() => {
-      setWatering(false);
-      setTreeGlow(false);
-    }, 3200);
-  }
-
-  // Progress bar widths (clamped 0–100%)
-  const growthPct = Math.round(Math.min(1, Math.max(0, s.growth)) * 100);
-  const waterPct  = Math.round(Math.min(1, Math.max(0, s.water)) * 100);
+  // Month-window count of new elements — purely additive; the garden
+  // shows growth THIS month, never decay.
+  const thisMonthCount = useMemo(() => {
+    const now = Date.now();
+    const monthStart = (() => { const d = new Date(now); d.setDate(1); d.setHours(0,0,0,0); return d.getTime(); })();
+    return burhanState.events.filter((e) => e.ts >= monthStart).length;
+  }, [burhanState]);
 
   return (
     <div
@@ -594,7 +587,7 @@ export function GardenScreen({ onNavigate, onWater, stats }: GardenScreenProps) 
       <BrassLantern style={{ position: 'absolute', bottom: '42%', right: '18%', zIndex: 4 }} />
 
       {/* ── REFLECTING POOL ─────────────────────────────────────────────── */}
-      <ReflectingPool waterLevel={s.water} />
+      <ReflectingPool waterLevel={0.6} />
 
       {/* ── BURHAN (full size, center — 3D model) ────────────────────────── */}
       <div
@@ -604,17 +597,13 @@ export function GardenScreen({ onNavigate, onWater, stats }: GardenScreenProps) 
           left: '50%',
           transform: 'translateX(-50%)',
           zIndex: 5,
-          animation: treeGlow ? 'treeGlow 3.2s ease-out both' : undefined,
         }}
       >
-        <Burhan3D height={440} width={440} />
+        <Burhan3D height={440} width={440} lifeEvents={burhanState.events} />
       </div>
 
       {/* ── ATMOSPHERIC PETALS ──────────────────────────────────────────── */}
       <DriftingPetals />
-
-      {/* ── WATER DROPLETS (watering animation) ─────────────────────────── */}
-      <WaterDroplets active={watering} />
 
       {/* ── BOTTOM FROSTED CARD ─────────────────────────────────────────── */}
       <div
@@ -646,7 +635,7 @@ export function GardenScreen({ onNavigate, onWater, stats }: GardenScreenProps) 
             gap: 20,
           }}
         >
-          {/* Stats */}
+          {/* Factual count — additive only, no decay framing. */}
           <div style={{ flex: 1, minWidth: 0 }}>
             <p
               style={{
@@ -655,110 +644,36 @@ export function GardenScreen({ onNavigate, onWater, stats }: GardenScreenProps) 
                 letterSpacing: '0.18em',
                 textTransform: 'uppercase',
                 color: 'rgba(0,0,0,0.45)',
-                margin: '0 0 10px',
+                margin: '0 0 8px',
               }}
             >
-              burhan is {s.health}
+              elements on the tree
             </p>
-
-            {/* Growth bar */}
-            <div style={{ marginBottom: 7 }}>
-              <div
+            <p
+              style={{
+                fontFamily: "'DM Serif Display', serif",
+                fontSize: 28,
+                fontWeight: 400,
+                margin: 0,
+                color: 'rgba(0,0,0,0.75)',
+                letterSpacing: '-0.01em',
+                lineHeight: 1,
+              }}
+            >
+              {elementCount}
+              <span
                 style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
                   fontFamily: "'DM Mono', monospace",
-                  fontSize: 8,
+                  fontSize: 10,
                   letterSpacing: '0.14em',
-                  textTransform: 'uppercase',
-                  color: 'rgba(0,0,0,0.38)',
-                  marginBottom: 3,
+                  color: 'rgba(0,0,0,0.4)',
+                  marginLeft: 12,
                 }}
               >
-                <span>growth</span>
-                <span>{growthPct}%</span>
-              </div>
-              <div
-                style={{
-                  height: 4,
-                  borderRadius: 99,
-                  background: 'rgba(0,0,0,0.08)',
-                  overflow: 'hidden',
-                }}
-              >
-                <div
-                  style={{
-                    height: '100%',
-                    width: `${growthPct}%`,
-                    borderRadius: 99,
-                    background: '#7C9E87',
-                    transition: 'width 600ms ease',
-                  }}
-                />
-              </div>
-            </div>
-
-            {/* Water bar */}
-            <div>
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  fontFamily: "'DM Mono', monospace",
-                  fontSize: 8,
-                  letterSpacing: '0.14em',
-                  textTransform: 'uppercase',
-                  color: 'rgba(0,0,0,0.38)',
-                  marginBottom: 3,
-                }}
-              >
-                <span>water</span>
-                <span>{waterPct}%</span>
-              </div>
-              <div
-                style={{
-                  height: 4,
-                  borderRadius: 99,
-                  background: 'rgba(0,0,0,0.08)',
-                  overflow: 'hidden',
-                }}
-              >
-                <div
-                  style={{
-                    height: '100%',
-                    width: `${waterPct}%`,
-                    borderRadius: 99,
-                    background: '#6AA8C0',
-                    transition: 'width 600ms ease',
-                  }}
-                />
-              </div>
-            </div>
+                +{thisMonthCount} this month
+              </span>
+            </p>
           </div>
-
-          {/* Water button */}
-          <button
-            type="button"
-            onClick={handleWater}
-            disabled={watering}
-            aria-label={watering ? 'watering in progress' : 'water burhan'}
-            style={{
-              flexShrink: 0,
-              background: watering ? 'rgba(80,130,180,0.25)' : 'rgba(79,110,91,0.1)',
-              border: `1px solid ${watering ? 'rgba(80,130,180,0.3)' : 'rgba(79,110,91,0.22)'}`,
-              borderRadius: 20,
-              padding: '9px 18px',
-              fontFamily: "'DM Mono', monospace",
-              fontSize: 11,
-              color: watering ? '#4A88B0' : '#5A7A60',
-              cursor: watering ? 'default' : 'pointer',
-              letterSpacing: '0.08em',
-              transition: 'all 300ms ease',
-              lineHeight: 1.2,
-            }}
-          >
-            {watering ? 'watering…' : 'water burhan 💧'}
-          </button>
         </div>
       </div>
 

@@ -307,7 +307,13 @@ export async function notify(spec: NotificationSpec): Promise<NotificationDispat
     }
   }
 
-  // Future-scheduled: persist and let the platform / fallback fire.
+  // Future-scheduled: persist and let the platform OR fallback fire.
+  // Credibility audit NC6: previously we scheduled BOTH the native
+  // backend AND an in-process timer for the same fireAt — Capacitor /
+  // Electron users got duplicate notifications. Now: if the backend
+  // returns a truthy platformId, the native scheduler owns the fire;
+  // we skip the in-process timer. Otherwise we keep the JS setTimeout
+  // as a fallback.
   if (fireAt !== null && fireAt > now) {
     let platformId: string | undefined;
     try {
@@ -320,7 +326,10 @@ export async function notify(spec: NotificationSpec): Promise<NotificationDispat
     const list = readScheduled().filter((r) => r.spec.dedupe_key !== spec.dedupe_key);
     list.push(record);
     writeScheduled(list);
-    scheduleInProcessTimer(record);
+    // Only schedule the JS timer when the backend did NOT take ownership.
+    if (!platformId) {
+      scheduleInProcessTimer(record);
+    }
     if (state.store) {
       appendLog(state.store, {
         ts: now,

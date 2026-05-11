@@ -3,6 +3,11 @@ import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { bootNotificationLayer } from './lib/push-register';
 import { installSavingsDigestLoop } from './lib/savings-digest';
+import { bootAccount } from './lib/account-boot';
+
+// Boot account layer (Credibility audit C2): wires @ollie/auth +
+// @ollie/sync + @ollie/research-stream into the running app. Idempotent.
+bootAccount();
 import './design/tokens.css';
 import './design/animations.css';
 import './design/breakpoints.css';

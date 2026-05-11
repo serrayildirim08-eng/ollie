@@ -15,6 +15,7 @@
 
 import React from 'react';
 import { useStoreSlice } from '../store';
+import { getAccount } from '../lib/account-boot';
 
 export interface GardenConsentScreenProps {
   onAccept: () => void;
@@ -25,7 +26,15 @@ export function GardenConsentScreen({ onAccept, onDecline }: GardenConsentScreen
   const [, setConsent] = useStoreSlice<boolean>('shared', 'consent.spending_research', false);
 
   function accept() {
-    setConsent(true);
+    // Credibility audit NC5: route through @ollie/research-stream so
+    // the device_id is generated alongside the consent flag. Falls
+    // back to a raw store write if the account layer hasn't booted.
+    const account = getAccount();
+    if (account?.research) {
+      account.research.grantConsent();
+    } else {
+      setConsent(true);
+    }
     onAccept();
   }
 

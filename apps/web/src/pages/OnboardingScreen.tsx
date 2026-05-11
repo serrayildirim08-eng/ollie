@@ -154,16 +154,18 @@ const INITIAL: State = {
 function commitAll(state: State): void {
   const ts = Date.now();
 
-  // shared.settings
+  // shared.settings — dotted namespace matches the keys other surfaces read.
+  // Credibility audit NC4: previously these were written as flat keys
+  // (`has_pets`, `consent_spending_research`) and silently lost.
   store.set('shared', 'name', state.name.trim() || null);
-  store.set('shared', 'has_pets', state.hasPets ?? false);
-  store.set('shared', 'work_time', state.workTime || null);
-  store.set('shared', 'cycle_tracking', state.cycleTracking || null);
+  store.set('shared', 'settings.has_pets', state.hasPets ?? false);
+  store.set('shared', 'settings.work_time', state.workTime || null);
+  store.set('shared', 'settings.cycle_tracking', state.cycleTracking || null);
   store.set('shared', 'onboarded', true);
 
-  // shared.consent
-  store.set('shared', 'consent_spending_research', state.spendResearch ?? false);
-  store.set('shared', 'consent_cycle', state.cycleTracking === 'yes');
+  // shared.consent — dotted keys match Garden gate + research-stream client.
+  store.set('shared', 'consent.spending_research', state.spendResearch ?? false);
+  store.set('shared', 'consent.cycle', state.cycleTracking === 'yes');
 
   // pets.pets
   if (state.hasPets && state.petDrafts.length > 0) {

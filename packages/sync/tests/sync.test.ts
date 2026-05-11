@@ -133,6 +133,7 @@ describe('sync · outbound', () => {
 
     store.set('cycle', 'items', [{ x: 1 }]);
     await vi.advanceTimersByTimeAsync(500);
+    await vi.runAllTimersAsync();
     expect(captured.upserts.length).toBe(0);
     expect(sync._inspect().queueDepth).toBeGreaterThan(0);
 
@@ -140,7 +141,7 @@ describe('sync · outbound', () => {
     online = true;
     setNextUpsert({ ok: true, status: 201 });
     await sync.syncOut();
-    await vi.advanceTimersByTimeAsync(100);
+    await vi.runAllTimersAsync();
     expect(captured.upserts.length).toBeGreaterThan(0);
     sync.stop();
   });

@@ -165,7 +165,11 @@ describe('@ollie/store · migrations', () => {
     expect(calls).toEqual([1, 2, 3, 4, 5]);
   });
 
-  it('a failing migration is logged but does not halt the others', () => {
+  it('a failing migration is logged AND halts subsequent migrations (audit C5)', () => {
+    // Credibility audit C5: previously a failing migration was logged
+    // and the rest continued, leaving the data in a half-migrated
+    // state. Now: failing migration triggers a snapshot rollback and
+    // halts. The meta version is NOT bumped so next boot retries.
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const calls: number[] = [];
     runMigrations(adapter, {
@@ -174,7 +178,7 @@ describe('@ollie/store · migrations', () => {
       },
       3: () => calls.push(3),
     });
-    expect(calls).toEqual([3]);
+    expect(calls).toEqual([]);
     expect(errSpy).toHaveBeenCalled();
     errSpy.mockRestore();
   });

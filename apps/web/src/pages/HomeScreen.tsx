@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Burhan3D } from '../components/Burhan3D';
 import { BrainDumpInput } from '../components/BrainDumpInput';
 import { getSkyVideoSrc } from '../lib/skyVideo';
+import { store } from '../store';
 
 // Sky orb — glowing circle varying by time of day
 function SkyOrb({ hour }: { hour: number }) {
@@ -45,20 +46,35 @@ function SkyOrb({ hour }: { hour: number }) {
 }
 
 // Time-tracker pill (right side, above brain dump)
+// Credibility audit NH3: previously the timer counted seconds and threw
+// them away. Now appends to `work.focus_log` on stop so the dashboard's
+// "tracked today" stat and the work module's totals reflect it.
 function TimeTracker() {
   const [active, setActive] = useState(false);
   const [sec, setSec] = useState(0);
+  const startTsRef = useRef<number | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     if (active) {
+      startTsRef.current = Date.now();
       timerRef.current = setInterval(() => setSec((s) => s + 1), 1000);
     } else {
       if (timerRef.current) clearInterval(timerRef.current);
+      // Append to work.focus_log on stop. Skip zero-duration accidental clicks.
+      if (startTsRef.current && sec > 0) {
+        try {
+          const duration_ms = Date.now() - startTsRef.current;
+          const log = store.get<Array<{ ts: number; duration_ms: number; source: string }>>('work', 'focus_log', []) ?? [];
+          store.set('work', 'focus_log', [...log, { ts: startTsRef.current, duration_ms, source: 'home-timer' }]);
+        } catch { /* non-fatal */ }
+        startTsRef.current = null;
+      }
     }
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
 
   const fmt = (s: number) =>

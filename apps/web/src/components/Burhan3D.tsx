@@ -1,5 +1,6 @@
-import { Component, Suspense, lazy, useEffect, useState, type ReactNode } from 'react';
-import { BurhanTree } from './BurhanTree';
+import { Component, Suspense, lazy, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { BurhanTree, LifeEventLayer } from './BurhanTree';
+import { positionFor, type BurhanEvent } from '@ollie/logic/burhan';
 
 const Burhan3DCanvas = lazy(() => import('./Burhan3DCanvas'));
 
@@ -10,6 +11,12 @@ export interface Burhan3DProps {
   width?: number;
   /** Force the 2D SVG fallback (useful for tests / very small viewports). */
   forceFallback?: boolean;
+  /**
+   * Life-event tree elements (Sprint 3 D1). Rendered as an SVG overlay
+   * on top of the 3D canvas. Empty array renders no overlay.
+   * Append-only — Burhan never decays.
+   */
+  lifeEvents?: BurhanEvent[];
 }
 
 function useReducedMotion(): boolean {
@@ -41,8 +48,8 @@ function usePageVisible(): boolean {
   return visible;
 }
 
-function Fallback2D({ height }: { height: number }) {
-  return <BurhanTree height={height} tone="garden" />;
+function Fallback2D({ height, lifeEvents }: { height: number; lifeEvents?: BurhanEvent[] }) {
+  return <BurhanTree height={height} tone="garden" lifeEvents={lifeEvents} />;
 }
 
 // If three.js fails to load or the model errors out, fall back to the SVG tree.
@@ -62,15 +69,20 @@ class CanvasErrorBoundary extends Component<
   }
 }
 
-export function Burhan3D({ height = 400, width, forceFallback }: Burhan3DProps) {
+export function Burhan3D({ height = 400, width, forceFallback, lifeEvents }: Burhan3DProps) {
   const w = width ?? height;
   const reduced = useReducedMotion();
   const visible = usePageVisible();
 
+  const positioned = useMemo(
+    () => (lifeEvents ?? []).map(positionFor),
+    [lifeEvents],
+  );
+
   if (forceFallback) {
     return (
-      <div role="img" aria-label="Burhan, an olive tree" style={{ width: w, height }}>
-        <Fallback2D height={height} />
+      <div role="img" aria-label="Burhan, an olive tree" style={{ width: w, height, position: 'relative' }}>
+        <Fallback2D height={height} lifeEvents={lifeEvents} />
       </div>
     );
   }
@@ -79,10 +91,10 @@ export function Burhan3D({ height = 400, width, forceFallback }: Burhan3DProps) 
     <div
       role="img"
       aria-label="Burhan, an olive tree"
-      style={{ width: w, height, display: 'block' }}
+      style={{ width: w, height, display: 'block', position: 'relative' }}
     >
-      <CanvasErrorBoundary fallback={<Fallback2D height={height} />}>
-        <Suspense fallback={<Fallback2D height={height} />}>
+      <CanvasErrorBoundary fallback={<Fallback2D height={height} lifeEvents={lifeEvents} />}>
+        <Suspense fallback={<Fallback2D height={height} lifeEvents={lifeEvents} />}>
           <Burhan3DCanvas
             width={w}
             height={height}
@@ -91,6 +103,9 @@ export function Burhan3D({ height = 400, width, forceFallback }: Burhan3DProps) 
           />
         </Suspense>
       </CanvasErrorBoundary>
+      {positioned.length > 0 && (
+        <LifeEventLayer width={w} height={height} elements={positioned} />
+      )}
     </div>
   );
 }

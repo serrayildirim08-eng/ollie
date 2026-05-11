@@ -536,7 +536,7 @@ interface LifeEventLayerProps {
   elements: PositionedElement[];
 }
 
-function LifeEventLayer({ width, height, elements }: LifeEventLayerProps) {
+export function LifeEventLayer({ width, height, elements }: LifeEventLayerProps) {
   return (
     <svg
       width={width}

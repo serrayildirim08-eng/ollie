@@ -3,6 +3,7 @@ import { FrostedCard } from '../components/FrostedCard';
 import { BrainDumpInput } from '../components/BrainDumpInput';
 import { Burhan3D } from '../components/Burhan3D';
 import { useStoreSlice } from '../store';
+import { lastN, type BurhanState } from '@ollie/logic/burhan';
 
 // ─── types ───────────────────────────────────────────────────────────────────
 
@@ -123,12 +124,31 @@ export function DashboardScreen({ onNavigate, onBrainDump, stats }: DashboardScr
     .toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
     .toLowerCase();
 
-  const dueToday  = stats?.dueToday  ?? 0;
-  const billsSoon = stats?.billsSoon ?? 0;
-  const tracked   = stats?.tracked   ?? '0m';
-
   const [hasPets] = useStoreSlice<boolean>('shared', 'settings.has_pets', true);
+  const [burhanState] = useStoreSlice<BurhanState>('burhan', 'state', { events: [] });
+  const recentBurhanEvents = useMemo(() => lastN(burhanState, 12), [burhanState]);
   const pendingCounts = usePendingCounts();
+
+  // Credibility audit NH2: stats bar was previously always 0 / 0 / 0m
+  // because no caller passed the `stats` prop. Derive from store.
+  const [upcomingBills] = useStoreSlice<Array<{ daysUntil?: number }>>('finance', 'upcoming', []);
+  const [adminTasksForStats] = useStoreSlice<Array<{ due?: number; state?: string }>>('admin', 'tasks', []);
+  const [focusLog] = useStoreSlice<Array<{ duration_ms?: number; ts?: number }>>('work', 'focus_log', []);
+  const dueToday = stats?.dueToday ?? (() => {
+    const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = todayStart.getTime() + 86_400_000;
+    return (adminTasksForStats ?? []).filter((t) => t?.state !== 'done' && t?.state !== 'closed' && typeof t.due === 'number' && t.due >= todayStart.getTime() && t.due < todayEnd).length;
+  })();
+  const billsSoon = stats?.billsSoon ?? (upcomingBills ?? []).filter((b) => (b?.daysUntil ?? 999) <= 7).length;
+  const tracked = stats?.tracked ?? (() => {
+    const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+    const ms = (focusLog ?? [])
+      .filter((s) => typeof s.ts === 'number' && s.ts >= todayStart.getTime())
+      .reduce((acc, s) => acc + (s.duration_ms ?? 0), 0);
+    const mins = Math.round(ms / 60_000);
+    if (mins < 60) return `${mins}m`;
+    return `${Math.floor(mins / 60)}h ${mins % 60}m`;
+  })();
 
   // Filter pets out of home cluster if has_pets is false
   const clusters = useMemo<Cluster[]>(
@@ -259,7 +279,7 @@ export function DashboardScreen({ onNavigate, onBrainDump, stats }: DashboardScr
               lineHeight: 0,
             }}
           >
-            <Burhan3D height={66} width={66} />
+            <Burhan3D height={66} width={66} lifeEvents={recentBurhanEvents} />
           </button>
         </header>
 

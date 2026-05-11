@@ -227,7 +227,34 @@ export function createSleepOrchestrator(
       setKey('chronotype', estimateChronotype(records, now));
       setKey('socialJetlag', computeSocialJetlag(records, settings));
       setKey('dspsFlag', detectDSPSPattern(records, now));
-      setKey('shortSleepRun', detectShortSleepRun(records, 5, 5, now));
+      const shortRun = detectShortSleepRun(records, 5, 5, now);
+      setKey('shortSleepRun', shortRun);
+      // Credibility audit NC2: emit the source event on transition →
+      // cross-module router routes it to finance spending caution.
+      try {
+        const prevShort = store.get<{ ts?: number; nights?: number } | null>('sleep', '_shortRunEmittedAt', null);
+        if (shortRun && shortRun.runNights >= 3 && (!prevShort || prevShort.nights !== shortRun.runNights)) {
+          events.emit('sleep:short_sleep_run_detected', {
+            nights: shortRun.runNights,
+            mean_hours: shortRun.meanTst / 60,
+            ts: now,
+          });
+          store.set('sleep', '_shortRunEmittedAt', { ts: now, nights: shortRun.runNights });
+        }
+        // Pacing breach = sleep debt above 4h sustained → emit once per
+        // 24h cooldown so we don't spam habits + work modules.
+        const debt = store.get<{ debt_hours?: number } | null>('sleep', 'debt', null);
+        const prevPacingTs = store.get<number>('sleep', '_pacingBreachEmittedAt', 0) ?? 0;
+        const debtHrs = debt?.debt_hours ?? 0;
+        if (debtHrs >= 4 && now - prevPacingTs > 24 * 3600_000) {
+          events.emit('sleep:pacing_breach_detected', {
+            severity: debtHrs >= 8 ? 'watch' : 'info',
+            run_length: shortRun?.runNights ?? 0,
+            ts: now,
+          });
+          store.set('sleep', '_pacingBreachEmittedAt', now);
+        }
+      } catch { /* non-fatal */ }
       // forecastTonightTST requires a PredictApi integration layer; pass null
       // so the function's own guard returns null until the layer is wired.
       setKey('tonightForecast', forecastTonightTST(records, null as never));

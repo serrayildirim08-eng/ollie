@@ -117,7 +117,7 @@ describe('notify · budget', () => {
 });
 
 describe('notify · scheduling', () => {
-  it('schedules a future notification and fires it on timer', async () => {
+  it('schedules a future notification — backend owns the fire when it returns a platformId (NC6)', async () => {
     const fireAt = Date.now() + 5_000;
     const r = await notify({
       title: 'vet med 5am',
@@ -127,16 +127,33 @@ describe('notify · scheduling', () => {
     });
     expect(r.reason).toBe('scheduled');
     expect(backend.scheduled).toHaveLength(1);
-    expect(_inspect().scheduledCount).toBe(1);
+    // Credibility audit NC6: when the backend returns a truthy platform
+    // id (modeled by our fake), the JS in-process timer is skipped to
+    // avoid double-firing on Capacitor / Electron.
+    expect(_inspect().scheduledCount).toBe(0);
+    expect(backend.calls.length).toBe(0);
+  });
 
+  it('falls back to in-process timer when the backend returns no platform id', async () => {
+    // Replace the schedule mock so it returns undefined → fallback path.
+    backend.schedule = () => undefined;
+    const fireAt = Date.now() + 5_000;
+    await notify({
+      title: 'fallback fire',
+      category: 'REMINDER',
+      dedupe_key: 'fb-1',
+      schedule_at: fireAt,
+    });
+    expect(_inspect().scheduledCount).toBe(1);
     vi.advanceTimersByTime(5_000);
-    // microtasks for the async deliver
     await Promise.resolve();
     expect(backend.calls.length).toBe(1);
-    expect(backend.calls[0].title).toBe('vet med 5am');
+    expect(backend.calls[0].title).toBe('fallback fire');
   });
 
   it('cancel() removes a pending scheduled notification', async () => {
+    // Use fallback path so the in-process timer is present to cancel.
+    backend.schedule = () => undefined;
     await notify({
       title: 'x',
       category: 'REMINDER',

@@ -87,6 +87,27 @@ export function createBodyOrchestrator(
       store.set('body', 'patterns', patterns);
       store.set('body', 'patternsLastComputedAt', now);
 
+      // Credibility audit NC2: hydration drop. WaterEntry is either a
+      // bare ts number or `{ ts, glasses? }` — normalize then compare.
+      try {
+        const target = store.get<number>('body', 'water_target', 8) ?? 8;
+        const dayMs = 86_400_000;
+        const todayStart = (() => { const d = new Date(now); d.setHours(0,0,0,0); return d.getTime(); })();
+        const entryTs = (w: WaterEntry): number => typeof w === 'number' ? w : (w?.ts ?? 0);
+        const todayCount = waterLog.filter((w) => { const t = entryTs(w); return t >= todayStart && t < todayStart + dayMs; }).length;
+        const last7Start = todayStart - 7 * dayMs;
+        const last7Count = waterLog.filter((w) => { const t = entryTs(w); return t >= last7Start && t < todayStart; }).length;
+        const baselineDaily = last7Count / 7;
+        const minutesIntoDay = Math.max(1, (now - todayStart) / 60_000);
+        const projectedToday = todayCount * (1440 / minutesIntoDay);
+        const dropPct = baselineDaily > 0 ? Math.max(0, (1 - projectedToday / baselineDaily) * 100) : 0;
+        const lastEmit = store.get<number>('body', '_hydrationEmittedAt', 0) ?? 0;
+        if (baselineDaily >= 2 && dropPct >= 30 && projectedToday < target && now - lastEmit > 24 * 3600_000) {
+          events.emit('body:hydration_drop_detected', { drop_pct: Math.round(dropPct), ts: now });
+          store.set('body', '_hydrationEmittedAt', now);
+        }
+      } catch { /* non-fatal */ }
+
       if (Array.isArray(patterns)) {
         for (const p of patterns) {
           if (p?.pattern && !prevKeys.has(p.pattern)) {

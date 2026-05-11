@@ -62,6 +62,13 @@ export function createCycleOrchestrator(store: Store): Orchestrator & {
         ? Math.floor((now - st.last_period_start) / 86_400_000) + 1
         : null;
 
+    // Credibility audit NC2 · emit cycle:luteal_phase_entered on transition.
+    try {
+      const prevPhase = store.get<string | null>('cycle', 'phaseName', null);
+      if (phaseName === 'luteal' && prevPhase !== 'luteal') {
+        events.emit('cycle:luteal_phase_entered', { ts: now });
+      }
+    } catch { /* non-fatal */ }
     store.set('cycle', 'phaseName', phaseName);
     store.set('cycle', 'flags', flags);
     store.set('cycle', 'currentDay', currentDay);

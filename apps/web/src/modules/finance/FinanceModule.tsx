@@ -324,10 +324,24 @@ function FinanceD3Cards() {
             </button>
             <button
               type="button"
-              onClick={() => dismissSub(s.pattern_id)}
+              onClick={() => {
+                // Credibility audit NH6: schedule a 24h-out reminder
+                // via the bus. The reminder scheduler in @ollie/router
+                // listens and surfaces a toast on fire.
+                try {
+                  emit('void:reminder:scheduled', {
+                    id: `cancel:${s.pattern_id}:${Date.now()}`,
+                    fireAt: Date.now() + 24 * 3600_000,
+                    message: `cancel ${s.merchant}? still on the list.`,
+                    module: 'finance',
+                    source: 'd3-subscription-card',
+                  });
+                } catch { /* non-fatal */ }
+                dismissSub(s.pattern_id);
+              }}
               style={d3BtnStyle}
             >
-              dismiss
+              remind me to cancel
             </button>
           </div>
         </div>
@@ -359,6 +373,51 @@ function FinanceD3Cards() {
           }}
         >
           {cyc.copy}
+        </div>
+      )}
+    </section>
+  );
+}
+
+// ─── ProtectiveCards · Sprint 4 · E5 ──────────────────────────────────────
+// Quiet surface for cross-module protective chains. Reads
+// `finance.protective_cards` (written by the cross-module router when
+// e.g. sleep:short_sleep_run_detected fires). Empty array → renders nothing.
+
+interface ProtectiveCard {
+  id: string;
+  reason: string;
+  kind?: string;
+  ts: number;
+}
+
+function ProtectiveCards() {
+  const [cards, setCards] = useStoreSlice<ProtectiveCard[]>('finance', 'protective_cards', []);
+  const [cycleCardVisible] = useStoreSlice<{ visible?: boolean; reason?: string; ts?: number } | null>('finance', 'cycle_card_visible', null);
+  const list = (cards ?? []).filter((c) => c?.reason);
+  if (list.length === 0 && !cycleCardVisible?.visible) return null;
+  return (
+    <section style={{ marginBottom: 48 }}>
+      <div style={{ paddingBottom: 10, borderBottom: `1px solid ${T.border}`, ...labelStyle }}>
+        easy on finance
+      </div>
+      {list.map((c) => (
+        <div
+          key={c.id}
+          style={{ padding: '16px 20px', background: T.paper, borderBottom: `1px solid ${T.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}
+        >
+          <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 14, color: T.text }}>{c.reason}</span>
+          <button
+            type="button"
+            onClick={() => setCards(list.filter((x) => x.id !== c.id))}
+            style={d3BtnStyle}
+            aria-label="dismiss"
+          >dismiss</button>
+        </div>
+      ))}
+      {cycleCardVisible?.visible && (
+        <div style={{ padding: '16px 20px', background: T.paper, fontFamily: "'DM Sans', sans-serif", fontSize: 14, color: T.text }}>
+          {cycleCardVisible.reason ?? 'luteal phase began — pattern, not medical.'}
         </div>
       )}
     </section>
@@ -1668,6 +1727,9 @@ export function FinanceModule() {
 
         {/* F1 savings tracker (quiet card, passive voice) */}
         <SavingsCard />
+
+        {/* E5 protective chain surface — sleep deprivation, cycle, etc. */}
+        <ProtectiveCards />
 
         {/* Patterns (noticed) */}
         <FinanceNoticed />

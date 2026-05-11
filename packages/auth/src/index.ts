@@ -1,23 +1,46 @@
 /**
  * @ollie/auth · account model + auth flow (C5)
  *
- * Zero-knowledge account model:
+ * THREAT MODEL — read this before changing anything in this file.
  *
+ * Current pattern (Pattern B):
  *   1. user signs up with email + passphrase
- *   2. server stores a random Supabase-internal password (NEVER the
- *      passphrase). server JWT auth only proves "this email controls
- *      its inbox" — it cannot decrypt anything by itself.
- *   3. client derives an encryption key from passphrase + salt.
- *      key lives only in memory. log out = drop key.
- *   4. salt is stored encrypted alongside the user row (in
- *      shared.settings.account.salt — encrypted_state RLS protects it
- *      via user_id auth). a separate well-known location stores it
- *      plaintext for first sign-in: localStorage._ollie_auth_salt and
- *      a Supabase profile row.
+ *   2. on signUp:  we POST `{email, passphrase}` to Supabase Auth.
+ *      Supabase salt+bcrypts the passphrase server-side and stores the
+ *      hash. We DO NOT store the passphrase anywhere else.
+ *   3. on signIn:  we POST `{email, passphrase}` to Supabase Auth again.
+ *      Supabase verifies bcrypt. We receive a session JWT.
+ *   4. independently, the client derives an AES-GCM-256 encryption
+ *      key from `passphrase + salt` via PBKDF2-SHA-256 100k iters.
+ *      The derived key lives in memory only and never leaves the
+ *      device. log out = drop key.
  *
- *   if the user loses the passphrase, the data is unrecoverable.
- *   constitutional — there is NO password reset path for the
- *   passphrase. UI must say this explicitly.
+ * What Pattern B leaks: Supabase sees the passphrase in transit (TLS
+ * to their edge) and may see it in audit logs / request bodies. The
+ * passphrase is bcrypt-hashed at rest, but a Supabase breach OR an
+ * insider with log access could capture the plaintext. Since the same
+ * passphrase derives the AES key client-side, capturing the
+ * passphrase → capturing the encryption key.
+ *
+ * Pattern B is NOT zero-knowledge. Marketing copy must NOT claim
+ * "Supabase never sees your password." It CAN claim "we never store
+ * your password — only Supabase's salted bcrypt hash."
+ *
+ * If we ever need true zero-knowledge (Pattern A), the migration is:
+ *   - keep PBKDF2 + AES on the device (already done)
+ *   - on signUp, generate a separate random Supabase password
+ *     (already in `generateRandomServerPassword`). Encrypt it with the
+ *     passphrase-derived key, persist in `profiles.encrypted_server_pw`.
+ *   - on signIn, fetch the encrypted server password, decrypt locally
+ *     with the passphrase-derived key, then call Supabase signIn with
+ *     the random server password. Wrong passphrase → decrypt fails →
+ *     "wrong passphrase" without contacting auth.
+ * That migration takes ~1 day and removes Supabase from the trusted
+ * computing base for encryption.
+ *
+ * Constitutional invariant either way: passphrase is unrecoverable by
+ * design. There is NO password reset path. UI must say this
+ * explicitly at signup.
  *
  * State lives at:
  *   shared.auth.session        { access_token, refresh_token, user_id, email }

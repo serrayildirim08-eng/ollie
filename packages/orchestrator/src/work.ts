@@ -82,6 +82,30 @@ export function createWorkOrchestrator(
       store.set('work', 'patterns', patterns);
       store.set('work', 'patternsLastComputedAt', now);
 
+      // Credibility audit NC2: hyperfocus = a single sustained session
+      // ≥ 3h (180 min) inside the focus log within the last 24h. Emit
+      // once per session id; cross-module router routes to body
+      // fatigue-warning surface.
+      try {
+        const focusLog = store.get<Array<{ ts?: number; duration_ms?: number }>>('work', 'focus_log', []) ?? [];
+        const cutoff = now - 24 * 3600_000;
+        const seenIds = new Set(store.get<string[]>('work', '_hyperfocusEmittedIds', []) ?? []);
+        const fresh: string[] = [];
+        for (const s of focusLog) {
+          if (!s?.ts || !s.duration_ms) continue;
+          if (s.ts < cutoff) continue;
+          const minutes = s.duration_ms / 60_000;
+          if (minutes < 180) continue;
+          const id = `${s.ts}`;
+          if (seenIds.has(id)) continue;
+          events.emit('work:hyperfocus_detected', { minutes: Math.round(minutes), ts: s.ts });
+          fresh.push(id);
+        }
+        if (fresh.length) {
+          store.set('work', '_hyperfocusEmittedIds', [...seenIds, ...fresh]);
+        }
+      } catch { /* non-fatal */ }
+
       if (Array.isArray(patterns)) {
         for (const p of patterns) {
           if (p?.pattern && !prevKeys.has(p.pattern)) {

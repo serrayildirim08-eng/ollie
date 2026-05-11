@@ -63,6 +63,7 @@ export const REGISTRY: Registry = {
   'void:reminder:fired':           { payload: '{ id: string, fireAt: number }' },
   'void:reminder:dismissed':       { payload: '{ id: string }' },
   'void:reminder:cancelled':       { payload: '{ id: string }' },
+  'void:toast':                    { payload: '{ message: string, module: string }' },
 
   // ─── consumption (B2B panel) ────────────────────────────────────
   'consumption:brand:detected':    { payload: '{ id: string, brand_key: string, category_l1: string, category_l2?: string, confidence: number, source: "braindump"|"finance"|"grocery"|"direct", raw_module: string, ts: number }' },

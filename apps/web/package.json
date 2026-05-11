@@ -12,12 +12,18 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@ollie/api": "workspace:*",
+    "@ollie/auth": "workspace:*",
+    "@ollie/backup": "workspace:*",
+    "@ollie/crypto": "workspace:*",
     "@ollie/events": "workspace:*",
     "@ollie/logic": "workspace:*",
     "@ollie/notifications": "workspace:*",
     "@ollie/orchestrator": "workspace:*",
+    "@ollie/research-stream": "workspace:*",
     "@ollie/router": "workspace:*",
     "@ollie/store": "workspace:*",
+    "@ollie/sync": "workspace:*",
     "@react-three/drei": "^9.122.0",
     "@react-three/fiber": "^8.18.0",
     "astronomy-engine": "2.1.19",

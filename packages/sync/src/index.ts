@@ -72,7 +72,8 @@ interface QueueEntry {
 
 const DEFAULT_MODULES = [
   'cycle', 'finance', 'grocery', 'pets', 'sleep', 'body', 'habits', 'work',
-  'goals', 'admin', 'astrology', 'dump', 'journal', 'burhan', 'shared',
+  'goals', 'admin', 'astrology', 'dump', 'journal', 'burhan', 'medication',
+  'shared',
 ];
 
 export interface SyncClient {

@@ -141,28 +141,45 @@ async function runCron(env: Env): Promise<CronResult> {
   const jwt = (env.APNS_AUTH_KEY && env.APNS_KEY_ID && env.APNS_TEAM_ID) ? await getApnsJwt(env) : null;
 
   for (const job of due) {
+    // Credibility audit C4: track attempt count properly. Transient
+    // failures (network, 5xx) reschedule with exponential backoff;
+    // permanent failures (unknown job_type, no jwt) flip to 'failed';
+    // success flips to 'fired'. Cap at 5 attempts.
+    const MAX_ATTEMPTS = 5;
+    const nextAttempt = (job.attempts ?? 0) + 1;
     try {
       const spec = jobToSpec(job);
-      if (!spec) { await updateJob(env, job.id, { status: 'failed', last_error: 'unknown job_type' }); failed++; continue; }
+      if (!spec) {
+        await updateJob(env, job.id, { status: 'failed', last_error: 'unknown job_type', attempts: nextAttempt });
+        failed++; continue;
+      }
       const tokens = await tokensForUser(env, job.user_id);
       if (tokens.length === 0) {
-        // No registered device tokens — mark fired anyway so we don't retry forever.
-        // Client-side fallback timers handle delivery when the app is open.
-        await updateJob(env, job.id, { status: 'fired', last_error: 'no-tokens' });
+        // No registered device tokens — mark fired anyway so we don't
+        // retry forever. Client-side fallback timers handle delivery
+        // when the app is open.
+        await updateJob(env, job.id, { status: 'fired', last_error: 'no-tokens', attempts: nextAttempt });
         skippedNoToken++;
         continue;
       }
       if (!jwt) {
-        await updateJob(env, job.id, { status: 'failed', last_error: 'no-apns-jwt' });
-        failed++;
-        continue;
+        // Transient — APNs jwt may be missing if env not yet configured.
+        // Reschedule with backoff so deployment fixes don't lose jobs.
+        await rescheduleOrFail(env, job, nextAttempt, MAX_ATTEMPTS, 'no-apns-jwt');
+        failed++; continue;
       }
       const results = await Promise.all(tokens.map((t) => sendApns(env, jwt, t, spec)));
       const anyOk = results.some((r) => r.ok);
-      await updateJob(env, job.id, { status: anyOk ? 'fired' : 'failed', last_error: anyOk ? null : (results.find((r) => !r.ok)?.reason ?? 'unknown') });
-      if (anyOk) fired++; else failed++;
+      if (anyOk) {
+        await updateJob(env, job.id, { status: 'fired', last_error: null, attempts: nextAttempt });
+        fired++;
+      } else {
+        const reason = results.find((r) => !r.ok)?.reason ?? 'unknown';
+        await rescheduleOrFail(env, job, nextAttempt, MAX_ATTEMPTS, reason);
+        failed++;
+      }
     } catch (err) {
-      await updateJob(env, job.id, { status: 'failed', last_error: String((err as Error).message ?? err).slice(0, 200) });
+      await rescheduleOrFail(env, job, nextAttempt, MAX_ATTEMPTS, String((err as Error).message ?? err).slice(0, 200));
       failed++;
     }
   }
@@ -221,11 +238,43 @@ async function updateJob(env: Env, id: string, patch: Record<string, unknown>): 
         'content-type': 'application/json',
         prefer: 'return=minimal',
       },
-      body: JSON.stringify({ ...patch, attempts: (patch.attempts as number | undefined) ?? 1, fired_at: patch.status === 'fired' ? new Date().toISOString() : null }),
+      // Use the caller-supplied `attempts` (preserves history) and only
+      // stamp fired_at when the new status is 'fired'.
+      body: JSON.stringify({
+        ...patch,
+        fired_at: patch.status === 'fired' ? new Date().toISOString() : null,
+      }),
     });
   } catch (err) {
     console.error('[cron] updateJob failed', id, err);
   }
+}
+
+/**
+ * Credibility audit C4 · exponential-backoff reschedule helper.
+ *
+ * Transient failures keep `status='pending'` and push `fire_at`
+ * forward by `2^attempts` minutes. After MAX_ATTEMPTS, mark 'failed'.
+ */
+async function rescheduleOrFail(
+  env: Env,
+  job: ScheduledJobRow,
+  nextAttempt: number,
+  maxAttempts: number,
+  reason: string,
+): Promise<void> {
+  if (nextAttempt >= maxAttempts) {
+    await updateJob(env, job.id, { status: 'failed', last_error: reason, attempts: nextAttempt });
+    return;
+  }
+  const backoffMinutes = Math.pow(2, nextAttempt);
+  const nextFireAt = new Date(Date.now() + backoffMinutes * 60_000).toISOString();
+  await updateJob(env, job.id, {
+    status: 'pending',
+    last_error: reason,
+    attempts: nextAttempt,
+    fire_at: nextFireAt,
+  });
 }
 
 // ──────────────────────────────────────────────────────────────────────────
