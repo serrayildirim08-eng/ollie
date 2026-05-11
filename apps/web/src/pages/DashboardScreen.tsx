@@ -133,7 +133,7 @@ export function DashboardScreen({ onNavigate, onBrainDump, stats }: DashboardScr
   // because no caller passed the `stats` prop. Derive from store.
   const [upcomingBills] = useStoreSlice<Array<{ daysUntil?: number }>>('finance', 'upcoming', []);
   const [adminTasksForStats] = useStoreSlice<Array<{ due?: number; state?: string }>>('admin', 'tasks', []);
-  const [focusLog] = useStoreSlice<Array<{ duration_ms?: number; ts?: number }>>('work', 'focus_log', []);
+  const [focusLog] = useStoreSlice<Array<{ at?: number; duration_min?: number }>>('work', 'focus_log', []);
   const dueToday = stats?.dueToday ?? (() => {
     const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
     const todayEnd = todayStart.getTime() + 86_400_000;
@@ -142,10 +142,9 @@ export function DashboardScreen({ onNavigate, onBrainDump, stats }: DashboardScr
   const billsSoon = stats?.billsSoon ?? (upcomingBills ?? []).filter((b) => (b?.daysUntil ?? 999) <= 7).length;
   const tracked = stats?.tracked ?? (() => {
     const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
-    const ms = (focusLog ?? [])
-      .filter((s) => typeof s.ts === 'number' && s.ts >= todayStart.getTime())
-      .reduce((acc, s) => acc + (s.duration_ms ?? 0), 0);
-    const mins = Math.round(ms / 60_000);
+    const mins = (focusLog ?? [])
+      .filter((s) => typeof s.at === 'number' && s.at >= todayStart.getTime())
+      .reduce((acc, s) => acc + (s.duration_min ?? 0), 0);
     if (mins < 60) return `${mins}m`;
     return `${Math.floor(mins / 60)}h ${mins % 60}m`;
   })();

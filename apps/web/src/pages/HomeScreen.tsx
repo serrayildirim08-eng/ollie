@@ -61,12 +61,16 @@ function TimeTracker() {
       timerRef.current = setInterval(() => setSec((s) => s + 1), 1000);
     } else {
       if (timerRef.current) clearInterval(timerRef.current);
-      // Append to work.focus_log on stop. Skip zero-duration accidental clicks.
+      // Append to work.focus_log on stop using the canonical shape
+      // WorkModule reads: { at, duration_min }. Audit-fix #2.
+      // Skip zero-duration accidental clicks.
       if (startTsRef.current && sec > 0) {
         try {
-          const duration_ms = Date.now() - startTsRef.current;
-          const log = store.get<Array<{ ts: number; duration_ms: number; source: string }>>('work', 'focus_log', []) ?? [];
-          store.set('work', 'focus_log', [...log, { ts: startTsRef.current, duration_ms, source: 'home-timer' }]);
+          const duration_min = Math.round((Date.now() - startTsRef.current) / 60_000);
+          if (duration_min >= 1) {
+            const log = store.get<Array<{ at: number; duration_min: number; source?: string }>>('work', 'focus_log', []) ?? [];
+            store.set('work', 'focus_log', [...log, { at: startTsRef.current, duration_min, source: 'home-timer' }]);
+          }
         } catch { /* non-fatal */ }
         startTsRef.current = null;
       }

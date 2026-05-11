@@ -15,14 +15,6 @@ export interface BurhanTreeProps {
    */
   scale?: number;
   tone?: 'home' | 'garden';
-  droop?: number;
-  /**
-   * Water level 0–100.
-   * Currently inert — rendered as a prop only.
-   * TODO (Group D life-event tree): drive canopy glow intensity and
-   * leaf saturation from this value once the full growth system lands.
-   */
-  waterLevel?: number;
   /**
    * Life-event elements layered on top of the canopy.
    * Append-only. NEVER mutated to shrink the tree (constitutional rule).
@@ -31,6 +23,10 @@ export interface BurhanTreeProps {
   lifeEvents?: BurhanEvent[];
   onClick?: () => void;
 }
+// Constitutional: Burhan never decays. The `droop` and `waterLevel`
+// props were primitives that could encode decay state — removed
+// (Credibility audit NH8 + NH9). If you find yourself wanting them
+// back, talk to Serra first. Re-read pod-b-pitch.html.
 
 type Variant = 'home' | 'garden';
 
@@ -105,8 +101,6 @@ export function BurhanTree({
   height,
   scale,
   tone = 'home',
-  droop = 0,
-  waterLevel = 50,
   lifeEvents,
   onClick,
 }: BurhanTreeProps) {
@@ -125,8 +119,6 @@ export function BurhanTree({
   const aspectRatio = cfg.baseW / cfg.baseH;
   const resolvedHeight = Math.max(50, resolvedHeightProp);
   const resolvedWidth = Math.round(resolvedHeight * aspectRatio);
-
-  const desat = Math.min(Math.max(droop, 0) / 100, 1);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -477,7 +469,7 @@ export function BurhanTree({
       if (animRef.current) cancelAnimationFrame(animRef.current);
       animRef.current = null;
     };
-  }, [tone, resolvedWidth, resolvedHeight, droop, waterLevel]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [tone, resolvedWidth, resolvedHeight]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const positioned: PositionedElement[] = (lifeEvents ?? []).map(positionFor);
 
@@ -510,8 +502,6 @@ export function BurhanTree({
           width: resolvedWidth,
           height: resolvedHeight,
           display: 'block',
-          filter: `saturate(${1 - desat * 0.4}) brightness(${1 - desat * 0.12})`,
-          transition: 'filter 600ms ease',
         }}
       />
       {positioned.length > 0 && (

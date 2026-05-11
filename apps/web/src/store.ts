@@ -112,5 +112,30 @@ createOrchestrator(store).init();
 
 import { createReminderScheduler, createCrossModuleRouter } from '@ollie/router';
 import * as appEvents from '@ollie/events';
-createReminderScheduler(store, appEvents).init();
+
+// Single canonical reminder scheduler. Audit-fix #3: previously two
+// instances existed (one here, one inside useApplyBrainDump). They
+// didn't share timers, so cancels from one couldn't see schedules
+// from the other. Export this one so any caller imports the same
+// scheduler and observe each other's adds/cancels.
+export const reminderScheduler = createReminderScheduler(store, appEvents);
+reminderScheduler.init();
 createCrossModuleRouter(store, appEvents).init();
+
+// Audit-fix #3: bridge `void:reminder:scheduled` events from anywhere
+// in the app onto the scheduler. Before this, code that emitted the
+// event (e.g. the "remind me to cancel" button in FinanceModule) had
+// nothing listening — the reminder vanished. Now it lands as a real
+// scheduled reminder with a fire-time + toast on fire.
+appEvents.on('void:reminder:scheduled', (payload: unknown) => {
+  const p = (payload ?? {}) as { id?: string; fireAt?: number; message?: string; module?: string; source?: string };
+  if (!p.id || typeof p.fireAt !== 'number') return;
+  reminderScheduler.add({
+    id: p.id,
+    datetime: p.fireAt,
+    body: p.message ?? '',
+    module: p.module ?? 'unknown',
+    action: p.source ?? 'unknown',
+    status: 'scheduled',
+  });
+});

@@ -1,5 +1,6 @@
 import React, { lazy, Suspense, useState } from 'react';
 import { REGISTRY } from '@ollie/events';
+import * as appEventsForToast from '@ollie/events';
 import { cycle } from '@ollie/logic';
 import { getString } from './i18n';
 import { useStoreSlice, store } from './store';
@@ -48,6 +49,17 @@ function AppInner() {
   const [visits, setVisits] = useStoreSlice<number>('shared', 'visit_count', 0);
   const toast = useToast();
   const demoTileRef = React.useRef<HTMLDivElement>(null);
+
+  // Audit-fix #3: surface `void:toast` events through the existing
+  // ToastHost. The reminder scheduler emits void:toast on every fire
+  // and previously nothing was listening — the user saw nothing.
+  React.useEffect(() => {
+    const off = appEventsForToast.on('void:toast', (payload: unknown) => {
+      const p = (payload ?? {}) as { message?: string; module?: string };
+      if (p.message) toast.show(p.message, { module: p.module ?? 'reminder' });
+    });
+    return () => off();
+  }, [toast]);
 
   const apply = useApplyBrainDump();
 

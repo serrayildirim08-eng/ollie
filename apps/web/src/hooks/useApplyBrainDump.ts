@@ -19,9 +19,11 @@ import { store as appStore, useStoreSlice } from '../store';
 import { chipFly } from '../components/ChipFly';
 import { useToast } from '../components/ToastContext';
 import { applyRoute } from './applyRoute';
-import { parseReminder, createReminderScheduler } from '@ollie/router';
-
-const reminderScheduler = createReminderScheduler(appStore, appEvents);
+import { parseReminder } from '@ollie/router';
+// Audit-fix #3: import the shared scheduler instance from store.ts
+// instead of creating a second instance. Two schedulers with their
+// own timer maps couldn't cancel each other's schedules (audit H4).
+import { reminderScheduler } from '../store';
 
 // Re-export so callers only need one import.
 export { applyRoute } from './applyRoute';
