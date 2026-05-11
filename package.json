@@ -7,7 +7,15 @@
     "dev": "pnpm --filter @ollie/web dev",
     "build": "pnpm --filter @ollie/web build",
     "typecheck": "pnpm -r typecheck",
-    "test": "pnpm -r test"
+    "test": "pnpm -r test",
+    "ios:sync": "pnpm --filter @ollie/ios sync",
+    "ios:open": "pnpm --filter @ollie/ios open",
+    "ios:run": "pnpm --filter @ollie/ios run",
+    "electron:dev": "pnpm --filter @ollie/desktop dev",
+    "electron:build:mac": "pnpm --filter @ollie/desktop build:mac",
+    "electron:build:win": "pnpm --filter @ollie/desktop build:win",
+    "electron:build:linux": "pnpm --filter @ollie/desktop build:linux",
+    "electron:build:all": "pnpm --filter @ollie/desktop build:all"
   },
   "devDependencies": {
     "typescript": "^5.6.0"

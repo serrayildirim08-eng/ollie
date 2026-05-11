@@ -1,0 +1,26 @@
+{
+  "appId": "app.ollie.ollie",
+  "appName": "ollie",
+  "webDir": "./www",
+  "server": {
+    "androidScheme": "https",
+    "iosScheme": "https",
+    "allowNavigation": []
+  },
+  "ios": {
+    "contentInset": "always",
+    "limitsNavigationsToAppBoundDomains": false,
+    "scheme": "ollie",
+    "preferredContentMode": "mobile"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 1000,
+      "backgroundColor": "#F2EEE4"
+    },
+    "StatusBar": {
+      "style": "DEFAULT",
+      "backgroundColor": "#F2EEE4"
+    }
+  }
+}
