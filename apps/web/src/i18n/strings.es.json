@@ -53,6 +53,36 @@
       "back": "← atrás",
       "next": "siguiente",
       "start": "empezar"
+    },
+    "pets": {
+      "title": "¿tienes mascotas?",
+      "yes": "sí",
+      "no": "no",
+      "add": "+ añadir mascota",
+      "name_ph": "nombre",
+      "species_ph": "especie"
+    },
+    "pantry": {
+      "title": "básicos de despensa.",
+      "sub": "están incluidos por defecto. toca para quitar los que no sueles tener."
+    },
+    "subs": {
+      "title": "¿suscripciones?",
+      "sub": "toca las que tienes. llevaré el control de las renovaciones."
+    },
+    "spend_research": {
+      "title": "una cosa más.",
+      "body": "puedes ayudarnos a entender cómo gastan los cerebros con tdah. anónimo. desactivado por defecto. puedes cambiarlo en ajustes cuando quieras.",
+      "yes": "sí, con gusto",
+      "no": "no, gracias"
+    },
+    "work_time": {
+      "title": "¿cuándo rindes mejor?"
+    },
+    "burhan": {
+      "title": "este es burhan. vive aquí.",
+      "sub": "crecerá a medida que uses ollie. lleva aquí desde el principio.",
+      "cta": "empecemos"
     }
   },
 

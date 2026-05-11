@@ -53,6 +53,36 @@
       "back": "Back",
       "next": "Next",
       "start": "Begin"
+    },
+    "pets": {
+      "title": "Do you have any pets?",
+      "yes": "Yes",
+      "no": "No",
+      "add": "Add a pet",
+      "name_ph": "Pet name",
+      "species_ph": "Species"
+    },
+    "pantry": {
+      "title": "Pantry staples.",
+      "sub": "These items are included by default. Tap to remove any you do not keep."
+    },
+    "subs": {
+      "title": "Subscriptions?",
+      "sub": "Tap the ones you have. Ollie will track renewal dates."
+    },
+    "spend_research": {
+      "title": "One more thing.",
+      "body": "You can help us understand how ADHD brains spend money. This is anonymous. It is off by default. You can change this in settings at any time.",
+      "yes": "Yes, help out",
+      "no": "No thanks"
+    },
+    "work_time": {
+      "title": "When do you do your best work?"
+    },
+    "burhan": {
+      "title": "Meet Burhan. He lives here.",
+      "sub": "He will grow as you use Ollie. He has been here since the beginning.",
+      "cta": "Let's go"
     }
   },
 

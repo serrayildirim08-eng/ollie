@@ -1,3 +1,57 @@
+/* ───────────────────────────────────────────────────────────────────── */
+/* FONTS · local · downloaded to apps/web/public/fonts/                  */
+/* ───────────────────────────────────────────────────────────────────── */
+
+@font-face {
+  font-family: 'DM Serif Display';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/dm-serif-display-regular.ttf') format('truetype');
+}
+@font-face {
+  font-family: 'DM Serif Display';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/dm-serif-display-italic.ttf') format('truetype');
+}
+@font-face {
+  font-family: 'DM Sans';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/dm-sans-regular.ttf') format('truetype');
+}
+@font-face {
+  font-family: 'DM Sans';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/dm-sans-medium.ttf') format('truetype');
+}
+@font-face {
+  font-family: 'DM Sans';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/dm-sans-bold.ttf') format('truetype');
+}
+@font-face {
+  font-family: 'DM Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/dm-mono-regular.ttf') format('truetype');
+}
+@font-face {
+  font-family: 'DM Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/dm-mono-medium.ttf') format('truetype');
+}
+
 /*
  * ollie · design tokens · vol 1
  * source of truth: pod-b-pitch.html + masterplan.html
@@ -44,8 +98,9 @@
   /* ───────────────────────────────────────── */
 
   /* font families */
-  --font-system:    'Courier New', Courier, monospace;
-  --font-editor:    'Fraunces', Georgia, serif;
+  --font-system:    'DM Sans', system-ui, -apple-system, sans-serif;
+  --font-editor:    'DM Serif Display', Georgia, serif;
+  --font-mono:      'DM Mono', Menlo, Consolas, monospace;
 
   /* type scale · use these as the only sizes */
   --t-hero:         96px;   /* one per page · cover, manifesto break · 1.02 leading */

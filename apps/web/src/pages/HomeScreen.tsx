@@ -1,22 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { BurhanTree } from '../components/BurhanTree';
 import { BrainDumpInput } from '../components/BrainDumpInput';
-
-// Sky video URLs — keyed by condition
-const SKY_VIDEOS = {
-  clearDay:   'https://assets.mixkit.co/videos/26108/26108-720.mp4',
-  clearNight: 'https://assets.mixkit.co/videos/1610/1610-720.mp4',
-  sunset:     'https://assets.mixkit.co/videos/4119/4119-720.mp4',
-  sunrise:    'https://assets.mixkit.co/videos/51102/51102-720.mp4',
-  overcast:   'https://assets.mixkit.co/videos/9680/9680-720.mp4',
-} as const;
-
-function getSkyVideo(hour: number): string {
-  if (hour >= 5 && hour < 7) return SKY_VIDEOS.sunrise;
-  if (hour >= 18 && hour < 20) return SKY_VIDEOS.sunset;
-  if (hour >= 7 && hour < 18) return SKY_VIDEOS.clearDay;
-  return SKY_VIDEOS.clearNight;
-}
+import { getSkyVideoSrc } from '../lib/skyVideo';
 
 // Sky orb — glowing circle varying by time of day
 function SkyOrb({ hour }: { hour: number }) {
@@ -128,7 +113,7 @@ export interface HomeScreenProps {
 export function HomeScreen({ onNavigate, onBrainDump }: HomeScreenProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hour = new Date().getHours();
-  const skyUrl = getSkyVideo(hour);
+  const sky = getSkyVideoSrc(hour);
 
   useEffect(() => {
     if (videoRef.current) {
@@ -150,14 +135,18 @@ export function HomeScreen({ onNavigate, onBrainDump }: HomeScreenProps) {
         background: '#1a2030', // fallback while video loads
       }}
     >
-      {/* Sky video — full viewport */}
+      {/* Sky video — full viewport · local-first, CDN fallback on error */}
       <video
         ref={videoRef}
         autoPlay
         muted
         loop
         playsInline
-        src={skyUrl}
+        src={sky.local}
+        onError={(e) => {
+          const el = e.currentTarget;
+          if (el.src.endsWith(sky.local)) el.src = sky.cdn;
+        }}
         aria-hidden="true"
         style={{
           position: 'absolute',

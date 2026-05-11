@@ -1,9 +1,22 @@
 import { useEffect, useRef } from 'react';
 
 export interface BurhanTreeProps {
+  /** Explicit height in px. Overrides `scale` when both are provided. */
   height?: number;
+  /**
+   * Convenience scale: 0.22–1.0.
+   * Derives height = 600 * scale (scale=1.0 → 600px, scale=0.22 → 132px).
+   * Ignored when `height` is explicitly passed.
+   */
+  scale?: number;
   tone?: 'home' | 'garden';
   droop?: number;
+  /**
+   * Water level 0–100.
+   * Currently inert — rendered as a prop only.
+   * TODO (Group D life-event tree): drive canopy glow intensity and
+   * leaf saturation from this value once the full growth system lands.
+   */
   waterLevel?: number;
   onClick?: () => void;
 }
@@ -78,19 +91,27 @@ interface Olive {
 }
 
 export function BurhanTree({
-  height = 220,
+  height,
+  scale,
   tone = 'home',
   droop = 0,
   waterLevel = 50,
   onClick,
 }: BurhanTreeProps) {
+  // Resolve height: explicit `height` wins; `scale` derives 600*scale; fallback 220px.
+  const resolvedHeightProp: number =
+    height !== undefined
+      ? height
+      : scale !== undefined
+        ? Math.round(600 * Math.min(Math.max(scale, 0.22), 1.0))
+        : 220;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animRef = useRef<number | null>(null);
 
   // Derive width from aspect ratio of the preset
   const cfg = PRESETS[tone];
   const aspectRatio = cfg.baseW / cfg.baseH;
-  const resolvedHeight = Math.max(50, height);
+  const resolvedHeight = Math.max(50, resolvedHeightProp);
   const resolvedWidth = Math.round(resolvedHeight * aspectRatio);
 
   const desat = Math.min(Math.max(droop, 0) / 100, 1);

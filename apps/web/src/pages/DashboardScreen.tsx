@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import { FrostedCard } from '../components/FrostedCard';
 import { BrainDumpInput } from '../components/BrainDumpInput';
 import { BurhanTree } from '../components/BurhanTree';
+import { useStoreSlice } from '../store';
 
 // ─── types ───────────────────────────────────────────────────────────────────
 
@@ -17,29 +18,101 @@ export interface DashboardScreenProps {
   };
 }
 
-// ─── module tile data ─────────────────────────────────────────────────────────
+// ─── cluster definition ───────────────────────────────────────────────────────
 
-interface ModuleTile {
+interface SubModule {
   id: string;
   label: string;
-  emoji: string;
-  sub: string;
 }
 
-const MODULES: ModuleTile[] = [
-  { id: 'grocery',   label: 'grocery',   emoji: '🛒', sub: 'pantry · lists · recipes'  },
-  { id: 'pets',      label: 'pets',      emoji: '🐾', sub: 'care · meds · vet'         },
-  { id: 'finance',   label: 'finance',   emoji: '💳', sub: 'bills · goals · adhd tax'  },
-  { id: 'habits',    label: 'habits',    emoji: '⟳',  sub: 'daily · resets at midnight' },
-  { id: 'sleep',     label: 'sleep',     emoji: '◐',  sub: 'wind-down · sounds'        },
-  { id: 'cycle',     label: 'cycle',     emoji: '○',  sub: 'tracking · patterns'       },
-  { id: 'work',      label: 'work',      emoji: '▦',  sub: 'tasks · focus · deadlines' },
-  { id: 'goals',     label: 'goals',     emoji: '◎',  sub: 'long-term · aspirations'   },
-  { id: 'admin',     label: 'admin',     emoji: '◻',  sub: 'renewals · appointments'   },
-  { id: 'astrology', label: 'astrology', emoji: '✦',  sub: 'chart · transits'          },
-  { id: 'body',      label: 'body',      emoji: '◇',  sub: 'water · supplements'       },
-  { id: 'dump',      label: 'dump',      emoji: '∿',  sub: 'thoughts · journal'        },
+interface Cluster {
+  id: string;
+  label: string;
+  subModules: SubModule[];
+  /** cluster-specific frosted tint — overrides FrostedCard default bg */
+  tint: string;
+  /** text color for cluster label (dark tint needs light text) */
+  labelColor: string;
+}
+
+const CLUSTERS: Cluster[] = [
+  {
+    id: 'money',
+    label: 'money',
+    subModules: [{ id: 'finance', label: 'finance' }],
+    tint: 'rgba(14, 12, 20, 0.85)',
+    labelColor: 'rgba(245,244,240,0.9)',
+  },
+  {
+    id: 'body',
+    label: 'body',
+    subModules: [
+      { id: 'cycle',  label: 'cycle'  },
+      { id: 'sleep',  label: 'sleep'  },
+      { id: 'body',   label: 'body'   },
+      { id: 'habits', label: 'habits' },
+    ],
+    tint: 'rgba(245, 244, 240, 0.85)',
+    labelColor: 'rgba(17,17,17,0.85)',
+  },
+  {
+    id: 'home',
+    label: 'home',
+    subModules: [
+      { id: 'admin',   label: 'admin'   },
+      { id: 'pets',    label: 'pets'    },
+      { id: 'grocery', label: 'grocery' },
+    ],
+    tint: 'rgba(245, 240, 232, 0.85)',
+    labelColor: 'rgba(17,17,17,0.85)',
+  },
+  {
+    id: 'work',
+    label: 'work',
+    subModules: [
+      { id: 'work',  label: 'work'  },
+      { id: 'goals', label: 'goals' },
+    ],
+    tint: 'rgba(255, 255, 255, 0.6)',
+    labelColor: 'rgba(17,17,17,0.85)',
+  },
 ];
+
+// ─── pending count per sub-module ────────────────────────────────────────────
+// Each hook reads the canonical "things waiting" slice for its module.
+// Rendered inside <ClusterTile> via usePendingCounts.
+
+function usePendingCounts(): Record<string, number> {
+  const [financeRecords] = useStoreSlice<unknown[]>('finance', 'records', []);
+  const [cycleItems]     = useStoreSlice<unknown[]>('cycle', 'items', []);
+  const [sleepRecords]   = useStoreSlice<unknown[]>('sleep', 'records', []);
+  const [bodyEpisodes]   = useStoreSlice<unknown[]>('body', 'episodes', []);
+  const [habits]         = useStoreSlice<unknown[]>('shared', 'habits_v2', []);
+  const [adminTasks]     = useStoreSlice<unknown[]>('admin', 'tasks', []);
+  const [pets]           = useStoreSlice<unknown[]>('pets', 'pets', []);
+  const [groceryItems]   = useStoreSlice<unknown[]>('grocery', 'items', []);
+  const [workTasks]      = useStoreSlice<unknown[]>('work', 'tasks', []);
+  const [goals]          = useStoreSlice<unknown[]>('goals', 'items', []);
+
+  return useMemo(
+    () => ({
+      finance: (financeRecords ?? []).length,
+      cycle:   (cycleItems     ?? []).length,
+      sleep:   (sleepRecords   ?? []).length,
+      body:    (bodyEpisodes   ?? []).length,
+      habits:  (habits         ?? []).length,
+      admin:   (adminTasks     ?? []).length,
+      pets:    (pets           ?? []).length,
+      grocery: (groceryItems   ?? []).length,
+      work:    (workTasks      ?? []).length,
+      goals:   (goals          ?? []).length,
+    }),
+    [
+      financeRecords, cycleItems, sleepRecords, bodyEpisodes, habits,
+      adminTasks, pets, groceryItems, workTasks, goals,
+    ],
+  );
+}
 
 // ─── component ───────────────────────────────────────────────────────────────
 
@@ -53,6 +126,21 @@ export function DashboardScreen({ onNavigate, onBrainDump, stats }: DashboardScr
   const billsSoon = stats?.billsSoon ?? 0;
   const tracked   = stats?.tracked   ?? '0m';
 
+  const [hasPets] = useStoreSlice<boolean>('shared', 'settings.has_pets', true);
+  const pendingCounts = usePendingCounts();
+
+  // Filter pets out of home cluster if has_pets is false
+  const clusters = useMemo<Cluster[]>(
+    () =>
+      CLUSTERS.map((c) => {
+        if (c.id === 'home' && !hasPets) {
+          return { ...c, subModules: c.subModules.filter((s) => s.id !== 'pets') };
+        }
+        return c;
+      }),
+    [hasPets],
+  );
+
   return (
     <div
       style={{
@@ -64,7 +152,7 @@ export function DashboardScreen({ onNavigate, onBrainDump, stats }: DashboardScr
         overflowX: 'hidden',
       }}
     >
-      {/* Sky video — inherited from parent viewport layer, rendered behind */}
+      {/* Sky gradient — sits behind everything */}
       <div
         aria-hidden="true"
         style={{
@@ -76,7 +164,7 @@ export function DashboardScreen({ onNavigate, onBrainDump, stats }: DashboardScr
         }}
       />
 
-      {/* Dark gradient overlay (matches home) */}
+      {/* Dark gradient overlay */}
       <div
         aria-hidden="true"
         style={{
@@ -91,14 +179,14 @@ export function DashboardScreen({ onNavigate, onBrainDump, stats }: DashboardScr
         }}
       />
 
-      {/* Scrollable content layer */}
+      {/* Scrollable content */}
       <div
         style={{
           position: 'relative',
           zIndex: 2,
           maxWidth: 1200,
           margin: '0 auto',
-          padding: '40px 24px 140px',
+          padding: '40px 24px 160px',
         }}
       >
         {/* ── Header ───────────────────────────────────────────────────── */}
@@ -111,7 +199,6 @@ export function DashboardScreen({ onNavigate, onBrainDump, stats }: DashboardScr
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            {/* Back arrow */}
             <button
               type="button"
               aria-label="back to home"
@@ -131,7 +218,6 @@ export function DashboardScreen({ onNavigate, onBrainDump, stats }: DashboardScr
               ←
             </button>
 
-            {/* VOID wordmark */}
             <span
               style={{
                 fontFamily: "'DM Serif Display', serif",
@@ -146,7 +232,6 @@ export function DashboardScreen({ onNavigate, onBrainDump, stats }: DashboardScr
               VOID
             </span>
 
-            {/* Date */}
             <span
               style={{
                 fontFamily: "'DM Mono', monospace",
@@ -161,7 +246,6 @@ export function DashboardScreen({ onNavigate, onBrainDump, stats }: DashboardScr
             </span>
           </div>
 
-          {/* Mini Burhan — tappable → garden */}
           <button
             type="button"
             aria-label="open garden · burhan the olive tree"
@@ -227,118 +311,306 @@ export function DashboardScreen({ onNavigate, onBrainDump, stats }: DashboardScr
           ))}
         </FrostedCard>
 
-        {/* ── Module grid ──────────────────────────────────────────────── */}
+        {/* ── Brain dump — inline, above cluster grid ───────────────────── */}
+        <div style={{ marginBottom: 24 }}>
+          <InlineBrainDump onSubmit={onBrainDump} />
+        </div>
+
+        {/* ── 4-cluster grid ───────────────────────────────────────────── */}
         <div
           role="list"
-          aria-label="modules"
+          aria-label="clusters"
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-            gap: 12,
+            gridTemplateColumns: 'repeat(2, 1fr)',
+            gap: 16,
           }}
         >
-          {MODULES.map((mod) => (
-            <ModuleTileCard
-              key={mod.id}
-              tile={mod}
+          {clusters.map((cluster) => (
+            <ClusterTile
+              key={cluster.id}
+              cluster={cluster}
+              pendingCounts={pendingCounts}
               onNavigate={onNavigate}
             />
           ))}
         </div>
       </div>
-
-      {/* ── BrainDumpInput ───────────────────────────────────────────── */}
-      <BrainDumpInput onSubmit={onBrainDump} />
     </div>
   );
 }
 
-// ─── ModuleTileCard ───────────────────────────────────────────────────────────
+// ─── InlineBrainDump ──────────────────────────────────────────────────────────
+// Top-anchored variant — not fixed-bottom, sits in document flow.
 
-interface ModuleTileCardProps {
-  tile: ModuleTile;
-  onNavigate: DashboardScreenProps['onNavigate'];
+interface InlineBrainDumpProps {
+  onSubmit: (text: string) => void;
 }
 
-function ModuleTileCard({ tile, onNavigate }: ModuleTileCardProps) {
-  const [pressed, setPressed] = React.useState(false);
+function InlineBrainDump({ onSubmit }: InlineBrainDumpProps) {
+  const [value, setValue] = useState('');
+  const [busy, setBusy] = useState(false);
+  const inputRef = React.useRef<HTMLInputElement>(null);
+
+  async function handleSubmit() {
+    const text = value.trim();
+    if (!text || busy) return;
+    setBusy(true);
+    setValue('');
+    try {
+      await onSubmit(text);
+    } finally {
+      setBusy(false);
+      inputRef.current?.focus();
+    }
+  }
 
   return (
-    <div
-      role="listitem"
-      data-magic-tile={tile.id}
-      style={{
-        transition: 'transform 120ms ease, opacity 120ms ease',
-        transform: pressed ? 'scale(0.97)' : 'scale(1)',
-        opacity: pressed ? 0.85 : 1,
-      }}
-    >
+    <div role="search" aria-label="brain dump">
       <FrostedCard
         style={{
           display: 'flex',
           alignItems: 'center',
-          gap: 12,
-          padding: '14px 16px',
+          gap: '12px',
+          padding: '6px 8px 6px 20px',
+          borderRadius: '16px',
         }}
       >
+        <input
+          ref={inputRef}
+          type="text"
+          data-brain-dump="true"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') { void handleSubmit(); } }}
+          placeholder="what's on your mind..."
+          disabled={busy}
+          aria-label="type a note and press enter"
+          style={{
+            flex: 1,
+            background: 'transparent',
+            border: 'none',
+            outline: 'none',
+            fontFamily: "'DM Sans', sans-serif",
+            fontStyle: 'italic',
+            fontSize: 'var(--t-body)',
+            color: 'var(--ink)',
+            lineHeight: 'var(--lh-body)',
+          }}
+        />
         <button
           type="button"
-          aria-label={`open ${tile.label}`}
-          onClick={() => onNavigate('module', tile.id)}
-          onMouseDown={() => setPressed(true)}
-          onMouseUp={() => setPressed(false)}
-          onMouseLeave={() => setPressed(false)}
-          onTouchStart={() => setPressed(true)}
-          onTouchEnd={() => setPressed(false)}
+          onClick={() => { void handleSubmit(); }}
+          disabled={busy || !value.trim()}
+          aria-label="submit"
+          style={{
+            flexShrink: 0,
+            background: 'transparent',
+            border: '1px solid var(--rule)',
+            borderRadius: 'var(--r-pill)',
+            padding: '6px 14px',
+            fontFamily: "'DM Mono', monospace",
+            fontSize: 'var(--t-meta)',
+            letterSpacing: 'var(--ls-caps-small)',
+            textTransform: 'uppercase',
+            color: value.trim() ? 'var(--ink-soft)' : 'var(--ink-ghost)',
+            cursor: value.trim() ? 'pointer' : 'default',
+            transition: 'color var(--d-tap) var(--e-calm-out)',
+          }}
+        >
+          {busy ? '...' : 'enter'}
+        </button>
+      </FrostedCard>
+    </div>
+  );
+}
+
+// ─── ClusterTile ──────────────────────────────────────────────────────────────
+
+interface ClusterTileProps {
+  cluster: Cluster;
+  pendingCounts: Record<string, number>;
+  onNavigate: DashboardScreenProps['onNavigate'];
+}
+
+function ClusterTile({ cluster, pendingCounts, onNavigate }: ClusterTileProps) {
+  const [expanded, setExpanded] = useState(false);
+
+  // Total pending across all sub-modules in this cluster
+  const totalPending = useMemo(
+    () => cluster.subModules.reduce((acc, s) => acc + (pendingCounts[s.id] ?? 0), 0),
+    [cluster.subModules, pendingCounts],
+  );
+
+  const pendingLabel = totalPending > 0 ? `${totalPending} items` : '—';
+
+  return (
+    <div
+      role="listitem"
+      style={{
+        transition: 'transform 120ms ease',
+      }}
+    >
+      {/* Use background override to apply per-cluster tint */}
+      <div
+        style={{
+          background: cluster.tint,
+          backdropFilter: 'blur(16px)',
+          WebkitBackdropFilter: 'blur(16px)',
+          border: '1px solid rgba(255, 255, 255, 0.25)',
+          borderRadius: '20px',
+          boxShadow: 'var(--sh-md)',
+          overflow: 'hidden',
+        }}
+      >
+        {/* Collapsed header — always visible */}
+        <button
+          type="button"
+          aria-expanded={expanded}
+          aria-controls={`cluster-${cluster.id}-subs`}
+          onClick={() => setExpanded((prev) => !prev)}
           style={{
             display: 'flex',
-            alignItems: 'center',
-            gap: 12,
+            flexDirection: 'column',
             width: '100%',
             background: 'transparent',
             border: 'none',
-            padding: 0,
+            padding: '24px 24px 20px',
             cursor: 'pointer',
             textAlign: 'left',
+            gap: 6,
           }}
         >
-          {/* Emoji */}
           <span
-            aria-hidden="true"
-            style={{ fontSize: 18, lineHeight: 1, flexShrink: 0 }}
+            style={{
+              fontFamily: "'DM Serif Display', serif",
+              fontSize: 24,
+              fontWeight: 400,
+              color: cluster.labelColor,
+              letterSpacing: '-0.01em',
+              lineHeight: 1,
+            }}
           >
-            {tile.emoji}
+            {cluster.label}
           </span>
 
-          {/* Labels */}
-          <div>
-            <div
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              width: '100%',
+            }}
+          >
+            {/* Sub-module names */}
+            <span
               style={{
-                fontFamily: "'DM Mono', monospace",
-                fontSize: 10,
-                letterSpacing: '0.16em',
-                textTransform: 'uppercase',
-                color: 'var(--ink)',
-                lineHeight: 1.2,
+                fontFamily: "'DM Sans', sans-serif",
+                fontSize: 12,
+                color:
+                  cluster.id === 'money'
+                    ? 'rgba(245,244,240,0.5)'
+                    : 'rgba(17,17,17,0.45)',
+                lineHeight: 1.4,
               }}
             >
-              {tile.label}
-            </div>
-            <div
+              {cluster.subModules.map((s) => s.label).join(' · ')}
+            </span>
+
+            {/* Pending badge */}
+            <span
               style={{
                 fontFamily: "'DM Mono', monospace",
                 fontSize: 9,
-                letterSpacing: '0.12em',
-                color: 'var(--ink-faint)',
-                marginTop: 3,
-                lineHeight: 1.2,
+                letterSpacing: '0.14em',
+                textTransform: 'uppercase',
+                color:
+                  cluster.id === 'money'
+                    ? 'rgba(245,244,240,0.45)'
+                    : 'rgba(17,17,17,0.4)',
+                flexShrink: 0,
+                marginLeft: 12,
               }}
             >
-              {tile.sub}
-            </div>
+              {pendingLabel}
+            </span>
           </div>
         </button>
-      </FrostedCard>
+
+        {/* Expanded sub-module buttons */}
+        <div
+          id={`cluster-${cluster.id}-subs`}
+          role="group"
+          aria-label={`${cluster.label} sub-modules`}
+          style={{
+            maxHeight: expanded ? `${cluster.subModules.length * 56 + 16}px` : '0px',
+            overflow: 'hidden',
+            transition: 'max-height 250ms cubic-bezier(0.4,0,0.2,1)',
+          }}
+        >
+          <div
+            style={{
+              borderTop: '1px solid rgba(255,255,255,0.18)',
+              padding: '8px 0 12px',
+            }}
+          >
+            {cluster.subModules.map((sub) => {
+              const count = pendingCounts[sub.id] ?? 0;
+              return (
+                <button
+                  key={sub.id}
+                  type="button"
+                  aria-label={`open ${sub.label}`}
+                  onClick={() => onNavigate('module', sub.id)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    width: '100%',
+                    background: 'transparent',
+                    border: 'none',
+                    padding: '12px 24px',
+                    cursor: 'pointer',
+                    minHeight: 44,
+                    textAlign: 'left',
+                    gap: 8,
+                  }}
+                >
+                  <span
+                    style={{
+                      fontFamily: "'DM Mono', monospace",
+                      fontSize: 11,
+                      letterSpacing: '0.14em',
+                      textTransform: 'uppercase',
+                      color:
+                        cluster.id === 'money'
+                          ? 'rgba(245,244,240,0.75)'
+                          : 'rgba(17,17,17,0.7)',
+                    }}
+                  >
+                    {sub.label}
+                  </span>
+                  {count > 0 && (
+                    <span
+                      style={{
+                        fontFamily: "'DM Mono', monospace",
+                        fontSize: 9,
+                        letterSpacing: '0.12em',
+                        color:
+                          cluster.id === 'money'
+                            ? 'rgba(245,244,240,0.4)'
+                            : 'rgba(17,17,17,0.35)',
+                      }}
+                    >
+                      {count}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

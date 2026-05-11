@@ -37,6 +37,7 @@ import type {
 import { useStoreSlice } from '../../store';
 import { ModuleHelp } from '../../components/ModuleHelp';
 import { SourcesLink } from '../../components/SourcesLink';
+import { SleepSoundPlayer } from '../../components/SleepSoundPlayer';
 
 // ─── palette ─────────────────────────────────────────────────────────────────
 
@@ -721,6 +722,17 @@ export function SleepModule({ onBack }: SleepModuleProps) {
                   </div>
                 </div>
               )}
+            </div>
+
+            {/* ── wind down ── */}
+            <div>
+              <div style={{
+                fontSize: 11, letterSpacing: '0.20em', textTransform: 'uppercase',
+                color: C.inkSoft, marginBottom: 14, fontWeight: 700,
+              }}>
+                wind down
+              </div>
+              <SleepSoundPlayer />
             </div>
           </div>
         )}

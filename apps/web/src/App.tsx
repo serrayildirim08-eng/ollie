@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { REGISTRY } from '@ollie/events';
 import { cycle } from '@ollie/logic';
 import { getString } from './i18n';
-import { useStoreSlice } from './store';
+import { useStoreSlice, store } from './store';
 import { FrostedCard } from './components/FrostedCard';
 import { ModuleHelp } from './components/ModuleHelp';
 import { SourcesLink } from './components/SourcesLink';
@@ -15,9 +15,10 @@ import { HomeScreen } from './pages/HomeScreen';
 import { DashboardScreen } from './pages/DashboardScreen';
 import { GardenScreen } from './pages/GardenScreen';
 import { ModuleScreen } from './pages/ModuleScreen';
+import { OnboardingScreen } from './pages/OnboardingScreen';
 import { useApplyBrainDump } from './hooks/useApplyBrainDump';
 
-type Screen = 'home' | 'dashboard' | 'garden' | 'module' | 'demo';
+type Screen = 'home' | 'dashboard' | 'garden' | 'module' | 'demo' | 'onboarding';
 
 const eventCount = Object.keys(REGISTRY).length;
 
@@ -29,6 +30,10 @@ const SAMPLE_STARTS = [0, 28, 56, 84, 112, 140].map((d) => ({
 const samplePrediction = cycle.predictNextPeriod(cycle.detectBoundaries(SAMPLE_STARTS));
 
 function AppInner() {
+  // First-launch detection: check onboarded flag before any other screen
+  const onboardedRaw = store.get<boolean>('shared', 'onboarded', false);
+  const [onboarded, setOnboarded] = useState<boolean>(Boolean(onboardedRaw));
+
   const [screen, setScreen] = useState<Screen>('home');
   const [selectedModule, setSelectedModule] = useState<string>('');
   const [visits, setVisits] = useStoreSlice<number>('shared', 'visit_count', 0);
@@ -46,6 +51,25 @@ function AppInner() {
   };
 
   let content: React.ReactNode;
+
+  // Show onboarding before any other screen on first launch
+  if (!onboarded) {
+    content = (
+      <OnboardingScreen
+        onComplete={() => {
+          store.set('shared', 'onboarded', true);
+          setOnboarded(true);
+        }}
+      />
+    );
+    return (
+      <>
+        {content}
+        <ToastHost />
+        <ChipFlyHost />
+      </>
+    );
+  }
 
   if (screen === 'home') {
     content = (
