@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { BurhanTree } from '../components/BurhanTree';
+import { Burhan3D } from '../components/Burhan3D';
 
 // ─── types ────────────────────────────────────────────────────────────────────
 
@@ -596,7 +597,7 @@ export function GardenScreen({ onNavigate, onWater, stats }: GardenScreenProps) 
       {/* ── REFLECTING POOL ─────────────────────────────────────────────── */}
       <ReflectingPool waterLevel={s.water} />
 
-      {/* ── BURHAN (full size, center) ───────────────────────────────────── */}
+      {/* ── BURHAN (full size, center — 3D model) ────────────────────────── */}
       <div
         style={{
           position: 'absolute',
@@ -607,12 +608,7 @@ export function GardenScreen({ onNavigate, onWater, stats }: GardenScreenProps) 
           animation: treeGlow ? 'treeGlow 3.2s ease-out both' : undefined,
         }}
       >
-        <BurhanTree
-          height={400}
-          tone="garden"
-          waterLevel={Math.round(s.water * 100)}
-          droop={s.health === 'thirsty' ? 35 : 8}
-        />
+        <Burhan3D height={440} width={440} />
       </div>
 
       {/* Burhan reflection in pool */}

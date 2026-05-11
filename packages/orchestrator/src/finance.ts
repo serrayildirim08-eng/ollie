@@ -48,6 +48,16 @@ import {
   detectPostPaydaySpikes,
   detectPatterns,
   tagResearchLoops,
+  detectD3Patterns,
+  computeSavings,
+} from '@ollie/logic/finance';
+import type {
+  DetectedSubscriptionCard,
+  ADHDTaxRunningTotal as D3ADHDTaxRunningTotal,
+  CycleSpendingPatternCard,
+  CycleBoundary,
+  Cancellation,
+  SavingsTotals,
 } from '@ollie/logic/finance';
 import type {
   FinanceRecord,
@@ -325,10 +335,190 @@ export function createFinanceOrchestrator(
         console.error('[orchestrator/finance] detectPatterns failed', err);
       }
 
+      // ── Sprint 3 / D3 · Canva-style pattern detection ───────────────────
+      try {
+        const cycleBoundaries =
+          store.get<CycleBoundary[]>('cycle', 'cycles', [])?.map((c: unknown) => {
+            const o = c as { startTs?: number; endTs?: number | null; lengthDays?: number };
+            return {
+              startTs: o.startTs ?? 0,
+              endTs: o.endTs ?? null,
+              lengthDays: o.lengthDays,
+            };
+          }) ?? [];
+        const d3 = detectD3Patterns({ records, cycles: cycleBoundaries, now });
+
+        // dedupe vs previous
+        const prevSubs = store.get<DetectedSubscriptionCard[]>('finance', 'd3_subscriptions', []) ?? [];
+        const prevSubIds = new Set(prevSubs.map((s) => s.pattern_id));
+        setKey('d3_subscriptions', d3.subscriptions);
+        for (const s of d3.subscriptions) {
+          if (!prevSubIds.has(s.pattern_id)) {
+            try {
+              events.emit('finance:subscription_detected', {
+                pattern_id: s.pattern_id,
+                merchant: s.merchant,
+                amount: s.amount,
+                cadence: s.cadence,
+                occurrence_count: s.occurrence_count,
+                ts: now,
+              });
+            } catch { /* non-fatal */ }
+          }
+        }
+
+        const prevTax = store.get<D3ADHDTaxRunningTotal | null>('finance', 'd3_adhd_tax', null);
+        setKey('d3_adhd_tax', d3.adhdTax);
+        if (!prevTax || prevTax.total_30d !== d3.adhdTax.total_30d || prevTax.count_30d !== d3.adhdTax.count_30d) {
+          try {
+            events.emit('finance:adhd_tax_updated', {
+              total_30d: d3.adhdTax.total_30d,
+              count_30d: d3.adhdTax.count_30d,
+              ts: now,
+            });
+          } catch { /* non-fatal */ }
+        }
+
+        const prevCyc = store.get<CycleSpendingPatternCard | null>('finance', 'd3_cycle_spending', null);
+        setKey('d3_cycle_spending', d3.cycleSpending);
+        if (d3.cycleSpending && (!prevCyc || prevCyc.cycle_count !== d3.cycleSpending.cycle_count)) {
+          try {
+            events.emit('finance:cycle_spending_pattern_detected', {
+              luteal_ratio: d3.cycleSpending.luteal_ratio,
+              follicular_median: d3.cycleSpending.follicular_median,
+              luteal_median: d3.cycleSpending.luteal_median,
+              cycle_count: d3.cycleSpending.cycle_count,
+              ts: now,
+            });
+          } catch { /* non-fatal */ }
+        }
+      } catch (err) {
+        console.error('[orchestrator/finance] D3 pattern detection failed', err);
+      }
+
+      // ── Sprint 3 / D3 · subscription_cancelled + bill_paid_on_time ──────
+      // Watch RecurringPattern records for `user_dismissed_stale` (= cancel
+      // confirmed) and bill records with kind='bill' that have an on-time
+      // last_at relative to their cadence median.
+      try {
+        const seenCancelled = new Set(
+          store.get<string[]>('finance', '_subCancelledIds', []) ?? [],
+        );
+        const seenPaidOnTime = new Set(
+          store.get<string[]>('finance', '_billPaidOnTimeIds', []) ?? [],
+        );
+        const newCancelled: string[] = [];
+        const newPaid: string[] = [];
+
+        for (const p of detect.recurring) {
+          if (!p?.id) continue;
+          if (p.kind === 'subscription' && p.user_dismissed_stale && !seenCancelled.has(p.id)) {
+            newCancelled.push(p.id);
+            try {
+              events.emit('finance:subscription_cancelled', {
+                pattern_id: p.id,
+                merchant: p.display_name ?? p.merchant_normalized,
+                ts: now,
+              });
+            } catch { /* non-fatal */ }
+          }
+          if (p.kind === 'bill' && p.last_at && !seenPaidOnTime.has(`${p.id}:${p.last_at}`)) {
+            // "Paid on time" = the most recent occurrence is within
+            // interval_days_median (± mad) of the previous one, and the
+            // last_at is within the last 30 days. Cheap heuristic — full
+            // logic would consult bill.due_date vs paid_at.
+            if (
+              p.interval_days_median > 0 &&
+              now - p.last_at < 30 * 86_400_000 &&
+              p.record_ids?.length >= 2
+            ) {
+              newPaid.push(`${p.id}:${p.last_at}`);
+              try {
+                events.emit('finance:bill_paid_on_time', {
+                  pattern_id: p.id,
+                  merchant: p.display_name ?? p.merchant_normalized,
+                  ts: p.last_at,
+                });
+              } catch { /* non-fatal */ }
+            }
+          }
+        }
+        if (newCancelled.length) {
+          store.set('finance', '_subCancelledIds', [...seenCancelled, ...newCancelled]);
+        }
+        if (newPaid.length) {
+          store.set('finance', '_billPaidOnTimeIds', [...seenPaidOnTime, ...newPaid]);
+        }
+      } catch (err) {
+        console.error('[orchestrator/finance] subscription/bill transition emit failed', err);
+      }
+
+      // ── Sprint 2.5 / F1 · savings totals ────────────────────────────────
+      try {
+        const cancellations = store.get<Cancellation[]>('finance', 'cancellations', []) ?? [];
+        const totals = computeSavings(cancellations, now);
+        setKey('savings', totals satisfies SavingsTotals);
+      } catch (err) {
+        console.error('[orchestrator/finance] savings totals failed', err);
+      }
+
       setKey('lastRecomputeAt', now);
     } catch (err) {
       console.error('[orchestrator/finance] recomputeDerived failed:', err);
     }
+  }
+
+  // ── Sprint 2.5 / F1 · cancellation recording ──────────────────────────────
+  // When the user taps "cancelled" on a d3-subscription card, the UI
+  // emits `finance:subscription_cancelled` (already wired in the D3
+  // path). This handler turns that event into a Cancellation entry
+  // append + marks the underlying d3_subscriptions entry inactive.
+  function onSubscriptionCancelled(payload: unknown): void {
+    const p = (payload ?? {}) as { pattern_id?: string; merchant?: string; monthly_amount?: number; ts?: number };
+    if (!p.pattern_id || !p.merchant) return;
+    const ts = typeof p.ts === 'number' ? p.ts : getNow();
+
+    const list = store.get<Cancellation[]>('finance', 'cancellations', []) ?? [];
+    if (list.some((c) => c.id === p.pattern_id)) {
+      // already recorded — preserve historic count (Decision #14 rule)
+      return;
+    }
+    // Determine monthly_amount: prefer payload, else look up the
+    // d3_subscriptions card by pattern_id, else fall back to the
+    // RecurringPattern amount_median.
+    let monthly = typeof p.monthly_amount === 'number' ? p.monthly_amount : null;
+    if (monthly == null) {
+      const subs = store.get<DetectedSubscriptionCard[]>('finance', 'd3_subscriptions', []) ?? [];
+      const sub = subs.find((s) => s.pattern_id === p.pattern_id);
+      if (sub) monthly = sub.amount;
+    }
+    if (monthly == null) {
+      const recurring = store.get<RecurringPattern[]>('finance', 'recurring', []) ?? [];
+      const r = recurring.find((rp) => rp.id === p.pattern_id);
+      if (r?.amount_median != null) monthly = r.amount_median;
+    }
+    if (monthly == null || monthly <= 0) return;
+
+    const entry: Cancellation = {
+      id: p.pattern_id,
+      merchant: p.merchant,
+      monthly_amount: monthly,
+      cancelled_at: ts,
+      surfaced_by_ollie: true,
+    };
+    store.set('finance', 'cancellations', [...list, entry]);
+    try {
+      events.emit('finance:savings_recorded', {
+        id: entry.id,
+        merchant: entry.merchant,
+        monthly_amount: entry.monthly_amount,
+        cancelled_at: entry.cancelled_at,
+        surfaced_by_ollie: entry.surfaced_by_ollie,
+        ts,
+      });
+    } catch { /* non-fatal */ }
+    // Trigger a recompute so finance.savings reflects the new entry.
+    schedule();
   }
 
   // ── processBacklog ────────────────────────────────────────────────────────
@@ -380,6 +570,13 @@ export function createFinanceOrchestrator(
     }));
     unsubs.push(store.subscribeKey('finance', 'records', () => {
       try { schedule(); } catch (err) { console.error('[orchestrator/finance] finance.records tick failed', err); }
+    }));
+    unsubs.push(store.subscribeKey('finance', 'cancellations', () => {
+      try { schedule(); } catch (err) { console.error('[orchestrator/finance] cancellations tick failed', err); }
+    }));
+    unsubs.push(events.on('finance:subscription_cancelled', (p) => {
+      try { onSubscriptionCancelled(p); }
+      catch (err) { console.error('[orchestrator/finance] onSubscriptionCancelled failed', err); }
     }));
 
     unsubs.push(

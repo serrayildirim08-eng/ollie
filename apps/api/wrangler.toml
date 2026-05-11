@@ -1,0 +1,26 @@
+# Cloudflare Worker config for ollie's APNs sender + device-token register.
+#
+# Required secrets (set via `wrangler secret put` after Serra generates
+# the APNs auth key in Apple Developer Portal):
+#
+#   APNS_KEY_ID      — 10-char key id shown next to the .p8 file
+#   APNS_TEAM_ID     — 10-char team id from Membership page
+#   APNS_BUNDLE_ID   — matches Capacitor capacitor.config.json appId (app.ollie.ollie)
+#   APNS_AUTH_KEY    — full .p8 file contents including BEGIN/END lines
+#   REGISTER_SHARED_SECRET — bearer token clients send when registering tokens
+#
+# Optional:
+#   APNS_USE_SANDBOX — set to "1" to send to api.sandbox.push.apple.com
+#                      (development builds only; default = production)
+
+name = "ollie-notifications"
+main = "src/worker.ts"
+compatibility_date = "2026-05-01"
+
+[vars]
+APNS_USE_SANDBOX = "0"
+
+# Device-token store (D1 or KV — KV is simpler for the registration use case)
+[[kv_namespaces]]
+binding = "DEVICE_TOKENS"
+id = "REPLACE_AFTER_wrangler_kv_create_DEVICE_TOKENS"

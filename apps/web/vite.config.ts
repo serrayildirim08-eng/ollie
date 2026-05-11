@@ -24,6 +24,14 @@ export default defineConfig({
           if (id.includes('node_modules/howler')) {
             return 'vendor-howler';
           }
+          // Vendor: three.js + r3f + drei (loaded only on /garden)
+          if (
+            id.includes('node_modules/three/') ||
+            id.includes('node_modules/three-stdlib/') ||
+            id.includes('node_modules/@react-three/')
+          ) {
+            return 'vendor-three';
+          }
           // Vendor: @ollie/* monorepo packages
           if (
             id.includes('packages/logic') ||

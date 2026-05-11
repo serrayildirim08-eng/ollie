@@ -175,4 +175,27 @@ export const REGISTRY: Registry = {
   'habits:surface_water_habit':        { payload: '{ reason: string, ts: number }' },
   'body:doctor_visit_completed':       { payload: '{ ts: number }' },
   'grocery:auto_added':                { payload: '{ source_event: string, item_ids: string[], category: string, ts: number }' },
+
+  // ─── Sprint 2.5 / notification layer ────────────────────────────
+  'notifications:delivered':           { payload: '{ dedupe_key: string, category: "REMINDER"|"PATTERN_ALERT"|"CONTENT_DELIVERY", ts: number }' },
+  'notifications:suppressed':          { payload: '{ dedupe_key: string, category: "REMINDER"|"PATTERN_ALERT"|"CONTENT_DELIVERY", reason: string, ts: number }' },
+
+  // ─── Sprint 2.5 / F1 savings tracker ────────────────────────────
+  'finance:savings_recorded':          { payload: '{ id: string, merchant: string, monthly_amount: number, cancelled_at: number, surfaced_by_ollie: boolean, ts: number }' },
+
+  // ─── Sprint 2 / Group C · sync ──────────────────────────────────
+  'sync:outbound_flushed':             { payload: '{ count: number, ts: number }' },
+  'sync:inbound_applied':              { payload: '{ ts: number }' },
+  'sync:auth_expired':                 { payload: '{ ts: number }' },
+
+  // ─── Sprint 2 / Group C · auth ──────────────────────────────────
+  'auth:signed_up':                    { payload: '{ user_id: string, ts: number }' },
+  'auth:signed_in':                    { payload: '{ user_id: string, ts: number }' },
+  'auth:signed_out':                   { payload: '{ ts: number }' },
+  'auth:decryption_failed':            { payload: '{ reason: string, ts: number }' },
+
+  // ─── Sprint 2 / Group C · research stream ───────────────────────
+  'research:event_queued':             { payload: '{ event_id: string, ts: number }' },
+  'research:flush_succeeded':          { payload: '{ count: number, ts: number }' },
+  'research:flush_failed':             { payload: '{ count: number, reason: string, ts: number }' },
 };

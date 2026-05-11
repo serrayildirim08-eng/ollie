@@ -1,4 +1,9 @@
 import { useEffect, useRef } from 'react';
+import {
+  positionFor,
+  type BurhanEvent,
+  type PositionedElement,
+} from '@ollie/logic/burhan';
 
 export interface BurhanTreeProps {
   /** Explicit height in px. Overrides `scale` when both are provided. */
@@ -18,6 +23,12 @@ export interface BurhanTreeProps {
    * leaf saturation from this value once the full growth system lands.
    */
   waterLevel?: number;
+  /**
+   * Life-event elements layered on top of the canopy.
+   * Append-only. NEVER mutated to shrink the tree (constitutional rule).
+   * Empty array renders no overlay — the canvas tree is unchanged.
+   */
+  lifeEvents?: BurhanEvent[];
   onClick?: () => void;
 }
 
@@ -96,6 +107,7 @@ export function BurhanTree({
   tone = 'home',
   droop = 0,
   waterLevel = 50,
+  lifeEvents,
   onClick,
 }: BurhanTreeProps) {
   // Resolve height: explicit `height` wins; `scale` derives 600*scale; fallback 220px.
@@ -467,13 +479,14 @@ export function BurhanTree({
     };
   }, [tone, resolvedWidth, resolvedHeight, droop, waterLevel]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const positioned: PositionedElement[] = (lifeEvents ?? []).map(positionFor);
+
   return (
-    <canvas
-      ref={canvasRef}
-      onClick={onClick}
+    <div
       role={onClick ? 'button' : undefined}
       aria-label={onClick ? 'burhan the olive tree' : undefined}
       tabIndex={onClick ? 0 : undefined}
+      onClick={onClick}
       onKeyDown={
         onClick
           ? (e) => {
@@ -485,13 +498,152 @@ export function BurhanTree({
           : undefined
       }
       style={{
+        position: 'relative',
         width: resolvedWidth,
         height: resolvedHeight,
-        display: 'block',
         cursor: onClick ? 'pointer' : 'default',
-        filter: `saturate(${1 - desat * 0.4}) brightness(${1 - desat * 0.12})`,
-        transition: 'filter 600ms ease',
       }}
-    />
+    >
+      <canvas
+        ref={canvasRef}
+        style={{
+          width: resolvedWidth,
+          height: resolvedHeight,
+          display: 'block',
+          filter: `saturate(${1 - desat * 0.4}) brightness(${1 - desat * 0.12})`,
+          transition: 'filter 600ms ease',
+        }}
+      />
+      {positioned.length > 0 && (
+        <LifeEventLayer
+          width={resolvedWidth}
+          height={resolvedHeight}
+          elements={positioned}
+        />
+      )}
+    </div>
   );
+}
+
+// ─── life-event overlay ─────────────────────────────────────────────────
+// SVG layer painted on top of the canvas. Each element type renders as a
+// small editorial shape — no emoji, no color shouting. Positions are
+// deterministic per event id, so the tree looks the same across reloads.
+
+interface LifeEventLayerProps {
+  width: number;
+  height: number;
+  elements: PositionedElement[];
+}
+
+function LifeEventLayer({ width, height, elements }: LifeEventLayerProps) {
+  return (
+    <svg
+      width={width}
+      height={height}
+      viewBox={`0 0 ${width} ${height}`}
+      style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        pointerEvents: 'none',
+      }}
+      aria-hidden="true"
+    >
+      {elements.map((el) => {
+        const cx = el.x * width;
+        const cy = el.y * height;
+        return (
+          <g
+            key={el.id}
+            transform={`translate(${cx} ${cy}) rotate(${el.rot}) scale(${el.scale})`}
+          >
+            {renderElement(el.type)}
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+function renderElement(type: PositionedElement['type']): JSX.Element {
+  switch (type) {
+    case 'flower':
+      // small five-petal silhouette, pale pink-cream
+      return (
+        <g>
+          {[0, 72, 144, 216, 288].map((deg) => (
+            <ellipse
+              key={deg}
+              cx="0"
+              cy="-4"
+              rx="2.4"
+              ry="3.6"
+              fill="#E8C9C2"
+              opacity="0.78"
+              transform={`rotate(${deg})`}
+            />
+          ))}
+          <circle cx="0" cy="0" r="1.4" fill="#C8A089" opacity="0.85" />
+        </g>
+      );
+    case 'fruit':
+      // olive-shaped fruit, warm brown
+      return (
+        <g>
+          <ellipse cx="0" cy="0" rx="2.6" ry="4.0" fill="#6E4A2A" opacity="0.88" />
+          <ellipse cx="-0.5" cy="-1" rx="0.8" ry="1.2" fill="#9C7752" opacity="0.55" />
+        </g>
+      );
+    case 'leaf':
+      // silver-green editorial leaf — pointed almond
+      return (
+        <g>
+          <path
+            d="M0,-6 Q4,0 0,6 Q-4,0 0,-6 Z"
+            fill="#9BB098"
+            opacity="0.85"
+          />
+          <line
+            x1="0"
+            y1="-5"
+            x2="0"
+            y2="5"
+            stroke="#6E8270"
+            strokeWidth="0.4"
+            opacity="0.5"
+          />
+        </g>
+      );
+    case 'gold_leaf':
+      // warm gold leaf — paid-on-time signal
+      return (
+        <g>
+          <path
+            d="M0,-7 Q5,0 0,7 Q-5,0 0,-7 Z"
+            fill="#C9A559"
+            opacity="0.88"
+          />
+          <line
+            x1="0"
+            y1="-6"
+            x2="0"
+            y2="6"
+            stroke="#8C6E2C"
+            strokeWidth="0.4"
+            opacity="0.55"
+          />
+        </g>
+      );
+    case 'canopy_fruit':
+      // larger fruit at canopy — doctor visit / appointment of consequence
+      return (
+        <g>
+          <circle cx="0" cy="0" r="4.5" fill="#7A3E2A" opacity="0.85" />
+          <circle cx="-1.4" cy="-1.6" r="1.2" fill="#A86E48" opacity="0.55" />
+        </g>
+      );
+    default:
+      return <circle cx="0" cy="0" r="2" fill="#888" opacity="0.5" />;
+  }
 }

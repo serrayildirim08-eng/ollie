@@ -4,7 +4,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createStore, createMemoryAdapter } from '@ollie/store';
-import { _clearAllHandlers, on } from '@ollie/events';
+import { _clearAllHandlers, on, emit } from '@ollie/events';
 import { createGroceryOrchestrator } from '../src/grocery';
 import type { GroceryPattern, PantryItem, ShoppingItem } from '@ollie/logic/grocery';
 
@@ -158,5 +158,70 @@ describe('grocery orchestrator', () => {
     // Sentinel empty array must remain — no recompute fired after teardown.
     const patterns = store.get<GroceryPattern[]>('grocery', 'patterns', []);
     expect(patterns).toHaveLength(0);
+  });
+
+  // ─── Sprint 3 / D4 · cycle → grocery auto-routing ───────────────────────
+  describe('D4 · cycle:period_logged → auto-add period products', () => {
+    it('adds 3 generic period products when no preferences set', () => {
+      orch.init();
+      emit('cycle:period_logged', { ts: NOW, source: 'user' });
+      const items = store.get<ShoppingItem[]>('grocery', 'items', []) ?? [];
+      const periodItems = items.filter((i) => (i as { category?: string }).category === 'period_products');
+      expect(periodItems).toHaveLength(3);
+      const names = periodItems.map((i) => i.name);
+      expect(names).toEqual(expect.arrayContaining(['tampons', 'pads', 'liners']));
+    });
+
+    it('uses user preferences from shared.settings.period_products', () => {
+      store.set('shared', 'settings', {
+        period_products: [
+          { name: 'organyc super', normalizedName: 'tampons' },
+          { name: 'natracare regular' },
+        ],
+      });
+      orch.init();
+      emit('cycle:period_logged', { ts: NOW, source: 'user' });
+      const items = store.get<ShoppingItem[]>('grocery', 'items', []) ?? [];
+      const periodItems = items.filter((i) => (i as { category?: string }).category === 'period_products');
+      expect(periodItems).toHaveLength(2);
+      expect(periodItems[0].name).toBe('organyc super');
+    });
+
+    it('stamps shelf=watching and source=auto-added on the items', () => {
+      orch.init();
+      emit('cycle:period_logged', { ts: NOW, source: 'user' });
+      const items = store.get<ShoppingItem[]>('grocery', 'items', []) ?? [];
+      const it = items.find((i) => (i as { category?: string }).category === 'period_products') as {
+        shelf?: string;
+        auto_added_source?: string;
+        auto_added_source_event?: string;
+        auto_added_at?: number;
+      };
+      expect(it.shelf).toBe('watching');
+      expect(it.auto_added_source).toBe('period log');
+      expect(it.auto_added_source_event).toBe('cycle:period_logged');
+      expect(typeof it.auto_added_at).toBe('number');
+    });
+
+    it('is idempotent — same period ts does not duplicate items', () => {
+      orch.init();
+      emit('cycle:period_logged', { ts: NOW, source: 'user' });
+      emit('cycle:period_logged', { ts: NOW, source: 'user' });
+      const items = store.get<ShoppingItem[]>('grocery', 'items', []) ?? [];
+      const periodItems = items.filter((i) => (i as { category?: string }).category === 'period_products');
+      expect(periodItems).toHaveLength(3);
+    });
+
+    it('emits grocery:auto_added with the new item ids', () => {
+      orch.init();
+      const seen: unknown[] = [];
+      on('grocery:auto_added', (p) => seen.push(p));
+      emit('cycle:period_logged', { ts: NOW, source: 'user' });
+      expect(seen).toHaveLength(1);
+      const p = seen[0] as { item_ids?: string[]; category?: string; source_event?: string };
+      expect(p.item_ids?.length).toBe(3);
+      expect(p.category).toBe('period_products');
+      expect(p.source_event).toBe('cycle:period_logged');
+    });
   });
 });

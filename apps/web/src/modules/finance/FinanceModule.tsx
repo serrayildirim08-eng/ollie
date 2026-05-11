@@ -25,7 +25,13 @@ import type {
   ADHDTaxSummary,
   StaleSubscription,
   SpendBand,
+  DetectedSubscriptionCard,
+  ADHDTaxRunningTotal as D3ADHDTaxRunningTotal,
+  CycleSpendingPatternCard,
+  SavingsTotals,
 } from '@ollie/logic/finance';
+import { buildSavingsCardCopy } from '@ollie/logic/finance';
+import { emit } from '@ollie/events';
 import { useStoreSlice } from '../../store';
 import { ModuleHelp } from '../../components/ModuleHelp';
 
@@ -246,6 +252,182 @@ function FinanceDonut({ items, total, size = 180 }: { items: DonutItem[]; total:
     </svg>
   );
 }
+
+// ─── FinanceD3Cards · Sprint 3 / D3 ───────────────────────────────────────
+// Three quiet cards: subscription detection (Canva-style), adhd-tax 30-day
+// running total, cycle-correlated spending. Lives next to "noticed" — never
+// pushes, never toasts. Brand voice: lowercase, factual, no judgement.
+
+function FinanceD3Cards() {
+  const [subs] = useStoreSlice<DetectedSubscriptionCard[]>('finance', 'd3_subscriptions', []);
+  const [tax] = useStoreSlice<D3ADHDTaxRunningTotal | null>('finance', 'd3_adhd_tax', null);
+  const [cyc] = useStoreSlice<CycleSpendingPatternCard | null>('finance', 'd3_cycle_spending', null);
+  const [subDismissed, setSubDismissed] = useStoreSlice<Record<string, number>>(
+    'finance', 'd3_subs_dismissed', {},
+  );
+
+  const visibleSubs = (subs ?? []).filter((s) => !(subDismissed?.[s.pattern_id]));
+  const showTax = tax && (tax.count_30d ?? 0) > 0;
+  const showCyc = !!cyc;
+
+  if (!visibleSubs.length && !showTax && !showCyc) return null;
+
+  function dismissSub(id: string) {
+    setSubDismissed({ ...(subDismissed ?? {}), [id]: Date.now() });
+  }
+
+  return (
+    <section style={{ marginBottom: 48 }}>
+      <div style={{ paddingBottom: 10, borderBottom: `1px solid ${T.border}`, ...labelStyle }}>
+        ollie remembers
+      </div>
+
+      {visibleSubs.map((s) => (
+        <div
+          key={s.pattern_id}
+          style={{
+            padding: '18px 20px',
+            background: T.paper,
+            borderBottom: `1px solid ${T.border}`,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 10,
+          }}
+        >
+          <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 14, color: T.text }}>
+            {s.copy}
+          </div>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              onClick={() => {
+                // F1 — record cancellation. Orchestrator listens and
+                // appends to finance.cancellations + recomputes savings.
+                emit('finance:subscription_cancelled', {
+                  pattern_id: s.pattern_id,
+                  merchant: s.merchant,
+                  monthly_amount: s.amount,
+                  ts: Date.now(),
+                });
+                dismissSub(s.pattern_id);
+              }}
+              style={{ ...d3BtnStyle, color: T.accent, borderColor: T.accent }}
+            >
+              cancelled
+            </button>
+            <button
+              type="button"
+              onClick={() => dismissSub(s.pattern_id)}
+              style={d3BtnStyle}
+            >
+              this is intentional
+            </button>
+            <button
+              type="button"
+              onClick={() => dismissSub(s.pattern_id)}
+              style={d3BtnStyle}
+            >
+              dismiss
+            </button>
+          </div>
+        </div>
+      ))}
+
+      {showTax && tax && (
+        <div
+          style={{
+            padding: '18px 20px',
+            background: T.paper,
+            borderBottom: `1px solid ${T.border}`,
+            fontFamily: "'DM Sans', sans-serif",
+            fontSize: 14,
+            color: T.text,
+          }}
+        >
+          {tax.copy}
+        </div>
+      )}
+
+      {showCyc && cyc && (
+        <div
+          style={{
+            padding: '18px 20px',
+            background: T.paper,
+            fontFamily: "'DM Sans', sans-serif",
+            fontSize: 14,
+            color: T.text,
+          }}
+        >
+          {cyc.copy}
+        </div>
+      )}
+    </section>
+  );
+}
+
+// ─── SavingsCard · Sprint 2.5 / F1 ────────────────────────────────────────
+// Decision #14 (locked 2026-05-11): passive voice, "saved" never "you saved"
+// or "ollie saved you". Math is elapsed_months × monthly_amount, not
+// annual projection. Re-subscribe preserves history.
+
+function SavingsCard() {
+  const [totals] = useStoreSlice<SavingsTotals | null>('finance', 'savings', null);
+  const [showDetail, setShowDetail] = useState(false);
+  if (!totals || totals.year_total <= 0) return null;
+  const copy = buildSavingsCardCopy(totals);
+  if (!copy) return null;
+
+  return (
+    <section style={{ marginBottom: 48 }}>
+      <div style={{ paddingBottom: 10, borderBottom: `1px solid ${T.border}`, ...labelStyle }}>
+        saved this year
+      </div>
+      <button
+        type="button"
+        onClick={() => setShowDetail((v) => !v)}
+        style={{
+          width: '100%',
+          textAlign: 'left',
+          padding: '18px 20px',
+          background: T.paper,
+          border: 'none',
+          borderBottom: `1px solid ${T.border}`,
+          cursor: 'pointer',
+          fontFamily: "'DM Sans', sans-serif",
+          fontSize: 14,
+          color: T.text,
+        }}
+        aria-expanded={showDetail}
+      >
+        {copy}
+      </button>
+      {showDetail && (
+        <div style={{ padding: '14px 20px', background: T.paper, fontFamily: "'DM Mono', monospace", fontSize: 11, color: T.muted, letterSpacing: '0.04em' }}>
+          <div style={{ marginBottom: 8 }}>all time · ${totals.all_time_total.toFixed(2)}</div>
+          {totals.entries.map((e) => (
+            <div key={e.cancellation.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
+              <span>{e.cancellation.merchant} · {e.months_elapsed} mo</span>
+              <span>${e.saved_amount.toFixed(2)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+const d3BtnStyle: React.CSSProperties = {
+  fontFamily: "'DM Mono', monospace",
+  fontSize: 10,
+  letterSpacing: '0.18em',
+  textTransform: 'uppercase',
+  padding: '8px 12px',
+  background: 'transparent',
+  color: T.muted,
+  border: `1px solid ${T.border}`,
+  cursor: 'pointer',
+  borderRadius: 12,
+};
 
 // ─── FinanceNoticed ───────────────────────────────────────────────────────────
 
@@ -1480,6 +1662,12 @@ export function FinanceModule() {
             </div>
           ))}
         </section>
+
+        {/* D3 Canva-style alerts (quiet cards, no push) */}
+        <FinanceD3Cards />
+
+        {/* F1 savings tracker (quiet card, passive voice) */}
+        <SavingsCard />
 
         {/* Patterns (noticed) */}
         <FinanceNoticed />

@@ -3,6 +3,7 @@ import { FrostedCard } from '../components/FrostedCard';
 import { BrainDumpInput } from '../components/BrainDumpInput';
 import { BurhanTree } from '../components/BurhanTree';
 import { useStoreSlice } from '../store';
+import { lastN, type BurhanState } from '@ollie/logic/burhan';
 
 // ─── types ───────────────────────────────────────────────────────────────────
 
@@ -127,6 +128,8 @@ export function DashboardScreen({ onNavigate, onBrainDump, stats }: DashboardScr
   const tracked   = stats?.tracked   ?? '0m';
 
   const [hasPets] = useStoreSlice<boolean>('shared', 'settings.has_pets', true);
+  const [burhanState] = useStoreSlice<BurhanState>('burhan', 'state', { events: [] });
+  const recentBurhanEvents = useMemo(() => lastN(burhanState, 12), [burhanState]);
   const pendingCounts = usePendingCounts();
 
   // Filter pets out of home cluster if has_pets is false
@@ -258,7 +261,7 @@ export function DashboardScreen({ onNavigate, onBrainDump, stats }: DashboardScr
               lineHeight: 0,
             }}
           >
-            <BurhanTree height={66} tone="home" onClick={undefined} />
+            <BurhanTree height={66} tone="home" onClick={undefined} lifeEvents={recentBurhanEvents} />
           </button>
         </header>
 

@@ -281,6 +281,48 @@ export function createAdminOrchestrator(
     store.set('admin', 'patternsLastComputedAt', now);
   }
 
+  // ── Sprint 3 / D1+D2 · appointment-completed transitions ─────────────────
+  //
+  // Fires `admin:appointment_completed` whenever a task transitions to
+  // state='done' or 'closed'. Marks the kind as 'doctor' when the task's
+  // label/text matches a doctor/dr/clinic regex — burhan upgrades that
+  // to canopy_fruit (life event > leaf event).
+
+  const DOCTOR_RE = /\b(doctor|dr\.|dr |clinic|gp|optometrist|dentist|gyno|cardio|derma)\b/i;
+  const APPT_RE = /\bappointment\b/i;
+
+  function detectAppointmentTransitions(): void {
+    const tasks = getTasks() as Array<{
+      id?: string;
+      label?: string;
+      text?: string;
+      state?: string;
+      done_at?: number;
+      closed_at?: number;
+    }>;
+    const seen = store.get<string[]>('admin', '_appointmentCompletedIds', []) ?? [];
+    const seenSet = new Set(seen);
+    const newlyFired: string[] = [];
+    for (const t of tasks) {
+      if (!t?.id) continue;
+      const isClosed = t.state === 'done' || t.state === 'closed';
+      if (!isClosed) continue;
+      if (seenSet.has(t.id)) continue;
+      const text = `${t.label ?? ''} ${t.text ?? ''}`;
+      // Only fire for appointment-like tasks. Other closed tasks are noise.
+      if (!APPT_RE.test(text) && !DOCTOR_RE.test(text)) continue;
+      const ts = t.done_at ?? t.closed_at ?? nowFn();
+      const kind: 'doctor' | 'appointment' = DOCTOR_RE.test(text) ? 'doctor' : 'appointment';
+      try {
+        events.emit('admin:appointment_completed', { task_id: t.id, kind, ts });
+      } catch { /* non-fatal */ }
+      newlyFired.push(t.id);
+    }
+    if (newlyFired.length) {
+      store.set('admin', '_appointmentCompletedIds', [...seen, ...newlyFired]);
+    }
+  }
+
   // ── debounce ──────────────────────────────────────────────────────────────
 
   function schedule(): void {
@@ -303,11 +345,16 @@ export function createAdminOrchestrator(
     if (initialized) return;
     initialized = true;
 
-    unsubs.push(store.subscribeKey('admin', 'tasks', () => schedule()));
+    unsubs.push(store.subscribeKey('admin', 'tasks', () => {
+      schedule();
+      try { detectAppointmentTransitions(); }
+      catch (err) { console.error('[orchestrator/admin] appointment transition failed', err); }
+    }));
     unsubs.push(store.subscribeKey('dump', 'items', () => schedule()));
     unsubs.push(events.on('void:braindump:submitted', onBraindump));
 
     recomputePatterns();
+    try { detectAppointmentTransitions(); } catch { /* non-fatal */ }
   }
 
   function teardown(): void {

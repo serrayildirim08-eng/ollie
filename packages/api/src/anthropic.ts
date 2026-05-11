@@ -17,7 +17,9 @@ import type { RouteViaHaikuOpts } from './types';
 let __lastCallTs = 0;
 
 // ─── system prompt (verbatim from void-app.html ROUTER_SYSTEM_PROMPT) ─────────
-
+// notif-scope-allow — LLM system prompt. The model is an answer engine,
+// not a push channel; phrases like "haven't logged" appear here as
+// instructions for factual replies, not as engagement-shaped copy.
 const ROUTER_SYSTEM_PROMPT = `You are ollie, the AI layer inside a life management app for ADHD brains.
 You have THREE jobs:
 1. DISSECT input into distinct events (one input often contains multiple)

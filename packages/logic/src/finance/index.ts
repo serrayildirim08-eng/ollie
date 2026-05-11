@@ -27,3 +27,30 @@ export {
 export { spearmanRho, correlateFinanceWithCycle, correlateFinanceWithSleepDebt } from './correlate';
 export { scoreBSAS, recordScaleResult, scaleCadenceStatus, BSAS_ITEMS, BSAS_CITED_URL } from './bsas';
 export { detectPatterns, tagResearchLoops, RESEARCH_LOOP_RE } from './patterns';
+export {
+  detectSubscriptions,
+  adhdTaxRunningTotal,
+  detectCycleSpendingPattern,
+  detectD3Patterns,
+} from './pattern-detection';
+export type {
+  DetectedSubscriptionCard,
+  DetectedSubscriptionCadence,
+  ADHDTaxRunningTotal,
+  CycleBoundary,
+  CycleSpendingPatternCard,
+  D3Output,
+} from './pattern-detection';
+export {
+  computeSavings,
+  monthsBetween,
+  buildSavingsCardCopy,
+  buildMonthlyDigestCopy,
+  savingsThisMonth,
+  cancellationsAccruedThisMonth,
+} from './savings';
+export type {
+  Cancellation,
+  SavingsEntry,
+  SavingsTotals,
+} from './savings';

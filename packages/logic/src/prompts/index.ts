@@ -69,6 +69,7 @@ export function buildCandidates(state: BuildCandidatesState): PromptCandidate[] 
   if (hoursSinceSleep >= 48) {
     out.push({
       id: 'sleep-gap',
+      // notif-scope-allow — in-app prompt suggestion, not a push. Factual.
       text: "haven't logged bed in a while. anything to say?",
       priority: 0.75,
       why: 'sleep-gap',
