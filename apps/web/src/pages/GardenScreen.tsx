@@ -1,5 +1,4 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { BurhanTree } from '../components/BurhanTree';
 import { Burhan3D } from '../components/Burhan3D';
 
 // ─── types ────────────────────────────────────────────────────────────────────
@@ -609,23 +608,6 @@ export function GardenScreen({ onNavigate, onWater, stats }: GardenScreenProps) 
         }}
       >
         <Burhan3D height={440} width={440} />
-      </div>
-
-      {/* Burhan reflection in pool */}
-      <div
-        aria-hidden="true"
-        style={{
-          position: 'absolute',
-          bottom: '16%',
-          left: '50%',
-          transform: 'translateX(-50%) scaleY(-0.18)',
-          transformOrigin: 'bottom center',
-          zIndex: 3,
-          opacity: 0.12,
-          pointerEvents: 'none',
-        }}
-      >
-        <BurhanTree height={400} tone="garden" waterLevel={50} droop={0} />
       </div>
 
       {/* ── ATMOSPHERIC PETALS ──────────────────────────────────────────── */}

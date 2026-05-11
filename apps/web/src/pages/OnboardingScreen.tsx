@@ -16,7 +16,7 @@
  */
 
 import React, { useReducer, useRef, useEffect } from 'react';
-import { BurhanTree } from '../components/BurhanTree';
+import { Burhan3D } from '../components/Burhan3D';
 import { store } from '../store';
 
 // ─── types ──────────────────────────────────────────────────────────────────
@@ -763,7 +763,7 @@ function BurhanIntroScreen({ onDone }: { onDone: () => void }) {
   return (
     <>
       <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '32px' }}>
-        <BurhanTree height={120} tone="home" />
+        <Burhan3D height={120} width={120} />
       </div>
       <Headline>meet burhan. he lives here.</Headline>
       <Sub>he'll grow as you use ollie. he's been here since the beginning.</Sub>

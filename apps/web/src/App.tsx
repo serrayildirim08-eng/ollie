@@ -8,7 +8,7 @@ import { ModuleHelp } from './components/ModuleHelp';
 import { SourcesLink } from './components/SourcesLink';
 import { ToastHost } from './components/ToastHost';
 import { ToastProvider, useToast } from './components/ToastContext';
-import { BurhanTree } from './components/BurhanTree';
+import { Burhan3D } from './components/Burhan3D';
 import { BrainDumpInput } from './components/BrainDumpInput';
 import { ChipFlyHost, chipFly } from './components/ChipFly';
 import { OnboardingScreen } from './pages/OnboardingScreen';
@@ -283,8 +283,8 @@ function AppInner() {
         </div>
 
         <div style={{ marginTop: '3rem', display: 'flex', alignItems: 'flex-end', gap: '2rem', paddingBottom: '120px' }}>
-          <BurhanTree height={220} tone="home" />
-          <BurhanTree height={320} tone="garden" />
+          <Burhan3D height={220} width={220} />
+          <Burhan3D height={320} width={320} />
         </div>
 
         <BrainDumpInput

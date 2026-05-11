@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { BurhanTree } from '../components/BurhanTree';
+import { Burhan3D } from '../components/Burhan3D';
 import { BrainDumpInput } from '../components/BrainDumpInput';
 import { getSkyVideoSrc } from '../lib/skyVideo';
 
@@ -248,19 +248,14 @@ export function HomeScreen({ onNavigate, onBrainDump }: HomeScreenProps) {
 
       {/* Burhan — bottom left */}
       <div
-        style={{ position: 'absolute', bottom: 40, left: 10, zIndex: 10 }}
+        style={{ position: 'absolute', bottom: 40, left: 10, zIndex: 10, cursor: 'pointer' }}
         role="button"
         tabIndex={0}
         aria-label="go to garden"
+        onClick={() => onNavigate('garden')}
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onNavigate('garden'); }}
       >
-        <BurhanTree
-          height={220}
-          tone="home"
-          waterLevel={60}
-          droop={15}
-          onClick={() => onNavigate('garden')}
-        />
+        <Burhan3D height={220} width={220} />
       </div>
 
       {/* Dashboard hint — bottom right */}

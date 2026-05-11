@@ -6,22 +6,19 @@ import type { Group } from 'three';
 // Begin fetching the model as soon as this chunk loads.
 useGLTF.preload('/models/burhan.glb');
 
-const ROTATION_PERIOD_SECONDS = 8;
-const ROTATION_SPEED = (Math.PI * 2) / ROTATION_PERIOD_SECONDS;
 const SWAY_AMPLITUDE = 0.018;
 const SWAY_FREQUENCY = 0.6;
 
-function Model({ rotating, swaying }: { rotating: boolean; swaying: boolean }) {
+function Model({ swaying }: { swaying: boolean }) {
   const { scene } = useGLTF('/models/burhan.glb');
   const groupRef = useRef<Group>(null);
 
   // Clone so we don't mutate the cached source on remount.
   const cloned = useMemo(() => scene.clone(true), [scene]);
 
-  useFrame((state, delta) => {
+  useFrame((state) => {
     const g = groupRef.current;
     if (!g) return;
-    if (rotating) g.rotation.y += ROTATION_SPEED * delta;
     if (swaying) {
       g.rotation.z = Math.sin(state.clock.elapsedTime * SWAY_FREQUENCY) * SWAY_AMPLITUDE;
     } else {
@@ -51,17 +48,17 @@ export default function Burhan3DCanvas({
   reducedMotion,
   paused,
 }: Burhan3DCanvasProps) {
-  const rotating = !reducedMotion && !paused;
   const swaying = !reducedMotion && !paused;
-  const frameloop = paused ? 'never' : rotating || swaying ? 'always' : 'demand';
+  const frameloop = paused ? 'never' : swaying ? 'always' : 'demand';
 
   return (
     <Canvas
       dpr={[1, 2]}
       frameloop={frameloop}
       camera={{ position: [0, 0.3, 4.2], fov: 35 }}
-      gl={{ antialias: true, powerPreference: 'high-performance', alpha: true }}
-      style={{ width, height, background: '#F5F4F0' }}
+      gl={{ antialias: true, powerPreference: 'high-performance', alpha: true, premultipliedAlpha: false }}
+      onCreated={({ gl }) => gl.setClearColor(0x000000, 0)}
+      style={{ width, height, background: 'transparent' }}
     >
       {/* Warm cream ambient + golden-hour key light */}
       <ambientLight intensity={0.85} color="#FFF1D9" />
@@ -78,7 +75,7 @@ export default function Burhan3DCanvas({
       />
       <Suspense fallback={null}>
         <Bounds fit clip observe margin={1.15}>
-          <Model rotating={rotating} swaying={swaying} />
+          <Model swaying={swaying} />
         </Bounds>
       </Suspense>
     </Canvas>
