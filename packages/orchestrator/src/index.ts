@@ -15,6 +15,8 @@ import { createPetsOrchestrator } from './pets';
 import { createBodyOrchestrator } from './body';
 import { createGroceryOrchestrator } from './grocery';
 import { createSleepOrchestrator } from './sleep';
+import { createFinanceOrchestrator } from './finance';
+import { createPatternsOrchestrator } from './patterns';
 
 export type { Orchestrator } from './types';
 export { createCycleOrchestrator } from './cycle';
@@ -22,6 +24,8 @@ export { createPetsOrchestrator } from './pets';
 export { createBodyOrchestrator } from './body';
 export { createGroceryOrchestrator } from './grocery';
 export { createSleepOrchestrator } from './sleep';
+export { createFinanceOrchestrator } from './finance';
+export { createPatternsOrchestrator } from './patterns';
 
 export interface RootOrchestrator extends Orchestrator {
   cycle: ReturnType<typeof createCycleOrchestrator>;
@@ -29,6 +33,8 @@ export interface RootOrchestrator extends Orchestrator {
   body: ReturnType<typeof createBodyOrchestrator>;
   grocery: ReturnType<typeof createGroceryOrchestrator>;
   sleep: ReturnType<typeof createSleepOrchestrator>;
+  finance: ReturnType<typeof createFinanceOrchestrator>;
+  patterns: ReturnType<typeof createPatternsOrchestrator>;
 }
 
 /**
@@ -42,6 +48,8 @@ export function createOrchestrator(store: Store): RootOrchestrator {
   const bodyOrch = createBodyOrchestrator(store);
   const groceryOrch = createGroceryOrchestrator(store);
   const sleepOrch = createSleepOrchestrator(store);
+  const financeOrch = createFinanceOrchestrator(store);
+  const patternsOrch = createPatternsOrchestrator(store);
 
   return {
     cycle: cycleOrch,
@@ -49,6 +57,8 @@ export function createOrchestrator(store: Store): RootOrchestrator {
     body: bodyOrch,
     grocery: groceryOrch,
     sleep: sleepOrch,
+    finance: financeOrch,
+    patterns: patternsOrch,
 
     init() {
       cycleOrch.init();
@@ -56,6 +66,8 @@ export function createOrchestrator(store: Store): RootOrchestrator {
       bodyOrch.init();
       groceryOrch.init();
       sleepOrch.init();
+      financeOrch.init();
+      patternsOrch.init();
     },
 
     teardown() {
@@ -64,6 +76,8 @@ export function createOrchestrator(store: Store): RootOrchestrator {
       bodyOrch.teardown();
       groceryOrch.teardown();
       sleepOrch.teardown();
+      financeOrch.teardown();
+      patternsOrch.teardown();
     },
   };
 }

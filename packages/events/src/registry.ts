@@ -72,6 +72,7 @@ export const REGISTRY: Registry = {
 
   // ─── finance / journal / sleep ──────────────────────────────────
   'finance:record_added':          { payload: '{ id: string, kind?: string, amount: number, direction?: string, merchant?: string, merchant_normalized?: string, category?: string, is_adhd_tax?: boolean, ts?: number }' },
+  'finance:pattern_detected':      { payload: '{ pattern: string, confidence: string, ts: number }' },
   'journal:entries_added':         { payload: '{ dump_ts: number, count: number, extractor: string }' },
   'sleep:record_updated':          { payload: '{ night_of: string, is_partial: boolean }' },
 
