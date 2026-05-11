@@ -1,20 +1,18 @@
 /**
  * AstrologyModule — ported from void-app.html AstrologyModule.
  *
- * Wiring gap: @ollie/logic/astrology.computeNatalChart requires an injected
- * AstronomyAPI (astronomy-engine) which is not bundled here. Chart positions
- * are instead derived from a simplified Keplerian model (same as void v1)
- * that is accurate to ±few degrees — sufficient for the wheel UI. A future
- * commit can inject the real ephemeris via the `chart` store slice once the
- * astronomy-engine CDN loader is wired in the web shell.
+ * Chart positions: prefer the real NatalChart from the astrology.chart store
+ * slice (computed by the store orchestrator via astronomy-engine). Falls back
+ * to the simplified Keplerian model when chart is not yet available.
  *
  * Store slices consumed:
  *   useStoreSlice('astrology', 'birth', null)  — BirthDraft | null
- *   useStoreSlice('astrology', 'chart', null)  — NatalChart | null  (future)
+ *   useStoreSlice('astrology', 'chart', null)  — NatalChart | null
  */
 import React, { useState, useEffect, useMemo } from 'react';
 import { ModuleHelp } from '../../components/ModuleHelp';
 import { useStoreSlice } from '../../store';
+import type { NatalChart } from '@ollie/logic/astrology';
 
 // ─── types ────────────────────────────────────────────────────────────────────
 
@@ -329,6 +327,7 @@ interface AstrologyModuleProps {
 export function AstrologyModule({ onBack }: AstrologyModuleProps) {
   // Store slices
   const [birth, setBirth] = useStoreSlice<BirthDraft | null>('astrology', 'birth', null);
+  const [chart] = useStoreSlice<NatalChart | null>('astrology', 'chart', null);
 
   // Local state
   const [editing, setEditing] = useState(false);
@@ -376,10 +375,19 @@ export function AstrologyModule({ onBack }: AstrologyModuleProps) {
     } catch { return null; }
   }, [birth]);
 
+  // When the real chart is available from the store (computed via astronomy-engine),
+  // map its planet longitudes onto the in-component PlanetPos shape. Fall back to
+  // the Keplerian model otherwise.
   const natalPositions = useMemo<PlanetPos[]>(() => {
+    if (chart?.planets) {
+      return ASTRO_PLANETS.map(p => {
+        const real = chart.planets[p.id];
+        return { planet: p, lon: real != null ? real.longitude : (natalDate ? astroLon(p, natalDate) : 0) };
+      });
+    }
     if (!natalDate) return [];
     return ASTRO_PLANETS.map(p => ({ planet: p, lon: astroLon(p, natalDate) }));
-  }, [natalDate]);
+  }, [chart, natalDate]);
 
   const transitPositions = useMemo<PlanetPos[]>(
     () => ASTRO_PLANETS.map(p => ({ planet: p, lon: astroLon(p, now) })),

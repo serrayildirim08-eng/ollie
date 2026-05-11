@@ -24,6 +24,7 @@ import {
   detectMovementGap,
   detectVasomotorPattern,
   detectPatterns,
+  envelopeCopy,
   // episodes
   openEpisode,
   logSeverity,
@@ -452,5 +453,35 @@ describe('treatment plans', () => {
     const result = detectSideEffectPattern(plan, dumps, { minCycles: 2, concThreshold: 0.5 });
     expect(result).not.toBeNull();
     expect(result?.pattern).toBe('treatment_side_effect_cycle');
+  });
+});
+
+// ─── envelopeCopy ────────────────────────────────────────────────────────────
+
+describe('envelopeCopy', () => {
+  it('returns dry copy when energy_envelope_on=false', () => {
+    expect(envelopeCopy({ dry: 'short', envelope: 'long pacing' }, false)).toBe('short');
+  });
+
+  it('returns envelope copy when energy_envelope_on=true', () => {
+    expect(envelopeCopy({ dry: 'short', envelope: 'long pacing' }, true)).toBe('long pacing');
+  });
+
+  it('falls back to dry when envelope key absent and flag true', () => {
+    expect(envelopeCopy({ dry: 'only dry' }, true)).toBe('only dry');
+  });
+
+  it('falls back to envelope when dry key absent and flag false', () => {
+    expect(envelopeCopy({ envelope: 'only envelope' }, false)).toBe('only envelope');
+  });
+
+  it('passes plain string through unchanged regardless of flag', () => {
+    expect(envelopeCopy('plain string', false)).toBe('plain string');
+    expect(envelopeCopy('plain string', true)).toBe('plain string');
+  });
+
+  it('returns empty string for null/undefined', () => {
+    expect(envelopeCopy(null, false)).toBe('');
+    expect(envelopeCopy(undefined, true)).toBe('');
   });
 });

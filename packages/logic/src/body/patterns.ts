@@ -1103,6 +1103,35 @@ export function detectSleepDebtSymptomLag(
   };
 }
 
+// ─── envelopeCopy ─────────────────────────────────────────────────────────────
+// Resolves copy that has two variants: a dry default and an envelope-aware
+// alternative. Mirrors void-app.html VOID.logic.body.envelopeCopy (line 9938).
+// The original read window.VOID.settings; here the caller injects
+// energy_envelope_on directly so the function stays pure.
+//
+// Usage: envelopeCopy({ dry: 'short copy', envelope: 'longer pacing copy' }, isOn)
+//        envelopeCopy('plain string', isOn) → returns the string unchanged.
+
+export type EnvelopeCopyInput =
+  | string
+  | { dry?: string; envelope?: string }
+  | null
+  | undefined;
+
+export function envelopeCopy(
+  input: EnvelopeCopyInput,
+  energy_envelope_on: boolean,
+): string {
+  if (input === null || input === undefined) return '';
+  if (typeof input === 'string') return input;
+  if (typeof input === 'object' && ('dry' in input || 'envelope' in input)) {
+    return energy_envelope_on
+      ? String(input.envelope ?? input.dry ?? '')
+      : String(input.dry ?? input.envelope ?? '');
+  }
+  return '';
+}
+
 // ─── detectPatterns (top-level) ───────────────────────────────────────────────
 
 export function detectPatterns(

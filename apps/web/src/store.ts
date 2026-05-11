@@ -8,6 +8,10 @@
  * Components import `useStoreSlice` from this file, NOT from @ollie/store
  * directly, so that swapping the underlying store (e.g., for tests or a
  * future remote-sync adapter) is a one-file change.
+ *
+ * Astrology orchestrator (bottom of file):
+ *   - Listens for changes to astrology.birth; recomputes astrology.chart.
+ *   - Runs a daily tick to refresh astrology.currentTransits.
  */
 
 import {
@@ -17,6 +21,9 @@ import {
   runMigrations,
 } from '@ollie/store';
 import { useStoreSlice as baseUseStoreSlice } from '@ollie/store/react';
+import { computeNatalChart, currentTransits } from '@ollie/logic/astrology';
+import type { BirthData } from '@ollie/logic/astrology';
+import { astronomyAPI } from './lib/astronomy';
 
 runMigrations(browserAdapter);
 
@@ -30,3 +37,42 @@ export function useStoreSlice<T>(
 ): [T, (value: T) => void] {
   return baseUseStoreSlice<T>(store, mod, key, defaultValue);
 }
+
+// ─── Astrology orchestrator ───────────────────────────────────────────────────
+
+function recomputeChart(birth: BirthData | null | undefined): void {
+  if (!birth?.date) {
+    store.set('astrology', 'chart', null);
+    return;
+  }
+  try {
+    const chart = computeNatalChart(birth, astronomyAPI);
+    store.set('astrology', 'chart', chart);
+  } catch (err) {
+    console.warn('[astrology orchestrator] computeNatalChart failed:', err);
+    store.set('astrology', 'chart', null);
+  }
+}
+
+function recomputeTransits(): void {
+  try {
+    const snapshot = currentTransits(new Date(), astronomyAPI);
+    store.set('astrology', 'currentTransits', snapshot);
+  } catch (err) {
+    console.warn('[astrology orchestrator] currentTransits failed:', err);
+  }
+}
+
+// Run once on load with whatever birth data is already stored.
+recomputeChart(store.get<BirthData | null>('astrology', 'birth', null));
+recomputeTransits();
+
+// Subscribe to birth changes.
+store.subscribeKey<BirthData | null>('astrology', 'birth', recomputeChart);
+
+// Daily transit tick (every 24 h); also refresh chart in case DST shifted anything.
+const TRANSIT_INTERVAL_MS = 24 * 60 * 60 * 1000;
+setInterval(() => {
+  recomputeTransits();
+  recomputeChart(store.get<BirthData | null>('astrology', 'birth', null));
+}, TRANSIT_INTERVAL_MS);

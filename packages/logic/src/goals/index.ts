@@ -7,8 +7,8 @@
  *
  * Mirrors void-app.html VOID.logic.goals IIFE (~lines 22484–23692).
  *
- * Omitted: _consentOnGoals — it read window.VOID.consent (browser global).
- * Consent is passed via opts.consent by the caller if needed.
+ * Consent gate: opts.consent (boolean) is injected by callers.
+ * Defaults to true when absent — mirrors void-app.html _consentOnGoals fallback.
  */
 
 export * from './types';

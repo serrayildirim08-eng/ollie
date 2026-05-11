@@ -12,8 +12,9 @@
  * All pure: inputs → outputs, no DOM, no store reads, no Date.now() inside.
  * Mirrors void-app.html VOID.logic.goals IIFE lines 22982–23644.
  *
- * NOTE: _consentOnGoals is omitted — it read window.VOID.consent which is
- * a browser global. Callers pass consent via opts.consent if needed.
+ * _consentOnGoals is ported via dependency injection: callers pass
+ * opts.consent (boolean). Defaults to true when absent so existing
+ * call-sites that don't wire consent continue to work.
  */
 
 import { resolveNow, tokens, goalLabel } from './helpers';
@@ -35,6 +36,13 @@ import type {
   ExperimentCandidateSignal,
 } from './types';
 
+// Consent gate — mirrors void-app.html _consentOnGoals (line 23098).
+// Reads opts.consent first; defaults to true when absent.
+function _consentOnGoals(opts: GoalsOpts | null | undefined): boolean {
+  if (opts && typeof opts.consent === 'boolean') return opts.consent;
+  return true;
+}
+
 const CYCLE_TOKENS = ["just because", "i don't know", "don't know", "dunno", "idk", "no idea", "not sure"];
 
 const CONFLICT_PAIRS: Array<[string, string]> = [
@@ -55,6 +63,7 @@ export function detectContagion(
   opts?: GoalsOpts | null,
 ): ContagionSignal | null {
   const o = opts || {};
+  if (!_consentOnGoals(o)) return null;
   const now = resolveNow(history, opts);
   const windowDays = typeof o.windowDays === 'number' ? o.windowDays : 3;
   const minMatches = typeof o.minMatches === 'number' ? o.minMatches : 1;
@@ -122,6 +131,8 @@ export function detectMissingAnchorPair(
   history: GoalsHistory | null | undefined,
   opts?: GoalsOpts | null,
 ): MissingAnchorPairSignal[] | null {
+  const o = opts || {};
+  if (!_consentOnGoals(o)) return null;
   const now = resolveNow(history, opts);
   const goals = Array.isArray(history?.goals) ? history!.goals! : [];
   if (goals.length === 0) return null;
@@ -172,6 +183,7 @@ export function detectFloatingGoal(
   opts?: GoalsOpts | null,
 ): FloatingGoalSignal[] | null {
   const o = opts || {};
+  if (!_consentOnGoals(o)) return null;
   const now = resolveNow(history, opts);
   const minDepth = typeof o.minDepth === 'number' ? o.minDepth : 3;
   const goals = Array.isArray(history?.goals) ? history!.goals! : [];
@@ -260,6 +272,8 @@ export function detectMissingConstrual(
   history: GoalsHistory | null | undefined,
   opts?: GoalsOpts | null,
 ): MissingConstrualSignal[] | null {
+  const o = opts || {};
+  if (!_consentOnGoals(o)) return null;
   const now = resolveNow(history, opts);
   const goals = Array.isArray(history?.goals) ? history!.goals! : [];
   if (goals.length === 0) return null;
@@ -299,6 +313,7 @@ export function construalFrameForState(
   efState: 'low' | 'high' | string,
   opts?: GoalsOpts | null,
 ): ConstrualFrame | null {
+  if (!_consentOnGoals(opts)) return null;
   if (!goal) return null;
   if (efState === 'low' && typeof goal.construal_abstract === 'string' && goal.construal_abstract.trim()) {
     return {
@@ -328,6 +343,7 @@ export function detectAntiGoalOpportunity(
   opts?: GoalsOpts | null,
 ): AntiGoalOpportunitySignal[] | null {
   const o = opts || {};
+  if (!_consentOnGoals(o)) return null;
   const now = resolveNow(history, opts);
   const stuckDays = typeof o.stuckDays === 'number' ? o.stuckDays : 14;
   const stuckMs = stuckDays * 86400000;
@@ -389,6 +405,7 @@ export function detectAntiGoalInDump(
   opts?: GoalsOpts | null,
 ): AntiGoalInDumpSignal | null {
   const o = opts || {};
+  if (!_consentOnGoals(o)) return null;
   const now = resolveNow(history, opts);
   const windowDays = typeof o.windowDays === 'number' ? o.windowDays : 7;
   const windowStart = now - windowDays * 86400000;
@@ -423,6 +440,8 @@ export function detectGoalInterference(
   history: GoalsHistory | null | undefined,
   opts?: GoalsOpts | null,
 ): GoalInterferenceSignal | null {
+  const o = opts || {};
+  if (!_consentOnGoals(o)) return null;
   const now = resolveNow(history, opts);
   const all = Array.isArray(history?.goals) ? history!.goals! : [];
   const goals = all.filter(g => g && g.id && (!g.status || g.status === 'active'));
@@ -473,6 +492,7 @@ export function detectExperimentCandidate(
   opts?: GoalsOpts | null,
 ): ExperimentCandidateSignal[] | null {
   const o = opts || {};
+  if (!_consentOnGoals(o)) return null;
   const now = resolveNow(history, opts);
   const stuckWeeks = typeof o.stuckWeeks === 'number' ? o.stuckWeeks : 4;
   const stuckMs = stuckWeeks * 7 * 86400000;

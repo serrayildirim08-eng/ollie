@@ -36,6 +36,13 @@ const PACING_DORMANCY_DAYS: Record<PacingKind, number> = {
   rolling: 14,
 };
 
+// Consent gate — mirrors void-app.html _consentOnGoals (line 23098).
+// Reads opts.consent first; defaults to true when absent (consent layer not wired).
+function _consentOnGoals(opts: GoalsOpts | null | undefined): boolean {
+  if (opts && typeof opts.consent === 'boolean') return opts.consent;
+  return true;
+}
+
 // ─── G14 — classifyPacing ─────────────────────────────────────────────
 // Pure classifier on a single goal. Always returns an object (never null).
 // Pacing precedence: explicit goal.pacing > inferred from target_date_ts > 'rolling'.
@@ -296,6 +303,7 @@ export function detectPacingBreach(
   opts?: GoalsOpts | null,
 ): PacingBreachSignal[] | null {
   const o = opts || {};
+  if (!_consentOnGoals(o)) return null;
   const now = resolveNow(history, opts);
   const thresholds = o.dormancyDays || PACING_DORMANCY_DAYS;
   const goals = Array.isArray(history?.goals) ? history!.goals! : [];

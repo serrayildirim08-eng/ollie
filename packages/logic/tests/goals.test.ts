@@ -338,3 +338,57 @@ describe('detectExperimentCandidate', () => {
     expect(result![0].weeks_stuck).toBeGreaterThanOrEqual(5);
   });
 });
+
+// ─── consent gate ─────────────────────────────────────────────────────────────
+// Verifies _consentOnGoals is wired: consent=false → null; absent → fires.
+
+describe('consent gate (opts.consent)', () => {
+  const goals = [{ id: 'g1', status: 'active', label: 'write book', created_at: NOW - 60 * DAY }];
+  const sessions: never[] = [];
+
+  it('detectPacingBreach returns null when consent=false', () => {
+    expect(detectPacingBreach({ goals, sessions }, { now: NOW, consent: false })).toBeNull();
+  });
+
+  it('detectPacingBreach fires when consent=true', () => {
+    const result = detectPacingBreach({ goals, sessions }, { now: NOW, consent: true });
+    expect(result).not.toBeNull();
+  });
+
+  it('detectPacingBreach defaults to true when consent omitted', () => {
+    const result = detectPacingBreach({ goals, sessions }, { now: NOW });
+    expect(result).not.toBeNull();
+  });
+
+  it('detectContagion returns null when consent=false', () => {
+    const dumps = [{ ts: NOW - 1 * DAY, text: 'i saw a post and now inspired by it' }];
+    expect(detectContagion({ dumps }, { now: NOW, consent: false })).toBeNull();
+  });
+
+  it('detectFloatingGoal returns null when consent=false', () => {
+    const g = [{ id: 'g1', status: 'active', label: 'x', why_chain: ['idk'] }];
+    expect(detectFloatingGoal({ goals: g }, { now: NOW, consent: false })).toBeNull();
+  });
+
+  it('detectMissingConstrual returns null when consent=false', () => {
+    const g = [{ id: 'g1', status: 'active' }];
+    expect(detectMissingConstrual({ goals: g }, { now: NOW, consent: false })).toBeNull();
+  });
+
+  it('construalFrameForState returns null when consent=false', () => {
+    const goal = { id: 'g1', construal_abstract: 'become healthy', construal_concrete: 'run 1km' };
+    expect(construalFrameForState(goal, 'low', { consent: false })).toBeNull();
+  });
+
+  it('detectExperimentCandidate returns null when consent=false', () => {
+    expect(detectExperimentCandidate({ goals, sessions }, { now: NOW, consent: false })).toBeNull();
+  });
+
+  it('detectGoalInterference returns null when consent=false', () => {
+    const g = [
+      { id: 'g1', status: 'active', interference_tags: ['spend'] },
+      { id: 'g2', status: 'active', interference_tags: ['save'] },
+    ];
+    expect(detectGoalInterference({ goals: g }, { now: NOW, consent: false })).toBeNull();
+  });
+});
