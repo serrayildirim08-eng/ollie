@@ -54,6 +54,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@capacitor/app':
+        specifier: ^8.1.0
+        version: 8.1.0(@capacitor/core@7.6.4)
       '@ollie/api':
         specifier: workspace:*
         version: link:../../packages/api
@@ -444,6 +447,11 @@ packages:
   '@bramus/specificity@2.4.2':
     resolution: {integrity: sha512-ctxtJ/eA+t+6q2++vj5j7FYX3nRu311q1wfYH3xjlLOsczhlhxAg2FWNUXhpGvAw3BWo1xBcvOV6/YLc2r5FJw==}
     hasBin: true
+
+  '@capacitor/app@8.1.0':
+    resolution: {integrity: sha512-MlmttTOWHDedr/G4SrhNRxsXMqY+R75S4MM4eIgzsgCzOYhb/MpCkA5Q3nuOCfL1oHm26xjUzqZ5aupbOwdfYg==}
+    peerDependencies:
+      '@capacitor/core': '>=8.0.0'
 
   '@capacitor/cli@7.6.4':
     resolution: {integrity: sha512-lW692IiFQC5gd1fvMxrwLN3exS/Z9VmiCBL+k440edNSl4VxE+LhVmTXkqFg0tW46VJUbIdW3PXkx/Y64On7ag==}
@@ -4238,6 +4246,10 @@ snapshots:
   '@bramus/specificity@2.4.2':
     dependencies:
       css-tree: 3.2.1
+
+  '@capacitor/app@8.1.0(@capacitor/core@7.6.4)':
+    dependencies:
+      '@capacitor/core': 7.6.4
 
   '@capacitor/cli@7.6.4':
     dependencies:

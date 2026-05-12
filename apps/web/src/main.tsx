@@ -4,10 +4,15 @@ import { App } from './App';
 import { bootNotificationLayer } from './lib/push-register';
 import { installSavingsDigestLoop } from './lib/savings-digest';
 import { bootAccount } from './lib/account-boot';
+import { installDeeplinkHandler } from './lib/capacitor-deeplink';
 
 // Boot account layer (Credibility audit C2): wires @ollie/auth +
 // @ollie/sync + @ollie/research-stream into the running app. Idempotent.
 bootAccount();
+
+// iOS Siri App Intents → URL scheme → MicButton (Sprint 4 · E3).
+// No-op on web/desktop; Capacitor native only.
+void installDeeplinkHandler();
 import './design/tokens.css';
 import './design/animations.css';
 import './design/breakpoints.css';

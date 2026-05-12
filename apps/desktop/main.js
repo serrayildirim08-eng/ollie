@@ -278,16 +278,30 @@ if (gotTheLock) {
 
     // E3 · Mac hot-key for "Hey Ollie" equivalent. Renderer listens for
     // `ollie:hotkey` and triggers the MicButton's start flow.
-    try {
-      const ok = globalShortcut.register('CommandOrControl+Control+Space', () => {
-        focusMainWindow();
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('ollie:hotkey', { source: 'mac-shortcut' });
+    //
+    // Why not Cmd+Ctrl+Space? — that's the macOS Character Viewer
+    // (Emoji & Symbols) on stock macOS. Cmd+Space is Spotlight.
+    // Cmd+Shift+Space is the input-source switcher on multi-locale
+    // Macs (TR/EN). Cmd+Option+Space is generally free.
+    const combos = [
+      'CommandOrControl+Alt+Space',     // primary
+      'CommandOrControl+Shift+Period',  // backup
+    ];
+    for (const combo of combos) {
+      try {
+        const ok = globalShortcut.register(combo, () => {
+          focusMainWindow();
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('ollie:hotkey', { source: 'mac-shortcut', combo });
+          }
+        });
+        if (ok) {
+          console.log('[ollie] global shortcut registered:', combo);
+          break;
         }
-      });
-      if (!ok) console.warn('[ollie] global shortcut not registered (already in use?)');
-    } catch (err) {
-      console.warn('[ollie] globalShortcut.register failed', err && err.message);
+      } catch (err) {
+        console.warn('[ollie] globalShortcut.register failed for', combo, err && err.message);
+      }
     }
 
     app.on('activate', () => {

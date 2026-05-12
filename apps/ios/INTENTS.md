@@ -1,111 +1,75 @@
 # iOS App Intents · Hey Siri integration
 
-**Status:** Swift skeleton. Wires up once the Xcode project is generated
-via `pnpm cap add ios` (deferred — needs Apple Developer enrollment).
+**Status:** Xcode project + Swift App Intents + URL scheme + web deep-link handler all in place. The last step (build + install on a device) needs Apple Developer enrollment OR a 7-day free signing certificate.
 
-## Intent set (matches Sprint 4 E3 brief)
+## What's built
 
-| Intent             | Invocation phrase            | Outcome |
-|--------------------|------------------------------|---------|
-| OllieCaptureIntent | "Hey Siri, Ollie capture"    | open app with mic ready |
-| OllieRemindIntent  | "Hey Siri, Ollie remind"    | open admin reminder draft |
-| OllieDueIntent     | "Hey Siri, Ollie what's due" | open dashboard upcoming |
-
-## File to add inside the generated Xcode project
-
-Path: `apps/ios/App/App/OllieIntents.swift`
-
-```swift
-import AppIntents
-
-@available(iOS 16.0, *)
-struct OllieCaptureIntent: AppIntent {
-  static var title: LocalizedStringResource = "Ollie capture"
-  static var description = IntentDescription("open ollie ready to record")
-  static var openAppWhenRun: Bool = true
-
-  func perform() async throws -> some IntentResult {
-    // Capacitor sets a URL scheme (ollie://). The intent opens that
-    // URL with `?action=capture` so the web layer can route.
-    if let url = URL(string: "ollie://capture") {
-      await UIApplication.shared.open(url)
-    }
-    return .result()
-  }
-}
-
-@available(iOS 16.0, *)
-struct OllieRemindIntent: AppIntent {
-  static var title: LocalizedStringResource = "Ollie remind"
-  static var openAppWhenRun: Bool = true
-  func perform() async throws -> some IntentResult {
-    if let url = URL(string: "ollie://admin?action=remind") {
-      await UIApplication.shared.open(url)
-    }
-    return .result()
-  }
-}
-
-@available(iOS 16.0, *)
-struct OllieDueIntent: AppIntent {
-  static var title: LocalizedStringResource = "Ollie what's due"
-  static var openAppWhenRun: Bool = true
-  func perform() async throws -> some IntentResult {
-    if let url = URL(string: "ollie://dashboard?focus=upcoming") {
-      await UIApplication.shared.open(url)
-    }
-    return .result()
-  }
-}
-
-@available(iOS 16.0, *)
-struct OllieShortcuts: AppShortcutsProvider {
-  static var appShortcuts: [AppShortcut] {
-    AppShortcut(intent: OllieCaptureIntent(), phrases: [
-      "\(.applicationName) capture",
-      "capture in \(.applicationName)",
-    ])
-    AppShortcut(intent: OllieRemindIntent(), phrases: [
-      "\(.applicationName) remind",
-      "set a reminder in \(.applicationName)",
-    ])
-    AppShortcut(intent: OllieDueIntent(), phrases: [
-      "\(.applicationName) what's due",
-      "what's due in \(.applicationName)",
-    ])
-  }
-}
+```
+apps/ios/
+├── capacitor.config.json            # appId, URL scheme, plugins
+├── ios/App/App/
+│   ├── AppDelegate.swift             # Capacitor default (forwards URL opens)
+│   ├── Info.plist                    # mic + speech-recognition usage + URL types
+│   ├── OllieIntents.swift            # 3 App Intents + AppShortcutsProvider
+│   ├── capacitor.config.json
+│   └── public/                       # built web app
+└── www/                              # copy of apps/web/dist
 ```
 
-## Renderer-side handler
+## The three intents
 
-The web app already supports a deep-link router. Wire `ollie://capture`
-into the brain-dump path: on app open with that URL, call
-`startVoiceCapture()` from `voice-capture.ts` with `source: 'siri'`.
+| Intent             | Phrase                          | Outcome                              |
+|--------------------|---------------------------------|--------------------------------------|
+| OllieCaptureIntent | "Hey Siri, Ollie capture"       | open app → mic auto-starts via deep link |
+| OllieRemindIntent  | "Hey Siri, Ollie remind"        | open app → admin draft               |
+| OllieDueIntent     | "Hey Siri, Ollie what's due"    | open app → dashboard upcoming        |
 
-Pseudocode for `apps/web/src/main.tsx` after Capacitor is wired:
+## Deep-link flow
 
-```ts
-Capacitor.addListener('appUrlOpen', ({ url }) => {
-  if (url.startsWith('ollie://capture')) {
-    // dispatch a custom event the MicButton listens for
-    window.dispatchEvent(new CustomEvent('ollie:siri-capture'));
-  }
-});
+1. Siri runs the intent → `UIApplication.shared.open("ollie://capture")`.
+2. iOS launches the app (or foregrounds it).
+3. AppDelegate forwards the URL to Capacitor.
+4. Capacitor fires `appUrlOpen` → `apps/web/src/lib/capacitor-deeplink.ts` handles it.
+5. `ollie://capture` dispatches the custom `ollie:siri-capture` window event.
+6. `MicButton` is listening → calls `start()` → mic recording begins.
+
+The web event chain is already wired in `apps/web/src/main.tsx` and `MicButton.tsx`.
+
+## Final step (Serra) — open the project in Xcode
+
+```sh
+# 1. Make sure CocoaPods is installed (one-time):
+brew install cocoapods   # ← already done
+
+# 2. Point xcode-select at full Xcode (NOT command-line tools):
+sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+
+# 3. Install pods + open:
+cd ~/ollie/apps/ios/ios/App
+pod install
+open App.xcworkspace
 ```
 
-## Deferred until Apple Developer enrollment
+In Xcode:
 
-- iOS App ID `app.ollie.ollie` needs Push Notifications + Background
-  Modes (Audio for SFSpeech) capabilities enabled.
-- App Intents require iOS 16+ deployment target — already the default.
-- Siri donation: `OllieShortcuts.updateAppShortcutParameters()` after
-  signin so the suggestions surface.
+1. **Add `OllieIntents.swift` to the App target** — drag from `App/App/OllieIntents.swift` into the App target if not already in Compile Sources.
+2. **Set deployment target to iOS 16+** — required for App Intents.
+3. **Capabilities → Push Notifications → on** (for APNs, Sprint 5).
+4. **Sign with your Apple Developer team** (free 7-day for testing, paid $99/yr for App Store).
+5. **Build + run on a connected device.** First launch prompts for mic + speech permission (Info.plist usage strings in place).
 
-## Why Mac shipped this sprint and iOS didn't
+## Test
 
-Mac via `globalShortcut.register('CommandOrControl+Control+Space')` in
-Electron's main process requires no Apple Developer enrollment and no
-Xcode project. iOS App Intents need the Xcode project + a paid
-Developer account. Mac ships now; iOS waits for the same enrollment
-that unblocks APNs (Sprint 5).
+Once installed on device:
+
+```
+"Hey Siri, Ollie capture"
+```
+
+→ Ollie opens. Within ~250ms the mic starts recording. Speak. Tap mic or pause ~3s; transcript routes through the dissection pipeline.
+
+`ollie://capture` can also be tested without Siri:
+
+```sh
+xcrun simctl openurl booted "ollie://capture"
+```

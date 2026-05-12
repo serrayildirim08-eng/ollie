@@ -12,6 +12,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@capacitor/app": "^8.1.0",
     "@ollie/api": "workspace:*",
     "@ollie/auth": "workspace:*",
     "@ollie/backup": "workspace:*",

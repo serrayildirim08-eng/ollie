@@ -7,6 +7,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { startVoiceCapture, voiceCaptureSupported } from '../lib/voice-capture';
+import { SIRI_CAPTURE_EVENT } from '../lib/capacitor-deeplink';
 
 export interface MicButtonProps {
   onTranscript: (text: string) => void;
@@ -33,13 +34,18 @@ export function MicButton({ onTranscript, source = 'mic-button', style }: MicBut
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recording]);
 
-  // Web hotkey · cmd+shift+space (Mac) / ctrl+shift+space (Win/Linux).
+  // Web hotkey · cmd+option+space (Mac) / ctrl+alt+space (Win/Linux).
   // Works in any browser when the page has focus — equivalent to the
-  // "hey ollie" Electron globalShortcut for browser users.
+  // "hey ollie" Electron globalShortcut for browser users. Combo
+  // choice avoids Mac collisions:
+  //   - cmd+space  → Spotlight
+  //   - cmd+shift+space → input-source switcher (TR/EN)
+  //   - cmd+ctrl+space → Character Viewer
+  //   - cmd+option+space → free
   useEffect(() => {
     function onKey(e: KeyboardEvent): void {
       if (e.code !== 'Space') return;
-      if (!e.shiftKey) return;
+      if (!e.altKey) return;
       if (!(e.metaKey || e.ctrlKey)) return;
       // Don't fire while user is typing in an input/textarea
       const t = e.target as HTMLElement | null;
@@ -50,6 +56,17 @@ export function MicButton({ onTranscript, source = 'mic-button', style }: MicBut
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recording]);
+
+  // iOS Siri intent → custom window event. When "Hey Siri, Ollie
+  // capture" fires, the AppDelegate opens ollie://capture, the
+  // capacitor-deeplink handler dispatches SIRI_CAPTURE_EVENT, and
+  // this listener triggers start() the same as the floating mic.
+  useEffect(() => {
+    function onSiri(): void { if (!recording) void start(); }
+    window.addEventListener(SIRI_CAPTURE_EVENT, onSiri as EventListener);
+    return () => window.removeEventListener(SIRI_CAPTURE_EVENT, onSiri as EventListener);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recording]);
 
