@@ -18,6 +18,7 @@
 import React, { useReducer, useRef, useEffect } from 'react';
 import { Burhan3D } from '../components/Burhan3D';
 import { store } from '../store';
+import { SUPPORTED_COUNTRIES, detectCountryFromLocale } from '../lib/country';
 
 // ─── types ──────────────────────────────────────────────────────────────────
 
@@ -30,6 +31,7 @@ interface PetDraft {
 interface State {
   screen: number;
   name: string;
+  country: string;
   hasPets: boolean | null;
   petDrafts: PetDraft[];
   pantryItems: string[];
@@ -43,6 +45,7 @@ interface State {
 
 type Action =
   | { type: 'SET_NAME'; value: string }
+  | { type: 'SET_COUNTRY'; value: string }
   | { type: 'SET_HAS_PETS'; value: boolean }
   | { type: 'ADD_PET' }
   | { type: 'UPDATE_PET'; index: number; field: 'name' | 'species'; value: string }
@@ -75,6 +78,9 @@ const WORK_TIMES = [
   { id: 'all_over',   label: 'all over the place' },
 ];
 
+// F3 (Sprint 5): SUPPORTED_COUNTRIES + detectCountryFromLocale live in
+// ../lib/country.ts so tests can import them without pulling in Burhan3D.
+
 // ─── reducer ─────────────────────────────────────────────────────────────────
 
 function uid(): string {
@@ -85,6 +91,8 @@ function reducer(state: State, action: Action): State {
   switch (action.type) {
     case 'SET_NAME':
       return { ...state, name: action.value };
+    case 'SET_COUNTRY':
+      return { ...state, country: action.value };
     case 'SET_HAS_PETS':
       return { ...state, hasPets: action.value };
     case 'ADD_PET':
@@ -139,6 +147,7 @@ function reducer(state: State, action: Action): State {
 const INITIAL: State = {
   screen: 0,
   name: '',
+  country: detectCountryFromLocale(),
   hasPets: null,
   petDrafts: [],
   pantryItems: [...DEFAULT_PANTRY],
@@ -161,6 +170,9 @@ function commitAll(state: State): void {
   store.set('shared', 'settings.has_pets', state.hasPets ?? false);
   store.set('shared', 'settings.work_time', state.workTime || null);
   store.set('shared', 'settings.cycle_tracking', state.cycleTracking || null);
+  // F3 (Sprint 5): country drives crisis hotline selection. INTL = no
+  // specific country, fall through to global directory.
+  store.set('shared', 'settings.country', state.country || 'INTL');
   store.set('shared', 'onboarded', true);
 
   // shared.consent — dotted keys match Garden gate + research-stream client.
@@ -419,10 +431,54 @@ function WelcomeScreen({
           outline: 'none',
           width: '100%',
           maxWidth: '360px',
-          marginBottom: '32px',
+          marginBottom: '24px',
           letterSpacing: '0.04em',
         }}
       />
+
+      {/* F3 (Sprint 5): country picker — auto-detected from browser locale.
+          Used by the crisis hotline path so the right number shows up. */}
+      <div style={{ marginBottom: '32px' }}>
+        <label
+          htmlFor="onb-country"
+          style={{
+            display: 'block',
+            fontFamily: "'DM Mono', monospace",
+            fontSize: 'var(--t-meta)',
+            letterSpacing: 'var(--ls-caps-small)',
+            textTransform: 'uppercase',
+            color: 'var(--ink-faint)',
+            marginBottom: '6px',
+          }}
+        >
+          where are you?
+        </label>
+        <select
+          id="onb-country"
+          value={state.country}
+          onChange={(e) => dispatch({ type: 'SET_COUNTRY', value: e.target.value })}
+          aria-label="country"
+          style={{
+            fontFamily: "'DM Mono', monospace",
+            fontSize: 'var(--t-caption)',
+            padding: '10px 0',
+            border: 'none',
+            borderBottom: '1px solid var(--rule)',
+            background: 'transparent',
+            color: 'var(--ink)',
+            outline: 'none',
+            width: '100%',
+            maxWidth: '360px',
+            letterSpacing: '0.04em',
+            cursor: 'pointer',
+          }}
+        >
+          {SUPPORTED_COUNTRIES.map((c) => (
+            <option key={c.code} value={c.code}>{c.label}</option>
+          ))}
+        </select>
+      </div>
+
       <PrimaryBtn label="let's go" onClick={onNext} />
     </>
   );

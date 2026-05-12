@@ -50,7 +50,10 @@ export function useApplyBrainDump(): (text: string, fromRect?: DOMRect) => Promi
   const toast = useToast();
   const [settings] = useStoreSlice<{ locale?: string; country?: string }>('shared', 'settings', {});
   const locale = (settings?.locale ?? 'en') as Locale;
-  const country = settings?.country ?? 'TR';
+  // F3 (Sprint 5): no hardcoded TR fallback. If country is null/unset
+  // we fall through to crisis.hotline_INTL below (global directory).
+  // Onboarding now sets this via browser-locale detection + manual picker.
+  const country = settings?.country ?? null;
 
   return useCallback(
     async (text: string, fromRect?: DOMRect): Promise<void> => {
@@ -58,8 +61,10 @@ export function useApplyBrainDump(): (text: string, fromRect?: DOMRect) => Promi
       const { match, line } = detectCrisis(text);
       if (match) {
         emit('void:crisis:detected', { text, matchedLine: line, ts: Date.now() });
-        const hotlineKey =
-          COUNTRY_TO_HOTLINE_KEY[(country || '').toUpperCase()] ?? 'crisis.hotline_INTL';
+        const upper = (country || '').toUpperCase();
+        const hotlineKey = upper && COUNTRY_TO_HOTLINE_KEY[upper]
+          ? COUNTRY_TO_HOTLINE_KEY[upper]
+          : 'crisis.hotline_INTL';
         const opener = getString(locale, 'crisis.opener_no_name');
         const hotline = getString(locale, hotlineKey);
         const close = getString(locale, 'crisis.close');
