@@ -101,7 +101,10 @@ function startWeb(cb: VoiceCaptureCallbacks): VoiceCaptureSession {
   // shared.settings.recognizer_locale.
   rec.lang = 'en-US';
   rec.interimResults = true;
-  rec.continuous = false;
+  // continuous=true: the recognizer keeps listening across natural
+  // pauses instead of cutting off after the first silence. We end
+  // explicitly via stop() or the 30s cap below.
+  rec.continuous = true;
 
   let stopped = false;
   let finalBuf = '';
