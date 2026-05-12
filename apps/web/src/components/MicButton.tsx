@@ -94,7 +94,7 @@ export function MicButton({ onTranscript, source = 'mic-button', style }: MicBut
           animation: recording ? 'mic-pulse 1.4s ease-in-out infinite' : undefined,
         }}
       >
-        {recording ? '■' : '🎙'}
+        {recording ? <StopIcon /> : <MicIcon />}
       </button>
       <style>{`
         @keyframes mic-pulse {
@@ -106,18 +106,36 @@ export function MicButton({ onTranscript, source = 'mic-button', style }: MicBut
   );
 }
 
+// Editorial SVG glyphs — replaces the emoji button (NL3).
+// Hairline strokes match the design system's quiet feel.
+function MicIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <rect x="9" y="3" width="6" height="11" rx="3" stroke="currentColor" strokeWidth="1.4" />
+      <path d="M5 11a7 7 0 0 0 14 0" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      <line x1="12" y1="18" x2="12" y2="21" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function StopIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+      <rect x="1" y="1" width="12" height="12" rx="2" fill="currentColor" />
+    </svg>
+  );
+}
+
 const buttonStyle: React.CSSProperties = {
   width: 56,
   height: 56,
   borderRadius: 28,
   border: '1px solid rgba(0,0,0,0.12)',
-  fontSize: 22,
   cursor: 'pointer',
   backdropFilter: 'blur(16px)',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  fontFamily: 'system-ui',
 };
 
 const transcriptStyle: React.CSSProperties = {
