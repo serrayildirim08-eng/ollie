@@ -53,6 +53,76 @@ const SUPABASE_CONFIGURED = Boolean(
   (import.meta as unknown as { env?: { VITE_SUPABASE_URL?: string } }).env?.VITE_SUPABASE_URL,
 );
 
+if (!SUPABASE_CONFIGURED && typeof console !== 'undefined') {
+  // Loud once per page load — paired with the DevModeBanner UI so a
+  // dev never silently runs without auth.
+  console.warn('[ollie] VITE_SUPABASE_URL missing — auth disabled, sync inactive');
+}
+
+// Fix 5: when the auth gate is skipped, surface a tiny sage banner so
+// Serra never confuses a missing-env build with a real authenticated
+// session. Dismissible-per-session via sessionStorage.
+const DEV_BANNER_DISMISS_KEY = 'ollie:dev-mode-banner:dismissed';
+
+function DevModeBanner() {
+  const [dismissed, setDismissed] = React.useState<boolean>(() => {
+    try { return sessionStorage.getItem(DEV_BANNER_DISMISS_KEY) === '1'; } catch { return false; }
+  });
+  if (dismissed) return null;
+
+  const onDismiss = () => {
+    try { sessionStorage.setItem(DEV_BANNER_DISMISS_KEY, '1'); } catch { /* non-fatal */ }
+    setDismissed(true);
+  };
+
+  return (
+    <div
+      role="status"
+      aria-label="dev mode banner"
+      style={{
+        position: 'fixed',
+        bottom: 12,
+        left: 12,
+        zIndex: 10000,
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 10,
+        padding: '6px 10px',
+        background: 'rgba(123, 154, 134, 0.14)',
+        color: '#5e7d6c',
+        border: '1px solid rgba(123, 154, 134, 0.32)',
+        borderRadius: 4,
+        fontFamily: "'DM Mono', monospace",
+        fontSize: 10,
+        letterSpacing: '0.16em',
+        textTransform: 'lowercase',
+        backdropFilter: 'blur(6px)',
+        WebkitBackdropFilter: 'blur(6px)',
+      }}
+    >
+      <span>dev mode · no auth</span>
+      <button
+        type="button"
+        onClick={onDismiss}
+        aria-label="dismiss dev mode banner"
+        style={{
+          background: 'transparent',
+          border: 'none',
+          color: 'inherit',
+          fontFamily: 'inherit',
+          fontSize: 'inherit',
+          letterSpacing: 'inherit',
+          cursor: 'pointer',
+          padding: '0 2px',
+          lineHeight: 1,
+        }}
+      >
+        ×
+      </button>
+    </div>
+  );
+}
+
 function AppInner() {
   // Auth gate: unauthenticated users see AuthFlow first.
   // bootAccount is idempotent — main.tsx also calls it.
@@ -147,6 +217,7 @@ function AppInner() {
         />
         <ToastHost />
         <ChipFlyHost />
+        {!SUPABASE_CONFIGURED && <DevModeBanner />}
       </>
     );
   }
@@ -166,6 +237,7 @@ function AppInner() {
         {content}
         <ToastHost />
         <ChipFlyHost />
+        {!SUPABASE_CONFIGURED && <DevModeBanner />}
       </>
     );
   }
@@ -423,6 +495,7 @@ function AppInner() {
           void apply(text);
         }} />
       )}
+      {!SUPABASE_CONFIGURED && <DevModeBanner />}
     </>
   );
 }
