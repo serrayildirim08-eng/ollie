@@ -1,5 +1,5 @@
 /**
- * @ollie/auth · C5 tests
+ * @ollie/auth · Pattern A tests (Sprint 5 · F1)
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
@@ -12,7 +12,10 @@ interface FakeApiState {
   signInResult: { ok: boolean; status?: number; data?: unknown; code?: string };
   signOutCalled: number;
   upsertedProfiles: unknown[];
-  profileSaltLookup: { [userId: string]: string };
+  /** Captured signUp/signIn args so tests can introspect what was sent. */
+  signUpCalls: Array<{ email: string; password: string }>;
+  signInCalls: Array<{ email: string; password: string }>;
+  profileLookup: { [userId: string]: { salt?: string; encrypted_server_pw?: string } };
 }
 
 function makeFakeApi(state: FakeApiState): OllieAPI {
@@ -29,8 +32,8 @@ function makeFakeApi(state: FakeApiState): OllieAPI {
           if (table === 'profiles') {
             const m = String(opts?.params?.id ?? '').match(/eq\.(.+)/);
             const userId = m?.[1];
-            if (userId && state.profileSaltLookup[userId]) {
-              return { ok: true, status: 200, data: [{ salt: state.profileSaltLookup[userId] }] };
+            if (userId && state.profileLookup[userId]) {
+              return { ok: true, status: 200, data: [state.profileLookup[userId]] };
             }
             return { ok: true, status: 200, data: [] };
           }
@@ -48,13 +51,19 @@ function makeFakeApi(state: FakeApiState): OllieAPI {
       },
       auth: {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        signUp: vi.fn(async () => state.signUpResult.ok
-          ? { ok: true, status: 200, data: state.signUpResult.data }
-          : { ok: false, error: { code: state.signUpResult.code ?? 'http', status: state.signUpResult.status ?? 400, message: 'x' } }) as any,
+        signUp: vi.fn(async (email: string, password: string) => {
+          state.signUpCalls.push({ email, password });
+          return state.signUpResult.ok
+            ? { ok: true, status: 200, data: state.signUpResult.data }
+            : { ok: false, error: { code: state.signUpResult.code ?? 'http', status: state.signUpResult.status ?? 400, message: 'x' } };
+        }) as any,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        signInWithPassword: vi.fn(async () => state.signInResult.ok
-          ? { ok: true, status: 200, data: state.signInResult.data }
-          : { ok: false, error: { code: state.signInResult.code ?? 'http', status: state.signInResult.status ?? 400, message: 'x' } }) as any,
+        signInWithPassword: vi.fn(async (email: string, password: string) => {
+          state.signInCalls.push({ email, password });
+          return state.signInResult.ok
+            ? { ok: true, status: 200, data: state.signInResult.data }
+            : { ok: false, error: { code: state.signInResult.code ?? 'http', status: state.signInResult.status ?? 400, message: 'x' } };
+        }) as any,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         refresh: vi.fn() as any,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -74,7 +83,9 @@ beforeEach(() => {
     signInResult: { ok: true, data: { user: { id: 'user-1' }, session: { access_token: 'a2', refresh_token: 'r2' } } },
     signOutCalled: 0,
     upsertedProfiles: [],
-    profileSaltLookup: {},
+    signUpCalls: [],
+    signInCalls: [],
+    profileLookup: {},
   };
 });
 
@@ -126,13 +137,30 @@ describe('auth · signUp', () => {
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.code).toBe('no-consent');
   });
+
+  it('passes a random server password (NOT the passphrase) to Supabase', async () => {
+    const auth = createAuthClient({ store, api: makeFakeApi(fakeState) });
+    const passphrase = 'correct-horse-battery-staple-x';
+    await auth.signUp({
+      email: 'serra@example.com',
+      passphrase,
+      passphraseConfirm: passphrase,
+      acknowledged_unrecoverable: true,
+    });
+    expect(fakeState.signUpCalls.length).toBe(1);
+    const sent = fakeState.signUpCalls[0].password;
+    expect(sent).not.toBe(passphrase);
+    expect(sent).not.toContain(passphrase);
+    // 32 bytes hex = 64 chars
+    expect(sent).toMatch(/^[0-9a-f]{64}$/);
+  });
 });
 
 describe('auth · signIn', () => {
-  it('happy path with salt in localStorage', async () => {
+  it('happy path with salt + encrypted_server_pw in localStorage', async () => {
     const api = makeFakeApi(fakeState);
     const auth = createAuthClient({ store, api, now: () => 1000 });
-    // signUp first to populate salt
+    // signUp first to populate salt + encrypted server pw
     await auth.signUp({
       email: 'serra@example.com',
       passphrase: 'correct-horse-battery-staple-x',
@@ -147,15 +175,26 @@ describe('auth · signIn', () => {
     expect(auth.state().unlocked).toBe(true);
   });
 
-  it('wrong email → wrong-passphrase code (400 from server)', async () => {
-    fakeState.signInResult = { ok: false, status: 400, code: 'http' };
-    const auth = createAuthClient({ store, api: makeFakeApi(fakeState) });
-    const r = await auth.signIn({ email: 'nope@example.com', passphrase: 'correct-horse-battery-staple-x' });
+  it('wrong passphrase → fails LOCALLY without calling Supabase', async () => {
+    const api = makeFakeApi(fakeState);
+    const auth = createAuthClient({ store, api, now: () => 1000 });
+    await auth.signUp({
+      email: 'serra@example.com',
+      passphrase: 'correct-horse-battery-staple-x',
+      passphraseConfirm: 'correct-horse-battery-staple-x',
+      acknowledged_unrecoverable: true,
+    });
+    await auth.signOut();
+    fakeState.signInCalls.length = 0;
+
+    const r = await auth.signIn({ email: 'serra@example.com', passphrase: 'wrong-wrong-wrong-wrong-x' });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.code).toBe('wrong-passphrase');
+    // CRITICAL: Supabase auth was never contacted on wrong passphrase.
+    expect(fakeState.signInCalls.length).toBe(0);
   });
 
-  it('missing salt → missing-salt error', async () => {
+  it('new device with no local data → no-device-data', async () => {
     fakeState.signInResult = { ok: true, data: { user: { id: 'user-2' }, session: { access_token: 'a', refresh_token: 'r' } } };
     const auth = createAuthClient({ store, api: makeFakeApi(fakeState) });
     const r = await auth.signIn({ email: 'unknown@example.com', passphrase: 'correct-horse-battery-staple-x' });
@@ -163,20 +202,34 @@ describe('auth · signIn', () => {
     if (!r.ok) expect(r.code).toBe('missing-salt');
   });
 
-  it('falls back to fetching salt from profiles table', async () => {
-    // Pre-populate the server-side profile with a salt the auth client can fetch.
-    fakeState.profileSaltLookup['user-2'] = 'AAAAAAAAAAAAAAAAAAAAAA==';
-    fakeState.signInResult = { ok: true, data: { user: { id: 'user-2' }, session: { access_token: 'a', refresh_token: 'r' } } };
+  it('passes decrypted server password (NOT the passphrase) to Supabase', async () => {
+    const api = makeFakeApi(fakeState);
+    const auth = createAuthClient({ store, api, now: () => 1000 });
+    const passphrase = 'correct-horse-battery-staple-x';
+    await auth.signUp({
+      email: 'serra@example.com',
+      passphrase,
+      passphraseConfirm: passphrase,
+      acknowledged_unrecoverable: true,
+    });
+    const serverPwSent = fakeState.signUpCalls[0].password;
 
-    const auth = createAuthClient({ store, api: makeFakeApi(fakeState) });
-    const r = await auth.signIn({ email: 'roaming@example.com', passphrase: 'correct-horse-battery-staple-x' });
+    await auth.signOut();
+    fakeState.signInCalls.length = 0;
+
+    const r = await auth.signIn({ email: 'serra@example.com', passphrase });
     expect(r.ok).toBe(true);
-    expect(auth.state().unlocked).toBe(true);
+    expect(fakeState.signInCalls.length).toBe(1);
+    const signInPw = fakeState.signInCalls[0].password;
+    expect(signInPw).not.toBe(passphrase);
+    expect(signInPw).not.toContain(passphrase);
+    // Should decrypt to the SAME server password we generated at signUp.
+    expect(signInPw).toBe(serverPwSent);
   });
 });
 
 describe('auth · signOut', () => {
-  it('drops in-memory key + clears session, salt remains', async () => {
+  it('drops in-memory key + clears session, salt + encrypted_server_pw remain', async () => {
     const auth = createAuthClient({ store, api: makeFakeApi(fakeState) });
     await auth.signUp({
       email: 'serra@example.com',
@@ -190,5 +243,7 @@ describe('auth · signOut', () => {
     expect(auth.state().session).toBeNull();
     // salt persists for next sign-in on this device
     expect(store.get('shared', 'shared.auth.salt', null)).not.toBeNull();
+    // encrypted server pw also persists
+    expect(store.get('shared', 'shared.auth.encrypted_server_pw', null)).not.toBeNull();
   });
 });
