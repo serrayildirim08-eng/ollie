@@ -15,6 +15,8 @@ import { BrainDumpInput } from './components/BrainDumpInput';
 import { ChipFlyHost, chipFly } from './components/ChipFly';
 import { OnboardingScreen } from './pages/OnboardingScreen';
 import { useApplyBrainDump } from './hooks/useApplyBrainDump';
+import { trackSession } from './lib/retention';
+import { emit as emitEvent } from '@ollie/events';
 
 // ─── lazy page imports ────────────────────────────────────────────────────────
 
@@ -60,6 +62,14 @@ function AppInner() {
     });
     return () => off();
   }, [toast]);
+
+  // Retention markers — fires once per app mount. Emits
+  // void:retention:installed on fresh install, session_started every
+  // time, d1_returned the first time the user comes back ≥24h after
+  // install, d7_returned at ≥7d. Local-only until backend lands.
+  React.useEffect(() => {
+    trackSession(store, emitEvent);
+  }, []);
 
   const apply = useApplyBrainDump();
 

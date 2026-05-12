@@ -221,4 +221,11 @@ export const REGISTRY: Registry = {
 
   // ─── Sprint 4 / E8 · grocery interest capture ───────────────────
   'grocery:interest_capture_detected': { payload: '{ category: string, count: number, window_days: number, ts: number }' },
+
+  // ─── retention telemetry (local-only until backend Group C ships) ────────
+  // Local-first: backend may pick these up via research-stream later.
+  'void:retention:installed':          { payload: '{ installed_at: number, source: "fresh"|"reinstall", ts: number }' },
+  'void:retention:session_started':    { payload: '{ session_count: number, hours_since_install: number, ts: number }' },
+  'void:retention:d1_returned':        { payload: '{ installed_at: number, returned_at: number, hours: number }' },
+  'void:retention:d7_returned':        { payload: '{ installed_at: number, returned_at: number, days: number }' },
 };
