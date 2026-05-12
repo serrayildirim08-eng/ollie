@@ -14,9 +14,11 @@ import { Burhan3D } from './components/Burhan3D';
 import { BrainDumpInput } from './components/BrainDumpInput';
 import { ChipFlyHost, chipFly } from './components/ChipFly';
 import { OnboardingScreen } from './pages/OnboardingScreen';
+import { AuthFlow } from './components/AuthFlow';
 import { useApplyBrainDump } from './hooks/useApplyBrainDump';
 import { trackSession } from './lib/retention';
 import { emit as emitEvent } from '@ollie/events';
+import { bootAccount } from './lib/account-boot';
 
 // ─── lazy page imports ────────────────────────────────────────────────────────
 
@@ -42,6 +44,11 @@ const SAMPLE_STARTS = [0, 28, 56, 84, 112, 140].map((d) => ({
 const samplePrediction = cycle.predictNextPeriod(cycle.detectBoundaries(SAMPLE_STARTS));
 
 function AppInner() {
+  // Auth gate: unauthenticated users see AuthFlow first.
+  // bootAccount is idempotent — main.tsx also calls it.
+  const accountRef = React.useRef(bootAccount());
+  const [authed, setAuthed] = useState<boolean>(() => Boolean(accountRef.current.auth.state().session));
+
   // First-launch detection: check onboarded flag before any other screen
   const onboardedRaw = store.get<boolean>('shared', 'onboarded', false);
   const [onboarded, setOnboarded] = useState<boolean>(Boolean(onboardedRaw));
@@ -82,6 +89,22 @@ function AppInner() {
   };
 
   let content: React.ReactNode;
+
+  // Auth gate runs BEFORE onboarding. A session is required to encrypt
+  // anything (sync/backup/research). Sign-up + sign-in is Pattern A:
+  // passphrase never leaves the device.
+  if (!authed) {
+    return (
+      <>
+        <AuthFlow
+          auth={accountRef.current.auth}
+          onAuthenticated={() => setAuthed(true)}
+        />
+        <ToastHost />
+        <ChipFlyHost />
+      </>
+    );
+  }
 
   // Show onboarding before any other screen on first launch
   if (!onboarded) {
