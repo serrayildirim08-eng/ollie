@@ -204,7 +204,12 @@ export function fallbackRoute(text: string): Route {
       const cm = clause.match(new RegExp(`(\\d+)\\s*(?:super|regular|light|ultra|heavy)?\\s*${tail}`, 'i'));
       const count = cm ? parseInt(cm[1], 10) : (/\bbox\b|\bpack\b/.test(clause) ? 20 : 1);
       if (boughtHere) {
+        // Bought period product: log to cycle productUse AND restock
+        // the grocery pantry. Pantry uses module='grocery' action='log'
+        // (see applyRoute) — different from action='add' which puts
+        // it on the shopping list.
         pushEvent({ module: 'cycle', action: 'productUse', data: `${count} ${p.label}`, productType: p.type, productCount: count });
+        pushEvent({ module: 'grocery', action: 'log', data: p.label });
       } else if (needHere) {
         pushEvent({ module: 'grocery', action: 'add', data: `${count > 1 ? `${count} ` : ''}${p.label}` });
       } else {

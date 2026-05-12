@@ -104,6 +104,13 @@ describe('dissection.extract · products', () => {
     expect(e?.productType).toBe('tampon');
     expect(e?.productCount).toBe(20);
   });
+
+  it('"bought tampons" ALSO restocks the pantry (grocery log)', () => {
+    const events = asEvents(extract('bought tampons'));
+    const pantry = events.find(x => x.module === 'grocery' && x.action === 'log');
+    expect(pantry).toBeDefined();
+    expect(pantry?.data).toBe('tampons');
+  });
 });
 
 // ─── daysAgo stamping ────────────────────────────────────────────────────────
