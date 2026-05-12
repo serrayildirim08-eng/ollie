@@ -3,6 +3,7 @@ import { FrostedCard } from '../components/FrostedCard';
 import { BrainDumpInput } from '../components/BrainDumpInput';
 import { ModuleHelp } from '../components/ModuleHelp';
 import { getString } from '../i18n';
+import { useStoreSlice } from '../store';
 
 // ─── lazy module imports ──────────────────────────────────────────────────────
 
@@ -105,6 +106,12 @@ export function ModuleScreen({
   children,
 }: ModuleScreenProps) {
   const cfg = getBgConfig(moduleId);
+  // Fix 4: consent gates for cycle + astrology entry. If consent is off
+  // (user toggled off in Settings post-onboarding), redirect to dashboard
+  // rather than render the module. The Settings toggle is the single
+  // source of truth — opt out hides + silences.
+  const [cycleConsent] = useStoreSlice<boolean>('shared', 'consent.cycle', false);
+  const [astroConsent] = useStoreSlice<boolean>('shared', 'consent.astrology', false);
 
   // Sleep: full-screen takeover — owns its own paper/ink layout
   if (moduleId === 'sleep') {
@@ -130,8 +137,13 @@ export function ModuleScreen({
     );
   }
 
-  // Cycle: full-screen takeover with its own ceramic header — bypass wrapper
+  // Cycle: full-screen takeover with its own ceramic header — bypass wrapper.
+  // Gated on consent.cycle (Fix 4) — opt out hides the module entirely.
   if (moduleId === 'cycle') {
+    if (!cycleConsent) {
+      onNavigate('dashboard');
+      return null;
+    }
     return (
       <>
         <Suspense fallback={<ModuleLoading />}>
@@ -190,12 +202,14 @@ export function ModuleScreen({
     );
   }
 
-  // Astrology: cut from launch — only accessible with ?astrology=1
+  // Astrology: cut from launch — only accessible with ?astrology=1 AND
+  // consent.astrology toggled on in Settings (Fix 4). Either gate failing
+  // redirects to dashboard silently.
   if (moduleId === 'astrology') {
-    const astrologyEnabled =
+    const urlGate =
       typeof window !== 'undefined' &&
       new URLSearchParams(window.location.search).get('astrology') === '1';
-    if (!astrologyEnabled) {
+    if (!urlGate || !astroConsent) {
       // Silently redirect to dashboard rather than showing a dead page.
       onNavigate('dashboard');
       return null;

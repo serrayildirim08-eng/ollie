@@ -125,6 +125,10 @@ export function DashboardScreen({ onNavigate, onBrainDump, stats }: DashboardScr
     .toLowerCase();
 
   const [hasPets] = useStoreSlice<boolean>('shared', 'settings.has_pets', true);
+  // Fix 4: consent.cycle gates the cycle sub-tile inside the body cluster.
+  // Default matches SettingsScreen (false) — onboarding sets it explicitly
+  // based on the user's cycle-tracking answer.
+  const [cycleConsent] = useStoreSlice<boolean>('shared', 'consent.cycle', false);
   const [burhanState] = useStoreSlice<BurhanState>('burhan', 'state', { events: [] });
   const recentBurhanEvents = useMemo(() => lastN(burhanState, 12), [burhanState]);
   const pendingCounts = usePendingCounts();
@@ -149,16 +153,20 @@ export function DashboardScreen({ onNavigate, onBrainDump, stats }: DashboardScr
     return `${Math.floor(mins / 60)}h ${mins % 60}m`;
   })();
 
-  // Filter pets out of home cluster if has_pets is false
+  // Filter pets out of home cluster if has_pets is false.
+  // Filter cycle out of body cluster if consent.cycle is false (Fix 4).
   const clusters = useMemo<Cluster[]>(
     () =>
       CLUSTERS.map((c) => {
         if (c.id === 'home' && !hasPets) {
           return { ...c, subModules: c.subModules.filter((s) => s.id !== 'pets') };
         }
+        if (c.id === 'body' && !cycleConsent) {
+          return { ...c, subModules: c.subModules.filter((s) => s.id !== 'cycle') };
+        }
         return c;
       }),
-    [hasPets],
+    [hasPets, cycleConsent],
   );
 
   return (

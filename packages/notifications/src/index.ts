@@ -262,6 +262,27 @@ export async function notify(spec: NotificationSpec): Promise<NotificationDispat
   const fireAt = coerceScheduleAt(spec.schedule_at);
 
   if (state.store) {
+    // Fix 4: gate astrology / daily-reading deliveries on consent.astrology.
+    // The Settings toggle is the single source of truth — opt out silences
+    // the daily reading even if upstream scheduled it before opt-out.
+    const feature = (spec.extra as { feature?: string } | undefined)?.feature ?? '';
+    const isAstrologyFeature =
+      feature === 'daily-reading' || feature === 'astrology' || feature === 'transit-ping';
+    if (isAstrologyFeature) {
+      const astroConsent = state.store.get<boolean>('shared', 'consent.astrology', false);
+      if (!astroConsent) {
+        appendLog(state.store, {
+          ts: now,
+          dedupe_key: spec.dedupe_key,
+          category: spec.category,
+          title: spec.title,
+          delivered: false,
+          reason: 'muted',
+        });
+        return { delivered: false, reason: 'muted' };
+      }
+    }
+
     if (isRecentlySeen(state.store, spec.dedupe_key, now)) {
       const entry: NotificationLogEntry = {
         ts: now,
