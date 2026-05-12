@@ -68,6 +68,7 @@ function AppInner() {
   const [screen, setScreen] = useState<Screen>('home');
   const [selectedModule, setSelectedModule] = useState<string>('');
   const [visits, setVisits] = useStoreSlice<number>('shared', 'visit_count', 0);
+  const [consent] = useStoreSlice<boolean>('shared', 'consent.spending_research', false);
   const toast = useToast();
   const demoTileRef = React.useRef<HTMLDivElement>(null);
 
@@ -88,6 +89,38 @@ function AppInner() {
   // install, d7_returned at ≥7d. Local-only until backend lands.
   React.useEffect(() => {
     trackSession(store, emitEvent);
+  }, []);
+
+  // F5 (Sprint 5): global reduce-motion-today.
+  // Cross-module router writes shared.reduce_motion_today when a
+  // pacing breach fires. Apply globally as a CSS variable + data attr
+  // so transitions tagged with the duration vars short-circuit to 0ms
+  // for the day. No banner, just a quieter app surface.
+  React.useEffect(() => {
+    function applyReduceMotion(): void {
+      if (typeof document === 'undefined') return;
+      const value = store.get<unknown[]>('shared', 'reduce_motion_today', []) ?? [];
+      const active = Array.isArray(value) ? value.length > 0 : !!value;
+      const root = document.documentElement;
+      if (active) {
+        root.dataset.reduceMotion = 'today';
+        root.style.setProperty('--reduce-motion-active', '1');
+        root.style.setProperty('--d-flight', '0ms');
+        root.style.setProperty('--d-slide', '0ms');
+        root.style.setProperty('--d-flick', '0ms');
+        root.style.setProperty('--d-settle', '0ms');
+      } else {
+        delete root.dataset.reduceMotion;
+        root.style.removeProperty('--reduce-motion-active');
+        root.style.removeProperty('--d-flight');
+        root.style.removeProperty('--d-slide');
+        root.style.removeProperty('--d-flick');
+        root.style.removeProperty('--d-settle');
+      }
+    }
+    applyReduceMotion();
+    const unsub = store.subscribeKey('shared', 'reduce_motion_today', applyReduceMotion);
+    return () => { try { unsub(); } catch { /* noop */ } };
   }, []);
 
   const apply = useApplyBrainDump();
@@ -164,7 +197,6 @@ function AppInner() {
     // Decision #15: garden gated on shared.consent.spending_research.
     // Mini-burhan stays in dashboard for everyone; full /garden requires
     // the anonymous-research opt-in. The garden is the gift in exchange.
-    const consent = store.get<boolean>('shared', 'consent.spending_research', false);
     content = consent ? (
       <Suspense fallback={<PageLoading />}>
         <GardenScreen

@@ -40,6 +40,78 @@ const C = {
   water: '#3A4E5E', // editorial steel-blue
 } as const;
 
+// ─── Body protective cards · Sprint 5 · F5 ────────────────────────────────────
+// Reads `body.protective_cards` written by the cross-module router when
+// e.g. `work:hyperfocus_detected` fires. Quiet, factual, dismissable.
+// Never urgent. Ollie voice: name the pattern, don't prescribe.
+
+interface BodyProtectiveCard {
+  id: string;
+  reason: string;
+  kind?: string;
+  ts: number;
+}
+
+function BodyProtectiveCards() {
+  const [cards, setCards] = useStoreSlice<BodyProtectiveCard[]>('body', 'protective_cards', []);
+  const list = (cards ?? []).filter((c) => c?.reason);
+  if (list.length === 0) return null;
+  return (
+    <section style={{ marginBottom: 40 }}>
+      <div
+        style={{
+          fontFamily: "'DM Mono', monospace",
+          fontSize: 10,
+          letterSpacing: '0.24em',
+          textTransform: 'uppercase',
+          color: C.muted,
+          paddingBottom: 10,
+          borderBottom: `1px solid ${C.hairline}`,
+        }}
+      >
+        be gentle today
+      </div>
+      {list.map((c) => (
+        <div
+          key={c.id}
+          style={{
+            padding: '16px 20px',
+            background: C.paper,
+            borderBottom: `1px solid ${C.hairline}`,
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: 12,
+          }}
+        >
+          <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 14, color: C.ink }}>
+            {c.reason}
+          </span>
+          <button
+            type="button"
+            onClick={() => setCards(list.filter((x) => x.id !== c.id))}
+            aria-label="dismiss"
+            style={{
+              background: 'none',
+              border: '1px solid ' + C.hairlineHi,
+              borderRadius: 16,
+              padding: '6px 12px',
+              fontFamily: "'DM Mono', monospace",
+              fontSize: 10,
+              letterSpacing: '0.16em',
+              textTransform: 'uppercase',
+              color: C.muted,
+              cursor: 'pointer',
+            }}
+          >
+            dismiss
+          </button>
+        </div>
+      ))}
+    </section>
+  );
+}
+
 // ─── Supplement shape ─────────────────────────────────────────────────────────
 
 interface Supplement {
@@ -1576,6 +1648,9 @@ export function BodyModule({ onBack }: BodyModuleProps) {
             hydrate. take your stuff. rest when you need to.
           </div>
         </div>
+
+        {/* protective cards (Sprint 5 · F5) */}
+        <BodyProtectiveCards />
 
         {/* active episode (conditional) */}
         <ActiveEpisodeCard />

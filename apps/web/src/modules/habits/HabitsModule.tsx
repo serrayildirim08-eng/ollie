@@ -59,6 +59,84 @@ const SECTIONS = [
   { key: 'evening' as const, label: 'evening', short: 'EVE' },
 ];
 
+// ─── HabitsWaterPrompt · Sprint 5 · F5 ────────────────────────────────────────
+// Reads `habits.surface_water_habit` written by the cross-module router
+// when `body:hydration_drop_detected` fires. Quiet, factual, dismissable.
+// No streaks · no shame · no urgency.
+
+interface WaterPromptEntry {
+  id?: string;
+  reason: string;
+  ts: number;
+}
+
+function HabitsWaterPrompt() {
+  const [prompts, setPrompts] = useStoreSlice<WaterPromptEntry[] | WaterPromptEntry | null>(
+    'habits',
+    'surface_water_habit',
+    [],
+  );
+  // The cross-module router writes additively (push to array) BUT for
+  // singletons might write the entry directly. Normalize both shapes.
+  const list: WaterPromptEntry[] = Array.isArray(prompts)
+    ? prompts
+    : prompts && typeof prompts === 'object'
+      ? [prompts as WaterPromptEntry]
+      : [];
+  const visible = list.filter((p) => p?.reason);
+  if (visible.length === 0) return null;
+  return (
+    <section
+      style={{
+        marginBottom: 28,
+        padding: '14px 18px',
+        background: 'rgba(91,143,181,0.06)',
+        borderLeft: `2px solid ${ACCENT}`,
+        borderRadius: 2,
+      }}
+    >
+      {visible.map((p, i) => (
+        <div
+          key={p.id ?? `wp-${i}`}
+          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, padding: '4px 0' }}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <span style={{ fontFamily: "'Inter Tight', 'DM Sans', sans-serif", fontSize: 14, color: INK }}>
+              water — {p.reason}
+            </span>
+            <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: '0.2em', textTransform: 'uppercase', color: MUTED }}>
+              from body · gentle reminder
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              const next = visible.filter((_, j) => j !== i);
+              setPrompts(next);
+            }}
+            aria-label="dismiss water prompt"
+            style={{
+              minHeight: 44,
+              padding: '6px 12px',
+              background: 'transparent',
+              color: MUTED,
+              border: `1px solid ${HAIRLINE}`,
+              fontFamily: "'DM Mono', monospace",
+              fontSize: 10,
+              letterSpacing: '0.2em',
+              textTransform: 'uppercase',
+              cursor: 'pointer',
+              borderRadius: 2,
+            }}
+          >
+            dismiss
+          </button>
+        </div>
+      ))}
+    </section>
+  );
+}
+
 // ─── HabitsNoticed ────────────────────────────────────────────────────────────
 
 function HabitsNoticed({ habits }: { habits: StoredHabit[] }) {
@@ -841,6 +919,8 @@ export function HabitsModule({ onBack }: { onBack: () => void }) {
               >+ new entry</button>
             </div>
           )}
+
+          <HabitsWaterPrompt />
 
           <HabitsNoticed habits={habitsArr} />
         </section>
