@@ -326,9 +326,14 @@ function AppInner() {
       {/* ToastHost + ChipFlyHost are top-level so chips/toasts work on every screen */}
       <ToastHost />
       <ChipFlyHost />
-      {/* MicButton — push-to-talk, hidden when onboarding */}
+      {/* MicButton — push-to-talk, hidden when onboarding.
+          Shows "heard · …" so user can tell a transcription miss from
+          a routing miss before the apply pipeline runs. */}
       {onboarded && screen !== 'onboarding' && (
-        <MicButton onTranscript={(text) => { void apply(text); }} />
+        <MicButton onTranscript={(text) => {
+          toast.show(`heard · ${text}`, { module: 'voice', ttl: 6000 });
+          void apply(text);
+        }} />
       )}
     </>
   );
