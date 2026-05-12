@@ -328,12 +328,16 @@ function AccountSection({
     // Supabase row is left orphaned (no server delete endpoint in
     // current API surface) — that's documented and acceptable for
     // alpha. Future: add api.deleteUser().
+    //
+    // Store keys live under `void.state.<mod>.v<N>` (see
+    // packages/store/src/store.ts:21). Match that prefix so the wipe
+    // hits the real data, not a phantom `ollie:` namespace.
     try {
       if (typeof localStorage !== 'undefined') {
         const keys: string[] = [];
         for (let i = 0; i < localStorage.length; i++) {
           const k = localStorage.key(i);
-          if (k && k.startsWith('ollie:')) keys.push(k);
+          if (k && k.startsWith('void.state.')) keys.push(k);
         }
         for (const k of keys) localStorage.removeItem(k);
       }
