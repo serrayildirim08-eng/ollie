@@ -25,14 +25,20 @@ export interface AuthFlowProps {
   onAuthenticated: () => void;
 }
 
-const EMAIL_LS_KEY = 'shared.auth.email_for_login';
+const EMAIL_LS_KEY = 'auth.email_for_login';
+// Store keys live at `void.state.<mod>.v<STORE_VERSION>` as a JSON blob
+// holding the whole module's state — not flat per-key entries.
+// See packages/store/src/store.ts:21.
+const SHARED_LS_KEY = 'void.state.shared.v5';
 
 function readPrefilledEmail(): string {
   try {
     if (typeof localStorage === 'undefined') return '';
-    const raw = localStorage.getItem('ollie:shared:' + EMAIL_LS_KEY);
+    const raw = localStorage.getItem(SHARED_LS_KEY);
     if (!raw) return '';
-    return JSON.parse(raw) as string;
+    const parsed = JSON.parse(raw) as Record<string, unknown> | null;
+    const value = parsed && typeof parsed === 'object' ? parsed[EMAIL_LS_KEY] : null;
+    return typeof value === 'string' ? value : '';
   } catch { return ''; }
 }
 
