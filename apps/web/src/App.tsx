@@ -27,12 +27,13 @@ const DashboardScreen = lazy(() => import('./pages/DashboardScreen').then(m => (
 const GardenScreen    = lazy(() => import('./pages/GardenScreen').then(m => ({ default: m.GardenScreen })));
 const GardenConsentScreen = lazy(() => import('./pages/GardenConsentScreen').then(m => ({ default: m.GardenConsentScreen })));
 const ModuleScreen    = lazy(() => import('./pages/ModuleScreen').then(m => ({ default: m.ModuleScreen })));
+const SettingsScreen  = lazy(() => import('./pages/SettingsScreen').then(m => ({ default: m.SettingsScreen })));
 
 function PageLoading() {
   return <div style={{ minHeight: '100vh', background: 'var(--bone)' }} aria-busy="true" />;
 }
 
-type Screen = 'home' | 'dashboard' | 'garden' | 'module' | 'demo' | 'onboarding';
+type Screen = 'home' | 'dashboard' | 'garden' | 'module' | 'demo' | 'onboarding' | 'settings';
 
 const eventCount = Object.keys(REGISTRY).length;
 
@@ -43,11 +44,22 @@ const SAMPLE_STARTS = [0, 28, 56, 84, 112, 140].map((d) => ({
 }));
 const samplePrediction = cycle.predictNextPeriod(cycle.detectBoundaries(SAMPLE_STARTS));
 
+// Backend (Supabase) is optional in local/dogfood builds. If
+// VITE_SUPABASE_URL isn't set, AuthFlow can't actually create an
+// account — every signup hits the Vite dev server and 404s. Skip the
+// gate in that case so the app falls through to onboarding-first
+// behavior; sync + research stay no-ops until the env is wired.
+const SUPABASE_CONFIGURED = Boolean(
+  (import.meta as unknown as { env?: { VITE_SUPABASE_URL?: string } }).env?.VITE_SUPABASE_URL,
+);
+
 function AppInner() {
   // Auth gate: unauthenticated users see AuthFlow first.
   // bootAccount is idempotent — main.tsx also calls it.
   const accountRef = React.useRef(bootAccount());
-  const [authed, setAuthed] = useState<boolean>(() => Boolean(accountRef.current.auth.state().session));
+  const [authed, setAuthed] = useState<boolean>(
+    () => !SUPABASE_CONFIGURED || Boolean(accountRef.current.auth.state().session),
+  );
 
   // First-launch detection: check onboarded flag before any other screen
   const onboardedRaw = store.get<boolean>('shared', 'onboarded', false);
@@ -132,8 +144,19 @@ function AppInner() {
           onNavigate={(to) => {
             if (to === 'dashboard') setScreen('dashboard');
             else if (to === 'garden') setScreen('garden');
+            else if (to === 'settings') setScreen('settings');
           }}
           onBrainDump={homeDump}
+        />
+      </Suspense>
+    );
+  } else if (screen === 'settings') {
+    content = (
+      <Suspense fallback={<PageLoading />}>
+        <SettingsScreen
+          auth={accountRef.current.auth}
+          onBack={() => setScreen('home')}
+          onSignedOut={() => { setAuthed(false); setScreen('home'); }}
         />
       </Suspense>
     );

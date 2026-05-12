@@ -126,7 +126,7 @@ function TimeTracker() {
 }
 
 export interface HomeScreenProps {
-  onNavigate: (to: 'dashboard' | 'garden') => void;
+  onNavigate: (to: 'dashboard' | 'garden' | 'settings') => void;
   onBrainDump: (text: string) => void;
 }
 
@@ -223,6 +223,33 @@ export function HomeScreen({ onNavigate, onBrainDump }: HomeScreenProps) {
 
       {/* Sky orb — top right */}
       <SkyOrb hour={hour} />
+
+      {/* Settings entry — top-right corner, quiet kicker glyph (F4) */}
+      <button
+        type="button"
+        onClick={() => onNavigate('settings')}
+        aria-label="open settings"
+        style={{
+          position: 'absolute',
+          top: 52,
+          right: 32,
+          zIndex: 12,
+          background: 'rgba(255,255,255,0.12)',
+          backdropFilter: 'blur(16px)',
+          WebkitBackdropFilter: 'blur(16px)',
+          border: '1px solid rgba(255,255,255,0.18)',
+          borderRadius: 20,
+          padding: '8px 16px',
+          fontFamily: "'DM Mono', monospace",
+          fontSize: 10,
+          letterSpacing: '0.16em',
+          textTransform: 'uppercase',
+          color: 'rgba(255,255,255,0.7)',
+          cursor: 'pointer',
+        }}
+      >
+        settings
+      </button>
 
       {/* "what's up?" headline — center */}
       <div
