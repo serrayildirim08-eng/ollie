@@ -93,7 +93,13 @@ function startWeb(cb: VoiceCaptureCallbacks): VoiceCaptureSession {
   const Ctor = (w.SpeechRecognition ?? w.webkitSpeechRecognition)!;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rec: any = new Ctor();
-  rec.lang = (w as { navigator?: { language?: string } }).navigator?.language ?? 'en-US';
+  // Force English recognition. Voice capture runs in English regardless
+  // of OS / browser locale — the dissection router has English + Turkish
+  // keywords so it'll still route Turkish-sounding words that the
+  // recognizer's English model happens to pick up (e.g. brand names).
+  // If multi-locale support is needed later, read from
+  // shared.settings.recognizer_locale.
+  rec.lang = 'en-US';
   rec.interimResults = true;
   rec.continuous = false;
 

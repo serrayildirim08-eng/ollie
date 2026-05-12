@@ -33,6 +33,26 @@ export function MicButton({ onTranscript, source = 'mic-button', style }: MicBut
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recording]);
 
+  // Web hotkey · cmd+shift+space (Mac) / ctrl+shift+space (Win/Linux).
+  // Works in any browser when the page has focus — equivalent to the
+  // "hey ollie" Electron globalShortcut for browser users.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent): void {
+      if (e.code !== 'Space') return;
+      if (!e.shiftKey) return;
+      if (!(e.metaKey || e.ctrlKey)) return;
+      // Don't fire while user is typing in an input/textarea
+      const t = e.target as HTMLElement | null;
+      const tag = t?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || t?.isContentEditable) return;
+      e.preventDefault();
+      if (recording) stop(); else void start();
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recording]);
+
   async function start() {
     if (!supported || recording) return;
     setInterim(''); setError(null); setRecording(true);
