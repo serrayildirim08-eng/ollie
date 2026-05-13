@@ -1,7 +1,9 @@
 import { useEffect, useMemo } from 'react';
 import { useThree } from '@react-three/fiber';
-import { useGLTF, Clone } from '@react-three/drei';
+import { useGLTF, Instances, Instance } from '@react-three/drei';
+import * as THREE from 'three';
 import { fixMeshyMaterials } from './fixMaterials';
+import { findFirstMesh } from './glbHelpers';
 
 useGLTF.preload('/assets/garden/path-stone.glb');
 
@@ -11,8 +13,6 @@ interface Stone {
   scale: number;
 }
 
-// Straight row in front of daisies (daisies z≈-1.9, path z=-1.2).
-// Spacing 0.7 with scale ~0.42 (0.79m tile) → slight overlap, no gaps.
 function buildPath(): Stone[] {
   let seed = 13;
   const rand = () => {
@@ -20,7 +20,7 @@ function buildPath(): Stone[] {
     return seed / 233280;
   };
   const out: Stone[] = [];
-  for (let x = -10.5; x <= 10.5; x += 0.7) {
+  for (let x = -7; x <= 7; x += 0.85) {
     out.push({
       pos: [x, 0.02, -1.2 + (rand() - 0.5) * 0.06],
       rot: (rand() - 0.5) * 0.3,
@@ -36,19 +36,19 @@ export function Path() {
   useEffect(() => { fixMeshyMaterials(scene); invalidate(); }, [scene, invalidate]);
 
   const stones = useMemo(buildPath, []);
+  const source = useMemo(() => findFirstMesh(scene), [scene]);
+  if (!source) return null;
 
   return (
-    <>
+    <Instances
+      geometry={source.geometry}
+      material={source.material as THREE.Material}
+      limit={stones.length}
+      receiveShadow
+    >
       {stones.map((s, i) => (
-        <Clone
-          key={i}
-          object={scene}
-          position={s.pos}
-          rotation={[0, s.rot, 0]}
-          scale={s.scale}
-          receiveShadow
-        />
+        <Instance key={i} position={s.pos} rotation={[0, s.rot, 0]} scale={s.scale} />
       ))}
-    </>
+    </Instances>
   );
 }

@@ -1,14 +1,12 @@
 import { useEffect, useMemo } from 'react';
 import { useThree } from '@react-three/fiber';
-import { useGLTF, Clone } from '@react-three/drei';
+import { useGLTF, Instances, Instance } from '@react-three/drei';
+import * as THREE from 'three';
 import { fixMeshyMaterials } from './fixMaterials';
+import { findFirstMesh } from './glbHelpers';
 
 useGLTF.preload('/assets/garden/daisies.glb');
 
-// daisies.glb bbox 1.89 × 0.51 × 1.89m (meadow patch, ~50cm tall).
-// Render a row of varying-size patches just in front of the fence
-// (fence z=-2.3, daisies z≈-1.9 ±0.2), spanning the full fence width
-// so the join reads as naturally overgrown.
 interface Patch {
   pos: [number, number, number];
   rot: number;
@@ -22,10 +20,10 @@ function buildPatches(): Patch[] {
     return seed / 233280;
   };
   const out: Patch[] = [];
-  for (let i = 0; i < 55; i++) {
+  for (let i = 0; i < 20; i++) {
     out.push({
       pos: [
-        -10.5 + (i / 54) * 21 + (rand() - 0.5) * 0.5,
+        -8 + (i / 19) * 16 + (rand() - 0.5) * 0.5,
         0.1 + rand() * 0.05,
         -1.9 + (rand() - 0.5) * 0.5,
       ],
@@ -42,19 +40,19 @@ export function Daisies() {
   useEffect(() => { fixMeshyMaterials(scene); invalidate(); }, [scene, invalidate]);
 
   const patches = useMemo(buildPatches, []);
+  const source = useMemo(() => findFirstMesh(scene), [scene]);
+  if (!source) return null;
 
   return (
-    <>
+    <Instances
+      geometry={source.geometry}
+      material={source.material as THREE.Material}
+      limit={patches.length}
+      receiveShadow
+    >
       {patches.map((p, i) => (
-        <Clone
-          key={i}
-          object={scene}
-          position={p.pos}
-          rotation={[0, p.rot, 0]}
-          scale={p.scale}
-          receiveShadow
-        />
+        <Instance key={i} position={p.pos} rotation={[0, p.rot, 0]} scale={p.scale} />
       ))}
-    </>
+    </Instances>
   );
 }

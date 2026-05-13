@@ -23,8 +23,7 @@ export interface GardenCanvasProps {
 export default function GardenCanvas({ paused, raining }: GardenCanvasProps) {
   return (
     <Canvas
-      shadows
-      dpr={[1, 1.5]}
+      dpr={[1, 1.25]}
       frameloop={paused ? 'never' : raining ? 'always' : 'demand'}
       gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping }}
       style={{ width: '100%', height: '100%', display: 'block', background: '#f5f4f0' }}
@@ -32,7 +31,7 @@ export default function GardenCanvas({ paused, raining }: GardenCanvasProps) {
       <Camera />
       <Lighting />
       <Suspense fallback={null}>
-        <Environment preset="sunset" background={false} resolution={64} />
+        <Environment preset="sunset" background={false} resolution={32} />
         <Sky />
         <Ground />
         <Fence />
@@ -42,7 +41,7 @@ export default function GardenCanvas({ paused, raining }: GardenCanvasProps) {
         <DirtPile />
         <Burhan />
         <Signboard />
-        <Rain active={raining} center={[0, 3.5, 0]} radius={5} count={1200} />
+        <Rain active={raining} center={[0, 3.5, 0]} radius={5} count={600} />
       </Suspense>
     </Canvas>
   );
