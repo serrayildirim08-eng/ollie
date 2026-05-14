@@ -77,6 +77,19 @@ describe('burhan orchestrator', () => {
     expect(read().events).toHaveLength(1);
   });
 
+  it('adds a leaf on habits:completed', () => {
+    events.emit('habits:completed', {
+      habitId: 'h_teeth',
+      category: 'health',
+      habitName: 'brush teeth',
+      ts: 9000,
+    });
+    const s = read();
+    expect(s.events).toHaveLength(1);
+    expect(s.events[0].type).toBe('leaf');
+    expect(s.events[0].source_module).toBe('habits');
+  });
+
   it('constitutional · no decay ever shrinks the tree', () => {
     events.emit('cycle:period_logged', { ts: 100, source: 'user' });
     events.emit('finance:subscription_cancelled', { pattern_id: 'p3', merchant: 'X', ts: 200 });
