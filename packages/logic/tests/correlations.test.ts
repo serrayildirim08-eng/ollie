@@ -2,9 +2,8 @@
  * @ollie/logic · body · correlation registry tests
  *
  * Covers:
- *   - registry shape + completeness (6 entries)
+ *   - registry shape + completeness (6 entries, all implemented)
  *   - runAllCorrelations executes every implemented correlator
- *   - PENDING (water_focus) returns detected=false without faking math
  *   - threshold + sample-size gating (sparse → detected=false)
  *   - copy passes the banned-phrase scanner
  *   - takeUserDataSnapshot reads canonical store keys
@@ -14,7 +13,8 @@
  *   - workout-skip-mood (positive direction, single class, sparse)
  *   - sleep-debt-habits (negative direction, sparse, missing-data resilience)
  *   - evening-matcha-sleep (matcha-only filter, sparse, non-matcha excluded)
- *   - water-focus (always PENDING)
+ *   - water-focus (Option B clarity-ratio proxy: positive, negative,
+ *     sparse, threshold edge, banned-phrase, snapshot integration)
  */
 
 import { describe, it, expect } from 'vitest';
@@ -73,6 +73,7 @@ function emptySnapshot(): UserDataSnapshot {
     sleepRecords: [],
     cycles: [],
     habits: [],
+    waterLog: [],
     sleepTargetHours: 7.5,
   };
 }
@@ -103,16 +104,16 @@ describe('CORRELATION_REGISTRY · shape', () => {
     for (const e of expected) expect(names.has(e)).toBe(true);
   });
 
-  it('flags water_focus as PENDING with a reason', () => {
-    const entry = CORRELATION_REGISTRY.find((e) => e.name === 'water_focus');
-    expect(entry).toBeDefined();
-    expect(entry!.implemented).toBe(false);
-    expect(entry!.reason).toBeTruthy();
+  it('marks every entry as implemented=true', () => {
+    for (const e of CORRELATION_REGISTRY) {
+      expect(e.implemented).toBe(true);
+    }
   });
 
-  it('marks every other entry as implemented=true', () => {
-    const others = CORRELATION_REGISTRY.filter((e) => e.name !== 'water_focus');
-    for (const e of others) expect(e.implemented).toBe(true);
+  it('marks water_focus as implemented (Option B clarity proxy)', () => {
+    const entry = CORRELATION_REGISTRY.find((e) => e.name === 'water_focus');
+    expect(entry).toBeDefined();
+    expect(entry!.implemented).toBe(true);
   });
 
   it('keeps thresholds in (0, 1)', () => {
@@ -145,11 +146,11 @@ describe('runAllCorrelations · execution', () => {
     }
   });
 
-  it('marks water_focus as implemented=false even with input', () => {
+  it('returns water_focus with sample size 0 on empty input but implemented=true', () => {
     const results = runAllCorrelations(emptySnapshot());
     const wf = results.find((r) => r.name === 'water_focus')!;
-    expect(wf.implemented).toBe(false);
-    expect(wf.correlation).toBeNull();
+    expect(wf.implemented).toBe(true);
+    expect(wf.sampleSize).toBe(0);
     expect(wf.copy).toBeNull();
     expect(wf.detected).toBe(false);
   });
@@ -161,14 +162,16 @@ describe('runAllCorrelations · execution', () => {
     }
   });
 
-  it('skips PENDING correlators gracefully when input bigger than empty', () => {
+  it('runs water_focus correlator without throwing on partial input', () => {
     const snap: UserDataSnapshot = {
       ...emptySnapshot(),
       finance: [txn('2026-05-01', 5)],
+      waterLog: [{ ts: NOW - DAY_MS, glasses: 4 }],
     };
     const results = runAllCorrelations(snap);
     const wf = results.find((r) => r.name === 'water_focus')!;
-    expect(wf.implemented).toBe(false);
+    expect(wf.implemented).toBe(true);
+    // Sparse input — should land below sample threshold.
     expect(wf.detected).toBe(false);
   });
 
@@ -512,20 +515,191 @@ describe('correlateEveningMatchaAndSleep', () => {
   });
 });
 
-// ─── per-correlator: water-focus ─────────────────────────────────────────
+// ─── per-correlator: water-focus (Option B clarity-ratio proxy) ──────────
 
-describe('correlateWaterAndFocus · PENDING', () => {
-  it('always returns implemented=false', () => {
+describe('correlateWaterAndFocus', () => {
+  it('returns 0 sample on null/empty input', () => {
     const r = correlateWaterAndFocus(null, null, { now: NOW });
-    expect(r.implemented).toBe(false);
-    expect(r.correlation).toBeNull();
+    expect(r.implemented).toBe(true);
+    expect(r.sampleSize).toBe(0);
     expect(r.copy).toBe('');
   });
 
-  it('carries a non-empty reason', () => {
-    const r = correlateWaterAndFocus(null, null, { now: NOW });
-    expect(r.reason).toBeTruthy();
-    expect(r.reason.length).toBeGreaterThan(20);
+  it('returns 0 sample when water log is empty', () => {
+    const r = correlateWaterAndFocus(
+      [],
+      [{ ts: NOW - DAY_MS, rawText: 'clear today.' }],
+      { now: NOW },
+    );
+    expect(r.sampleSize).toBe(0);
+  });
+
+  it('returns 0 sample when dumps are empty', () => {
+    const r = correlateWaterAndFocus(
+      [{ ts: NOW - DAY_MS, glasses: 6 }],
+      [],
+      { now: NOW },
+    );
+    expect(r.sampleSize).toBe(0);
+  });
+
+  it('lands below sample threshold on sparse paired days', () => {
+    // NOW is at noon, so a `dayTs = NOW - i * DAY_MS` lands on a noon
+    // boundary. Both water (11am) and dump (1pm) need to share the same
+    // local day key → keep both offsets close to noon of the SAME
+    // calendar day. With 5 days < 14, gate trips and copy stays empty.
+    const water: Array<{ ts: number; glasses: number }> = [];
+    const dumps: Array<{ ts: number; rawText: string }> = [];
+    for (let i = 2; i <= 6; i++) {
+      const dayTs = NOW - i * DAY_MS;
+      water.push({ ts: dayTs - 1 * 3600_000, glasses: 5 });
+      dumps.push({ ts: dayTs + 1 * 3600_000, rawText: 'today felt fine.' });
+    }
+    const r = correlateWaterAndFocus(water, dumps, { now: NOW });
+    expect(r.sampleSize).toBe(5);
+    expect(r.copy).toBe('');
+    expect(r.correlation).toBeNull();
+  });
+
+  it('detects positive ρ when high-water days read clearer in dumps', () => {
+    // 16 paired days. First 8: high water (8 cups), clean dumps.
+    // Last 8: low water (2 cups), overwhelmed-lexicon-heavy dumps.
+    const water: Array<{ ts: number; glasses: number }> = [];
+    const dumps: Array<{ ts: number; rawText: string }> = [];
+    for (let i = 1; i <= 16; i++) {
+      const dayTs = NOW - i * DAY_MS;
+      const isLowWater = i > 8;
+      water.push({
+        ts: dayTs - 1 * 3600_000,
+        glasses: isLowWater ? 2 : 8,
+      });
+      dumps.push({
+        ts: dayTs + 1 * 3600_000,
+        rawText: isLowWater
+          ? 'overwhelmed. too much. cannot cope.'
+          : 'wrote a bit. ran an errand. read.',
+      });
+    }
+    const r = correlateWaterAndFocus(water, dumps, { now: NOW });
+    expect(r.sampleSize).toBeGreaterThanOrEqual(14);
+    expect(r.correlation).not.toBeNull();
+    expect(r.correlation!).toBeGreaterThan(0.30);
+    expect(r.copy).toMatch(/hydration days read clearer in dumps/);
+  });
+
+  it('detects negative ρ when high-water days read heavier in dumps', () => {
+    // Inverted: high water co-occurs with overwhelmed lexicon.
+    const water: Array<{ ts: number; glasses: number }> = [];
+    const dumps: Array<{ ts: number; rawText: string }> = [];
+    for (let i = 1; i <= 16; i++) {
+      const dayTs = NOW - i * DAY_MS;
+      const isLowWater = i > 8;
+      water.push({
+        ts: dayTs - 1 * 3600_000,
+        glasses: isLowWater ? 2 : 8,
+      });
+      dumps.push({
+        ts: dayTs + 1 * 3600_000,
+        rawText: isLowWater
+          ? 'wrote a bit. ran an errand. read.'
+          : 'overwhelmed. too much. cannot cope.',
+      });
+    }
+    const r = correlateWaterAndFocus(water, dumps, { now: NOW });
+    expect(r.sampleSize).toBeGreaterThanOrEqual(14);
+    expect(r.correlation).not.toBeNull();
+    expect(r.correlation!).toBeLessThan(-0.30);
+    expect(r.copy).toMatch(/hydration days read heavier in dumps for you/);
+  });
+
+  it('stays below copy gate when correlation hovers under threshold', () => {
+    // 16 days of identical 5-cup water + identical neutral dumps → ρ ≈ 0.
+    const water: Array<{ ts: number; glasses: number }> = [];
+    const dumps: Array<{ ts: number; rawText: string }> = [];
+    for (let i = 1; i <= 16; i++) {
+      const dayTs = NOW - i * DAY_MS;
+      water.push({ ts: dayTs - 1 * 3600_000, glasses: 5 });
+      dumps.push({ ts: dayTs + 1 * 3600_000, rawText: 'okay day. went outside.' });
+    }
+    const r = correlateWaterAndFocus(water, dumps, { now: NOW });
+    expect(r.sampleSize).toBeGreaterThanOrEqual(14);
+    // Zero variance → pearson returns 0 → below threshold → empty copy.
+    expect(r.copy).toBe('');
+  });
+
+  it('emits banned-phrase-clean copy on detection', () => {
+    const water: Array<{ ts: number; glasses: number }> = [];
+    const dumps: Array<{ ts: number; rawText: string }> = [];
+    for (let i = 1; i <= 16; i++) {
+      const dayTs = NOW - i * DAY_MS;
+      const isLowWater = i > 8;
+      water.push({ ts: dayTs - 1 * 3600_000, glasses: isLowWater ? 2 : 8 });
+      dumps.push({
+        ts: dayTs + 1 * 3600_000,
+        rawText: isLowWater
+          ? 'overwhelmed. too much. cannot cope.'
+          : 'wrote a bit. ran an errand. read.',
+      });
+    }
+    const r = correlateWaterAndFocus(water, dumps, { now: NOW });
+    if (r.copy) {
+      const hits = scanForBanned(r.copy);
+      expect(hits).toEqual([]);
+    }
+  });
+
+  it('respects custom thresholdRho gate', () => {
+    // Clean bimodal correlation → |ρ| = 1.0 with default threshold 0.30.
+    // Re-run with threshold=2.0 (impossible) → must trip empty copy.
+    const water: Array<{ ts: number; glasses: number }> = [];
+    const dumps: Array<{ ts: number; rawText: string }> = [];
+    for (let i = 1; i <= 16; i++) {
+      const dayTs = NOW - i * DAY_MS;
+      const isLowWater = i > 8;
+      water.push({ ts: dayTs - 1 * 3600_000, glasses: isLowWater ? 4 : 6 });
+      dumps.push({
+        ts: dayTs + 1 * 3600_000,
+        rawText: isLowWater ? 'overwhelmed.' : 'fine.',
+      });
+    }
+    const loose = correlateWaterAndFocus(water, dumps, { now: NOW });
+    expect(loose.copy).not.toBe('');
+
+    const strict = correlateWaterAndFocus(water, dumps, {
+      now: NOW,
+      thresholdRho: 2.0, // unreachable — |ρ| <= 1 always
+    });
+    expect(strict.copy).toBe('');
+    expect(strict.sampleSize).toBe(loose.sampleSize);
+  });
+});
+
+// ─── snapshot adapter · water_log integration ────────────────────────────
+
+describe('takeUserDataSnapshot · water_log', () => {
+  function makeStore(state: Record<string, Record<string, unknown>>): SnapshotStoreLike {
+    return {
+      get<T>(ns: string, key: string, fallback?: T): T | undefined {
+        const v = state[ns]?.[key];
+        return (v === undefined ? fallback : v) as T | undefined;
+      },
+    };
+  }
+
+  it('reads body.water_log into the snapshot', () => {
+    const log = [
+      { ts: NOW - DAY_MS, glasses: 4 },
+      { ts: NOW - 2 * DAY_MS, glasses: 6 },
+    ];
+    const store = makeStore({ body: { water_log: log } });
+    const snap = takeUserDataSnapshot(store, NOW);
+    expect(snap.waterLog).toEqual(log);
+  });
+
+  it('defaults waterLog to empty array', () => {
+    const store = makeStore({});
+    const snap = takeUserDataSnapshot(store, NOW);
+    expect(snap.waterLog).toEqual([]);
   });
 });
 
@@ -540,6 +714,8 @@ describe('correlation copy · banned-phrase compliance', () => {
     'habit completion drops as sleep debt climbs · 2 weeks of data',
     'habit completion holds steady as sleep debt climbs for you · 14 days of data',
     'evening matcha tracks with lower sleep quality for you · 2 weeks of data',
+    'hydration days read clearer in dumps · 16 days of data',
+    'hydration days read heavier in dumps for you · 16 days of data',
   ];
 
   it.each(SAMPLE_COPIES)('clean: %s', (copy) => {
