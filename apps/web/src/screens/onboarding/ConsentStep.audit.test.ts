@@ -36,6 +36,7 @@ function extractCopyBlock(src: string): string {
 const COPY_BLOCK = extractCopyBlock(SOURCE);
 
 describe('ConsentStep · banned-phrase audit', () => {
+  // notif-scope-allow — test asserts these phrases are ABSENT from copy
   const banned = ['great job', 'you should', 'streak'];
   for (const phrase of banned) {
     it(`does not contain "${phrase}"`, () => {
