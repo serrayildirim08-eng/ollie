@@ -2,7 +2,7 @@
  * @ollie/logic · cycle types
  */
 
-export type CycleAction = 'started' | 'ended' | 'symptom' | 'log';
+export type CycleAction = 'started' | 'ended' | 'symptom' | 'log' | 'pill';
 
 export interface CycleItem {
   ts: number;

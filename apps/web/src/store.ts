@@ -129,7 +129,7 @@ function scheduleNotificationWrapper(spec: import('@ollie/notifications').Notifi
 }
 
 createOrchestrator(store, { scheduleNotification: scheduleNotificationWrapper }).init();
-initPatternDetectedSubscriber({ store, scheduleNotification: scheduleNotificationWrapper });
+initPatternDetectedSubscriber({ scheduleNotification: scheduleNotificationWrapper });
 
 import { createReminderScheduler, createCrossModuleRouter } from '@ollie/router';
 import * as appEvents from '@ollie/events';
