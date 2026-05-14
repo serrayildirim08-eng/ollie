@@ -103,6 +103,18 @@ export interface AuthDeps {
   /** Optional Supabase profiles table that stores per-user salt. */
   profilesTable?: string;
   now?: () => number;
+  /**
+   * Account-deletion endpoint URL (Cloudflare Worker
+   * `apps/api · POST /account/delete`). When unset, `deleteAccount()`
+   * returns code='no-endpoint' so the UI can decide whether to fall
+   * back to a local-only wipe or surface a configuration error.
+   *
+   * Wired by `apps/web/src/lib/account-boot.ts` from
+   * `VITE_ACCOUNT_DELETE_URL` (or built via VITE_API_WORKER_URL).
+   */
+  accountDeleteUrl?: string;
+  /** Injectable fetch — tests substitute a mock. Defaults to globalThis.fetch. */
+  fetchImpl?: typeof fetch;
 }
 
 interface SupabaseAuthResponse {
@@ -120,6 +132,26 @@ export type SignUpResultLike = SignUpResult | SignUpError;
 interface SignInResult { ok: true; user_id: string; }
 interface SignInError { ok: false; code: 'wrong-passphrase' | 'wrong-email' | 'http' | 'network' | 'missing-salt' | 'no-device-data'; message: string; }
 export type SignInResultLike = SignInResult | SignInError;
+
+interface DeleteAccountResult { ok: true; user_id: string; deleted_tables: string[]; deleted_rows: Record<string, number>; }
+interface DeleteAccountError {
+  ok: false;
+  /**
+   * - `no-session`        — no local session, nothing to delete on server
+   * - `no-endpoint`       — accountDeleteUrl not configured
+   * - `bad-confirm`       — server rejected the confirm token (shouldn't happen — code-bug)
+   * - `unauthorized`      — JWT expired / not accepted by server
+   * - `cascade-failed`    — server-side DELETEs failed partway; retry-safe
+   * - `auth-delete-failed` — cascade succeeded but auth.users delete failed; retry-safe
+   * - `network`           — fetch threw
+   * - `http`              — non-2xx with no recognised code
+   */
+  code: 'no-session' | 'no-endpoint' | 'bad-confirm' | 'unauthorized' | 'cascade-failed' | 'auth-delete-failed' | 'network' | 'http';
+  message: string;
+  /** Partial cascade summary when server returned a 500 with detail. */
+  partial?: { deleted_tables: string[]; deleted_rows: Record<string, number>; failed_table?: string };
+}
+export type DeleteAccountResultLike = DeleteAccountResult | DeleteAccountError;
 
 export interface SignUpInput {
   email: string;
@@ -148,6 +180,21 @@ export interface AuthClient {
   signUp(input: SignUpInput): Promise<SignUpResultLike>;
   signIn(input: SignInInput): Promise<SignInResultLike>;
   signOut(): Promise<void>;
+  /**
+   * Server-side account deletion (GDPR / App Store erasure path).
+   *
+   * Flow:
+   *   1. POST { confirm: "DELETE" } with the user JWT to the account-
+   *      deletion endpoint configured at boot.
+   *   2. On 2xx: drop in-memory key, clear session, wipe every
+   *      `void.state.*` key from localStorage, clear store modules.
+   *   3. On non-2xx: return the error; DO NOT wipe local data so the
+   *      user can retry without losing access.
+   *
+   * The local wipe runs AFTER the server reports success — if the
+   * server fails mid-cascade the data on this device stays usable.
+   */
+  deleteAccount(): Promise<DeleteAccountResultLike>;
   /** Recompute the strength bucket for UI meters. Pure. */
   strength(passphrase: string): ReturnType<typeof passphraseStrength>;
 }
@@ -156,6 +203,7 @@ export function createAuthClient(deps: AuthDeps): AuthClient {
   let inMemoryKey: CryptoKey | null = null;
   const nowFn = deps.now ?? (() => Date.now());
   const profilesTable = deps.profilesTable ?? PROFILES_TABLE_DEFAULT;
+  const fetchImpl: typeof fetch = deps.fetchImpl ?? ((url, init) => globalThis.fetch(url, init));
 
   function state(): AuthState {
     const session = deps.store.get<AuthSession | null>('shared', 'auth.session', null);
@@ -407,12 +455,116 @@ export function createAuthClient(deps: AuthDeps): AuthClient {
     catch { /* registry warn ok */ }
   }
 
+  async function deleteAccount(): Promise<DeleteAccountResultLike> {
+    const session = deps.store.get<AuthSession | null>('shared', 'auth.session', null);
+    if (!session) {
+      return { ok: false, code: 'no-session', message: 'no active session to delete' };
+    }
+    if (!deps.accountDeleteUrl) {
+      return { ok: false, code: 'no-endpoint', message: 'account deletion endpoint not configured' };
+    }
+
+    // POST { confirm: "DELETE" } with the JWT. The server re-verifies
+    // the JWT through Supabase /auth/v1/user, then service-role cascades
+    // every user-scoped table, then deletes the auth.users row last.
+    let res: Response;
+    try {
+      res = await fetchImpl(deps.accountDeleteUrl, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'authorization': `Bearer ${session.access_token}`,
+          'accept': 'application/json',
+        },
+        body: JSON.stringify({ confirm: 'DELETE' }),
+      });
+    } catch (err) {
+      return {
+        ok: false,
+        code: 'network',
+        message: 'network error: ' + String((err as Error).message ?? err).slice(0, 200),
+      };
+    }
+
+    let parsed: Record<string, unknown> = {};
+    try {
+      parsed = (await res.json()) as Record<string, unknown>;
+    } catch {
+      // body wasn't json — fall through with empty parsed
+    }
+
+    if (!res.ok) {
+      const serverCode = typeof parsed.code === 'string' ? parsed.code : '';
+      const partial = parsed.partial as
+        | { deleted_tables?: string[]; deleted_rows?: Record<string, number>; failed_table?: string }
+        | undefined;
+      const partialOut = partial && partial.deleted_tables && partial.deleted_rows
+        ? {
+            deleted_tables: partial.deleted_tables,
+            deleted_rows: partial.deleted_rows,
+            failed_table: partial.failed_table,
+          }
+        : undefined;
+      if (res.status === 401) {
+        return { ok: false, code: 'unauthorized', message: 'session expired — sign in again to delete your account' };
+      }
+      if (res.status === 403 || serverCode === 'bad-confirm') {
+        return { ok: false, code: 'bad-confirm', message: 'server rejected the confirmation token' };
+      }
+      if (serverCode === 'cascade-failed') {
+        return { ok: false, code: 'cascade-failed', message: 'partial deletion — please retry', partial: partialOut };
+      }
+      if (serverCode === 'auth-delete-failed') {
+        return { ok: false, code: 'auth-delete-failed', message: 'partial deletion — please retry', partial: partialOut };
+      }
+      const msg = typeof parsed.message === 'string' ? parsed.message : `http ${res.status}`;
+      return { ok: false, code: 'http', message: msg, partial: partialOut };
+    }
+
+    // Server reported success. NOW wipe local data — only after the
+    // server cascade succeeded. If we wiped first and the network call
+    // failed, the user would lose their data on this device with the
+    // server row orphaned, which is the exact bug we're fixing.
+    const deletedUserId = typeof parsed.user_id === 'string' ? parsed.user_id : session.user_id;
+    const deletedTables = Array.isArray(parsed.deleted_tables) ? (parsed.deleted_tables as string[]) : [];
+    const deletedRows = (parsed.deleted_rows && typeof parsed.deleted_rows === 'object')
+      ? (parsed.deleted_rows as Record<string, number>)
+      : {};
+
+    inMemoryKey = null;
+    deps.store.set('shared', 'auth.session', null);
+    // Wipe every `void.state.*` key. The store adapter's own
+    // `removeItem` is fine but doesn't know about peer modules — we
+    // scan localStorage directly for the prefix used by storeModuleKey.
+    try {
+      if (typeof localStorage !== 'undefined') {
+        const keys: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith('void.state.')) keys.push(k);
+        }
+        for (const k of keys) localStorage.removeItem(k);
+      }
+    } catch { /* non-fatal */ }
+
+    try { events.emit('auth:signed_out', { ts: nowFn() }); }
+    catch { /* registry warn ok */ }
+
+    return {
+      ok: true,
+      user_id: deletedUserId,
+      deleted_tables: deletedTables,
+      deleted_rows: deletedRows,
+    };
+  }
+
   return {
     state,
     encryptionKey: () => inMemoryKey,
     signUp,
     signIn,
     signOut,
+    deleteAccount,
     strength: passphraseStrength,
   };
 }
