@@ -8,7 +8,7 @@ compatibility_flags = ["nodejs_compat"]
 # Then paste the returned id below (and remove the placeholder).
 [[kv_namespaces]]
 binding = "RATE_KV"
-id = "REPLACE_WITH_RATE_KV_ID"
+id = "04527c1767e0474d90aa52d1cd8f9c86"
 
 # ─── secrets (set with `wrangler secret put`) ──────────────────────────────────
 # APPLE_AUTH_KEY    — full p8 PEM contents
