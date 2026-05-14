@@ -32,8 +32,9 @@ import {
   type EnrichEnv,
   type IngestEnv,
 } from './telemetry';
+import { handleLabel, type LabelEnv } from './label';
 
-export interface Env extends EnrichEnv, IngestEnv {
+export interface Env extends EnrichEnv, IngestEnv, LabelEnv {
   ANTHROPIC_API_KEY: string;
   CACHE_KV: KVNamespace;
   RATE_KV: KVNamespace;
@@ -64,6 +65,9 @@ export default {
     }
     if (url.pathname === '/ingest-event') {
       return handleIngestEvent(req, env);
+    }
+    if (url.pathname === '/label') {
+      return handleLabel(req, env);
     }
 
     if (url.pathname !== '/brain-dump' && url.pathname !== '/v1/messages') {

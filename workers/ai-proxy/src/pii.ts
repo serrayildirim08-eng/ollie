@@ -1,11 +1,15 @@
 /**
- * PII scrubber — Layer 1 (regex) of the two-layer defense.
- * Layer 2 = Anthropic system prompt during enrichment (cron worker).
+ * PII scrubber — worker-local regex layer.
  *
- * Goal: remove obvious identifiers before queuing. False negatives are
- * acceptable (Anthropic catches the rest). False positives — over-scrubbing
- * legitimate text — are also acceptable because B2B signal value lives in
- * topic/sentiment/brand, not in proper nouns.
+ * NOTE (Sprint B' pivot 2026-05-14): the canonical scrubber moved to
+ * `@ollie/pii-scrub` which adds locale-aware name wordlists + a numeric
+ * pass and ships with a 100-sample golden test. This file is retained
+ * as the belt-and-suspenders second pass inside the worker so we never
+ * forward raw text to Anthropic even if a misconfigured client calls
+ * /label with un-scrubbed input. Keep these two implementations in sync
+ * for the regex layer; the package version is the source of truth.
+ *
+ * Layer 2 = Anthropic system prompt during enrichment + labeling.
  *
  * Order matters: URL must run before email/phone (URLs may embed both).
  * Replacement tokens are bracketed so the LLM can recognize and preserve
