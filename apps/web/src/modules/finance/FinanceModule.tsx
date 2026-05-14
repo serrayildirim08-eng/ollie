@@ -32,6 +32,7 @@ import type {
   RecurringCandidate,
 } from '@ollie/logic/finance';
 import { buildSavingsCardCopy } from '@ollie/logic/finance';
+import { IncomeCard } from './IncomeCard';
 import { emit } from '@ollie/events';
 import { useStoreSlice } from '../../store';
 import { ModuleHelp } from '../../components/ModuleHelp';
@@ -1609,6 +1610,9 @@ export function FinanceModule() {
             </div>
           )}
         </div>
+
+        {/* Variable-income surface — silent when sparse */}
+        <IncomeCard records={records} now={now} masked={masked} $fmt={$fmt} />
 
         {/* Upcoming bills (derived) */}
         {upcomingBillList.length > 0 && (
