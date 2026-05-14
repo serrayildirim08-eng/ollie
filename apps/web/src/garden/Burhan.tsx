@@ -4,20 +4,11 @@ import { useGLTF, Clone } from '@react-three/drei';
 import { useStoreSlice } from '../store';
 import type { BurhanState } from '@ollie/logic/burhan';
 import { fixMeshyMaterials } from './fixMaterials';
+import { getStage, type Stage } from '@ollie/garden';
 
 useGLTF.preload('/assets/burhan/seedling.glb');
 useGLTF.preload('/assets/burhan/young.glb');
 useGLTF.preload('/assets/burhan/burhan-v1.glb');
-
-type Stage = 'seedling' | 'sapling' | 'young' | 'mature' | 'ancient';
-
-function getStage(activeDays: number): Stage {
-  if (activeDays < 15)  return 'seedling';
-  if (activeDays < 61)  return 'sapling';
-  if (activeDays < 181) return 'young';
-  if (activeDays < 541) return 'mature';
-  return 'ancient';
-}
 
 // sapling and ancient glbs don't exist yet — fall back to nearest stage.
 // Pile peak is ~0.25m above ground (dirt-pile scale 0.7, position y=0.02);

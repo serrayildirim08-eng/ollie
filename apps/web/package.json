@@ -20,6 +20,7 @@
     "@ollie/consent": "workspace:*",
     "@ollie/crypto": "workspace:*",
     "@ollie/events": "workspace:*",
+    "@ollie/garden": "workspace:*",
     "@ollie/logic": "workspace:*",
     "@ollie/notifications": "workspace:*",
     "@ollie/orchestrator": "workspace:*",
