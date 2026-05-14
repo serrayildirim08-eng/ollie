@@ -41,6 +41,15 @@ export { createWorkOrchestrator } from './work';
 export { createGoalsOrchestrator } from './goals';
 export { createBurhanOrchestrator } from './burhan';
 export { createMedicationOrchestrator } from './medication';
+export {
+  computeWeeklyReview,
+  emitWeeklyReview,
+  scheduleWeeklyReview,
+  nextSunday19,
+  isoWeekKey,
+  SPARSE_THRESHOLD,
+} from './body-weekly';
+export type { WeeklyReviewInput, WeeklyReviewResult, WeeklyReviewSummary, WeeklyReviewEmitOptions } from './body-weekly';
 
 export interface RootOrchestrator extends Orchestrator {
   cycle: ReturnType<typeof createCycleOrchestrator>;

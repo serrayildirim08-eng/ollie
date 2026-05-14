@@ -63,6 +63,22 @@ export const SHAPES: Record<string, ShapeSpec> = {
 
   // body weekly review
   'body:weekly_review': { ts: 'number', weekStartTs: 'number', weekEndTs: 'number', copy: 'string', summary: 'object' },
+
+  // sleep · wind-down checklist (feature 12)
+  'sleep:wind_down_started':   { ts: 'number' },
+  'sleep:wind_down_completed': { ts: 'number', durationMs: 'number', itemsCompleted: 'number' },
+  'sleep:wind_down_skipped':   { ts: 'number', itemsCompleted: 'number' },
+
+  // body · caffeine→sleep correlator (Drake 2013, 6h half-life). threshold
+  // may be null when correlation magnitude < 0.3; declared optional here
+  // so the validator accepts null without dropping the emit.
+  'pattern:caffeine_sleep_detected': {
+    correlation: 'number',
+    'threshold?': 'object',
+    sampleSize: 'number',
+    copy: 'string',
+    ts: 'number',
+  },
 };
 
 export type ValidationResult = { ok: true } | { ok: false; reason: string };

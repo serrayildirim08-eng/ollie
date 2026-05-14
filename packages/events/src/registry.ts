@@ -81,6 +81,13 @@ export const REGISTRY: Registry = {
   'journal:entries_added':         { payload: '{ dump_ts: number, count: number, extractor: string }' },
   'sleep:record_updated':          { payload: '{ night_of: string, is_partial: boolean }' },
 
+  // ─── sleep · wind-down checklist (feature 12 / AUDIT_body_v2 hyp #6) ────
+  // Sequential 6-item bedtime ritual; started fires on first tap of the night,
+  // completed when the final item is checked, skipped if dismissed mid-flow.
+  'sleep:wind_down_started':       { payload: '{ ts: number }' },
+  'sleep:wind_down_completed':     { payload: '{ ts: number, durationMs: number, itemsCompleted: number }' },
+  'sleep:wind_down_skipped':       { payload: '{ ts: number, itemsCompleted: number }' },
+
   // ─── episodes ───────────────────────────────────────────────────
   'void:episode:opened':           { payload: '{ id: string, label: string, kind: string, started_at: number }' },
   'void:episode:closed':           { payload: '{ id: string, ended_at: number, duration_days: number }' },
@@ -92,6 +99,7 @@ export const REGISTRY: Registry = {
   'work:pattern_detected':         { payload: '{ pattern: string, confidence: string, sample_n: number, ts: number }' },
   'body:pattern_detected':         { payload: '{ pattern: string, confidence: string, sample_n: number, ts: number }' },
   'sleep:pattern_detected':        { payload: '{ pattern: string, confidence: string, sample_n: number, ts: number }' },
+  'pattern:caffeine_sleep_detected': { payload: '{ correlation: number, threshold: { hours: number, minutes: number } | null, sampleSize: number, copy: string, ts: number }' },
   'astrology:transit_change':      { payload: '{ aspect: string, planet1: string, planet2: string, ts: number }' },
 
   // ─── habits ─────────────────────────────────────────────────────

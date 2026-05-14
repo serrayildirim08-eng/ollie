@@ -20,3 +20,8 @@ supabase/.temp/
 
 # Stray empty leftover from CLI link
 workers/cron/supabase/
+
+# 3D model source files — optimized .glb's ship from apps/{web,ios}/{public,www}/models/
+# Originals live elsewhere (Meshy AI / cloud storage), too large for git.
+assets/*.glb
+assets/*/*.glb
