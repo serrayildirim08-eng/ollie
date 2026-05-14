@@ -116,8 +116,12 @@ describe('sync · outbound', () => {
     store.set('cycle', 'items', [{ ts: 1, action: 'started' }, { ts: 2, action: 'symptom' }]);
     await vi.advanceTimersByTimeAsync(500);
     await vi.runAllTimersAsync();
-    // Single upsert for the latest snapshot
-    expect(captured.upserts.length).toBe(1);
+    // The debounced upsert kicks off an async encrypt + post. Give it
+    // microtask cycles to land before asserting (CI runners are noisier
+    // than local — without this, captured.upserts stays empty).
+    await vi.waitFor(() => {
+      expect(captured.upserts.length).toBe(1);
+    });
     sync.stop();
   });
 
