@@ -1170,7 +1170,7 @@ export function createFinanceOrchestrator(
       }));
 
       // finance:subscription_stale → push next morning (~16h) once per pattern
-      // TODO: ES
+      // LOCALIZE_LATER — ES: finance.push.subscription_stale "${0} — sin abrir en ${1} días. sigues pagando${2}."
       unsubs.push(events.on('finance:subscription_stale', (raw) => {
         try {
           const p = (raw ?? {}) as {
@@ -1198,7 +1198,7 @@ export function createFinanceOrchestrator(
       }));
 
       // finance:savings_milestone → immediate push (milestone is the moment)
-      // TODO: ES
+      // LOCALIZE_LATER — ES: finance.push.savings_milestone "${0}: ${1} de ${2}. creciendo en silencio."
       unsubs.push(events.on('finance:savings_milestone', (raw) => {
         try {
           const p = (raw ?? {}) as {
@@ -1227,7 +1227,7 @@ export function createFinanceOrchestrator(
 
       // finance:impulse_pause_summary → monthly digest, fires same day (1st of month)
       // aggregation_group coalesces multiple emits within the digest window.
-      // TODO: ES
+      // LOCALIZE_LATER — ES: finance.push.impulse_pause_summary_one/many
       unsubs.push(events.on('finance:impulse_pause_summary', (raw) => {
         try {
           const p = (raw ?? {}) as { count?: number; total?: number };
@@ -1249,7 +1249,7 @@ export function createFinanceOrchestrator(
       }));
 
       // finance:anomaly_detected → push within 1h (already per-day deduped at emit site)
-      // TODO: ES
+      // LOCALIZE_LATER — ES: finance.push.anomaly_detected "este cargo de ${0} parece inusual. ¿confirmar o marcar?"
       unsubs.push(events.on('finance:anomaly_detected', (raw) => {
         try {
           const p = (raw ?? {}) as {
@@ -1275,7 +1275,7 @@ export function createFinanceOrchestrator(
 
       // finance:tax_setaside_due → immediate nudge on the 1st of each month
       // Deadpan, factual. No urgency. Deduped by month_key at emit site.
-      // TODO: ES
+      // LOCALIZE_LATER — ES: finance.push.tax_setaside "reserva fiscal · ${0} para ${1}. aviso mensual, no es una fecha límite."
       unsubs.push(events.on(FINANCE_TAX_SETASIDE_DUE_EVENT, (raw) => {
         try {
           const p = (raw ?? {}) as {
