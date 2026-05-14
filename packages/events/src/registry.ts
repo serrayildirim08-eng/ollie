@@ -100,6 +100,7 @@ export const REGISTRY: Registry = {
   'body:pattern_detected':         { payload: '{ pattern: string, confidence: string, sample_n: number, ts: number }' },
   'sleep:pattern_detected':        { payload: '{ pattern: string, confidence: string, sample_n: number, ts: number }' },
   'pattern:caffeine_sleep_detected': { payload: '{ correlation: number, threshold: { hours: number, minutes: number } | null, sampleSize: number, copy: string, ts: number }' },
+  'pattern:detected':              { payload: '{ correlation_name: string, correlation: number, sample_size: number, copy: string, ts: number }' },
   'astrology:transit_change':      { payload: '{ aspect: string, planet1: string, planet2: string, ts: number }' },
 
   // ─── habits ─────────────────────────────────────────────────────
@@ -260,6 +261,19 @@ export const REGISTRY: Registry = {
 
   // ─── body weekly review (Sunday 19:00 local) ────────────────────────────
   'body:weekly_review': { payload: '{ ts: number, weekStartTs: number, weekEndTs: number, copy: string, summary: { habitsCompleted: number, habitsTotal: number, mostSkippedWeekday: string|null, sleepAvgHours: number|null, sleepNightsLogged: number, cyclePhaseAtEnd: string|null, supplementAdherencePct: number|null, waterAvgCups: number|null, isSparse: boolean } }' },
+
+  // ─── body notifications · 11 push events (Sprint body-v2 wiring) ────────
+  'cycle:period_approaching':    { payload: '{ predictedTs: number, daysUntil: number, ts: number }' },
+  'cycle:period_imminent':       { payload: '{ predictedTs: number, ts: number }' },
+  'cycle:period_late':           { payload: '{ predictedTs: number, daysLate: number, ts: number }' },
+  'cycle:luteal_starting':       { payload: '{ lutealStartTs: number, daysUntil: number, ts: number }' },
+  'cycle:ovulation_imminent':    { payload: '{ ovulationTs: number, ts: number }' },
+  'cycle:pill_missed':           { payload: '{ missedDate: string, ts: number }' },
+  'sleep:wind_down_window':      { payload: '{ bedtimeTs: number, ts: number }' },
+  'sleep:debt_accumulated':      { payload: '{ debtHours: number, targetHours: number, idealBedtimeHHMM: string, ts: number }' },
+  'body:supplement_due':         { payload: '{ supplementId: string, supplementName: string, reminderHHMM: string, ts: number }' },
+  'body:posture_nudge':          { payload: '{ hourBucket: number, ts: number }' },
+  'habits:morning_check':        { payload: '{ firstHabitName: string|null, totalCount: number, ts: number }' },
 
   // ─── retention telemetry (local-only until backend Group C ships) ────────
   // Local-first: backend may pick these up via research-stream later.

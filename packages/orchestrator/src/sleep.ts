@@ -30,6 +30,7 @@
 import type { Store } from '@ollie/store';
 import type { Unsubscribe } from '@ollie/events';
 import * as events from '@ollie/events';
+import type { NotificationSpec } from '@ollie/notifications';
 import {
   parseSleepDump,
   mergeRecord,
@@ -132,11 +133,19 @@ const DEFAULT_SETTINGS: SleepOrchestratorSettings = {
   },
 };
 
+export interface SleepOrchestratorOptions {
+  /** Injected for tests; defaults to Date.now */
+  now?: () => number;
+  /** APNs push scheduler; no-op when omitted. */
+  scheduleNotification?: (spec: NotificationSpec, fireAt: number) => void;
+}
+
 export function createSleepOrchestrator(
   store: Store,
-  { now: nowFn }: { now?: () => number } = {},
+  opts: SleepOrchestratorOptions = {},
 ): Orchestrator & { recomputeDerived(): void; processBacklog(): void } {
-  const getNow = nowFn ?? (() => Date.now());
+  const getNow = opts.now ?? (() => Date.now());
+  const scheduleNotification = opts.scheduleNotification ?? null;
 
   let initialized = false;
   const unsubs: Unsubscribe[] = [];
@@ -228,7 +237,65 @@ export function createSleepOrchestrator(
       const target = resolveTarget(settings);
 
       setKey('stats', deriveSleepStats(records));
-      setKey('debt', computeSleepDebt(records, target, 14, now));
+      const debt = computeSleepDebt(records, target, 14, now);
+      setKey('debt', debt);
+
+      // ── sleep:debt_accumulated · 7d shortage > 4h ─────────────────────
+      // Once per UTC day, gated on ≥5 logged nights.
+      try {
+        const last7 = records
+          .filter((r) => r && !r.is_skipped && typeof r.tst_min === 'number')
+          .slice(-7);
+        if (last7.length >= 5) {
+          const totalHours = last7.reduce((s, r) => s + (r.tst_min ?? 0), 0) / 60;
+          const targetTotal = target * 7;
+          const shortage = targetTotal - totalHours;
+          if (shortage > 4) {
+            const todayKey = new Date(now).toISOString().slice(0, 10);
+            const lastEmittedDay = store.get<string>('sleep', '_debtAccumulatedDay', '') ?? '';
+            if (lastEmittedDay !== todayKey) {
+              const baseBedtimeMin = 22 * 60 + 30;
+              const pullForwardMin = Math.min(120, Math.round((shortage / 7) * 60));
+              const idealMin = baseBedtimeMin - pullForwardMin;
+              const idealHHMM = `${String(Math.floor(idealMin / 60) % 24).padStart(2, '0')}:${String(idealMin % 60).padStart(2, '0')}`;
+              try {
+                events.emit('sleep:debt_accumulated', {
+                  debtHours: Math.round(shortage * 10) / 10,
+                  targetHours: target,
+                  idealBedtimeHHMM: idealHHMM,
+                  ts: now,
+                });
+              } catch { /* non-fatal */ }
+              store.set('sleep', '_debtAccumulatedDay', todayKey);
+            }
+          }
+        }
+      } catch { /* non-fatal */ }
+
+      // ── sleep:wind_down_window · 60min before target bedtime ──────────
+      try {
+        const targetBedtime = (getSettings().target_bedtime ?? '').trim();
+        if (/^\d{2}:\d{2}$/.test(targetBedtime)) {
+          const [bh, bm] = targetBedtime.split(':').map(Number);
+          const todayMidnight = new Date(now);
+          todayMidnight.setHours(0, 0, 0, 0);
+          const bedtimeTs = todayMidnight.getTime() + (bh * 60 + bm) * 60_000;
+          const minutesUntil = (bedtimeTs - now) / 60_000;
+          if (minutesUntil <= 60 && minutesUntil > 0) {
+            const todayKey = new Date(now).toISOString().slice(0, 10);
+            const lastEmittedDay = store.get<string>('sleep', '_windDownWindowDay', '') ?? '';
+            if (lastEmittedDay !== todayKey) {
+              try {
+                events.emit('sleep:wind_down_window', {
+                  bedtimeTs,
+                  ts: now,
+                });
+              } catch { /* non-fatal */ }
+              store.set('sleep', '_windDownWindowDay', todayKey);
+            }
+          }
+        }
+      } catch { /* non-fatal */ }
       setKey('drift', detectBedtimeDrift(records, now));
       setKey('chronotype', estimateChronotype(records, now));
       setKey('socialJetlag', computeSocialJetlag(records, settings));
@@ -496,6 +563,72 @@ export function createSleepOrchestrator(
         try { schedule(); } catch (err) { console.error('[orchestrator/sleep] body:pattern_detected tick failed', err); }
       }),
     );
+
+    // ── APNs push subscribers (body-v2 wiring) ──────────────────────────
+    if (scheduleNotification) {
+      // sleep:wind_down_window
+      unsubs.push(events.on('sleep:wind_down_window', (raw) => {
+        try {
+          const p = (raw ?? {}) as { bedtimeTs?: number };
+          if (typeof p.bedtimeTs !== 'number') return;
+          const dayKey = new Date(p.bedtimeTs).toISOString().slice(0, 10);
+          scheduleNotification(
+            {
+              title: 'wind-down in 60 min. or whenever.',
+              category: 'REMINDER',
+              dedupe_key: `sleep:wind_down_window:${dayKey}`,
+              action_url: '/sleep',
+            },
+            getNow(),
+          );
+        } catch { /* non-fatal */ }
+      }));
+
+      // pattern:caffeine_sleep_detected (re-use of P3's event)
+      unsubs.push(events.on('pattern:caffeine_sleep_detected', (raw) => {
+        try {
+          const p = (raw ?? {}) as { copy?: string; threshold?: { hours?: number } | null; ts?: number };
+          const dynamic = typeof p.copy === 'string' && p.copy.trim().length > 0;
+          const title = dynamic ? p.copy! : 'coffee after 3pm. heads up — sleep usually dips.';
+          const hourBucket = p.threshold?.hours ?? 0;
+          const ts = typeof p.ts === 'number' ? p.ts : getNow();
+          const dayKey = new Date(ts).toISOString().slice(0, 10);
+          scheduleNotification(
+            {
+              title,
+              category: 'PATTERN_ALERT',
+              dedupe_key: `sleep:caffeine_late_warning:${dayKey}:${hourBucket}`,
+              action_url: '/sleep',
+            },
+            getNow(),
+          );
+        } catch { /* non-fatal */ }
+      }));
+
+      // sleep:debt_accumulated
+      unsubs.push(events.on('sleep:debt_accumulated', (raw) => {
+        try {
+          const p = (raw ?? {}) as { debtHours?: number; idealBedtimeHHMM?: string; ts?: number };
+          if (typeof p.debtHours !== 'number' || typeof p.idealBedtimeHHMM !== 'string') return;
+          const [hh, mm] = p.idealBedtimeHHMM.split(':').map(Number);
+          const period = hh >= 12 ? 'pm' : 'am';
+          const h12 = hh % 12 === 0 ? 12 : hh % 12;
+          const friendly = `${h12}:${String(mm).padStart(2, '0')}${period}`;
+          const debtRounded = Math.round(p.debtHours);
+          const ts = typeof p.ts === 'number' ? p.ts : getNow();
+          const dayKey = new Date(ts).toISOString().slice(0, 10);
+          scheduleNotification(
+            {
+              title: `you're ${debtRounded}h short this week. ideal bedtime tonight: ${friendly}.`,
+              category: 'PATTERN_ALERT',
+              dedupe_key: `sleep:debt_accumulated:${dayKey}`,
+              action_url: '/sleep',
+            },
+            getNow(),
+          );
+        } catch { /* non-fatal */ }
+      }));
+    }
 
     // Cold start — backfill + initial derived compute.
     try { processBacklog(); } catch (err) { console.error('[orchestrator/sleep] first-run backfill failed', err); }

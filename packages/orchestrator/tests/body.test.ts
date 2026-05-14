@@ -4,8 +4,9 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createStore, createMemoryAdapter } from '@ollie/store';
-import { _clearAllHandlers, on } from '@ollie/events';
+import { _clearAllHandlers, on, emit } from '@ollie/events';
 import { createBodyOrchestrator } from '../src/body';
+import type { NotificationSpec } from '@ollie/notifications';
 
 // Fixture: a user with 30 days of water logs and braindump entries
 // mentioning headaches on low-water days — enough to fire
@@ -143,5 +144,152 @@ describe('body orchestrator', () => {
     // Should not throw and should not double-fire subscriptions.
     const ts = store.get<number>('body', 'patternsLastComputedAt', 0);
     expect(ts).toBe(FIXED_NOW);
+  });
+});
+
+// ─── push notification subscribers ──────────────────────────────────────────
+
+describe('body orchestrator — push notification subscribers', () => {
+  // Use a time inside the 8am supplement reminder window so emitSupplementDue
+  // fires when recompute runs.
+  const FIXED_NOW = new Date('2026-05-14T08:30:00').getTime();
+
+  let store: ReturnType<typeof createStore>;
+  let orch: ReturnType<typeof createBodyOrchestrator>;
+  let scheduled: Array<{ spec: NotificationSpec; fireAt: number }>;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(FIXED_NOW);
+    store = createStore(createMemoryAdapter());
+    scheduled = [];
+    orch = createBodyOrchestrator(store, {
+      now: () => FIXED_NOW,
+      scheduleNotification: (spec, fireAt) => { scheduled.push({ spec, fireAt }); },
+    });
+  });
+
+  afterEach(() => {
+    orch.teardown();
+    _clearAllHandlers();
+    vi.useRealTimers();
+  });
+
+  it('body:supplement_due → REMINDER push with name substituted', () => {
+    orch.init();
+    emit('body:supplement_due', {
+      supplementId: 'sup-d',
+      supplementName: 'vitamin d',
+      reminderHHMM: '08:00',
+      ts: FIXED_NOW,
+    });
+    // flush the 10ms aggregation timer
+    vi.advanceTimersByTime(20);
+    expect(scheduled).toHaveLength(1);
+    expect(scheduled[0].spec.category).toBe('REMINDER');
+    expect(scheduled[0].spec.title).toBe('vitamin d. just a heads up.');
+    expect(scheduled[0].spec.dedupe_key).toContain('body:supplement_due:sup-d');
+  });
+
+  it('body:supplement_due → aggregates multiple supplements emitted within same tick', () => {
+    orch.init();
+    emit('body:supplement_due', {
+      supplementId: 'sup-d', supplementName: 'vitamin d',
+      reminderHHMM: '08:00', ts: FIXED_NOW,
+    });
+    emit('body:supplement_due', {
+      supplementId: 'sup-mg', supplementName: 'magnesium',
+      reminderHHMM: '08:00', ts: FIXED_NOW,
+    });
+    emit('body:supplement_due', {
+      supplementId: 'sup-fe', supplementName: 'iron',
+      reminderHHMM: '08:00', ts: FIXED_NOW,
+    });
+    vi.advanceTimersByTime(20);
+    expect(scheduled).toHaveLength(1);
+    expect(scheduled[0].spec.title).toBe('vitamin d, magnesium, iron. just a heads up.');
+    expect(scheduled[0].spec.aggregation_group).toContain('body:supplement_due:');
+  });
+
+  it('body:posture_nudge → REMINDER push with deadpan copy', () => {
+    orch.init();
+    emit('body:posture_nudge', {
+      hourBucket: 14,
+      ts: FIXED_NOW,
+    });
+    expect(scheduled).toHaveLength(1);
+    expect(scheduled[0].spec.category).toBe('REMINDER');
+    expect(scheduled[0].spec.title).toBe('stand up. or sit better. either works.');
+    expect(scheduled[0].spec.dedupe_key).toContain('body:posture_nudge');
+  });
+
+  it('emits body:supplement_due from recompute when reminder window is open', () => {
+    let emitted = 0;
+    on('body:supplement_due', () => { emitted++; });
+    store.set('body', 'supplements', [
+      { id: 'sup-d', name: 'vitamin d', dose: '2000iu', reminder_hhmm: '08:00', added_at: FIXED_NOW - 86400_000 },
+    ]);
+    orch.init();
+    vi.advanceTimersByTime(600);
+    expect(emitted).toBeGreaterThanOrEqual(1);
+  });
+
+  it('emits body:supplement_due only ONCE per supplement per day', () => {
+    let emitted = 0;
+    on('body:supplement_due', () => { emitted++; });
+    store.set('body', 'supplements', [
+      { id: 'sup-d', name: 'vitamin d', reminder_hhmm: '08:00', added_at: FIXED_NOW - 86400_000 },
+    ]);
+    orch.init();
+    vi.advanceTimersByTime(600);
+    orch.recomputePatterns();
+    orch.recomputePatterns();
+    expect(emitted).toBe(1);
+  });
+
+  it('does NOT emit body:supplement_due when supplement was checked off today', () => {
+    let emitted = 0;
+    on('body:supplement_due', () => { emitted++; });
+    const todayKey = new Date(FIXED_NOW).toISOString().slice(0, 10);
+    store.set('body', 'supplements', [
+      { id: 'sup-d', name: 'vitamin d', reminder_hhmm: '08:00', added_at: FIXED_NOW - 86400_000, checked_dates: [todayKey] },
+    ]);
+    orch.init();
+    vi.advanceTimersByTime(600);
+    expect(emitted).toBe(0);
+  });
+
+  it('does NOT emit body:posture_nudge when opt_in is false', () => {
+    let emitted = 0;
+    on('body:posture_nudge', () => { emitted++; });
+    // posture_settings absent → opt_in false → no emit
+    orch.init();
+    vi.advanceTimersByTime(600);
+    expect(emitted).toBe(0);
+  });
+
+  it('emits body:posture_nudge when opt_in is true and current hour is in window', () => {
+    // Override now to 14:00 local (well inside 9-17 work hours)
+    vi.setSystemTime(new Date('2026-05-14T14:00:00').getTime());
+    orch.teardown();
+    orch = createBodyOrchestrator(store, {
+      now: () => new Date('2026-05-14T14:00:00').getTime(),
+      scheduleNotification: (spec, fireAt) => { scheduled.push({ spec, fireAt }); },
+    });
+    let emitted = 0;
+    on('body:posture_nudge', () => { emitted++; });
+    store.set('body', 'posture_settings', { opt_in: true });
+    orch.init();
+    vi.advanceTimersByTime(600);
+    expect(emitted).toBe(1);
+  });
+
+  it('scheduleNotification NOT called when not injected', () => {
+    const store2 = createStore(createMemoryAdapter());
+    const orch2 = createBodyOrchestrator(store2, { now: () => FIXED_NOW });
+    orch2.init();
+    emit('body:posture_nudge', { hourBucket: 14, ts: FIXED_NOW });
+    expect(scheduled).toHaveLength(0);
+    orch2.teardown();
   });
 });

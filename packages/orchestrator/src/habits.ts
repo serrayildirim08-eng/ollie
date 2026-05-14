@@ -19,41 +19,52 @@
  *
  * Emits:
  *   habits:completed       when a habit is marked done for the first time today
- *                          Dedup: one emit per habitId per calendar day (UTC date string).
- *                          Toggling off then back on within the same day does NOT re-emit.
+ *                          Dedup: one emit per habitId per UTC calendar day.
+ *   habits:morning_check   daily 9am local time, once per day. Payload includes
+ *                          firstHabitName (or null) and totalCount.
+ *
+ * Push subscribers (APNs):
+ *   habits:morning_check → "{N} things today. one of them is {firstHabit}."
  */
 
 import type { Store } from '@ollie/store';
 import type { Unsubscribe } from '@ollie/events';
 import * as events from '@ollie/events';
+import type { NotificationSpec } from '@ollie/notifications';
 import { detectPatterns } from '@ollie/logic/habits';
 import type { AnyHabitsResult, Habit, HabitCompletion } from '@ollie/logic/habits';
 import type { Orchestrator } from './types';
 
 const DEBOUNCE_MS = 500;
+const MORNING_CHECK_HOUR = 9;
 
 type HabitsCompletedCategory = 'health' | 'mental' | 'home' | 'work' | 'self_care';
 
-// Best-effort mapping from cueTime to category.
-// Habits can add a `category` field in future; for now we infer from cueTime.
 function inferCategory(cueTime?: string): HabitsCompletedCategory {
   if (cueTime === 'morning') return 'health';
   if (cueTime === 'evening') return 'mental';
   return 'self_care';
 }
 
+export interface HabitsOrchestratorOptions {
+  /** Injected for tests; defaults to Date.now */
+  now?: () => number;
+  /** APNs push scheduler; no-op when omitted. */
+  scheduleNotification?: (spec: NotificationSpec, fireAt: number) => void;
+}
+
 export function createHabitsOrchestrator(
   store: Store,
-  { now: nowFn }: { now?: () => number } = {},
-): Orchestrator & { recomputePatterns(): void } {
-  const getNow = nowFn ?? (() => Date.now());
+  opts: HabitsOrchestratorOptions = {},
+): Orchestrator & { recomputePatterns(): void; emitMorningCheck(): boolean } {
+  const getNow = opts.now ?? (() => Date.now());
+  const scheduleNotification = opts.scheduleNotification ?? null;
 
   let initialized = false;
   const unsubs: Unsubscribe[] = [];
   let timer: ReturnType<typeof setTimeout> | null = null;
+  let morningTimer: ReturnType<typeof setTimeout> | null = null;
 
-  // Dedup set: "habitId:YYYY-MM-DD" entries that have already emitted habits:completed.
-  // Cleared on teardown so tests are isolated.
   const emittedCompletions = new Set<string>();
 
   function scanCompletions(): void {
@@ -93,7 +104,6 @@ export function createHabitsOrchestrator(
       const goals = store.get<Array<{ created_at?: number; title?: string }>>('goals', 'items', []) ?? [];
       const workSessions = store.get<Array<{ session_at?: number; ts?: number; reply?: string }>>('work', 'sessions', []) ?? [];
 
-      // Flatten completions from embedded habit objects into a flat array
       const completions: HabitCompletion[] = [];
       for (const h of habitsRaw) {
         if (Array.isArray(h.completions)) {
@@ -130,8 +140,6 @@ export function createHabitsOrchestrator(
       store.set('habits', 'patterns', patterns);
       store.set('habits', 'patternsLastComputedAt', now);
 
-      // flat(Infinity) on the recursive AnyHabitsResult type causes TS deep-
-      // instantiation errors; cast to unknown[] first to avoid it.
       const flat = Array.isArray(patterns) ? (patterns as unknown[]).flat(Infinity) : [];
       for (const p of flat) {
         const item = p as { pattern?: string; confidence?: string; sample_n?: number };
@@ -154,11 +162,57 @@ export function createHabitsOrchestrator(
     timer = setTimeout(() => { timer = null; recomputePatterns(); }, DEBOUNCE_MS);
   }
 
-  // Called synchronously on each habits_v2 change so completion events
-  // fire as quickly as the store write lands (no debounce delay).
   function scheduleWithCompletionScan(): void {
     scanCompletions();
     schedule();
+  }
+
+  // ── morning_check (daily 9am) ────────────────────────────────────────────
+  // Emits habits:morning_check once per UTC day. Self-arming timer fires
+  // at next 9am local. Returns true if event fired.
+  function emitMorningCheck(): boolean {
+    const now = getNow();
+    const todayKey = new Date(now).toISOString().slice(0, 10);
+    const lastEmittedDay = store.get<string>('habits', '_morningCheckEmittedDay', '') ?? '';
+    if (lastEmittedDay === todayKey) return false;
+
+    const habits = store.get<Array<{ name?: string; label?: string }>>('shared', 'habits_v2', []) ?? [];
+    const firstHabit = habits[0];
+    const firstHabitName = typeof firstHabit?.name === 'string' && firstHabit.name.trim().length > 0
+      ? firstHabit.name
+      : (typeof firstHabit?.label === 'string' && firstHabit.label.trim().length > 0
+        ? firstHabit.label
+        : null);
+    try {
+      events.emit('habits:morning_check', {
+        firstHabitName,
+        totalCount: habits.length,
+        ts: now,
+      });
+    } catch { /* non-fatal */ }
+    store.set('habits', '_morningCheckEmittedDay', todayKey);
+    return true;
+  }
+
+  function nextMorning9(now: number): number {
+    const d = new Date(now);
+    const target = new Date(d);
+    target.setHours(MORNING_CHECK_HOUR, 0, 0, 0);
+    if (target.getTime() <= now) {
+      target.setDate(target.getDate() + 1);
+    }
+    return target.getTime();
+  }
+
+  function armMorningTimer(): void {
+    const now = getNow();
+    const fireAt = nextMorning9(now);
+    const delay = Math.max(0, fireAt - now);
+    morningTimer = setTimeout(() => {
+      morningTimer = null;
+      try { emitMorningCheck(); } catch { /* non-fatal */ }
+      armMorningTimer();
+    }, delay);
   }
 
   function init(): void {
@@ -189,6 +243,39 @@ export function createHabitsOrchestrator(
       }),
     );
 
+    // ── APNs push subscriber (body-v2 wiring) ───────────────────────────
+    // habits:morning_check → "{N} things today. one of them is {first}."
+    if (scheduleNotification) {
+      unsubs.push(events.on('habits:morning_check', (raw) => {
+        try {
+          const p = (raw ?? {}) as { firstHabitName?: string | null; totalCount?: number; ts?: number };
+          const total = typeof p.totalCount === 'number' ? p.totalCount : 0;
+          if (total < 1) return;
+          const first = typeof p.firstHabitName === 'string' && p.firstHabitName.trim().length > 0
+            ? p.firstHabitName
+            : null;
+          const ts = typeof p.ts === 'number' ? p.ts : getNow();
+          const dayKey = new Date(ts).toISOString().slice(0, 10);
+          const noun = total === 1 ? 'thing' : 'things';
+          const title = first
+            ? `${total} ${noun} today. one of them is ${first}.`
+            : `${total} ${noun} today.`;
+          scheduleNotification(
+            {
+              title,
+              category: 'CONTENT_DELIVERY',
+              dedupe_key: `habits:morning_check:${dayKey}`,
+              action_url: '/habits',
+            },
+            getNow(),
+          );
+        } catch { /* non-fatal */ }
+      }));
+    }
+
+    // Arm the daily 9am scheduler.
+    armMorningTimer();
+
     // Cold start — populate patterns immediately.
     schedule();
   }
@@ -196,9 +283,10 @@ export function createHabitsOrchestrator(
   function teardown(): void {
     unsubs.splice(0).forEach((fn) => fn());
     if (timer) { clearTimeout(timer); timer = null; }
+    if (morningTimer) { clearTimeout(morningTimer); morningTimer = null; }
     emittedCompletions.clear();
     initialized = false;
   }
 
-  return { init, teardown, recomputePatterns };
+  return { init, teardown, recomputePatterns, emitMorningCheck };
 }

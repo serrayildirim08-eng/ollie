@@ -69,6 +69,19 @@ export const SHAPES: Record<string, ShapeSpec> = {
   'sleep:wind_down_completed': { ts: 'number', durationMs: 'number', itemsCompleted: 'number' },
   'sleep:wind_down_skipped':   { ts: 'number', itemsCompleted: 'number' },
 
+  // body notifications · 11 push events (Sprint body-v2 wiring)
+  'cycle:period_approaching':    { predictedTs: 'number', daysUntil: 'number', ts: 'number' },
+  'cycle:period_imminent':       { predictedTs: 'number', ts: 'number' },
+  'cycle:period_late':           { predictedTs: 'number', daysLate: 'number', ts: 'number' },
+  'cycle:luteal_starting':       { lutealStartTs: 'number', daysUntil: 'number', ts: 'number' },
+  'cycle:ovulation_imminent':    { ovulationTs: 'number', ts: 'number' },
+  'cycle:pill_missed':           { missedDate: 'string', ts: 'number' },
+  'sleep:wind_down_window':      { bedtimeTs: 'number', ts: 'number' },
+  'sleep:debt_accumulated':      { debtHours: 'number', targetHours: 'number', idealBedtimeHHMM: 'string', ts: 'number' },
+  'body:supplement_due':         { supplementId: 'string', supplementName: 'string', reminderHHMM: 'string', ts: 'number' },
+  'body:posture_nudge':          { hourBucket: 'number', ts: 'number' },
+  'habits:morning_check':        { 'firstHabitName?': 'string', totalCount: 'number', ts: 'number' },
+
   // body · caffeine→sleep correlator (Drake 2013, 6h half-life). threshold
   // may be null when correlation magnitude < 0.3; declared optional here
   // so the validator accepts null without dropping the emit.
@@ -76,6 +89,17 @@ export const SHAPES: Record<string, ShapeSpec> = {
     correlation: 'number',
     'threshold?': 'object',
     sampleSize: 'number',
+    copy: 'string',
+    ts: 'number',
+  },
+
+  // body-correlation registry — emitted from the daily registry pass for
+  // any correlator whose copy is non-empty. correlation_name is a stable
+  // enum from @ollie/logic/body/correlations.
+  'pattern:detected': {
+    correlation_name: 'string',
+    correlation: 'number',
+    sample_size: 'number',
     copy: 'string',
     ts: 'number',
   },
