@@ -1,10 +1,15 @@
 /**
- * @ollie/auth · Pattern A · zero-knowledge assertion (Sprint 5 · F1)
+ * @ollie/auth · Pattern A · passphrase-on-device assertion (Sprint 5 · F1)
  *
  * Spies on EVERY supabase-js call argument and FAILS if the raw user
  * passphrase appears anywhere — string, nested object, header, body,
- * any depth. If this test ever goes red, the constitutional
- * zero-knowledge invariant is broken and shipping is blocked.
+ * any depth. If this test ever goes red, the LOGIN passphrase has leaked
+ * to the server and shipping is blocked.
+ *
+ * NOTE (Sprint B' pivot 2026-05-14): brain-dump content posture changed
+ * to opt-in anonymized data collection. This test guards the LOGIN
+ * passphrase only — brain-dump data routes are governed by
+ * `@ollie/consent`, not by this invariant.
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
@@ -115,7 +120,7 @@ function assertNoPassphraseLeak(needle: string): void {
   }
 }
 
-describe('auth · zero-knowledge invariant', () => {
+describe('auth · passphrase-on-device invariant', () => {
   it('signUp: passphrase NEVER appears in any supabase call argument', async () => {
     const auth = createAuthClient({ store, api: makeSpyingSupabaseApi(captured) });
     const r = await auth.signUp({

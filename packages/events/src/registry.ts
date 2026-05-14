@@ -154,6 +154,11 @@ export const REGISTRY: Registry = {
   'goals:anti_goal_in_dump':           { payload: '{ excerpt: string, ts: number }' },
   'goals:interference':                { payload: '{ conflict_count: number, ts: number }' },
   'goals:experiment_candidate':        { payload: '{ goal_id: string, weeks_stuck: number, ts: number }' },
+  // ─── audit 2026-05-14 · goal → habit cross-dispatch ─────────────
+  // UI fires this when the user taps "convert to habit" on a goal
+  // detail card. habits orchestrator listens + appends a new Habit
+  // into shared.habits_v2.
+  'goals:convert_to_habit':            { payload: '{ goal_id: string, habit_title: string, cadence: "daily"|"weekly"|"weekdays"|"custom", ts: number }' },
 
   // ─── admin ──────────────────────────────────────────────────────
   'admin:open_loop_missing':           { payload: '{ dump_id: string, ts: number }' },
