@@ -7,6 +7,6 @@ allowBuilds:
   core-js: false
   electron: true
   esbuild: true
-  protobufjs: set this to true or false
+  protobufjs: false
   sharp: true
   workerd: true
