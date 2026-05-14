@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Burhan3D } from '../components/Burhan3D';
 import { BrainDumpInput } from '../components/BrainDumpInput';
+import { RetentionWelcomeBar } from '../components/RetentionWelcomeBar';
 import { getSkyVideoSrc } from '../lib/skyVideo';
 import { store } from '../store';
 import { getLocalWeather, formatWeatherPill, type WeatherSummary } from '../lib/weather';
@@ -196,6 +197,11 @@ export function HomeScreen({ onNavigate, onBrainDump }: HomeScreenProps) {
           zIndex: 0,
         }}
       />
+
+      {/* Retention welcome bar — D1/D7/D30 marker (Task 20).
+          Renders nothing unless a retention event fires this session.
+          Self-positioning at top center; auto-dismiss 8s. */}
+      <RetentionWelcomeBar />
 
       {/* Dark gradient overlay — bottom 45% */}
       <div

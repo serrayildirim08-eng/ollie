@@ -154,6 +154,8 @@ export const REGISTRY: Registry = {
   'goals:anti_goal_in_dump':           { payload: '{ excerpt: string, ts: number }' },
   'goals:interference':                { payload: '{ conflict_count: number, ts: number }' },
   'goals:experiment_candidate':        { payload: '{ goal_id: string, weeks_stuck: number, ts: number }' },
+  // audit task 15 (2026-05-14) — per-category completion velocity
+  'goals:velocity_pattern':            { payload: '{ category: string, total: number, completed: number, velocity: number, avg_days_to_complete: number, ts: number }' },
   // ─── audit 2026-05-14 · goal → habit cross-dispatch ─────────────
   // UI fires this when the user taps "convert to habit" on a goal
   // detail card. habits orchestrator listens + appends a new Habit
@@ -300,4 +302,5 @@ export const REGISTRY: Registry = {
   'void:retention:session_started':    { payload: '{ session_count: number, hours_since_install: number, ts: number }' },
   'void:retention:d1_returned':        { payload: '{ installed_at: number, returned_at: number, hours: number }' },
   'void:retention:d7_returned':        { payload: '{ installed_at: number, returned_at: number, days: number }' },
+  'void:retention:d30_returned':       { payload: '{ installed_at: number, returned_at: number, days: number }' },
 };

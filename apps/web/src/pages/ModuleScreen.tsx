@@ -25,6 +25,25 @@ const DumpModule      = lazy(() => import('../modules/dump/DumpModule').then(m =
 // AstrologyModule removed — deferred to backlog per audits/DECISIONS_2026-05-14.md Decision 2
 const MedicationModule = lazy(() => import('../modules/medication/MedicationModule').then(m => ({ default: m.MedicationModule })));
 
+// ─── telemetry whitelist ──────────────────────────────────────────────────────
+// Only the canonical 12 modules emit module_events rows. Anything else
+// (demo, redirect-through screens, placeholder routes) is dropped so the
+// table doesn't accumulate noise that breaks downstream cohort queries.
+const TRACKED_MODULES: ReadonlySet<string> = new Set([
+  'grocery',
+  'pets',
+  'finance',
+  'habits',
+  'sleep',
+  'cycle',
+  'work',
+  'goals',
+  'admin',
+  'body',
+  'dump',
+  'medication',
+]);
+
 // ─── fallback ─────────────────────────────────────────────────────────────────
 
 function ModuleLoading() {
@@ -122,9 +141,12 @@ export function ModuleScreen({
   // moduleId changes), and a close row on unmount / moduleId change.
   // Gated by research.hasConsent() — ConsentScreen sets necessary=true
   // before any user can reach this component; the check is defence-in-depth.
+  // Only the 12 canonical modules track; non-canonical screens (demo,
+  // placeholder routes) are dropped silently so module_events stays clean.
   const openedAtRef = useRef<number | null>(null);
   const actionsCountRef = useRef<number>(0);
   useEffect(() => {
+    if (!TRACKED_MODULES.has(moduleId)) return;
     const account = getAccount();
     if (!account?.research.hasConsent()) return;
     const userHash = readUserHash();
