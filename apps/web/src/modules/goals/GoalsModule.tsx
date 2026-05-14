@@ -15,6 +15,8 @@ import type {
   GoalSession,
   GoalReview,
   DumpEntry,
+  GoalCategory,
+  Milestone,
   LowMoodSignal,
   UlyssesContractSignal,
   ActiveCapSignal,
@@ -23,8 +25,27 @@ import type {
   SunkCostSignal,
   PacingClassifiedSignal,
 } from '@ollie/logic/goals';
+import { emit as emitEvent } from '@ollie/events';
 import { useStoreSlice } from '../../store';
 import { ModuleHelp } from '../../components/ModuleHelp';
+
+// ─── AI step-breakdown worker URL ───────────────────────────────────────────
+const AI_PROXY_URL =
+  ((import.meta as unknown as { env?: { VITE_AI_PROXY_URL?: string; VITE_AI_WORKER_URL?: string } }).env?.VITE_AI_PROXY_URL ??
+    (import.meta as unknown as { env?: { VITE_AI_WORKER_URL?: string } }).env?.VITE_AI_WORKER_URL ??
+    '');
+
+// ─── categories ─────────────────────────────────────────────────────────────
+const CATEGORIES: ReadonlyArray<GoalCategory> = [
+  'career',
+  'relationship',
+  'health',
+  'finance',
+  'learning',
+  'creative',
+];
+
+type CategoryFilter = GoalCategory | 'all';
 
 // ─── palette (paper/ink canonical) ───────────────────────────────────────────
 
@@ -53,6 +74,12 @@ interface StoredGoal extends Omit<Goal, 'obstacle' | 'premortem' | 'ulysses_cont
   paused_until?: number;
   created_at?: number;
   action?: string;
+  // audit 2026-05-14 — frontend-pod scaffold
+  category?: GoalCategory;
+  progress?: number;
+  milestones?: Milestone[];
+  steps?: string[];
+  converted_to_habit_at?: number;
 }
 
 interface AnyGoalPattern {
@@ -121,6 +148,421 @@ const LABEL_STYLE: React.CSSProperties = {
   textTransform: 'uppercase',
   fontWeight: 500,
 };
+
+// ─── ProgressBlock ────────────────────────────────────────────────────────────
+// SVG progress bar + optional manual control when no milestones exist.
+
+interface ProgressBlockProps {
+  goal: StoredGoal;
+  onManualSet: (pct: number) => void;
+}
+
+function ProgressBlock({ goal, onManualSet }: ProgressBlockProps) {
+  const hasMilestones = (goal.milestones ?? []).length > 0;
+  const pct = typeof goal.progress === 'number' ? goal.progress : 0;
+  const show = hasMilestones || typeof goal.progress === 'number';
+  if (!show && !hasMilestones) {
+    // surface a tiny inline control so user can start tracking
+    return (
+      <div style={{ paddingTop: 14 }}>
+        <button
+          type="button"
+          onClick={() => onManualSet(0)}
+          style={{
+            background: 'transparent',
+            border: 'none',
+            padding: 0,
+            color: FAINT,
+            fontFamily: "'DM Mono',monospace",
+            fontSize: 9,
+            letterSpacing: '0.22em',
+            textTransform: 'uppercase',
+            cursor: 'pointer',
+          }}
+        >
+          + track progress
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div style={{ paddingTop: 16 }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'baseline',
+          paddingBottom: 6,
+          fontFamily: "'DM Mono',monospace",
+          fontSize: 9,
+          letterSpacing: '0.22em',
+          textTransform: 'uppercase',
+          color: FAINT,
+        }}
+      >
+        <span>progress</span>
+        <span style={{ color: MUTED, fontVariantNumeric: 'tabular-nums' }}>{pct}%</span>
+      </div>
+      <svg
+        role="progressbar"
+        aria-valuenow={pct}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label="goal progress"
+        viewBox="0 0 200 4"
+        preserveAspectRatio="none"
+        style={{ width: '100%', height: 4, display: 'block' }}
+      >
+        <rect x="0" y="0" width="200" height="4" fill="rgba(255,255,255,0.6)" />
+        <rect x="0" y="0" width="200" height="4" fill={HAIRLINE} />
+        <rect x="0" y="0" width={Math.max(0, Math.min(200, (pct / 100) * 200))} height="4" fill={ACCENT} />
+      </svg>
+      {!hasMilestones && (
+        <input
+          type="range"
+          min={0}
+          max={100}
+          step={5}
+          value={pct}
+          onChange={(e) => onManualSet(Number(e.target.value))}
+          aria-label="set goal progress manually"
+          style={{
+            width: '100%',
+            marginTop: 6,
+            accentColor: ACCENT,
+            cursor: 'pointer',
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── MilestoneBlock ───────────────────────────────────────────────────────────
+
+interface MilestoneBlockProps {
+  goal: StoredGoal;
+  draft: { title: string; target: string };
+  onDraftChange: (d: { title: string; target: string }) => void;
+  onAdd: () => void;
+  onToggle: (msId: string) => void;
+  onRemove: (msId: string) => void;
+}
+
+function MilestoneBlock({
+  goal,
+  draft,
+  onDraftChange,
+  onAdd,
+  onToggle,
+  onRemove,
+}: MilestoneBlockProps) {
+  const list = goal.milestones ?? [];
+  return (
+    <div style={{ paddingTop: 18 }}>
+      <div
+        style={{
+          fontFamily: "'DM Mono',monospace",
+          fontSize: 9,
+          letterSpacing: '0.22em',
+          textTransform: 'uppercase',
+          color: FAINT,
+          paddingBottom: 8,
+        }}
+      >
+        milestones
+      </div>
+
+      {list.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingBottom: 10 }}>
+          {list.map((m) => {
+            const done = !!m.completed_at;
+            return (
+              <div
+                key={m.id}
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'auto 1fr auto auto',
+                  gap: 10,
+                  alignItems: 'center',
+                  padding: '6px 0',
+                  borderBottom: `1px solid ${HAIRLINE}`,
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => onToggle(m.id)}
+                  aria-pressed={done}
+                  aria-label={done ? 'mark milestone open' : 'mark milestone done'}
+                  style={{
+                    width: 18,
+                    height: 18,
+                    padding: 0,
+                    background: 'transparent',
+                    border: `1.5px solid ${done ? ACCENT : HAIRLINE_HI}`,
+                    borderRadius: 3,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                  }}
+                >
+                  {done && (
+                    <svg viewBox="0 0 14 14" width="12" height="12" aria-hidden="true">
+                      <path
+                        d="M 3 7 L 6 10 L 11 4"
+                        fill="none"
+                        stroke={ACCENT}
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  )}
+                </button>
+                <span
+                  style={{
+                    fontFamily: "'Inter Tight',sans-serif",
+                    fontSize: 14,
+                    color: done ? MUTED : INK,
+                    textDecoration: done ? 'line-through' : 'none',
+                  }}
+                >
+                  {m.title}
+                </span>
+                <span
+                  style={{
+                    fontFamily: "'DM Mono',monospace",
+                    fontSize: 9,
+                    letterSpacing: '0.18em',
+                    color: FAINT,
+                    textTransform: 'lowercase',
+                  }}
+                >
+                  {m.target_date
+                    ? new Date(m.target_date).toLocaleDateString(undefined, {
+                        month: 'short',
+                        day: 'numeric',
+                      }).toLowerCase()
+                    : ''}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => onRemove(m.id)}
+                  aria-label={`remove ${m.title}`}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: FAINT,
+                    fontFamily: "'DM Mono',monospace",
+                    fontSize: 9,
+                    letterSpacing: '0.18em',
+                    textTransform: 'uppercase',
+                    cursor: 'pointer',
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+        <input
+          value={draft.title}
+          onChange={(e) => onDraftChange({ ...draft, title: e.target.value })}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') onAdd();
+          }}
+          placeholder="+ add milestone"
+          aria-label="milestone title"
+          style={{
+            flex: '1 1 180px',
+            padding: '8px 10px',
+            background: 'transparent',
+            border: `1px solid ${HAIRLINE}`,
+            color: INK,
+            borderRadius: 2,
+            fontFamily: "'Inter Tight',sans-serif",
+            fontSize: 13,
+            outline: 'none',
+          }}
+        />
+        <input
+          type="date"
+          value={draft.target}
+          onChange={(e) => onDraftChange({ ...draft, target: e.target.value })}
+          aria-label="milestone target date"
+          style={{
+            padding: '8px 10px',
+            background: 'transparent',
+            border: `1px solid ${HAIRLINE}`,
+            color: INK,
+            borderRadius: 2,
+            fontFamily: "'DM Mono',monospace",
+            fontSize: 12,
+            outline: 'none',
+          }}
+        />
+        <button
+          type="button"
+          onClick={onAdd}
+          disabled={!draft.title.trim()}
+          style={{
+            padding: '8px 14px',
+            background: draft.title.trim() ? INK : 'transparent',
+            color: draft.title.trim() ? BG : FAINT,
+            border: `1px solid ${draft.title.trim() ? INK : HAIRLINE_HI}`,
+            fontFamily: "'DM Mono',monospace",
+            fontSize: 9,
+            letterSpacing: '0.22em',
+            textTransform: 'uppercase',
+            cursor: draft.title.trim() ? 'pointer' : 'default',
+            borderRadius: 2,
+          }}
+        >
+          add
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── StepBlock — AI step breakdown ────────────────────────────────────────────
+
+interface StepBlockProps {
+  goal: StoredGoal;
+  busy: boolean;
+  error: string | undefined;
+  onAsk: () => void;
+  onToggle: (idx: number) => void;
+}
+
+function StepBlock({ goal, busy, error, onAsk, onToggle }: StepBlockProps) {
+  const steps = goal.steps ?? [];
+  const done = (goal as StoredGoal & { steps_done?: boolean[] }).steps_done ?? [];
+  return (
+    <div style={{ paddingTop: 18 }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          flexWrap: 'wrap',
+          paddingBottom: 10,
+        }}
+      >
+        <button
+          type="button"
+          onClick={onAsk}
+          disabled={busy}
+          style={{
+            padding: '8px 14px',
+            minHeight: 36,
+            background: 'transparent',
+            color: busy ? FAINT : INK,
+            border: `1px solid ${HAIRLINE_HI}`,
+            borderRadius: 2,
+            cursor: busy ? 'wait' : 'pointer',
+            fontFamily: "'DM Mono',monospace",
+            fontSize: 9,
+            letterSpacing: '0.22em',
+            textTransform: 'uppercase',
+          }}
+        >
+          {busy ? 'asking…' : steps.length > 0 ? 'ask again' : 'ask claude for steps'}
+        </button>
+        {error && (
+          <span
+            style={{
+              fontFamily: "'Inter Tight',sans-serif",
+              fontSize: 12,
+              fontStyle: 'italic',
+              color: MUTED,
+            }}
+          >
+            {error}
+          </span>
+        )}
+      </div>
+
+      {steps.length > 0 && (
+        <ol
+          style={{
+            listStyle: 'none',
+            padding: 0,
+            margin: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 6,
+          }}
+        >
+          {steps.map((s, i) => {
+            const isDone = !!done[i];
+            return (
+              <li
+                key={i}
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'auto 1fr',
+                  gap: 10,
+                  alignItems: 'center',
+                  padding: '6px 0',
+                  borderBottom: `1px solid ${HAIRLINE}`,
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => onToggle(i)}
+                  aria-pressed={isDone}
+                  aria-label={isDone ? 'mark step open' : 'mark step done'}
+                  style={{
+                    width: 18,
+                    height: 18,
+                    padding: 0,
+                    background: 'transparent',
+                    border: `1.5px solid ${isDone ? ACCENT : HAIRLINE_HI}`,
+                    borderRadius: 3,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  {isDone && (
+                    <svg viewBox="0 0 14 14" width="12" height="12" aria-hidden="true">
+                      <path
+                        d="M 3 7 L 6 10 L 11 4"
+                        fill="none"
+                        stroke={ACCENT}
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  )}
+                </button>
+                <span
+                  style={{
+                    fontFamily: "'Inter Tight',sans-serif",
+                    fontSize: 14,
+                    color: isDone ? MUTED : INK,
+                    textDecoration: isDone ? 'line-through' : 'none',
+                  }}
+                >
+                  {s}
+                </span>
+              </li>
+            );
+          })}
+        </ol>
+      )}
+    </div>
+  );
+}
 
 // ─── GoalsNoticed — patterns surface from store ───────────────────────────────
 
@@ -362,11 +804,29 @@ export function GoalsModule({ onBack }: GoalsModuleProps) {
   const [draftUlysses, setDraftUlysses] = useState('');
   const [draftRole, setDraftRole] = useState('');
   const [draftPacing, setDraftPacing] = useState('');
+  const [draftCategory, setDraftCategory] = useState<GoalCategory | ''>('');
 
   // ── Filter ───────────────────────────────────────────────────────────────
   const [filter, setFilter] = useState<'active' | 'done' | 'dropped' | 'graveyard' | 'all'>(
     'active',
   );
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all');
+
+  // ── AI step-breakdown state ──────────────────────────────────────────────
+  const [stepFetching, setStepFetching] = useState<Record<string, boolean>>({});
+  const [stepError, setStepError] = useState<Record<string, string>>({});
+
+  // ── Milestone draft per goal ─────────────────────────────────────────────
+  const [milestoneDrafts, setMilestoneDrafts] = useState<
+    Record<string, { title: string; target: string }>
+  >({});
+
+  // ── Convert-to-habit modal state ─────────────────────────────────────────
+  const [habitModal, setHabitModal] = useState<{
+    goalId: string;
+    title: string;
+    cadence: 'daily' | 'weekly' | 'weekdays' | 'custom';
+  } | null>(null);
 
   // ── Detector UI state — Phase 1 ──────────────────────────────────────────
   const [lowMoodBanner, setLowMoodBanner] = useState<LowMoodSignal | null>(null);
@@ -415,6 +875,7 @@ export function GoalsModule({ onBack }: GoalsModuleProps) {
       ulysses_contract: draftUlysses.trim() || null,
       role: draftRole.trim() || null,
       pacing,
+      category: draftCategory || undefined,
       status: 'active',
       created_at: Date.now(),
       action: 'add',
@@ -430,7 +891,164 @@ export function GoalsModule({ onBack }: GoalsModuleProps) {
     setDraftUlysses('');
     setDraftRole('');
     setDraftPacing('');
+    setDraftCategory('');
     setAddOpen(false);
+  }
+
+  // ── AI step breakdown via Cloudflare Worker ─────────────────────────────
+  async function fetchSteps(goal: StoredGoal): Promise<void> {
+    if (!goal.id || !goal.title) return;
+    if (!AI_PROXY_URL) {
+      setStepError((prev) => ({ ...prev, [goal.id!]: 'claude unreachable. try again.' }));
+      return;
+    }
+    setStepFetching((prev) => ({ ...prev, [goal.id!]: true }));
+    setStepError((prev) => {
+      const n = { ...prev };
+      delete n[goal.id!];
+      return n;
+    });
+    try {
+      const prompt =
+        `Break this goal into 3-7 concrete actionable steps. ` +
+        `Goal: ${goal.title}. ` +
+        `Why: ${goal.why || 'not stated'}. ` +
+        `Return ONLY a JSON array of short imperative step strings, no prose. Example: ["step one","step two"].`;
+      const resp = await fetch(`${AI_PROXY_URL.replace(/\/$/, '')}/brain-dump`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 512,
+          messages: [{ role: 'user', content: prompt }],
+        }),
+      });
+      if (!resp.ok) throw new Error(`http ${resp.status}`);
+      const body = await resp.json();
+      // Anthropic /v1/messages-style response: { content: [{type:'text', text:'...'}] }
+      const text: string =
+        (body?.content?.[0]?.text as string) ??
+        (body?.completion as string) ??
+        (typeof body === 'string' ? body : '');
+      // Pull first JSON array out of the text.
+      const match = text.match(/\[[\s\S]*\]/);
+      const arr: unknown = match ? JSON.parse(match[0]) : null;
+      const steps = Array.isArray(arr)
+        ? arr.map((s) => String(s).trim()).filter((s) => s.length > 0).slice(0, 7)
+        : [];
+      if (steps.length === 0) throw new Error('no steps parsed');
+      setGoals(
+        (goals ?? []).map((g) =>
+          g?.id === goal.id ? { ...g, steps } : g,
+        ),
+      );
+    } catch (err) {
+      console.warn('[GoalsModule] fetchSteps failed:', err);
+      setStepError((prev) => ({ ...prev, [goal.id!]: 'claude unreachable. try again.' }));
+    } finally {
+      setStepFetching((prev) => {
+        const n = { ...prev };
+        delete n[goal.id!];
+        return n;
+      });
+    }
+  }
+
+  function toggleStep(goalId: string, idx: number) {
+    // Steps are simple strings; toggling completion stores a parallel
+    // boolean array under steps_done. We piggyback as a Record on the goal.
+    setGoals(
+      (goals ?? []).map((g) => {
+        if (g?.id !== goalId) return g;
+        const done = (g as StoredGoal & { steps_done?: boolean[] }).steps_done ?? [];
+        const next = [...done];
+        next[idx] = !next[idx];
+        return { ...g, steps_done: next };
+      }) as StoredGoal[],
+    );
+  }
+
+  // ── Milestone ops ───────────────────────────────────────────────────────
+  function addMilestone(goalId: string) {
+    const d = milestoneDrafts[goalId];
+    if (!d?.title?.trim()) return;
+    const ms: Milestone = {
+      id: `ms-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+      title: sanitize(d.title.trim()),
+      target_date: d.target ? Date.parse(d.target) : undefined,
+      completed_at: null,
+      created_at: Date.now(),
+    };
+    setGoals(
+      (goals ?? []).map((g) =>
+        g?.id === goalId
+          ? { ...g, milestones: [...(g.milestones ?? []), ms] }
+          : g,
+      ),
+    );
+    setMilestoneDrafts((prev) => ({ ...prev, [goalId]: { title: '', target: '' } }));
+  }
+
+  function toggleMilestone(goalId: string, msId: string) {
+    setGoals(
+      (goals ?? []).map((g) => {
+        if (g?.id !== goalId) return g;
+        const next = (g.milestones ?? []).map((m) =>
+          m.id === msId
+            ? { ...m, completed_at: m.completed_at ? null : Date.now() }
+            : m,
+        );
+        // Auto-compute progress when milestones exist.
+        const total = next.length;
+        const done = next.filter((m) => m.completed_at).length;
+        const progress = total > 0 ? Math.round((done / total) * 100) : g.progress;
+        return { ...g, milestones: next, progress };
+      }),
+    );
+  }
+
+  function removeMilestone(goalId: string, msId: string) {
+    setGoals(
+      (goals ?? []).map((g) => {
+        if (g?.id !== goalId) return g;
+        const next = (g.milestones ?? []).filter((m) => m.id !== msId);
+        const total = next.length;
+        const done = next.filter((m) => m.completed_at).length;
+        const progress = total > 0 ? Math.round((done / total) * 100) : g.progress;
+        return { ...g, milestones: next, progress };
+      }),
+    );
+  }
+
+  // ── Progress manual setter (when no milestones) ──────────────────────────
+  function setProgress(goalId: string, pct: number) {
+    const v = Math.max(0, Math.min(100, Math.round(pct)));
+    setGoals(
+      (goals ?? []).map((g) => (g?.id === goalId ? { ...g, progress: v } : g)),
+    );
+  }
+
+  // ── Convert to habit (dispatches cross-module event) ─────────────────────
+  function confirmConvertToHabit() {
+    if (!habitModal) return;
+    const { goalId, title, cadence } = habitModal;
+    setGoals(
+      (goals ?? []).map((g) =>
+        g?.id === goalId ? { ...g, converted_to_habit_at: Date.now() } : g,
+      ),
+    );
+    // Cross-module dispatch — backend pod wires habits orchestrator listener.
+    try {
+      emitEvent('goals:convert_to_habit', {
+        goal_id: goalId,
+        habit_title: title,
+        cadence,
+        ts: Date.now(),
+      });
+    } catch (err) {
+      console.warn('[GoalsModule] emit goals:convert_to_habit failed:', err);
+    }
+    setHabitModal(null);
   }
 
   function commitDraft(draftGoal: StoredGoal, nextGoals: StoredGoal[]) {
@@ -545,8 +1163,9 @@ export function GoalsModule({ onBack }: GoalsModuleProps) {
       (goals ?? [])
         .filter((g) => g?.title)
         .filter((g) => (filter === 'all' ? true : (g.status ?? 'active') === filter))
+        .filter((g) => (categoryFilter === 'all' ? true : g.category === categoryFilter))
         .sort((a, b) => (b.created_at ?? 0) - (a.created_at ?? 0)),
-    [goals, filter],
+    [goals, filter, categoryFilter],
   );
 
   const counts = useMemo(
@@ -1023,6 +1642,40 @@ export function GoalsModule({ onBack }: GoalsModuleProps) {
               <div
                 style={{ ...LABEL_STYLE, fontSize: 10, letterSpacing: '0.18em', paddingBottom: 8 }}
               >
+                category · optional
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, paddingBottom: 20 }}>
+                {CATEGORIES.map((c) => {
+                  const on = draftCategory === c;
+                  return (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => setDraftCategory(on ? '' : c)}
+                      aria-pressed={on}
+                      style={{
+                        padding: '8px 12px',
+                        minHeight: 36,
+                        background: on ? ACCENT : 'transparent',
+                        color: on ? BG : MUTED,
+                        border: `1px solid ${on ? ACCENT : HAIRLINE_HI}`,
+                        borderRadius: 999,
+                        cursor: 'pointer',
+                        fontFamily: "'DM Mono',monospace",
+                        fontSize: 9,
+                        letterSpacing: '0.22em',
+                        textTransform: 'uppercase',
+                      }}
+                    >
+                      {c}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div
+                style={{ ...LABEL_STYLE, fontSize: 10, letterSpacing: '0.18em', paddingBottom: 8 }}
+              >
                 pacing · optional
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, paddingBottom: 6 }}>
@@ -1177,9 +1830,7 @@ export function GoalsModule({ onBack }: GoalsModuleProps) {
           style={{
             display: 'flex',
             gap: 18,
-            paddingBottom: 28,
-            borderBottom: `1px solid ${HAIRLINE}`,
-            marginBottom: 32,
+            paddingBottom: 16,
             flexWrap: 'wrap',
           }}
         >
@@ -1218,6 +1869,47 @@ export function GoalsModule({ onBack }: GoalsModuleProps) {
             );
           })}
         </div>
+
+        {/* category filter row · hidden when no goals exist */}
+        {(goals ?? []).length > 0 && (
+          <div
+            style={{
+              display: 'flex',
+              gap: 6,
+              paddingBottom: 28,
+              borderBottom: `1px solid ${HAIRLINE}`,
+              marginBottom: 32,
+              flexWrap: 'wrap',
+            }}
+          >
+            {(['all', ...CATEGORIES] as CategoryFilter[]).map((c) => {
+              const on = categoryFilter === c;
+              return (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setCategoryFilter(c)}
+                  aria-pressed={on}
+                  style={{
+                    padding: '6px 12px',
+                    minHeight: 32,
+                    background: on ? ACCENT : 'transparent',
+                    color: on ? BG : FAINT,
+                    border: `1px solid ${on ? ACCENT : HAIRLINE}`,
+                    borderRadius: 999,
+                    cursor: 'pointer',
+                    fontFamily: "'DM Mono',monospace",
+                    fontSize: 9,
+                    letterSpacing: '0.22em',
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  {c}
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         {/* empty state */}
         {visible.length === 0 && (
@@ -1677,6 +2369,106 @@ export function GoalsModule({ onBack }: GoalsModuleProps) {
                       {overdue && ' · past target'}
                     </div>
                   )}
+
+                  {/* category chip */}
+                  {g.category && (
+                    <div style={{ paddingTop: 10 }}>
+                      <span
+                        style={{
+                          display: 'inline-block',
+                          padding: '4px 10px',
+                          border: `1px solid ${HAIRLINE_HI}`,
+                          borderRadius: 999,
+                          fontFamily: "'DM Mono',monospace",
+                          fontSize: 9,
+                          letterSpacing: '0.22em',
+                          color: MUTED,
+                          textTransform: 'uppercase',
+                        }}
+                      >
+                        {g.category}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* progress bar — sage fill, frosted bg */}
+                  {status === 'active' && (
+                    <ProgressBlock
+                      goal={g}
+                      onManualSet={(v) => setProgress(g.id!, v)}
+                    />
+                  )}
+
+                  {/* milestones */}
+                  {status === 'active' && (
+                    <MilestoneBlock
+                      goal={g}
+                      draft={milestoneDrafts[g.id!] ?? { title: '', target: '' }}
+                      onDraftChange={(d) =>
+                        setMilestoneDrafts((prev) => ({ ...prev, [g.id!]: d }))
+                      }
+                      onAdd={() => addMilestone(g.id!)}
+                      onToggle={(msId) => toggleMilestone(g.id!, msId)}
+                      onRemove={(msId) => removeMilestone(g.id!, msId)}
+                    />
+                  )}
+
+                  {/* AI step breakdown */}
+                  {status === 'active' && (
+                    <StepBlock
+                      goal={g}
+                      busy={!!stepFetching[g.id!]}
+                      error={stepError[g.id!]}
+                      onAsk={() => fetchSteps(g)}
+                      onToggle={(idx) => toggleStep(g.id!, idx)}
+                    />
+                  )}
+
+                  {/* convert to habit */}
+                  {(status === 'active' || status === 'done') && !g.converted_to_habit_at && (
+                    <div style={{ paddingTop: 16 }}>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setHabitModal({
+                            goalId: g.id!,
+                            title: g.title ?? 'goal',
+                            cadence: 'daily',
+                          })
+                        }
+                        style={{
+                          padding: '8px 14px',
+                          minHeight: 36,
+                          background: 'transparent',
+                          color: MUTED,
+                          border: `1px solid ${HAIRLINE_HI}`,
+                          borderRadius: 2,
+                          cursor: 'pointer',
+                          fontFamily: "'DM Mono',monospace",
+                          fontSize: 9,
+                          letterSpacing: '0.22em',
+                          textTransform: 'uppercase',
+                        }}
+                      >
+                        convert to habit
+                      </button>
+                    </div>
+                  )}
+
+                  {g.converted_to_habit_at && (
+                    <div
+                      style={{
+                        paddingTop: 12,
+                        fontFamily: "'DM Mono',monospace",
+                        fontSize: 9,
+                        letterSpacing: '0.22em',
+                        color: FAINT,
+                        textTransform: 'uppercase',
+                      }}
+                    >
+                      added to your habits.
+                    </div>
+                  )}
                 </div>
 
                 {/* action buttons */}
@@ -2073,6 +2865,143 @@ export function GoalsModule({ onBack }: GoalsModuleProps) {
                 }}
               >
                 delete anyway
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* convert-to-habit modal */}
+      {habitModal && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setHabitModal(null);
+          }}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(17,17,17,0.6)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 24,
+            zIndex: 1000,
+          }}
+        >
+          <div
+            style={{
+              width: '100%',
+              maxWidth: 460,
+              background: BG,
+              color: INK,
+              padding: 32,
+              borderRadius: 2,
+              border: `1px solid ${HAIRLINE}`,
+            }}
+          >
+            <div
+              style={{
+                fontFamily: "'DM Mono',monospace",
+                fontSize: 9,
+                letterSpacing: '0.26em',
+                color: MUTED,
+                textTransform: 'uppercase',
+                paddingBottom: 14,
+              }}
+            >
+              convert to habit
+            </div>
+            <div
+              style={{
+                fontFamily: "'DM Serif Display',serif",
+                fontSize: 22,
+                color: INK,
+                lineHeight: 1.3,
+                letterSpacing: '-0.01em',
+                paddingBottom: 18,
+              }}
+            >
+              {habitModal.title}
+            </div>
+            <div
+              style={{
+                fontFamily: "'DM Mono',monospace",
+                fontSize: 9,
+                letterSpacing: '0.22em',
+                color: FAINT,
+                textTransform: 'uppercase',
+                paddingBottom: 10,
+              }}
+            >
+              cadence
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', paddingBottom: 24 }}>
+              {(['daily', 'weekdays', 'weekly', 'custom'] as const).map((c) => {
+                const on = habitModal.cadence === c;
+                return (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => setHabitModal({ ...habitModal, cadence: c })}
+                    aria-pressed={on}
+                    style={{
+                      padding: '10px 16px',
+                      minHeight: 44,
+                      background: on ? INK : 'transparent',
+                      color: on ? BG : MUTED,
+                      border: `1px solid ${on ? INK : HAIRLINE_HI}`,
+                      borderRadius: 2,
+                      cursor: 'pointer',
+                      fontFamily: "'DM Mono',monospace",
+                      fontSize: 10,
+                      letterSpacing: '0.22em',
+                      textTransform: 'uppercase',
+                    }}
+                  >
+                    {c}
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                type="button"
+                onClick={confirmConvertToHabit}
+                style={{
+                  padding: '12px 22px',
+                  minHeight: 44,
+                  background: INK,
+                  color: BG,
+                  border: `1px solid ${INK}`,
+                  borderRadius: 2,
+                  fontFamily: "'DM Mono',monospace",
+                  fontSize: 10,
+                  letterSpacing: '0.22em',
+                  textTransform: 'uppercase',
+                  cursor: 'pointer',
+                }}
+              >
+                add to habits
+              </button>
+              <button
+                type="button"
+                onClick={() => setHabitModal(null)}
+                style={{
+                  padding: '12px 18px',
+                  minHeight: 44,
+                  background: 'transparent',
+                  color: FAINT,
+                  border: 'none',
+                  fontFamily: "'DM Mono',monospace",
+                  fontSize: 10,
+                  letterSpacing: '0.22em',
+                  textTransform: 'uppercase',
+                  cursor: 'pointer',
+                }}
+              >
+                cancel
               </button>
             </div>
           </div>

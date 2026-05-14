@@ -31,6 +31,7 @@ import { createRoot, type Root } from 'react-dom/client';
 const mocks = vi.hoisted(() => ({
   setConsentSpy: vi.fn().mockResolvedValue(undefined),
   emitSpy: vi.fn(),
+  trackTableSpy: vi.fn(),
 }));
 
 vi.mock('@ollie/consent', () => ({
@@ -52,7 +53,26 @@ vi.mock('@ollie/events', () => ({
   emit: mocks.emitSpy,
 }));
 
-const { setConsentSpy, emitSpy } = mocks;
+// account-boot pulls in store.ts (which fails to resolve @ollie/store/react
+// under the test transformer). Stub the surface ConsentStep uses.
+vi.mock('../../lib/account-boot', () => ({
+  getAccount: () => ({
+    research: {
+      trackTable: mocks.trackTableSpy,
+      hasConsent: () => true,
+    },
+  }),
+}));
+
+vi.mock('../../lib/user-hash', () => ({
+  readUserHash: () => 'hash-test',
+}));
+
+vi.mock('../../lib/device', () => ({
+  getAppVersion: () => '0.0.1-test',
+}));
+
+const { setConsentSpy, emitSpy, trackTableSpy } = mocks;
 
 import { ConsentStep } from './ConsentStep';
 
@@ -107,6 +127,7 @@ async function flushMicrotasks(): Promise<void> {
 beforeEach(() => {
   setConsentSpy.mockClear();
   emitSpy.mockClear();
+  trackTableSpy.mockClear();
   container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);
@@ -232,6 +253,45 @@ describe('ConsentStep · continue persistence', () => {
     await flushMicrotasks();
     await flushMicrotasks();
     expect(emitSpy.mock.calls[0][1]).toMatchObject({ source: 'reprompt' });
+  });
+});
+
+describe('ConsentStep · consent_audit telemetry', () => {
+  it('does NOT emit consent_audit when research stays OFF', async () => {
+    mount();
+    click(getContinue());
+    await flushMicrotasks();
+    await flushMicrotasks();
+    expect(trackTableSpy).not.toHaveBeenCalled();
+  });
+
+  it('emits consent_audit when research is opted in (event_source=signup)', async () => {
+    mount({ source: 'onboarding' });
+    click(getToggle('research'));
+    click(getContinue());
+    await flushMicrotasks();
+    await flushMicrotasks();
+    expect(trackTableSpy).toHaveBeenCalledTimes(1);
+    const [table, row] = trackTableSpy.mock.calls[0] as [string, Record<string, unknown>];
+    expect(table).toBe('consent_audit');
+    expect(row).toMatchObject({
+      user_hash: 'hash-test',
+      consent_necessary: true,
+      event_source: 'signup',
+      app_version: '0.0.1-test',
+    });
+    expect(typeof row.consented_at).toBe('string');
+  });
+
+  it('emits consent_audit with event_source=settings_change for reprompt source', async () => {
+    mount({ source: 'reprompt' });
+    click(getToggle('research'));
+    click(getContinue());
+    await flushMicrotasks();
+    await flushMicrotasks();
+    expect(trackTableSpy).toHaveBeenCalledTimes(1);
+    const [, row] = trackTableSpy.mock.calls[0] as [string, Record<string, unknown>];
+    expect(row.event_source).toBe('settings_change');
   });
 });
 

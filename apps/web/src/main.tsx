@@ -8,6 +8,7 @@ import { bootNotificationLayer } from './lib/push-register';
 import { installSavingsDigestLoop } from './lib/savings-digest';
 import { bootAccount } from './lib/account-boot';
 import { installDeeplinkHandler } from './lib/capacitor-deeplink';
+import { captureInviteFromUrl } from './lib/invite';
 
 // Sentry — error tracking. Capacitor SDK wraps the React SDK so we get
 // JS errors + native iOS crashes from the same project. MUST init before
@@ -45,6 +46,12 @@ if (sentryDsn) {
 // Boot account layer (Credibility audit C2): wires @ollie/auth +
 // @ollie/sync + @ollie/research-stream into the running app. Idempotent.
 bootAccount();
+
+// Task 22 — capture invite code from `?invite=…`, `#invite=…`, or the
+// Capacitor `ollie://invite/…` deep-link path. Writes to sessionStorage
+// so the onboarding gate (ConsentStep) can pre-fill. Strips the param
+// from the URL via history.replaceState so reloads don't double-fire.
+captureInviteFromUrl();
 
 // iOS Siri App Intents → URL scheme → MicButton (Sprint 4 · E3).
 // No-op on web/desktop; Capacitor native only.

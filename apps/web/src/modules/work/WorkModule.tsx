@@ -1,5 +1,12 @@
-import React, { useMemo, useState, useEffect, useCallback } from 'react';
-import type { AnyWorkPattern } from '@ollie/logic/work';
+import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
+import type {
+  AnyWorkPattern,
+  Project,
+  FocusLogEntry as LogicFocusLogEntry,
+  FocusDurationMin,
+  Meeting,
+  ScheduledFocusBlock,
+} from '@ollie/logic/work';
 import { useStoreSlice } from '../../store';
 import { ModuleHelp } from '../../components/ModuleHelp';
 import { SourcesLink } from '../../components/SourcesLink';
@@ -27,9 +34,33 @@ interface WorkItem {
   action?: string;
 }
 
-interface FocusLogEntry {
-  at: number;
-  duration_min: number;
+// Legacy log entries (pre-2026-05-14) may have used { at, duration_min } shape.
+// We migrate on read in todaySessions/billable rollups.
+interface LegacyFocusLogEntry {
+  at?: number;
+  ts?: number;
+  duration_min?: number;
+  duration_ms?: number;
+  project_id?: string;
+  task_id?: string;
+}
+
+type AnyFocusLogEntry = LogicFocusLogEntry | LegacyFocusLogEntry;
+
+function readLogTs(e: AnyFocusLogEntry): number {
+  return (e as LogicFocusLogEntry).ts ?? (e as LegacyFocusLogEntry).at ?? 0;
+}
+
+function readLogDurationMs(e: AnyFocusLogEntry): number {
+  const ms = (e as LogicFocusLogEntry).duration_ms;
+  if (typeof ms === 'number' && ms >= 0) return ms;
+  const min = (e as { duration_min?: number }).duration_min;
+  if (typeof min === 'number') return min * 60_000;
+  return 0;
+}
+
+function readLogProjectId(e: AnyFocusLogEntry): string | undefined {
+  return (e as { project_id?: string }).project_id;
 }
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -252,8 +283,17 @@ export interface WorkModuleProps {
 export function WorkModule({ onBack }: WorkModuleProps) {
   // ── store slices ────────────────────────────────────────────────────────────
   const [items, setItems] = useStoreSlice<WorkItem[]>('work', 'tasks', []);
-  const [focusDuration, setFocusDuration] = useStoreSlice<number>('work', 'focus_duration', 25);
-  const [focusLog, setFocusLog] = useStoreSlice<FocusLogEntry[]>('work', 'focus_log', []);
+  const [focusDuration, setFocusDuration] = useStoreSlice<FocusDurationMin>('work', 'focus_duration', 25);
+  const [focusLog, setFocusLog] = useStoreSlice<AnyFocusLogEntry[]>('work', 'focus_log', []);
+  const [projects, setProjects] = useStoreSlice<Project[]>('work', 'projects', []);
+  const [meetings, setMeetings] = useStoreSlice<Meeting[]>('work', 'meetings', []);
+  const [scheduledBlocks, setScheduledBlocks] = useStoreSlice<ScheduledFocusBlock[]>(
+    'work',
+    'scheduled_blocks',
+    [],
+  );
+  // Cross-module: read body.sleep_sounds for brown-noise overlay default.
+  const [sleepSounds] = useStoreSlice<{ enabled?: boolean; track?: string }>('body', 'sleep_sounds', { enabled: true, track: 'brown_noise' });
 
   // ── local UI state ──────────────────────────────────────────────────────────
   const [newTask, setNewTask] = useState('');
@@ -261,6 +301,30 @@ export function WorkModule({ onBack }: WorkModuleProps) {
   const [timerState, setTimerState] = useState<'idle' | 'running' | 'done'>('idle');
   const [timerSec, setTimerSec] = useState(0);
   const [timerDuration, setTimerDuration] = useState((focusDuration ?? 25) * 60);
+  const [activeProjectId, setActiveProjectId] = useState<string | undefined>(undefined);
+  const [showProjectPicker, setShowProjectPicker] = useState(false);
+  const [newProjectName, setNewProjectName] = useState('');
+  const [noiseEnabled, setNoiseEnabled] = useState<boolean>(sleepSounds?.enabled !== false);
+
+  // ── brown-noise overlay (audio element) ────────────────────────────────────
+  // Mounts during focus timer; unmounts on stop/done/idle. iOS Safari needs
+  // user-gesture to play, which we already have (timer start is a tap).
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const sessionStartRef = useRef<number>(0);
+
+  // ── meeting tracker UI state ────────────────────────────────────────────────
+  const [meetOpen, setMeetOpen] = useState(false);
+  const [meetTitle, setMeetTitle] = useState('');
+  const [meetWhen, setMeetWhen] = useState('');
+  const [meetDuration, setMeetDuration] = useState('30');
+  const [meetAttendees, setMeetAttendees] = useState('');
+
+  // ── scheduled deep work UI state ────────────────────────────────────────────
+  const [blockOpen, setBlockOpen] = useState(false);
+  const [blockTitle, setBlockTitle] = useState('');
+  const [blockWhen, setBlockWhen] = useState('');
+  const [blockDuration, setBlockDuration] = useState<FocusDurationMin>(45);
+  const [blockProjectId, setBlockProjectId] = useState<string>('');
 
   // ── task ops ────────────────────────────────────────────────────────────────
   const addTask = useCallback(() => {
@@ -319,28 +383,61 @@ export function WorkModule({ onBack }: WorkModuleProps) {
         const next = s + 1;
         if (next >= timerDuration) {
           setTimerState('done');
-          setFocusLog([
-            ...(focusLog ?? []),
-            { at: Date.now(), duration_min: Math.round(timerDuration / 60) },
-          ]);
+          const entry: LogicFocusLogEntry = {
+            ts: sessionStartRef.current || Date.now(),
+            duration_min: ((focusDuration ?? 25) as FocusDurationMin),
+            duration_ms: timerDuration * 1000,
+            ...(activeProjectId ? { project_id: activeProjectId } : {}),
+          };
+          setFocusLog([...(focusLog ?? []), entry]);
           return timerDuration;
         }
         return next;
       });
     }, 1000);
     return () => clearInterval(id);
-  }, [timerState, timerDuration, focusLog, setFocusLog]);
+  }, [timerState, timerDuration, focusLog, setFocusLog, activeProjectId, focusDuration]);
+
+  // Brown-noise audio mount: starts on running, fades on stop/done.
+  useEffect(() => {
+    if (timerState === 'running' && noiseEnabled) {
+      const a = audioRef.current;
+      if (a) {
+        a.volume = 0.5;
+        a.loop = true;
+        // .play() may reject if no user gesture — silently ignore (we have one).
+        void a.play().catch(() => { /* iOS will succeed because tap initiated state change */ });
+      }
+    } else {
+      const a = audioRef.current;
+      if (a && !a.paused) {
+        a.pause();
+        try { a.currentTime = 0; } catch { /* noop */ }
+      }
+    }
+  }, [timerState, noiseEnabled]);
 
   const startTimer = useCallback(() => {
     setTimerDuration((focusDuration ?? 25) * 60);
     setTimerSec(0);
+    sessionStartRef.current = Date.now();
     setTimerState('running');
   }, [focusDuration]);
 
   const stopTimer = useCallback(() => {
+    // Log partial session (audit fix — was being discarded).
+    if (timerSec >= 60) {
+      const entry: LogicFocusLogEntry = {
+        ts: sessionStartRef.current || Date.now(),
+        duration_min: ((focusDuration ?? 25) as FocusDurationMin),
+        duration_ms: timerSec * 1000,
+        ...(activeProjectId ? { project_id: activeProjectId } : {}),
+      };
+      setFocusLog([...(focusLog ?? []), entry]);
+    }
     setTimerState('idle');
     setTimerSec(0);
-  }, []);
+  }, [timerSec, focusDuration, activeProjectId, focusLog, setFocusLog]);
 
   const resetTimer = useCallback(() => {
     setTimerState('idle');
@@ -349,11 +446,173 @@ export function WorkModule({ onBack }: WorkModuleProps) {
 
   const todaySessions = useMemo(
     () =>
-      (focusLog ?? []).filter(
-        (l) => l?.at && new Date(l.at).toDateString() === new Date().toDateString(),
-      ),
+      (focusLog ?? []).filter((l) => {
+        const ts = readLogTs(l);
+        if (!ts) return false;
+        return new Date(ts).toDateString() === new Date().toDateString();
+      }),
     [focusLog],
   );
+
+  // ── project ops ─────────────────────────────────────────────────────────────
+  const addProject = useCallback(() => {
+    const name = newProjectName.trim();
+    if (!name) return;
+    const p: Project = {
+      id: `proj-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+      name: sanitize(name),
+      created_at: Date.now(),
+    };
+    setProjects([...(projects ?? []), p]);
+    setActiveProjectId(p.id);
+    setNewProjectName('');
+    setShowProjectPicker(false);
+  }, [newProjectName, projects, setProjects]);
+
+  // Week-to-date billable rollup per project.
+  const weeklyRollup = useMemo(() => {
+    const weekAgo = Date.now() - 7 * 86_400_000;
+    const sums = new Map<string, number>();
+    for (const l of focusLog ?? []) {
+      const ts = readLogTs(l);
+      if (ts < weekAgo) continue;
+      const pid = readLogProjectId(l);
+      if (!pid) continue;
+      sums.set(pid, (sums.get(pid) ?? 0) + readLogDurationMs(l));
+    }
+    const rows: Array<{ id: string; name: string; minutes: number }> = [];
+    for (const p of projects ?? []) {
+      const ms = sums.get(p.id) ?? 0;
+      if (ms === 0) continue;
+      rows.push({ id: p.id, name: p.name, minutes: Math.round(ms / 60_000) });
+    }
+    rows.sort((a, b) => b.minutes - a.minutes);
+    return rows;
+  }, [focusLog, projects]);
+
+  const activeProjectName = useMemo(() => {
+    if (!activeProjectId) return null;
+    return (projects ?? []).find((p) => p.id === activeProjectId)?.name ?? null;
+  }, [activeProjectId, projects]);
+
+  // ── meetings ───────────────────────────────────────────────────────────────
+  const thisWeekMeetings = useMemo(() => {
+    const now = Date.now();
+    const weekOut = now + 7 * 86_400_000;
+    return (meetings ?? [])
+      .filter((m) => m?.start_at && m.start_at >= now - 2 * 3600_000 && m.start_at <= weekOut)
+      .sort((a, b) => a.start_at - b.start_at);
+  }, [meetings]);
+
+  const addMeeting = useCallback(() => {
+    const title = meetTitle.trim();
+    const when = meetWhen.trim();
+    if (!title || !when) return;
+    const startMs = Date.parse(when);
+    if (isNaN(startMs)) return;
+    const durMin = Math.max(5, Math.min(480, parseInt(meetDuration || '30', 10) || 30));
+    const attendees = meetAttendees
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const m: Meeting = {
+      id: `mtg-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+      title: sanitize(title),
+      start_at: startMs,
+      end_at: startMs + durMin * 60_000,
+      duration_min: durMin,
+      attendees: attendees.length ? attendees : undefined,
+    };
+    setMeetings([...(meetings ?? []), m]);
+    setMeetTitle('');
+    setMeetWhen('');
+    setMeetDuration('30');
+    setMeetAttendees('');
+    setMeetOpen(false);
+  }, [meetTitle, meetWhen, meetDuration, meetAttendees, meetings, setMeetings]);
+
+  const removeMeeting = useCallback((id: string | null | undefined) => {
+    if (!id) return;
+    setMeetings((meetings ?? []).filter((m) => m?.id !== id));
+  }, [meetings, setMeetings]);
+
+  // ── scheduled deep-work blocks ─────────────────────────────────────────────
+  // Upcoming = not past, not cancelled. Past/cancelled blocks are hidden;
+  // the orchestrator still skips cancelled blocks via b.cancelled_at.
+  const upcomingBlocks = useMemo(() => {
+    const now = Date.now();
+    return (scheduledBlocks ?? [])
+      .filter((b) => b?.start_at && b.start_at >= now && !b.cancelled_at)
+      .sort((a, b) => a.start_at - b.start_at);
+  }, [scheduledBlocks]);
+
+  const addBlock = useCallback(() => {
+    const when = blockWhen.trim();
+    if (!when) return;
+    const startMs = Date.parse(when);
+    if (isNaN(startMs)) return;
+    // Refuse past times — silent no-op (the disabled state guards already).
+    if (startMs < Date.now()) return;
+    const block: ScheduledFocusBlock = {
+      id: `block-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+      start_at: startMs,
+      duration_min: blockDuration,
+      ...(blockProjectId ? { project_id: blockProjectId } : {}),
+      ...(blockTitle.trim() ? { label: sanitize(blockTitle.trim()) } : {}),
+      created_at: Date.now(),
+    };
+    setScheduledBlocks([...(scheduledBlocks ?? []), block]);
+    setBlockTitle('');
+    setBlockWhen('');
+    setBlockDuration(45);
+    setBlockProjectId('');
+    setBlockOpen(false);
+  }, [blockWhen, blockDuration, blockProjectId, blockTitle, scheduledBlocks, setScheduledBlocks]);
+
+  const cancelBlock = useCallback(
+    (id: string | null | undefined) => {
+      if (!id) return;
+      setScheduledBlocks(
+        (scheduledBlocks ?? []).map((b) =>
+          b?.id === id ? { ...b, cancelled_at: Date.now() } : b,
+        ),
+      );
+    },
+    [scheduledBlocks, setScheduledBlocks],
+  );
+
+  const activeProjects = useMemo(
+    () => (projects ?? []).filter((p) => !p.archived_at),
+    [projects],
+  );
+
+  function fmtBlockWhen(ms: number): string {
+    try {
+      return new Date(ms).toLocaleString(undefined, {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+      }).toLowerCase();
+    } catch {
+      return new Date(ms).toISOString();
+    }
+  }
+
+  function fmtMeetingWhen(ms: number): string {
+    try {
+      return new Date(ms).toLocaleString(undefined, {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+      }).toLowerCase();
+    } catch {
+      return new Date(ms).toISOString();
+    }
+  }
 
   return (
     <div
@@ -452,14 +711,22 @@ export function WorkModule({ onBack }: WorkModuleProps) {
               justifyContent: 'space-between',
               alignItems: 'baseline',
               paddingBottom: 20,
+              flexWrap: 'wrap',
+              gap: 12,
             }}
           >
             <div style={LABEL_STYLE}>
               focus <span style={{ color: FAINT, margin: '0 10px' }}>·</span>{' '}
               {todaySessions.length} today
+              {activeProjectName && (
+                <>
+                  <span style={{ color: FAINT, margin: '0 10px' }}>·</span>
+                  <span style={{ color: INK }}>{activeProjectName}</span>
+                </>
+              )}
             </div>
             <div style={{ display: 'flex', gap: 6 }}>
-              {([15, 25, 45] as const).map((d) => (
+              {([15, 25, 45, 90] as const).map((d) => (
                 <button
                   key={d}
                   onClick={() => setFocusDuration(d)}
@@ -482,6 +749,175 @@ export function WorkModule({ onBack }: WorkModuleProps) {
               ))}
             </div>
           </div>
+
+          {/* ── project picker + noise toggle row ─────────────────────── */}
+          {timerState === 'idle' && (
+            <div
+              style={{
+                display: 'flex',
+                gap: 14,
+                paddingBottom: 16,
+                flexWrap: 'wrap',
+                alignItems: 'center',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span
+                  style={{
+                    fontFamily: "'DM Mono',monospace",
+                    fontSize: 9,
+                    letterSpacing: '0.22em',
+                    color: FAINT,
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  project
+                </span>
+                <select
+                  value={activeProjectId ?? ''}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (v === '__new__') {
+                      setShowProjectPicker(true);
+                      return;
+                    }
+                    setActiveProjectId(v || undefined);
+                  }}
+                  aria-label="project for this focus session"
+                  style={{
+                    padding: '8px 10px',
+                    background: 'transparent',
+                    border: `1px solid ${HAIRLINE_HI}`,
+                    borderRadius: 2,
+                    fontFamily: "'DM Mono',monospace",
+                    fontSize: 10,
+                    letterSpacing: '0.18em',
+                    color: INK,
+                    textTransform: 'lowercase',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <option value="">no project</option>
+                  {(projects ?? [])
+                    .filter((p) => !p.archived_at)
+                    .map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  <option value="__new__">+ new project</option>
+                </select>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <button
+                  type="button"
+                  onClick={() => setNoiseEnabled((v) => !v)}
+                  aria-pressed={noiseEnabled}
+                  aria-label={noiseEnabled ? 'turn brown noise off' : 'turn brown noise on'}
+                  style={{
+                    padding: '8px 12px',
+                    background: 'transparent',
+                    color: noiseEnabled ? INK : FAINT,
+                    border: `1px solid ${HAIRLINE_HI}`,
+                    fontFamily: "'DM Mono',monospace",
+                    fontSize: 10,
+                    letterSpacing: '0.20em',
+                    textTransform: 'uppercase',
+                    borderRadius: 2,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 8,
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 6,
+                      height: 6,
+                      borderRadius: '50%',
+                      background: noiseEnabled ? ACCENT : 'transparent',
+                      border: `1px solid ${noiseEnabled ? ACCENT : HAIRLINE_HI}`,
+                      display: 'inline-block',
+                    }}
+                    aria-hidden="true"
+                  />
+                  noise
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* inline new-project form */}
+          {showProjectPicker && timerState === 'idle' && (
+            <div
+              style={{
+                padding: '14px 16px',
+                background: PAPER,
+                border: `1px solid ${HAIRLINE}`,
+                borderRadius: 2,
+                marginBottom: 16,
+                display: 'flex',
+                gap: 10,
+                flexWrap: 'wrap',
+                alignItems: 'center',
+              }}
+            >
+              <input
+                value={newProjectName}
+                onChange={(e) => setNewProjectName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') addProject(); }}
+                placeholder="project or client name"
+                aria-label="new project name"
+                style={{
+                  flex: 1,
+                  minWidth: 180,
+                  padding: '10px 12px',
+                  background: BG,
+                  border: `1px solid ${HAIRLINE}`,
+                  color: INK,
+                  borderRadius: 2,
+                  fontFamily: "'Inter Tight',sans-serif",
+                  fontSize: 14,
+                  outline: 'none',
+                }}
+              />
+              <button
+                onClick={addProject}
+                disabled={!newProjectName.trim()}
+                style={{
+                  padding: '10px 18px',
+                  background: newProjectName.trim() ? INK : 'transparent',
+                  color: newProjectName.trim() ? BG : FAINT,
+                  border: `1px solid ${newProjectName.trim() ? INK : HAIRLINE_HI}`,
+                  fontFamily: "'DM Mono',monospace",
+                  fontSize: 10,
+                  letterSpacing: '0.22em',
+                  textTransform: 'uppercase',
+                  cursor: newProjectName.trim() ? 'pointer' : 'default',
+                  borderRadius: 2,
+                }}
+              >
+                add
+              </button>
+              <button
+                onClick={() => { setShowProjectPicker(false); setNewProjectName(''); }}
+                style={{
+                  padding: '10px 14px',
+                  background: 'transparent',
+                  color: FAINT,
+                  border: 'none',
+                  fontFamily: "'DM Mono',monospace",
+                  fontSize: 10,
+                  letterSpacing: '0.22em',
+                  textTransform: 'uppercase',
+                  cursor: 'pointer',
+                }}
+              >
+                cancel
+              </button>
+            </div>
+          )}
 
           <div
             style={{
@@ -573,6 +1009,585 @@ export function WorkModule({ onBack }: WorkModuleProps) {
               )}
             </div>
           </div>
+
+          {/* ── brown-noise audio (hidden) ───────────────────────────── */}
+          <audio
+            ref={audioRef}
+            src="/audio/brown-noise.mp3"
+            preload="auto"
+            aria-hidden="true"
+          />
+
+          {/* ── billable hours per project (week-to-date) ───────────── */}
+          {weeklyRollup.length > 0 && (
+            <div
+              style={{
+                marginTop: 32,
+                padding: '20px 22px',
+                background: PAPER,
+                border: `1px solid ${HAIRLINE}`,
+                borderRadius: 2,
+              }}
+            >
+              <div
+                style={{
+                  ...LABEL_STYLE,
+                  paddingBottom: 14,
+                  borderBottom: `1px solid ${HAIRLINE}`,
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'baseline',
+                }}
+              >
+                <span>this week · per project</span>
+                <span style={{ color: FAINT }}>
+                  {weeklyRollup.reduce((s, r) => s + r.minutes, 0)} min total
+                </span>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                {weeklyRollup.map((row) => {
+                  const h = Math.floor(row.minutes / 60);
+                  const m = row.minutes % 60;
+                  const label = h > 0 ? `${h}h ${String(m).padStart(2, '0')}m` : `${m}m`;
+                  return (
+                    <div
+                      key={row.id}
+                      style={{
+                        padding: '12px 0',
+                        borderBottom: `1px solid ${HAIRLINE}`,
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'baseline',
+                        fontFamily: "'Inter Tight',sans-serif",
+                        fontSize: 14,
+                        color: INK,
+                      }}
+                    >
+                      <span>{row.name}</span>
+                      <span
+                        style={{
+                          fontFamily: "'DM Mono',monospace",
+                          fontSize: 11,
+                          letterSpacing: '0.14em',
+                          color: MUTED,
+                          fontVariantNumeric: 'tabular-nums',
+                        }}
+                      >
+                        {label}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </section>
+
+        {/* ── meetings this week ───────────────────────────────────── */}
+        <section style={{ paddingBottom: 48, borderTop: `1px solid ${HAIRLINE}`, paddingTop: 32 }}>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'baseline',
+              paddingBottom: 20,
+              flexWrap: 'wrap',
+              gap: 12,
+            }}
+          >
+            <div style={LABEL_STYLE}>
+              meetings <span style={{ color: FAINT, margin: '0 10px' }}>·</span> this week
+            </div>
+            <button
+              type="button"
+              onClick={() => setMeetOpen((o) => !o)}
+              style={{
+                padding: '8px 16px',
+                background: meetOpen ? INK : 'transparent',
+                color: meetOpen ? BG : INK,
+                border: `1px solid ${meetOpen ? INK : HAIRLINE_HI}`,
+                fontFamily: "'DM Mono',monospace",
+                fontSize: 10,
+                letterSpacing: '0.22em',
+                textTransform: 'uppercase',
+                cursor: 'pointer',
+                borderRadius: 2,
+              }}
+            >
+              {meetOpen ? 'close' : '+ add meeting'}
+            </button>
+          </div>
+
+          {meetOpen && (
+            <div
+              style={{
+                padding: 22,
+                background: PAPER,
+                border: `1px solid ${HAIRLINE}`,
+                borderRadius: 2,
+                marginBottom: 24,
+                display: 'grid',
+                gap: 12,
+              }}
+            >
+              <input
+                value={meetTitle}
+                onChange={(e) => setMeetTitle(e.target.value)}
+                placeholder="title (e.g. design review)"
+                aria-label="meeting title"
+                style={{
+                  padding: '12px 14px',
+                  background: BG,
+                  border: `1px solid ${HAIRLINE}`,
+                  color: INK,
+                  borderRadius: 2,
+                  fontFamily: "'Inter Tight',sans-serif",
+                  fontSize: 15,
+                  outline: 'none',
+                }}
+              />
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                <input
+                  type="datetime-local"
+                  value={meetWhen}
+                  onChange={(e) => setMeetWhen(e.target.value)}
+                  aria-label="meeting datetime"
+                  style={{
+                    flex: '1 1 240px',
+                    padding: '10px 12px',
+                    background: BG,
+                    border: `1px solid ${HAIRLINE}`,
+                    color: INK,
+                    borderRadius: 2,
+                    fontFamily: "'Inter Tight',sans-serif",
+                    fontSize: 14,
+                    outline: 'none',
+                  }}
+                />
+                <input
+                  type="number"
+                  min={5}
+                  max={480}
+                  value={meetDuration}
+                  onChange={(e) => setMeetDuration(e.target.value)}
+                  aria-label="duration in minutes"
+                  style={{
+                    width: 120,
+                    padding: '10px 12px',
+                    background: BG,
+                    border: `1px solid ${HAIRLINE}`,
+                    color: INK,
+                    borderRadius: 2,
+                    fontFamily: "'DM Mono',monospace",
+                    fontSize: 13,
+                    outline: 'none',
+                  }}
+                />
+              </div>
+              <input
+                value={meetAttendees}
+                onChange={(e) => setMeetAttendees(e.target.value)}
+                placeholder="attendees · comma separated · optional"
+                aria-label="attendees"
+                style={{
+                  padding: '10px 12px',
+                  background: BG,
+                  border: `1px solid ${HAIRLINE}`,
+                  color: INK,
+                  borderRadius: 2,
+                  fontFamily: "'Inter Tight',sans-serif",
+                  fontSize: 13,
+                  outline: 'none',
+                }}
+              />
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button
+                  type="button"
+                  onClick={addMeeting}
+                  disabled={!meetTitle.trim() || !meetWhen.trim()}
+                  style={{
+                    padding: '10px 20px',
+                    background: meetTitle.trim() && meetWhen.trim() ? INK : 'transparent',
+                    color: meetTitle.trim() && meetWhen.trim() ? BG : FAINT,
+                    border: `1px solid ${meetTitle.trim() && meetWhen.trim() ? INK : HAIRLINE_HI}`,
+                    fontFamily: "'DM Mono',monospace",
+                    fontSize: 10,
+                    letterSpacing: '0.22em',
+                    textTransform: 'uppercase',
+                    cursor: meetTitle.trim() && meetWhen.trim() ? 'pointer' : 'default',
+                    borderRadius: 2,
+                  }}
+                >
+                  add
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMeetOpen(false)}
+                  style={{
+                    padding: '10px 14px',
+                    background: 'transparent',
+                    color: FAINT,
+                    border: 'none',
+                    fontFamily: "'DM Mono',monospace",
+                    fontSize: 10,
+                    letterSpacing: '0.22em',
+                    textTransform: 'uppercase',
+                    cursor: 'pointer',
+                  }}
+                >
+                  cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+          {thisWeekMeetings.length === 0 ? (
+            <div
+              style={{
+                fontFamily: "'DM Serif Display',serif",
+                fontStyle: 'italic',
+                fontSize: 'clamp(16px, 1.6vw, 18px)',
+                color: MUTED,
+                lineHeight: 1.4,
+                paddingTop: 4,
+              }}
+            >
+              no meetings logged for the next 7 days. quiet week or the calendar is lying.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              {thisWeekMeetings.map((m) => (
+                <div
+                  key={m.id ?? `${m.start_at}-${m.title ?? ''}`}
+                  style={{
+                    padding: '14px 0',
+                    borderBottom: `1px solid ${HAIRLINE}`,
+                    display: 'grid',
+                    gridTemplateColumns: '1fr auto',
+                    gap: 14,
+                    alignItems: 'baseline',
+                  }}
+                >
+                  <div>
+                    <div
+                      style={{
+                        fontFamily: "'Inter Tight',sans-serif",
+                        fontSize: 16,
+                        color: INK,
+                        fontWeight: 500,
+                      }}
+                    >
+                      {m.title || 'meeting'}
+                    </div>
+                    <div
+                      style={{
+                        fontFamily: "'DM Mono',monospace",
+                        fontSize: 10,
+                        letterSpacing: '0.18em',
+                        color: MUTED,
+                        textTransform: 'lowercase',
+                        paddingTop: 6,
+                      }}
+                    >
+                      {fmtMeetingWhen(m.start_at)}
+                      {m.duration_min ? ` · ${m.duration_min} min` : ''}
+                      {m.attendees && m.attendees.length > 0
+                        ? ` · ${m.attendees.join(', ')}`
+                        : ''}
+                    </div>
+                    <div
+                      style={{
+                        fontFamily: "'DM Mono',monospace",
+                        fontSize: 9,
+                        letterSpacing: '0.22em',
+                        color: FAINT,
+                        textTransform: 'uppercase',
+                        paddingTop: 4,
+                      }}
+                    >
+                      ping 30m prior
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => removeMeeting(m.id)}
+                    aria-label={`remove ${m.title ?? 'meeting'}`}
+                    style={{
+                      padding: '6px 10px',
+                      background: 'transparent',
+                      color: FAINT,
+                      border: 'none',
+                      fontFamily: "'DM Mono',monospace",
+                      fontSize: 10,
+                      letterSpacing: '0.2em',
+                      textTransform: 'uppercase',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    remove
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* ── scheduled deep work ──────────────────────────────────── */}
+        <section style={{ paddingBottom: 48, borderTop: `1px solid ${HAIRLINE}`, paddingTop: 32 }}>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'baseline',
+              paddingBottom: 20,
+              flexWrap: 'wrap',
+              gap: 12,
+            }}
+          >
+            <div style={LABEL_STYLE}>
+              scheduled deep work <span style={{ color: FAINT, margin: '0 10px' }}>·</span> ping 1h prior
+            </div>
+            <button
+              type="button"
+              onClick={() => setBlockOpen((o) => !o)}
+              style={{
+                padding: '8px 16px',
+                background: blockOpen ? INK : 'transparent',
+                color: blockOpen ? BG : INK,
+                border: `1px solid ${blockOpen ? INK : HAIRLINE_HI}`,
+                fontFamily: "'DM Mono',monospace",
+                fontSize: 10,
+                letterSpacing: '0.22em',
+                textTransform: 'uppercase',
+                cursor: 'pointer',
+                borderRadius: 2,
+              }}
+            >
+              {blockOpen ? 'close' : '+ schedule block'}
+            </button>
+          </div>
+
+          {blockOpen && (
+            <div
+              style={{
+                padding: 22,
+                background: PAPER,
+                border: `1px solid ${HAIRLINE}`,
+                borderRadius: 2,
+                marginBottom: 24,
+                display: 'grid',
+                gap: 12,
+              }}
+            >
+              <input
+                value={blockTitle}
+                onChange={(e) => setBlockTitle(e.target.value)}
+                placeholder="title · optional (e.g. q3 deck)"
+                aria-label="block title"
+                style={{
+                  padding: '12px 14px',
+                  background: BG,
+                  border: `1px solid ${HAIRLINE}`,
+                  color: INK,
+                  borderRadius: 2,
+                  fontFamily: "'Inter Tight',sans-serif",
+                  fontSize: 15,
+                  outline: 'none',
+                }}
+              />
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                <input
+                  type="datetime-local"
+                  value={blockWhen}
+                  onChange={(e) => setBlockWhen(e.target.value)}
+                  aria-label="block datetime"
+                  style={{
+                    flex: '1 1 240px',
+                    padding: '10px 12px',
+                    background: BG,
+                    border: `1px solid ${HAIRLINE}`,
+                    color: INK,
+                    borderRadius: 2,
+                    fontFamily: "'Inter Tight',sans-serif",
+                    fontSize: 14,
+                    outline: 'none',
+                  }}
+                />
+                <select
+                  value={String(blockDuration)}
+                  onChange={(e) => setBlockDuration(Number(e.target.value) as FocusDurationMin)}
+                  aria-label="block duration"
+                  style={{
+                    padding: '10px 12px',
+                    background: BG,
+                    border: `1px solid ${HAIRLINE}`,
+                    color: INK,
+                    borderRadius: 2,
+                    fontFamily: "'DM Mono',monospace",
+                    fontSize: 11,
+                    letterSpacing: '0.18em',
+                    textTransform: 'lowercase',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {([15, 25, 45, 90] as const).map((d) => (
+                    <option key={d} value={d}>{d} min</option>
+                  ))}
+                </select>
+              </div>
+              <select
+                value={blockProjectId}
+                onChange={(e) => setBlockProjectId(e.target.value)}
+                aria-label="block project"
+                style={{
+                  padding: '10px 12px',
+                  background: BG,
+                  border: `1px solid ${HAIRLINE}`,
+                  color: INK,
+                  borderRadius: 2,
+                  fontFamily: "'DM Mono',monospace",
+                  fontSize: 11,
+                  letterSpacing: '0.18em',
+                  textTransform: 'lowercase',
+                  cursor: 'pointer',
+                }}
+              >
+                <option value="">no project</option>
+                {activeProjects.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button
+                  type="button"
+                  onClick={addBlock}
+                  disabled={!blockWhen.trim()}
+                  style={{
+                    padding: '10px 20px',
+                    background: blockWhen.trim() ? INK : 'transparent',
+                    color: blockWhen.trim() ? BG : FAINT,
+                    border: `1px solid ${blockWhen.trim() ? INK : HAIRLINE_HI}`,
+                    fontFamily: "'DM Mono',monospace",
+                    fontSize: 10,
+                    letterSpacing: '0.22em',
+                    textTransform: 'uppercase',
+                    cursor: blockWhen.trim() ? 'pointer' : 'default',
+                    borderRadius: 2,
+                  }}
+                >
+                  schedule
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBlockOpen(false)}
+                  style={{
+                    padding: '10px 14px',
+                    background: 'transparent',
+                    color: FAINT,
+                    border: 'none',
+                    fontFamily: "'DM Mono',monospace",
+                    fontSize: 10,
+                    letterSpacing: '0.22em',
+                    textTransform: 'uppercase',
+                    cursor: 'pointer',
+                  }}
+                >
+                  cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+          {upcomingBlocks.length === 0 ? (
+            <div
+              style={{
+                fontFamily: "'DM Serif Display',serif",
+                fontStyle: 'italic',
+                fontSize: 'clamp(16px, 1.6vw, 18px)',
+                color: MUTED,
+                lineHeight: 1.4,
+                paddingTop: 4,
+              }}
+            >
+              no blocks booked. schedule one — ollie pings you an hour before.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              {upcomingBlocks.map((b) => {
+                const projectName = b.project_id
+                  ? (projects ?? []).find((p) => p.id === b.project_id)?.name
+                  : null;
+                return (
+                  <div
+                    key={b.id ?? `${b.start_at}-${b.label ?? ''}`}
+                    style={{
+                      padding: '14px 0',
+                      borderBottom: `1px solid ${HAIRLINE}`,
+                      display: 'grid',
+                      gridTemplateColumns: '1fr auto',
+                      gap: 14,
+                      alignItems: 'baseline',
+                    }}
+                  >
+                    <div>
+                      <div
+                        style={{
+                          fontFamily: "'Inter Tight',sans-serif",
+                          fontSize: 16,
+                          color: INK,
+                          fontWeight: 500,
+                        }}
+                      >
+                        {b.label || `deep work · ${b.duration_min} min`}
+                      </div>
+                      <div
+                        style={{
+                          fontFamily: "'DM Mono',monospace",
+                          fontSize: 10,
+                          letterSpacing: '0.18em',
+                          color: MUTED,
+                          textTransform: 'lowercase',
+                          paddingTop: 6,
+                        }}
+                      >
+                        {fmtBlockWhen(b.start_at)}
+                        {` · ${b.duration_min} min`}
+                        {projectName ? ` · ${projectName}` : ''}
+                      </div>
+                      <div
+                        style={{
+                          fontFamily: "'DM Mono',monospace",
+                          fontSize: 9,
+                          letterSpacing: '0.22em',
+                          color: FAINT,
+                          textTransform: 'uppercase',
+                          paddingTop: 4,
+                        }}
+                      >
+                        ping 1h prior
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => cancelBlock(b.id)}
+                      aria-label={`cancel ${b.label ?? 'deep work block'}`}
+                      style={{
+                        padding: '6px 10px',
+                        background: 'transparent',
+                        color: FAINT,
+                        border: 'none',
+                        fontFamily: "'DM Mono',monospace",
+                        fontSize: 10,
+                        letterSpacing: '0.2em',
+                        textTransform: 'uppercase',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      cancel
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </section>
 
         {/* ── task list ───────────────────────────────────────────────── */}

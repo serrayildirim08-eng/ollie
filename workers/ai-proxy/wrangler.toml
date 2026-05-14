@@ -18,4 +18,7 @@ id = "5e222944bc8f450cb3cca05e709e3b88"
 # ─── secrets (set with `wrangler secret put`) ──────────────────────────────────
 # ANTHROPIC_API_KEY       — sk-ant-… key. NEVER ship to the client.
 # SUPABASE_URL            — https://<ref>.supabase.co (used by /ingest-event)
-# SUPABASE_SERVICE_ROLE   — server-only key (used by /ingest-event)
+# SUPABASE_SERVICE_ROLE   — server-only key (used by /ingest-event + invites)
+# SUPABASE_ANON_KEY       — public anon key (used to verify user JWTs on invite endpoints)
+# INVITE_BASE_URL         — optional; e.g. https://ollie.app. Defaults to ollie.app
+#                           when unset. Used in /generate-invite share_url.

@@ -17,6 +17,30 @@ export type PacingKind = 'sprint' | 'marathon' | 'rolling';
 
 export type AnchorType = 'identity' | 'metric';
 
+// Six-bucket category enum locked 2026-05-14 (audit task 6 + 18).
+export type GoalCategory =
+  | 'career'
+  | 'relationship'
+  | 'health'
+  | 'finance'
+  | 'learning'
+  | 'creative';
+
+// ─── Milestones ───────────────────────────────────────────────────────
+// Sub-goal under a parent Goal. Optional target_date enables the same
+// 30-day-out + dormancy detectors used for the parent.
+
+export interface Milestone {
+  id: string;
+  title: string;
+  /** Optional target date (ms epoch). */
+  target_date?: number;
+  /** When marked done (ms epoch). null/undefined = open. */
+  completed_at?: number | null;
+  /** Optional creation timestamp. */
+  created_at?: number;
+}
+
 // ─── Goal ─────────────────────────────────────────────────────────────
 
 export interface Goal {
@@ -24,6 +48,8 @@ export interface Goal {
   label?: string;
   title?: string;
   status?: string;
+  /** Last status-change ts (ms epoch). Drives velocity completion timing. */
+  status_at?: number;
   obstacle?: string;
   premortem?: string;
   created_at?: number;
@@ -40,6 +66,21 @@ export interface Goal {
   interference_tags?: string[];
   hypothesis?: string;
   incubation_until?: number;
+  // ─── audit 2026-05-14: category + progress + milestones + AI steps ──
+  /** One of six buckets; null when uncategorized. */
+  category?: GoalCategory;
+  /** Integer 0–100. Optional; UI bar hidden when undefined. */
+  progress?: number;
+  /** Optional sub-goals. */
+  milestones?: Milestone[];
+  /** AI step-breakdown output (Cloudflare Worker /brain-dump). */
+  steps?: string[];
+  /** Last weekly check-in ts (ms epoch). Drives Sunday review cue. */
+  last_review_ts?: number;
+  /** When user toggled status to "paused" (ms epoch). Drives 14d-dormant cue. */
+  paused_at?: number;
+  /** When dispatched into habits module (ms epoch). Suppresses re-conversion. */
+  converted_to_habit_at?: number;
 }
 
 // ─── Dump ─────────────────────────────────────────────────────────────
