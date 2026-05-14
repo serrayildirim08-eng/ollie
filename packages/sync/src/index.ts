@@ -11,6 +11,16 @@
  *   - sync is opt-in (shared.settings.sync_enabled default false)
  *   - offline queue caps at 10k entries; reconnect drains it
  *   - toggle off → zero network calls
+ *
+ * Finance note (Sprint 5):
+ *   The 'finance' module remains in DEFAULT_MODULES below for backwards
+ *   compatibility (settings, cancellations, dismissed-id bookkeeping
+ *   still ride this path). Per-record finance state — bills,
+ *   subscriptions, adhd_tax entries, transactions, savings goals, raw
+ *   records — also syncs via the per-record finance_records table; see
+ *   ./finance.ts and createFinanceSyncClient. The two paths coexist;
+ *   the per-record path is authoritative on a fresh device because it
+ *   pulls first via syncIn() and uses LWW per-record reconciliation.
  */
 
 import type { Store } from '@ollie/store';
@@ -292,3 +302,19 @@ function applyModule(store: Store, module: string, data: Record<string, unknown>
   // LWW reconciliation needs.
   store.setModule(module, data ?? {});
 }
+
+// Re-export the per-record finance sync. Boot code in apps/web/src/lib/
+// account-boot.ts should call createFinanceSyncClient(...).start() in
+// addition to createSyncClient(...).start() so finance gets both the
+// module-blob settings path and the per-record delta-sync path.
+export {
+  createFinanceSyncClient,
+  FINANCE_RECORD_STORE_KEYS,
+} from './finance';
+export type {
+  FinanceSyncClient,
+  FinanceSyncDeps,
+  FinanceRecordType,
+  SyncableFinanceRow,
+  RemoteFinanceRow,
+} from './finance';
