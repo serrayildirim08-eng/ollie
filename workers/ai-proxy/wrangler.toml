@@ -9,11 +9,11 @@ compatibility_flags = ["nodejs_compat"]
 #   wrangler kv:namespace create RATE_KV
 [[kv_namespaces]]
 binding = "CACHE_KV"
-id = "REPLACE_WITH_CACHE_KV_ID"
+id = "6031aea7f9c14f96884e55ec1be527f3"
 
 [[kv_namespaces]]
 binding = "RATE_KV"
-id = "REPLACE_WITH_RATE_KV_ID"
+id = "5e222944bc8f450cb3cca05e709e3b88"
 
 # ─── secrets (set with `wrangler secret put`) ──────────────────────────────────
 # ANTHROPIC_API_KEY — sk-ant-… key. NEVER ship to the client.
