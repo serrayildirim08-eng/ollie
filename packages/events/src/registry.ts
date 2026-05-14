@@ -42,6 +42,12 @@ export const REGISTRY: Registry = {
   'void:cycle:symptom_logged':     { payload: '{ ts: number, tags: string[], moduleContext: string }' },
   'void:cycle:asks_changed':       { payload: '{ asks: string[], ts: number }' },
 
+  // ─── research pipeline (Sprint B' 2026-05-14) ───────────────────
+  // Emitted by upstream module orchestrators when a scrubbable row is
+  // written. Research orchestrator buffers + flushes through scrub → /label.
+  // Consent check is on the orchestrator side; emitters do not gate.
+  'research:row_written':          { payload: '{ row_id: string, table: "brain_dump_log" | "finance_records" | "body_records" | "home_records" | "work_records", text: string, locale: "en" | "es" | "tr", sector_hint?: string, ts: number }' },
+
   // ─── pets ───────────────────────────────────────────────────────
   'pets:pet_added':                { payload: '{ pet_id: string, name: string, species: string }' },
   'pets:pet_archived':             { payload: '{ pet_id: string }' },

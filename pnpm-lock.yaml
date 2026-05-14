@@ -73,6 +73,9 @@ importers:
       '@ollie/backup':
         specifier: workspace:*
         version: link:../../packages/backup
+      '@ollie/capacitor-healthkit':
+        specifier: workspace:*
+        version: link:../../packages/capacitor-healthkit
       '@ollie/consent':
         specifier: workspace:*
         version: link:../../packages/consent
@@ -233,6 +236,9 @@ importers:
       '@capgo/capacitor-health':
         specifier: 7.2.15
         version: 7.2.15(@capacitor/core@7.6.4)
+      '@ollie/store':
+        specifier: workspace:*
+        version: link:../store
     devDependencies:
       typescript:
         specifier: ^5.6.0
