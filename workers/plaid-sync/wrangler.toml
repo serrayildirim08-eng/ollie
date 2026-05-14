@@ -1,0 +1,40 @@
+name = "ollie-plaid-sync"
+main = "src/index.ts"
+compatibility_date = "2025-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+# ─── plain vars (non-secret) ──────────────────────────────────────────────────
+# PLAID_ENV controls which Plaid environment we hit. Flip to "production"
+# only after PRODUCTION_CHECKLIST.md is complete.
+[vars]
+PLAID_ENV = "sandbox"
+
+# ─── KV bindings ──────────────────────────────────────────────────────────────
+# Caches Plaid webhook-verification public keys by kid (rotated rarely
+# upstream; 24h cache is safe).
+# Run once: `wrangler kv:namespace create PLAID_KEY_KV`
+# Then paste the returned id below (and remove the placeholder).
+[[kv_namespaces]]
+binding = "PLAID_KEY_KV"
+id = "REPLACE_WITH_KV_ID_AFTER_wrangler_kv_create"
+
+# ─── cron (deferred — primary trigger is webhook) ─────────────────────────────
+# Daily 06:00 UTC pull of recent transactions for any item that
+# hasn't fired a webhook in the last 24 hours. Commented OFF until
+# Serra greenlights — webhook coverage is expected to be 100% in
+# practice for sandbox + most production institutions.
+#
+# [triggers]
+# crons = ["0 6 * * *"]
+
+# ─── secrets (set with `wrangler secret put`) ─────────────────────────────────
+# PLAID_CLIENT_ID                — Plaid client_id (sandbox initially, prod later)
+# PLAID_SECRET                   — Plaid secret. NEVER ship to the client.
+# SUPABASE_URL                   — https://<ref>.supabase.co
+# SUPABASE_SERVICE_ROLE          — server-only key. Only used to insert
+#                                   into plaid_inbox staging. Never returned
+#                                   to a client.
+# PLAID_INBOX_ENCRYPTION_KEY     — 32-byte base64. Server-side at-rest key
+#                                   used to wrap plaid_inbox blobs until the
+#                                   client picks them up and re-encrypts
+#                                   with the user's key.
