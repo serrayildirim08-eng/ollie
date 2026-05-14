@@ -115,13 +115,13 @@ describe('sync · outbound', () => {
     await vi.advanceTimersByTimeAsync(100);
     store.set('cycle', 'items', [{ ts: 1, action: 'started' }, { ts: 2, action: 'symptom' }]);
     await vi.advanceTimersByTimeAsync(500);
-    await vi.runAllTimersAsync();
-    // The debounced upsert kicks off an async encrypt + post. Give it
-    // microtask cycles to land before asserting (CI runners are noisier
-    // than local — without this, captured.upserts stays empty).
-    await vi.waitFor(() => {
-      expect(captured.upserts.length).toBe(1);
-    });
+    // Flush enough microtask cycles to let the debounced upsert land.
+    for (let i = 0; i < 20 && captured.upserts.length === 0; i++) {
+      await vi.runAllTimersAsync();
+      await Promise.resolve();
+    }
+    // Single upsert for the latest snapshot
+    expect(captured.upserts.length).toBe(1);
     sync.stop();
   });
 
@@ -145,10 +145,14 @@ describe('sync · outbound', () => {
     online = true;
     setNextUpsert({ ok: true, status: 201 });
     await sync.syncOut();
-    await vi.runAllTimersAsync();
-    await vi.waitFor(() => {
-      expect(captured.upserts.length).toBeGreaterThan(0);
-    });
+    // Flush enough microtask cycles to let the async upsert land. CI
+    // runners need more cycles than local; loop until populated or give
+    // up after a bounded number of ticks.
+    for (let i = 0; i < 20 && captured.upserts.length === 0; i++) {
+      await vi.runAllTimersAsync();
+      await Promise.resolve();
+    }
+    expect(captured.upserts.length).toBeGreaterThan(0);
     sync.stop();
   });
 });
