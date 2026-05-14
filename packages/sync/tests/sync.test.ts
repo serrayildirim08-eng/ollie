@@ -146,7 +146,9 @@ describe('sync · outbound', () => {
     setNextUpsert({ ok: true, status: 201 });
     await sync.syncOut();
     await vi.runAllTimersAsync();
-    expect(captured.upserts.length).toBeGreaterThan(0);
+    await vi.waitFor(() => {
+      expect(captured.upserts.length).toBeGreaterThan(0);
+    });
     sync.stop();
   });
 });
