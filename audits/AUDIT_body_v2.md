@@ -38,15 +38,32 @@ Gap closure sprint shipped 7 priorities across 7 commits (round 1: 5 parallel ag
 - **Weekly review: NOT STARTED → WIRED-CROSSMODULE**
 - **Spearman/Pearson math layer: surprise-unused → registry-wired** (P6 promoted from audit's #2 surprise)
 
-### Still outstanding (next sprint)
-1. **Boot-layer wiring** — `RootOrchestratorOptions.scheduleNotification` must be threaded from app boot to fire APNs end-to-end. Currently events emit + subscribers fire but the callback is injected via DI; Serra's app entry needs the wrapper around `scheduleServerJob`. One-line.
-2. **HealthKit integration** (BLOCKED-EXTERNAL, ~2 weeks Apple Dev approval per existing memory)
-3. **`water_focus` correlator** — needs `focus_rating` numeric in store, or alternate proxy
-4. **`pattern:detected` → APNs** — P6 emits but no push subscriber attached (P2 didn't subscribe to it; follow-up)
-5. **Server cron deployment** — `runBodyCorrelations` + `runBodyWeeklyReview` are stubs in cron worker until per-user encrypted data access design lands
-6. **ES localization pass** — all new copy has `// TODO: ES` comments
-7. **Symptom log persistence verification** — audit marked WORKING but no manual UI test in this sprint
-8. **Birth control pill detection heuristic** — orchestrator emits on `cycle.items[].action === 'pill'` but no UI surface logs them yet
+### Sprint 2026-05-14 follow-up — 7 items shipped + 1 deferred (Serra)
+
+| item | task | status | commit |
+|---|---|---|---|
+| A | scheduleNotification boot injection | ✅ shipped | `30fa05c` |
+| B | pattern:detected → APNs subscriber | ✅ shipped | `06af249` + `9a6a8ea` |
+| C | birth control pill logging UI | ✅ shipped | `a1ee9af` |
+| D | water_focus correlator (Option B clarity-ratio) | ✅ shipped | `b3086bc` |
+| E | ES localization pass (~213 new keys) | ✅ shipped | `4bf72e4` |
+| F | HealthKit Capacitor scaffold | ✅ shipped (BLOCKED-EXTERNAL until Apple approval) | (this branch) |
+| G | server cron design memo | ✅ memo drafted, awaiting Serra sign-off | `65d27df` |
+| H | symptom log manual UI verification | ⏳ Serra-only | n/a |
+
+### Sprint follow-up deltas
+- Logic: 1037 → 1048 (+11)
+- Orchestrator: 190 → 209 (+19)
+- Web: 229 → 261 (+32)
+- @ollie/capacitor-healthkit: NEW package, 43 tests
+- Total follow-up: +105 tests. All green.
+
+### Outstanding after follow-up
+1. **Server cron Option D + E rollout** (~9-14 dev-days) — awaiting Serra sign-off on `audits/server-cron-data-access-memo.md`
+2. **HealthKit production cutover** — BLOCKED-EXTERNAL on Apple Developer approval; mechanical when it lands (Xcode capability + Pod install + env flag)
+3. **Symptom log manual UI verification** — Serra-only browser walk
+4. **scheduleHealthKitSync caller wiring** — one-liner in main.tsx once VITE_HEALTHKIT_ENABLED is set
+5. **`// LOCALIZE_LATER` flags** — 7 component-level literals not yet extracted to i18n keys (acceptable for v1; cleanup in a future i18n sweep)
 
 ### Surprises that flipped
 1. ovulation prediction logic computed but never displayed → now visible
