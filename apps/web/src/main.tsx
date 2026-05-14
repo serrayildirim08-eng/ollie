@@ -1,10 +1,46 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import * as Sentry from '@sentry/capacitor';
+import * as SentryReact from '@sentry/react';
 import { App } from './App';
+import { ErrorFallback } from './components/ErrorFallback';
 import { bootNotificationLayer } from './lib/push-register';
 import { installSavingsDigestLoop } from './lib/savings-digest';
 import { bootAccount } from './lib/account-boot';
 import { installDeeplinkHandler } from './lib/capacitor-deeplink';
+
+// Sentry — error tracking. Capacitor SDK wraps the React SDK so we get
+// JS errors + native iOS crashes from the same project. MUST init before
+// any boot* call so it can capture errors thrown during account/
+// notification bootstrap.
+// Privacy:
+//   beforeSend strips event.extra.encrypted so opt-in encrypted blobs
+//   never leak to Sentry. ollie is privacy-first; any payload that
+//   touches an external service must be sanitised here.
+const sentryDsn = (import.meta.env.VITE_SENTRY_DSN as string | undefined) ?? '';
+// Tunnel — Turkish ISP DPI blocks TLS to *.sentry.io. Route envelopes
+// through our Cloudflare worker (workers.dev is unblocked) when the
+// tunnel URL is set. Falls back to direct ingest when unset.
+const sentryTunnel = (import.meta.env.VITE_SENTRY_TUNNEL_URL as string | undefined) ?? '';
+if (sentryDsn) {
+  Sentry.init(
+    {
+      dsn: sentryDsn,
+      ...(sentryTunnel ? { tunnel: sentryTunnel } : {}),
+      tracesSampleRate: 0.1,
+      beforeSend(event) {
+        // Strip the encrypted payload field from event.extra — privacy
+        // guard. Mutates the event in place (Sentry expects this).
+        if (event.extra && 'encrypted' in event.extra) {
+          const { encrypted: _stripped, ...rest } = event.extra;
+          event.extra = rest;
+        }
+        return event;
+      },
+    },
+    SentryReact.init,
+  );
+}
 
 // Boot account layer (Credibility audit C2): wires @ollie/auth +
 // @ollie/sync + @ollie/research-stream into the running app. Idempotent.
@@ -38,6 +74,8 @@ if (!root) throw new Error('#app root not found');
 
 createRoot(root).render(
   <StrictMode>
-    <App />
+    <SentryReact.ErrorBoundary fallback={<ErrorFallback />}>
+      <App />
+    </SentryReact.ErrorBoundary>
   </StrictMode>,
 );

@@ -163,6 +163,10 @@ export const REGISTRY: Registry = {
   'finance:reminder_set':              { payload: '{ pattern_id: string, due_at: number, kind: "bill"|"subscription"|"goal", message: string, ts: number }' },
   'finance:subscription_cancelled':    { payload: '{ pattern_id: string, merchant: string, ts: number }' },
   'finance:bill_paid_on_time':         { payload: '{ pattern_id: string, merchant: string, ts: number }' },
+  'finance:bill_due_predicted':        { payload: '{ pattern_id: string, merchant: string, amount: number, due_at: number, days_until: number, ts: number }' },
+  'finance:recurring_candidate_detected': { payload: '{ merchant: string, merchant_normalized: string, estimatedAmount: number|null, estimatedInterval: number|null, nextDueDate: number|null, confidence: "low"|"medium"|"high", category: "bill"|"subscription"|"unknown", evidence: { occurrenceCount: number, amountVariance: number|null, intervalVariance: number|null }, ts: number }' },
+  'finance:savings_deposit_detected':    { payload: '{ transfer_id: string, record_id: string, paired_record_id: string|null, amount: number, date: string, memo: string|null, matched_keyword: string|null, confidence: "low"|"medium"|"high", is_matched_pair: boolean, ts: number }' },
+  'finance:adhd_tax_candidate_detected': { payload: '{ record_id: string|null, category: "late_fee"|"replacement"|"duplicate"|"unknown", confidence: "low"|"medium"|"high", amount: number|null, matched_phrase: string, copy: string, auto_add: boolean, ts: number }' },
 
   // ─── Sprint 3 / D2 cross-module wires ───────────────────────────
   'cycle:period_logged':               { payload: '{ ts: number, source: "user"|"braindump"|"import" }' },
@@ -184,10 +188,21 @@ export const REGISTRY: Registry = {
   // ─── Sprint 2.5 / F1 savings tracker ────────────────────────────
   'finance:savings_recorded':          { payload: '{ id: string, merchant: string, monthly_amount: number, cancelled_at: number, surfaced_by_ollie: boolean, ts: number }' },
 
+  // ─── push notification events (money module gap closure) ─────────
+  'finance:subscription_stale':        { payload: '{ pattern_id: string, merchant: string, amount: number, days_since: number, ts: number }' },
+  'finance:savings_milestone':         { payload: '{ goal_id: string, goal_name: string, current: number, target: number, milestone_pct: number, ts: number }' },
+  'finance:impulse_pause_summary':     { payload: '{ count: number, total: number, month_start: number, ts: number }' },
+  'finance:anomaly_detected':          { payload: '{ anomaly_id: string, merchant: string|null, amount: number, median: number|null, ts: number }' },
+  'finance:tax_setaside_due':          { payload: '{ amount: number, month_start: number, suggested_pct: number, message: string, ts: number }' },
+
   // ─── Sprint 2 / Group C · sync ──────────────────────────────────
   'sync:outbound_flushed':             { payload: '{ count: number, ts: number }' },
   'sync:inbound_applied':              { payload: '{ ts: number }' },
   'sync:auth_expired':                 { payload: '{ ts: number }' },
+
+  // ─── Sprint 5 · finance per-record sync ─────────────────────────
+  'sync:finance_outbound_flushed':     { payload: '{ upserts: number, deletes: number, ts: number }' },
+  'sync:finance_inbound_applied':      { payload: '{ applied: number, cursor: string, ts: number }' },
 
   // ─── Sprint 2 / Group C · auth ──────────────────────────────────
   'auth:signed_up':                    { payload: '{ user_id: string, ts: number }' },
@@ -221,4 +236,23 @@ export const REGISTRY: Registry = {
 
   // ─── Sprint 4 / E8 · grocery interest capture ───────────────────
   'grocery:interest_capture_detected': { payload: '{ category: string, count: number, window_days: number, ts: number }' },
+
+  // ─── Sprint 6 · impulse pause flow (FinanceModule) ──────────────
+  // Opt-in 24-hour hold on non-essential variable purchases. The pending
+  // pause lives in the finance store under `finance.pendingPauses`; on
+  // resolve, we emit the second event and either commit the transaction
+  // (purchased) or increment finance.savedByPause (skipped). The 24h
+  // expiry notification is delivered via the existing reminder pathway
+  // (see `void:reminder:scheduled`); a parallel backend worker aggregates
+  // resolved pauses into a monthly summary via `finance:impulse_pause_summary`
+  // (declared earlier in this registry).
+  'finance:impulse_pause_started':     { payload: '{ id: string, amount: number, merchant: string, category: string, ts: number, expires_at: number }' },
+  'finance:impulse_pause_resolved':    { payload: '{ id: string, amount: number, merchant: string, outcome: "purchased" | "skipped", ts: number }' },
+
+  // ─── retention telemetry (local-only until backend Group C ships) ────────
+  // Local-first: backend may pick these up via research-stream later.
+  'void:retention:installed':          { payload: '{ installed_at: number, source: "fresh"|"reinstall", ts: number }' },
+  'void:retention:session_started':    { payload: '{ session_count: number, hours_since_install: number, ts: number }' },
+  'void:retention:d1_returned':        { payload: '{ installed_at: number, returned_at: number, hours: number }' },
+  'void:retention:d7_returned':        { payload: '{ installed_at: number, returned_at: number, days: number }' },
 };

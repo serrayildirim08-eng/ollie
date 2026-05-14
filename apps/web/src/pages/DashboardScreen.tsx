@@ -125,6 +125,11 @@ export function DashboardScreen({ onNavigate, onBrainDump, stats }: DashboardScr
     .toLowerCase();
 
   const [hasPets] = useStoreSlice<boolean>('shared', 'settings.has_pets', true);
+  // Consent rewrite (Sprint 6): cycle sub-tile visibility now follows
+  // the onboarding cycle-tracking preference instead of the removed
+  // consent.cycle flag. "yes" surfaces it; any other answer hides it.
+  const [cycleTracking] = useStoreSlice<string | null>('shared', 'settings.cycle_tracking', null);
+  const cycleConsent = cycleTracking === 'yes';
   const [burhanState] = useStoreSlice<BurhanState>('burhan', 'state', { events: [] });
   const recentBurhanEvents = useMemo(() => lastN(burhanState, 12), [burhanState]);
   const pendingCounts = usePendingCounts();
@@ -149,16 +154,21 @@ export function DashboardScreen({ onNavigate, onBrainDump, stats }: DashboardScr
     return `${Math.floor(mins / 60)}h ${mins % 60}m`;
   })();
 
-  // Filter pets out of home cluster if has_pets is false
+  // Filter pets out of home cluster if has_pets is false.
+  // Filter cycle out of body cluster if user did not opt into cycle
+  // tracking during onboarding (Sprint 6 consent rewrite).
   const clusters = useMemo<Cluster[]>(
     () =>
       CLUSTERS.map((c) => {
         if (c.id === 'home' && !hasPets) {
           return { ...c, subModules: c.subModules.filter((s) => s.id !== 'pets') };
         }
+        if (c.id === 'body' && !cycleConsent) {
+          return { ...c, subModules: c.subModules.filter((s) => s.id !== 'cycle') };
+        }
         return c;
       }),
-    [hasPets],
+    [hasPets, cycleConsent],
   );
 
   return (

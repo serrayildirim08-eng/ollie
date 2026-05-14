@@ -134,6 +134,11 @@ export const CROSS_MODULE_RULES: CrossModuleRule[] = [
   },
 
   // ─── body hydration drop → habits surface water ───────────────────────
+  // Reflects into `habits.surface_water_habit` so HabitsWaterPrompt
+  // (apps/web/src/modules/habits/HabitsModule.tsx:62) can render. Without
+  // the reflect block the event fires but no store key is written and
+  // the UI is dead code. Mirrors the 3 other sibling chains (admin,
+  // body, finance, shared.reduce_motion_today).
   {
     source: 'body:hydration_drop_detected',
     target: 'habits:surface_water_habit',
@@ -142,6 +147,11 @@ export const CROSS_MODULE_RULES: CrossModuleRule[] = [
       const r = (p ?? {}) as { drop_pct?: number; ts?: number };
       return { reason: `hydration drop ${(r.drop_pct ?? 0).toFixed(0)}%`, ts: r.ts ?? Date.now() };
     },
+    reflect: (p) => ({
+      module: 'habits',
+      key: 'surface_water_habit',
+      entry: { id: `water:${(p.ts as number) ?? Date.now()}`, ...p },
+    }),
   },
 
   // ───────────────────────────────────────────────────────────────────────

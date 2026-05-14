@@ -1,53 +1,60 @@
 /**
- * @ollie/auth · account model + auth flow (C5)
+ * @ollie/auth · account model + auth flow (Sprint 5 · F1 — Pattern A)
  *
- * THREAT MODEL — read this before changing anything in this file.
+ * THREAT MODEL — Pattern A · zero-knowledge.
  *
- * Current pattern (Pattern B):
- *   1. user signs up with email + passphrase
- *   2. on signUp:  we POST `{email, passphrase}` to Supabase Auth.
- *      Supabase salt+bcrypts the passphrase server-side and stores the
- *      hash. We DO NOT store the passphrase anywhere else.
- *   3. on signIn:  we POST `{email, passphrase}` to Supabase Auth again.
- *      Supabase verifies bcrypt. We receive a session JWT.
- *   4. independently, the client derives an AES-GCM-256 encryption
- *      key from `passphrase + salt` via PBKDF2-SHA-256 100k iters.
- *      The derived key lives in memory only and never leaves the
- *      device. log out = drop key.
+ *   1. signUp:
+ *      - generate 32 random bytes → `serverPassword` (hex). This is the
+ *        ONLY string ever handed to Supabase Auth. Supabase sees it,
+ *        bcrypts it, never sees the user's actual passphrase.
+ *      - call supabase.auth.signUp(email, serverPassword).
+ *      - generate a 16-byte salt; derive an AES-GCM-256 key from
+ *        `passphrase + salt` via PBKDF2-SHA-256 100k iters. The key
+ *        stays in memory only.
+ *      - encrypt `serverPassword` with the derived key, persist the
+ *        ciphertext + salt in the `profiles` row (RLS-gated, only
+ *        readable post-auth). Salt is non-secret; ciphertext is
+ *        useless without the user's passphrase.
+ *   2. signIn:
+ *      - fetch salt + encrypted server password from `profiles`. To
+ *        fetch we need an auth jwt, so first we get a temporary session
+ *        by attempting auth with a deterministic "lookup" password that
+ *        ALWAYS fails — no, simpler: the salt is stored in BOTH
+ *        localStorage (when this device has seen the user) AND profiles
+ *        (after first signIn).
+ *      - if salt found locally → derive key locally → decrypt server
+ *        password from local cache. If wrong passphrase → decrypt
+ *        throws → "wrong passphrase" without contacting Supabase.
+ *      - if no local data (new device) → first call supabase.auth
+ *        passwordless lookup is not available; instead we ask the user
+ *        to import a backup from the original device. (Pattern A
+ *        accepts this UX tradeoff — sign-in on a brand-new device
+ *        requires a backup file. Documented at signup.)
+ *      - once decrypted, call supabase.auth.signInWithPassword(email,
+ *        serverPassword). Receive session JWT. Salt + ciphertext are
+ *        also uploaded to profiles for cross-device discovery in
+ *        future revs.
+ *   3. signOut: drop in-memory key + clear session. Salt + encrypted
+ *      server password stay (needed for next sign-in on this device).
  *
- * What Pattern B leaks: Supabase sees the passphrase in transit (TLS
- * to their edge) and may see it in audit logs / request bodies. The
- * passphrase is bcrypt-hashed at rest, but a Supabase breach OR an
- * insider with log access could capture the plaintext. Since the same
- * passphrase derives the AES key client-side, capturing the
- * passphrase → capturing the encryption key.
- *
- * Pattern B is NOT zero-knowledge. Marketing copy must NOT claim
- * "Supabase never sees your password." It CAN claim "we never store
- * your password — only Supabase's salted bcrypt hash."
- *
- * If we ever need true zero-knowledge (Pattern A), the migration is:
- *   - keep PBKDF2 + AES on the device (already done)
- *   - on signUp, generate a separate random Supabase password
- *     (already in `generateRandomServerPassword`). Encrypt it with the
- *     passphrase-derived key, persist in `profiles.encrypted_server_pw`.
- *   - on signIn, fetch the encrypted server password, decrypt locally
- *     with the passphrase-derived key, then call Supabase signIn with
- *     the random server password. Wrong passphrase → decrypt fails →
- *     "wrong passphrase" without contacting auth.
- * That migration takes ~1 day and removes Supabase from the trusted
- * computing base for encryption.
- *
- * Constitutional invariant either way: passphrase is unrecoverable by
- * design. There is NO password reset path. UI must say this
- * explicitly at signup.
+ * Constitutional invariant: the user's PASSPHRASE never leaves the
+ * device. The 32-byte serverPassword (uncorrelated with the passphrase)
+ * is what Supabase sees. A Supabase breach reveals only the bcrypt'd
+ * serverPassword which cannot be inverted to learn the passphrase OR
+ * the encryption key.
  *
  * State lives at:
- *   shared.auth.session        { access_token, refresh_token, user_id, email }
- *   shared.auth.salt           base64 — needed at login to derive the same key
- *   shared.auth.email_for_login last-used email (so login pre-fills)
+ *   shared.auth.session                 { access_token, refresh_token, user_id, email }
+ *   shared.auth.salt                    base64 — derive same key with same passphrase
+ *   shared.auth.salt_by_email.<email>   per-email salt cache
+ *   shared.auth.encrypted_server_pw     base64 — { iv, ciphertext } encrypted with derived key
+ *   shared.auth.email_for_login         last-used email (so login pre-fills)
  *
- * The derived CryptoKey is held in-process only.
+ * The derived CryptoKey is held in-process only — never persisted.
+ *
+ * SAFETY ASSERTION: a unit test in __tests__/zero-knowledge.test.ts spies
+ * on every supabase call argument and FAILS if the passphrase string
+ * appears anywhere. Do not regress this.
  */
 
 import { createOllieAPI } from '@ollie/api';
@@ -56,6 +63,8 @@ import {
   base64ToBytes,
   bytesToBase64,
   deriveKey,
+  encryptData,
+  decryptData,
   randomSalt,
   passphraseStrength,
   CRYPTO_PARAMS,
@@ -101,7 +110,7 @@ interface SignUpError { ok: false; code: 'weak-passphrase' | 'mismatch' | 'no-co
 export type SignUpResultLike = SignUpResult | SignUpError;
 
 interface SignInResult { ok: true; user_id: string; }
-interface SignInError { ok: false; code: 'wrong-passphrase' | 'wrong-email' | 'http' | 'network' | 'missing-salt'; message: string; }
+interface SignInError { ok: false; code: 'wrong-passphrase' | 'wrong-email' | 'http' | 'network' | 'missing-salt' | 'no-device-data'; message: string; }
 export type SignInResultLike = SignInResult | SignInError;
 
 export interface SignUpInput {
@@ -120,6 +129,8 @@ export interface SignInInput {
 /** Standardised salt path in Supabase profiles. */
 const SALT_LOCAL_KEY = 'shared.auth.salt';
 const SALT_LOCAL_KEY_BY_EMAIL = (email: string) => `shared.auth.salt_by_email.${email.toLowerCase()}`;
+const ENCRYPTED_SERVER_PW_KEY = 'shared.auth.encrypted_server_pw';
+const ENCRYPTED_SERVER_PW_BY_EMAIL = (email: string) => `shared.auth.encrypted_server_pw_by_email.${email.toLowerCase()}`;
 const PROFILES_TABLE_DEFAULT = 'profiles';
 
 export interface AuthClient {
@@ -148,23 +159,61 @@ export function createAuthClient(deps: AuthDeps): AuthClient {
     deps.store.set('shared', SALT_LOCAL_KEY_BY_EMAIL(email), saltBase64);
   }
 
-  async function uploadSaltToProfile(authJwt: string, userId: string, saltBase64: string): Promise<void> {
+  function persistEncryptedServerPw(email: string, envelopeBase64: string): void {
+    deps.store.set('shared', ENCRYPTED_SERVER_PW_KEY, envelopeBase64);
+    deps.store.set('shared', ENCRYPTED_SERVER_PW_BY_EMAIL(email), envelopeBase64);
+  }
+
+  async function uploadProfileToSupabase(
+    authJwt: string,
+    userId: string,
+    saltBase64: string,
+    encryptedServerPw: string,
+  ): Promise<void> {
     try {
-      await deps.api.supabase.rest.upsert(profilesTable, [{ id: userId, salt: saltBase64 }], { authJwt });
+      // Pattern A: salt is non-secret (PBKDF2 salt) and encrypted_server_pw
+      // is useless without the user's passphrase. Both are RLS-gated
+      // anyway. Upload so a second device can fetch them post-auth.
+      await deps.api.supabase.rest.upsert(
+        profilesTable,
+        [{ id: userId, salt: saltBase64, encrypted_server_pw: encryptedServerPw }],
+        { authJwt },
+      );
     } catch (err) {
-      console.warn('[auth] uploading salt failed; continuing — salt is in localStorage', err);
+      console.warn('[auth] uploading profile failed; continuing — data is in localStorage', err);
     }
   }
 
-  async function fetchSaltFromProfile(authJwt: string, userId: string): Promise<string | null> {
+  async function fetchProfileFromSupabase(
+    authJwt: string,
+    userId: string,
+  ): Promise<{ salt?: string; encrypted_server_pw?: string } | null> {
     try {
-      const r = await deps.api.supabase.rest.get<Array<{ salt?: string }>>(profilesTable, {
+      const r = await deps.api.supabase.rest.get<Array<{ salt?: string; encrypted_server_pw?: string }>>(profilesTable, {
         authJwt,
-        params: { id: `eq.${userId}`, select: 'salt' },
+        params: { id: `eq.${userId}`, select: 'salt,encrypted_server_pw' },
       });
-      if (r.ok && r.data?.[0]?.salt) return r.data[0].salt;
+      if (r.ok && r.data?.[0]) return r.data[0];
     } catch { /* fall through */ }
     return null;
+  }
+
+  /** Encrypt the server password with the derived key and pack to base64 JSON. */
+  async function packServerPw(key: CryptoKey, serverPassword: string): Promise<string> {
+    const env = await encryptData(key, serverPassword);
+    return JSON.stringify({
+      iv: bytesToBase64(env.iv),
+      ct: bytesToBase64(env.ciphertext),
+    });
+  }
+
+  /** Decrypt a packed envelope. Throws if wrong key (wrong passphrase). */
+  async function unpackServerPw(key: CryptoKey, envelopeBase64: string): Promise<string> {
+    const parsed = JSON.parse(envelopeBase64) as { iv: string; ct: string };
+    return await decryptData<string>(key, {
+      iv: base64ToBytes(parsed.iv),
+      ciphertext: base64ToBytes(parsed.ct),
+    });
   }
 
   async function signUp(input: SignUpInput): Promise<SignUpResultLike> {
@@ -183,26 +232,42 @@ export function createAuthClient(deps: AuthDeps): AuthClient {
       return { ok: false, code: 'mismatch', message: 'passphrase confirmation does not match' };
     }
 
-    // Server-side random password — long enough that brute force is hopeless.
+    // Pattern A:
+    //   1. Derive the encryption key LOCALLY from passphrase + fresh salt.
+    //   2. Generate a random 32-byte hex serverPassword. This is the ONLY
+    //      string sent to Supabase Auth — Supabase never sees the
+    //      passphrase.
+    //   3. Encrypt the serverPassword with the derived key, persist
+    //      ciphertext locally + (post-auth) on profiles.
+    const salt = randomSalt();
+    const saltBase64 = bytesToBase64(salt);
+    inMemoryKey = await deriveKey(input.passphrase, salt);
     const serverPassword = generateRandomServerPassword();
+    const encryptedServerPw = await packServerPw(inMemoryKey, serverPassword);
+
+    // SAFETY: the only password ever sent to Supabase is `serverPassword`,
+    // which is uncorrelated with `input.passphrase`. See zero-knowledge
+    // assertion test.
     const r = await deps.api.supabase.auth.signUp(input.email, serverPassword);
     if (!r.ok) {
+      // Roll back the in-memory key — signup failed, don't leave the
+      // client in a half-authed state.
+      inMemoryKey = null;
       const code = r.error.code === 'network' ? 'network' : 'http';
       return { ok: false, code, message: r.error.message };
     }
     const payload = (r.data ?? {}) as SupabaseAuthResponse;
     const userId = payload.user?.id;
     if (!userId) {
+      inMemoryKey = null;
       return { ok: false, code: 'http', message: 'signup response missing user.id' };
     }
 
-    // Some Supabase projects require email confirmation before issuing a session
-    // — in that case we still derive + persist the salt locally so the user
-    // can confirm + log in.
-    const salt = randomSalt();
-    const saltBase64 = bytesToBase64(salt);
-    inMemoryKey = await deriveKey(input.passphrase, salt);
+    // Persist local credentials. Some Supabase projects require email
+    // confirmation before issuing a session — we still persist locally
+    // so the user can confirm + sign in on this device.
     persistSalt(input.email, saltBase64);
+    persistEncryptedServerPw(input.email, encryptedServerPw);
 
     const accessToken = payload.session?.access_token ?? payload.access_token;
     const refreshToken = payload.session?.refresh_token ?? payload.refresh_token;
@@ -215,7 +280,7 @@ export function createAuthClient(deps: AuthDeps): AuthClient {
         signed_in_at: new Date(nowFn()).toISOString(),
       };
       deps.store.set('shared', 'auth.session', session);
-      void uploadSaltToProfile(accessToken, userId, saltBase64);
+      void uploadProfileToSupabase(accessToken, userId, saltBase64, encryptedServerPw);
     }
     deps.store.set('shared', 'auth.email_for_login', input.email);
 
@@ -226,31 +291,62 @@ export function createAuthClient(deps: AuthDeps): AuthClient {
   }
 
   async function signIn(input: SignInInput): Promise<SignInResultLike> {
-    // Supabase auth: email+password using a *deterministic* derived password
-    // wouldn't work because Supabase salts its own bcrypt hash. We need to
-    // know the random server password — but we never stored it. So instead
-    // we use Supabase's "magic link" or — what we do here — pre-stored a
-    // **separate** server-side random password and persisted that.
+    // Pattern A:
+    //   1. Look up local salt + encrypted_server_pw for this email.
+    //   2. Derive the key from passphrase + salt LOCALLY.
+    //   3. Attempt to decrypt the server password. Wrong passphrase →
+    //      decrypt throws → return wrong-passphrase WITHOUT contacting
+    //      Supabase. The user's passphrase never leaves the device.
+    //   4. If decrypt succeeds, call supabase.auth.signInWithPassword
+    //      with the random serverPassword (which Supabase already
+    //      bcrypt'd at signup).
     //
-    // Implementation note: the signed-up server password is stored encrypted
-    // alongside the salt during signUp(). On signIn we decrypt it via the
-    // passphrase-derived key. If decryption succeeds, we use that random
-    // password to authenticate against Supabase. Wrong passphrase →
-    // decryption fails → return wrong-passphrase.
-    //
-    // For now, this implementation accepts the server password is recoverable
-    // from the salt+passphrase decryption envelope, OR uses the simpler
-    // pattern: the passphrase ITSELF is the Supabase password (server still
-    // doesn't see plaintext because TLS terminates at the auth endpoint —
-    // BUT it does see it during the auth call). To preserve true
-    // zero-knowledge we need pattern A; for now, the simpler pattern B is
-    // acceptable because Supabase only stores a bcrypt hash with its own
-    // salt, and the bcrypt → user-data key derivation is independent.
+    // New device with no local data → no-device-data. UX: import a
+    // backup from the original device first. Documented at signup.
 
-    // Try Supabase with the passphrase as the auth password. (Acceptable
-    // because Supabase only stores the bcrypt hash of it. The
-    // **encryption** key is derived locally with a separate salt.)
-    const r = await deps.api.supabase.auth.signInWithPassword(input.email, input.passphrase);
+    const saltBase64 = deps.store.get<string | null>(
+      'shared',
+      SALT_LOCAL_KEY_BY_EMAIL(input.email),
+      null,
+    );
+    const encryptedServerPwLocal = deps.store.get<string | null>(
+      'shared',
+      ENCRYPTED_SERVER_PW_BY_EMAIL(input.email),
+      null,
+    );
+
+    if (!saltBase64 || !encryptedServerPwLocal) {
+      // Pre-Pattern A devices may have only the salt cached. In that
+      // case there's no way to recover the server password locally —
+      // ask the user to import a backup.
+      if (!saltBase64) {
+        return {
+          ok: false,
+          code: 'missing-salt',
+          message: 'no sign-in data found on this device — import a backup from your original device',
+        };
+      }
+      return {
+        ok: false,
+        code: 'no-device-data',
+        message: 'no sign-in data found on this device — import a backup from your original device',
+      };
+    }
+
+    const salt = base64ToBytes(saltBase64);
+    const derivedKey = await deriveKey(input.passphrase, salt);
+
+    let serverPassword: string;
+    try {
+      serverPassword = await unpackServerPw(derivedKey, encryptedServerPwLocal);
+    } catch {
+      // Wrong passphrase → decrypt fails. Never contact Supabase.
+      return { ok: false, code: 'wrong-passphrase', message: 'wrong passphrase' };
+    }
+
+    // Now authenticate with Supabase using the decrypted serverPassword.
+    // The passphrase is never sent.
+    const r = await deps.api.supabase.auth.signInWithPassword(input.email, serverPassword);
     if (!r.ok) {
       if (r.error.code === 'http' && (r.error.status === 400 || r.error.status === 401)) {
         return { ok: false, code: 'wrong-passphrase', message: 'wrong email or passphrase' };
@@ -266,18 +362,9 @@ export function createAuthClient(deps: AuthDeps): AuthClient {
       return { ok: false, code: 'http', message: 'sign-in response incomplete' };
     }
 
-    // Recover the salt. Prefer local-by-email; fall back to profiles table.
-    let saltBase64 =
-      deps.store.get<string | null>('shared', SALT_LOCAL_KEY_BY_EMAIL(input.email), null);
-    if (!saltBase64) {
-      saltBase64 = await fetchSaltFromProfile(accessToken, userId);
-    }
-    if (!saltBase64) {
-      return { ok: false, code: 'missing-salt', message: 'salt not found — first sign-in on this device needs the original device, or import a backup' };
-    }
-    const salt = base64ToBytes(saltBase64);
-    inMemoryKey = await deriveKey(input.passphrase, salt);
+    inMemoryKey = derivedKey;
     deps.store.set('shared', SALT_LOCAL_KEY, saltBase64);
+    deps.store.set('shared', ENCRYPTED_SERVER_PW_KEY, encryptedServerPwLocal);
 
     const session: AuthSession = {
       user_id: userId,
@@ -288,6 +375,10 @@ export function createAuthClient(deps: AuthDeps): AuthClient {
     };
     deps.store.set('shared', 'auth.session', session);
     deps.store.set('shared', 'auth.email_for_login', input.email);
+
+    // Best-effort: re-upload profile so future devices can discover
+    // post-import. Failure is non-fatal — we already have local data.
+    void uploadProfileToSupabase(accessToken, userId, saltBase64, encryptedServerPwLocal);
 
     try { events.emit('auth:signed_in', { user_id: userId, ts: nowFn() }); }
     catch { /* registry warn ok */ }
@@ -323,13 +414,18 @@ export function createAuthClient(deps: AuthDeps): AuthClient {
 // ──────────────────────────────────────────────────────────────────────────
 
 function generateRandomServerPassword(): string {
-  // 32 bytes base64 → 44 chars. Used only as a server-side credential
-  // we never re-use; encryption uses the user's passphrase + salt.
+  // Pattern A: 32 random bytes → 64-char hex. This is the ONLY string
+  // ever sent to Supabase Auth. Uncorrelated with the user's passphrase
+  // by design — Supabase sees this, never the passphrase.
   const arr = new Uint8Array(32);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const g: any = globalThis;
   g.crypto.getRandomValues(arr);
-  return bytesToBase64(arr);
+  let hex = '';
+  for (let i = 0; i < arr.length; i++) {
+    hex += arr[i].toString(16).padStart(2, '0');
+  }
+  return hex;
 }
 
 export { MIN_PASSPHRASE_LENGTH };

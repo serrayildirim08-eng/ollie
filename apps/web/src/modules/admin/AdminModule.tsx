@@ -212,6 +212,91 @@ const EMPTY_DRAFT = {
   duration_min: '',
 };
 
+// ─── AdminReflected · Sprint 5 · F5 ──────────────────────────────────────────
+// Reads `admin.reflected` written by the cross-module router when, e.g.,
+// `finance:reminder_set` fires. Surfaces reminders forwarded from other
+// modules so the user sees one consolidated upcoming list. Dismissable.
+
+interface AdminReflectedEntry {
+  id: string;
+  source_event?: string;
+  source_module?: string;
+  kind?: string;
+  due_at: number;
+  message?: string;
+  ts: number;
+}
+
+function fmtDueAt(ts: number): string {
+  const ms = ts - Date.now();
+  if (ms < 0) return `${Math.abs(Math.floor(ms / 86_400_000))}d overdue`;
+  const days = Math.floor(ms / 86_400_000);
+  if (days === 0) return 'today';
+  if (days === 1) return 'tomorrow';
+  if (days < 14) return `in ${days}d`;
+  return `in ~${Math.round(days / 7)}wk`;
+}
+
+function AdminReflected() {
+  const [reflected, setReflected] = useStoreSlice<AdminReflectedEntry[]>('admin', 'reflected', []);
+  const [dismissed, setDismissed] = useStoreSlice<string[]>('admin', 'reflected_dismissed', []);
+  const dset = new Set(dismissed ?? []);
+  const list = (reflected ?? [])
+    .filter((r) => r?.id && !dset.has(r.id))
+    .sort((a, b) => a.due_at - b.due_at);
+  if (list.length === 0) return null;
+  return (
+    <section style={{ marginBottom: 40 }}>
+      <div style={{ ...LABEL, paddingBottom: 10, borderBottom: `1px solid ${HAIRLINE}` }}>
+        reflected here
+      </div>
+      {list.map((r) => (
+        <div
+          key={r.id}
+          style={{
+            padding: '14px 18px',
+            background: PAPER,
+            borderBottom: `1px solid ${HAIRLINE}`,
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: 12,
+          }}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <span style={{ fontFamily: "'Inter Tight', 'DM Sans', sans-serif", fontSize: 14, color: INK }}>
+              {r.message || (r.kind ?? 'item')}
+            </span>
+            <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: '0.2em', textTransform: 'uppercase', color: FAINT }}>
+              {r.source_module ?? 'elsewhere'} · {fmtDueAt(r.due_at)}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setDismissed([...(dismissed ?? []), r.id])}
+            aria-label="dismiss reflected"
+            style={{
+              minHeight: 44,
+              padding: '8px 12px',
+              background: 'transparent',
+              color: FAINT,
+              border: `1px solid ${HAIRLINE}`,
+              fontFamily: "'DM Mono', monospace",
+              fontSize: 10,
+              letterSpacing: '0.2em',
+              textTransform: 'uppercase',
+              cursor: 'pointer',
+              borderRadius: 2,
+            }}
+          >
+            dismiss
+          </button>
+        </div>
+      ))}
+    </section>
+  );
+}
+
 // ─── AdminNoticed ─────────────────────────────────────────────────────────────
 
 function AdminNoticed() {
@@ -1361,6 +1446,9 @@ export function AdminModule({ onBack }: AdminModuleProps) {
             );
           })}
         </div>
+
+        {/* ── AdminReflected (Sprint 5 · F5 · cross-module forwards) ────── */}
+        <AdminReflected />
 
         {/* ── AdminNoticed (orchestrator-computed patterns) ──────────────── */}
         <AdminNoticed />

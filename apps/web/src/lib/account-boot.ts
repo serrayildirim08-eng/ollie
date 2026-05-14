@@ -24,8 +24,8 @@ import { createOllieAPI } from '@ollie/api';
 import type { OllieAPI } from '@ollie/api';
 import { createAuthClient } from '@ollie/auth';
 import type { AuthClient } from '@ollie/auth';
-import { createSyncClient } from '@ollie/sync';
-import type { SyncClient } from '@ollie/sync';
+import { createSyncClient, createFinanceSyncClient } from '@ollie/sync';
+import type { SyncClient, FinanceSyncClient } from '@ollie/sync';
 import { createResearchStream } from '@ollie/research-stream';
 import type { ResearchClient } from '@ollie/research-stream';
 import * as events from '@ollie/events';
@@ -36,6 +36,8 @@ interface ViteEnv {
   VITE_SUPABASE_ANON_KEY?: string;
   VITE_ANTHROPIC_PROXY_URL?: string;
   VITE_RESEARCH_ENDPOINT?: string;
+  VITE_AI_WORKER_URL?: string;
+  VITE_USER_HASH_SALT?: string;
 }
 
 const env: ViteEnv = (import.meta as unknown as { env?: ViteEnv }).env ?? {};
@@ -45,6 +47,8 @@ interface AccountBootHandles {
   auth: AuthClient;
   research: ResearchClient;
   sync: SyncClient | null;
+  /** Per-record finance sync (Sprint 5). Lives alongside module-blob sync. */
+  financeSync: FinanceSyncClient | null;
 }
 
 let handles: AccountBootHandles | null = null;
@@ -72,12 +76,13 @@ export function bootAccount(): AccountBootHandles {
     store,
     api,
     endpointUrl: env.VITE_RESEARCH_ENDPOINT,
+    ingestUrl: env.VITE_AI_WORKER_URL,
   });
   // Start the research flush loop unconditionally; track() is a no-op
   // until consent is granted, so the loop is harmless when off.
   research.start();
 
-  handles = { api, auth, research, sync: null };
+  handles = { api, auth, research, sync: null, financeSync: null };
 
   // If a session is already in store from a previous run, the auth
   // client's `state()` reports it. But the in-memory encryption key
@@ -101,24 +106,43 @@ export function bootAccount(): AccountBootHandles {
 
 async function attachSync(): Promise<void> {
   if (!handles) return;
-  if (handles.sync) return;
   const session = handles.auth.state().session;
   const key = handles.auth.encryptionKey();
   if (!session || !key) return;
 
-  const sync = createSyncClient({
-    store,
-    api: handles.api,
-    userId: session.user_id,
-    authJwt: session.access_token,
-    encryptionKey: key,
-  });
-  await sync.start();
-  handles.sync = sync;
+  if (!handles.sync) {
+    const sync = createSyncClient({
+      store,
+      api: handles.api,
+      userId: session.user_id,
+      authJwt: session.access_token,
+      encryptionKey: key,
+    });
+    await sync.start();
+    handles.sync = sync;
+  }
+
+  if (!handles.financeSync) {
+    const financeSync = createFinanceSyncClient({
+      store,
+      api: handles.api,
+      userId: session.user_id,
+      authJwt: session.access_token,
+      encryptionKey: key,
+    });
+    await financeSync.start();
+    handles.financeSync = financeSync;
+  }
 }
 
 function detachSync(): void {
-  if (!handles?.sync) return;
-  try { handles.sync.stop(); } catch { /* noop */ }
-  handles.sync = null;
+  if (!handles) return;
+  if (handles.sync) {
+    try { handles.sync.stop(); } catch { /* noop */ }
+    handles.sync = null;
+  }
+  if (handles.financeSync) {
+    try { handles.financeSync.stop(); } catch { /* noop */ }
+    handles.financeSync = null;
+  }
 }

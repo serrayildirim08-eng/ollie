@@ -14,21 +14,29 @@ import { Burhan3D } from './components/Burhan3D';
 import { BrainDumpInput } from './components/BrainDumpInput';
 import { ChipFlyHost, chipFly } from './components/ChipFly';
 import { OnboardingScreen } from './pages/OnboardingScreen';
+import { AuthFlow } from './components/AuthFlow';
+import { ConsentScreen } from './components/ConsentScreen';
 import { useApplyBrainDump } from './hooks/useApplyBrainDump';
+import { trackSession } from './lib/retention';
+import { emit as emitEvent } from '@ollie/events';
+import { bootAccount } from './lib/account-boot';
+import { sessionTracker } from './lib/session-tracker';
+import { readUserHash } from './lib/user-hash';
+import { getDeviceId, getAppVersion } from './lib/device';
 
 // ─── lazy page imports ────────────────────────────────────────────────────────
 
 const HomeScreen      = lazy(() => import('./pages/HomeScreen').then(m => ({ default: m.HomeScreen })));
 const DashboardScreen = lazy(() => import('./pages/DashboardScreen').then(m => ({ default: m.DashboardScreen })));
 const GardenScreen    = lazy(() => import('./pages/GardenScreen').then(m => ({ default: m.GardenScreen })));
-const GardenConsentScreen = lazy(() => import('./pages/GardenConsentScreen').then(m => ({ default: m.GardenConsentScreen })));
 const ModuleScreen    = lazy(() => import('./pages/ModuleScreen').then(m => ({ default: m.ModuleScreen })));
+const SettingsScreen  = lazy(() => import('./pages/SettingsScreen').then(m => ({ default: m.SettingsScreen })));
 
 function PageLoading() {
   return <div style={{ minHeight: '100vh', background: 'var(--bone)' }} aria-busy="true" />;
 }
 
-type Screen = 'home' | 'dashboard' | 'garden' | 'module' | 'demo' | 'onboarding';
+type Screen = 'home' | 'dashboard' | 'garden' | 'module' | 'demo' | 'onboarding' | 'settings';
 
 const eventCount = Object.keys(REGISTRY).length;
 
@@ -39,10 +47,104 @@ const SAMPLE_STARTS = [0, 28, 56, 84, 112, 140].map((d) => ({
 }));
 const samplePrediction = cycle.predictNextPeriod(cycle.detectBoundaries(SAMPLE_STARTS));
 
+// Backend (Supabase) is optional in local/dogfood builds. If
+// VITE_SUPABASE_URL isn't set, AuthFlow can't actually create an
+// account — every signup hits the Vite dev server and 404s. Skip the
+// gate in that case so the app falls through to onboarding-first
+// behavior; sync + research stay no-ops until the env is wired.
+const SUPABASE_CONFIGURED = Boolean(
+  (import.meta as unknown as { env?: { VITE_SUPABASE_URL?: string } }).env?.VITE_SUPABASE_URL,
+);
+
+if (!SUPABASE_CONFIGURED && typeof console !== 'undefined') {
+  // Loud once per page load — paired with the DevModeBanner UI so a
+  // dev never silently runs without auth.
+  console.warn('[ollie] VITE_SUPABASE_URL missing — auth disabled, sync inactive');
+}
+
+// Fix 5: when the auth gate is skipped, surface a tiny sage banner so
+// Serra never confuses a missing-env build with a real authenticated
+// session. Dismissible-per-session via sessionStorage.
+const DEV_BANNER_DISMISS_KEY = 'ollie:dev-mode-banner:dismissed';
+
+function DevModeBanner() {
+  const [dismissed, setDismissed] = React.useState<boolean>(() => {
+    try { return sessionStorage.getItem(DEV_BANNER_DISMISS_KEY) === '1'; } catch { return false; }
+  });
+  if (dismissed) return null;
+
+  const onDismiss = () => {
+    try { sessionStorage.setItem(DEV_BANNER_DISMISS_KEY, '1'); } catch { /* non-fatal */ }
+    setDismissed(true);
+  };
+
+  return (
+    <div
+      role="status"
+      aria-label="dev mode banner"
+      style={{
+        position: 'fixed',
+        bottom: 12,
+        left: 12,
+        zIndex: 10000,
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 10,
+        padding: '6px 10px',
+        background: 'rgba(123, 154, 134, 0.14)',
+        color: '#5e7d6c',
+        border: '1px solid rgba(123, 154, 134, 0.32)',
+        borderRadius: 4,
+        fontFamily: "'DM Mono', monospace",
+        fontSize: 10,
+        letterSpacing: '0.16em',
+        textTransform: 'lowercase',
+        backdropFilter: 'blur(6px)',
+        WebkitBackdropFilter: 'blur(6px)',
+      }}
+    >
+      <span>dev mode · no auth</span>
+      <button
+        type="button"
+        onClick={onDismiss}
+        aria-label="dismiss dev mode banner"
+        style={{
+          background: 'transparent',
+          border: 'none',
+          color: 'inherit',
+          fontFamily: 'inherit',
+          fontSize: 'inherit',
+          letterSpacing: 'inherit',
+          cursor: 'pointer',
+          padding: '0 2px',
+          lineHeight: 1,
+        }}
+      >
+        ×
+      </button>
+    </div>
+  );
+}
+
 function AppInner() {
+  // Auth gate: unauthenticated users see AuthFlow first.
+  // bootAccount is idempotent — main.tsx also calls it.
+  const accountRef = React.useRef(bootAccount());
+  const [authed, setAuthed] = useState<boolean>(
+    () => !SUPABASE_CONFIGURED || Boolean(accountRef.current.auth.state().session),
+  );
+
   // First-launch detection: check onboarded flag before any other screen
   const onboardedRaw = store.get<boolean>('shared', 'onboarded', false);
   const [onboarded, setOnboarded] = useState<boolean>(Boolean(onboardedRaw));
+
+  // Consent rewrite (Sprint 6): shared.consent.necessary is the master
+  // gate that replaces the per-feature consent flags. It's one-way (off
+  // → on, no way back without account deletion) and required to enter
+  // the app. Fresh sign-ups land on ConsentScreen before onboarding;
+  // returning users with consent.necessary === true skip it.
+  const necessaryRaw = store.get<boolean>('shared', 'consent.necessary', false);
+  const [consentGiven, setConsentGiven] = useState<boolean>(Boolean(necessaryRaw));
 
   const [screen, setScreen] = useState<Screen>('home');
   const [selectedModule, setSelectedModule] = useState<string>('');
@@ -61,17 +163,139 @@ function AppInner() {
     return () => off();
   }, [toast]);
 
+  // Retention markers — fires once per app mount. Emits
+  // void:retention:installed on fresh install, session_started every
+  // time, d1_returned the first time the user comes back ≥24h after
+  // install, d7_returned at ≥7d. Local-only until backend lands.
+  React.useEffect(() => {
+    trackSession(store, emitEvent);
+  }, []);
+
+  // Session telemetry — emits session_events start row once auth +
+  // consent are confirmed, and an end row on tab close / background.
+  // Gated on consent.necessary via research.hasConsent() inside
+  // sessionTracker.start(). readUserHash() is null until deriveUserHash()
+  // is called at sign-in — pre-auth sessions are silently dropped.
+  React.useEffect(() => {
+    if (!authed || !consentGiven) return;
+    const research = accountRef.current.research;
+    const userHash = readUserHash() ?? '';
+    const country = store.get<string>('shared', 'settings.country', 'INTL') ?? 'INTL';
+    sessionTracker.start(research, {
+      user_hash: userHash,
+      country,
+      device_id: getDeviceId(),
+      app_version: getAppVersion(),
+    });
+
+    function handleEnd() {
+      sessionTracker.end(research);
+    }
+
+    window.addEventListener('beforeunload', handleEnd);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') handleEnd();
+    });
+
+    return () => {
+      window.removeEventListener('beforeunload', handleEnd);
+      handleEnd();
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authed, consentGiven]);
+
+  // F5 (Sprint 5): global reduce-motion-today.
+  // Cross-module router writes shared.reduce_motion_today when a
+  // pacing breach fires. Apply globally as a CSS variable + data attr
+  // so transitions tagged with the duration vars short-circuit to 0ms
+  // for the day. No banner, just a quieter app surface.
+  React.useEffect(() => {
+    function applyReduceMotion(): void {
+      if (typeof document === 'undefined') return;
+      const value = store.get<unknown[]>('shared', 'reduce_motion_today', []) ?? [];
+      const active = Array.isArray(value) ? value.length > 0 : !!value;
+      const root = document.documentElement;
+      if (active) {
+        root.dataset.reduceMotion = 'today';
+        root.style.setProperty('--reduce-motion-active', '1');
+        root.style.setProperty('--d-flight', '0ms');
+        root.style.setProperty('--d-slide', '0ms');
+        root.style.setProperty('--d-flick', '0ms');
+        root.style.setProperty('--d-settle', '0ms');
+      } else {
+        delete root.dataset.reduceMotion;
+        root.style.removeProperty('--reduce-motion-active');
+        root.style.removeProperty('--d-flight');
+        root.style.removeProperty('--d-slide');
+        root.style.removeProperty('--d-flick');
+        root.style.removeProperty('--d-settle');
+      }
+    }
+    applyReduceMotion();
+    const unsub = store.subscribeKey('shared', 'reduce_motion_today', applyReduceMotion);
+    return () => { try { unsub(); } catch { /* noop */ } };
+  }, []);
+
   const apply = useApplyBrainDump();
 
-  const homeDump = (text: string) => { void apply(text); };
-  const dashDump = (text: string) => { void apply(text); };
-  const moduleDump = (text: string) => { void apply(text); };
+  // Record every brain-dump in the session tracker so the end row
+  // has accurate voice_used / text_used / brain_dumps_count.
+  // Modality here is 'text' for keyboard input; MicButton path below
+  // tracks as 'voice'.
+  const homeDump = (text: string) => {
+    sessionTracker.onBrainDump('text');
+    void apply(text);
+  };
+  const dashDump = (text: string) => {
+    sessionTracker.onBrainDump('text');
+    void apply(text);
+  };
+  const moduleDump = (text: string) => {
+    sessionTracker.onBrainDump('text');
+    void apply(text);
+  };
   const demoDump = (text: string) => {
+    sessionTracker.onBrainDump('text');
     const rect = demoTileRef.current?.getBoundingClientRect();
     void apply(text, rect ?? undefined);
   };
 
   let content: React.ReactNode;
+
+  // Auth gate runs BEFORE onboarding. A session is required to encrypt
+  // anything (sync/backup/research). Sign-up + sign-in is Pattern A:
+  // passphrase never leaves the device.
+  if (!authed) {
+    return (
+      <>
+        <AuthFlow
+          auth={accountRef.current.auth}
+          onAuthenticated={() => setAuthed(true)}
+        />
+        <ToastHost />
+        <ChipFlyHost />
+        {!SUPABASE_CONFIGURED && <DevModeBanner />}
+      </>
+    );
+  }
+
+  // Consent gate (Sprint 6): runs AFTER auth and BEFORE onboarding.
+  // Fresh sign-ups land here with consent.necessary === false (default).
+  // The screen is one-way: tapping "necessary opt-in" flips it true,
+  // and that flip is what unlocks the rest of the app. Returning users
+  // with consent.necessary === true bypass this entirely.
+  if (!consentGiven) {
+    return (
+      <>
+        <ConsentScreen
+          onContinue={() => setConsentGiven(true)}
+        />
+        <ToastHost />
+        <ChipFlyHost />
+        {!SUPABASE_CONFIGURED && <DevModeBanner />}
+      </>
+    );
+  }
 
   // Show onboarding before any other screen on first launch
   if (!onboarded) {
@@ -88,6 +312,7 @@ function AppInner() {
         {content}
         <ToastHost />
         <ChipFlyHost />
+        {!SUPABASE_CONFIGURED && <DevModeBanner />}
       </>
     );
   }
@@ -99,29 +324,32 @@ function AppInner() {
           onNavigate={(to) => {
             if (to === 'dashboard') setScreen('dashboard');
             else if (to === 'garden') setScreen('garden');
+            else if (to === 'settings') setScreen('settings');
           }}
           onBrainDump={homeDump}
         />
       </Suspense>
     );
+  } else if (screen === 'settings') {
+    content = (
+      <Suspense fallback={<PageLoading />}>
+        <SettingsScreen
+          auth={accountRef.current.auth}
+          onBack={() => setScreen('home')}
+          onSignedOut={() => { setAuthed(false); setScreen('home'); }}
+        />
+      </Suspense>
+    );
   } else if (screen === 'garden') {
-    // Decision #15: garden gated on shared.consent.spending_research.
-    // Mini-burhan stays in dashboard for everyone; full /garden requires
-    // the anonymous-research opt-in. The garden is the gift in exchange.
-    const consent = store.get<boolean>('shared', 'consent.spending_research', false);
-    content = consent ? (
+    // Consent rewrite (Sprint 6): garden is now auth-gated only. Every
+    // authed user has shared.consent.necessary === true by definition,
+    // so the prior per-feature spending-research gate is gone.
+    content = (
       <Suspense fallback={<PageLoading />}>
         <GardenScreen
           onNavigate={(to) => {
             if (to === 'home') setScreen('home');
           }}
-        />
-      </Suspense>
-    ) : (
-      <Suspense fallback={<PageLoading />}>
-        <GardenConsentScreen
-          onAccept={() => setScreen('garden')}
-          onDecline={() => setScreen('dashboard')}
         />
       </Suspense>
     );
@@ -331,10 +559,12 @@ function AppInner() {
           a routing miss before the apply pipeline runs. */}
       {onboarded && screen !== 'onboarding' && (
         <MicButton onTranscript={(text) => {
+          sessionTracker.onBrainDump('voice');
           toast.show(`heard · ${text}`, { module: 'voice', ttl: 6000 });
           void apply(text);
         }} />
       )}
+      {!SUPABASE_CONFIGURED && <DevModeBanner />}
     </>
   );
 }

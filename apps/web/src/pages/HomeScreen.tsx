@@ -3,6 +3,7 @@ import { Burhan3D } from '../components/Burhan3D';
 import { BrainDumpInput } from '../components/BrainDumpInput';
 import { getSkyVideoSrc } from '../lib/skyVideo';
 import { store } from '../store';
+import { getLocalWeather, formatWeatherPill, type WeatherSummary } from '../lib/weather';
 
 // Sky orb — glowing circle varying by time of day
 function SkyOrb({ hour }: { hour: number }) {
@@ -126,7 +127,7 @@ function TimeTracker() {
 }
 
 export interface HomeScreenProps {
-  onNavigate: (to: 'dashboard' | 'garden') => void;
+  onNavigate: (to: 'dashboard' | 'garden' | 'settings') => void;
   onBrainDump: (text: string) => void;
 }
 
@@ -134,6 +135,23 @@ export function HomeScreen({ onNavigate, onBrainDump }: HomeScreenProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hour = new Date().getHours();
   const sky = getSkyVideoSrc(hour);
+
+  // F6 (Sprint 5): replace hardcoded "ISTANBUL · 14° · CLEAR" with
+  // BigDataCloud reverse-geocode + Open-Meteo current weather. Both
+  // free, no key. Cached 1h. If offline / blocked / failed → null →
+  // hide the row entirely.
+  const [weather, setWeather] = useState<WeatherSummary | null>(null);
+  const [weatherFetched, setWeatherFetched] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void getLocalWeather().then((w) => {
+      if (cancelled) return;
+      setWeather(w);
+      setWeatherFetched(true);
+    });
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     if (videoRef.current) {
@@ -193,36 +211,66 @@ export function HomeScreen({ onNavigate, onBrainDump }: HomeScreenProps) {
         }}
       />
 
-      {/* Location / weather — top left (hardcoded placeholder) */}
-      <div style={{ position: 'absolute', top: 52, left: 32, zIndex: 10 }}>
-        <div
-          style={{
-            background: 'rgba(255,255,255,0.12)',
-            backdropFilter: 'blur(16px)',
-            WebkitBackdropFilter: 'blur(16px)',
-            borderRadius: 20,
-            padding: '8px 16px',
-            border: '1px solid rgba(255,255,255,0.18)',
-          }}
-        >
-          <span
+      {/* Location / weather — top left (F6 · live via BigDataCloud + Open-Meteo).
+          Hidden entirely if offline / permission denied / API failure. */}
+      {weatherFetched && weather && (
+        <div style={{ position: 'absolute', top: 52, left: 32, zIndex: 10 }}>
+          <div
             style={{
-              fontFamily: "'DM Mono', monospace",
-              fontSize: 10,
-              fontWeight: 500,
-              letterSpacing: '0.16em',
-              textTransform: 'uppercase',
-              color: 'rgba(255,255,255,0.7)',
-              textShadow: '0 1px 8px rgba(0,0,0,0.5)',
+              background: 'rgba(255,255,255,0.12)',
+              backdropFilter: 'blur(16px)',
+              WebkitBackdropFilter: 'blur(16px)',
+              borderRadius: 20,
+              padding: '8px 16px',
+              border: '1px solid rgba(255,255,255,0.18)',
             }}
           >
-            ISTANBUL · 14° · CLEAR
-          </span>
+            <span
+              style={{
+                fontFamily: "'DM Mono', monospace",
+                fontSize: 10,
+                fontWeight: 500,
+                letterSpacing: '0.16em',
+                textTransform: 'uppercase',
+                color: 'rgba(255,255,255,0.7)',
+                textShadow: '0 1px 8px rgba(0,0,0,0.5)',
+              }}
+            >
+              {formatWeatherPill(weather)}
+            </span>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Sky orb — top right */}
       <SkyOrb hour={hour} />
+
+      {/* Settings entry — top-right corner, quiet kicker glyph (F4) */}
+      <button
+        type="button"
+        onClick={() => onNavigate('settings')}
+        aria-label="open settings"
+        style={{
+          position: 'absolute',
+          top: 52,
+          right: 32,
+          zIndex: 12,
+          background: 'rgba(255,255,255,0.12)',
+          backdropFilter: 'blur(16px)',
+          WebkitBackdropFilter: 'blur(16px)',
+          border: '1px solid rgba(255,255,255,0.18)',
+          borderRadius: 20,
+          padding: '8px 16px',
+          fontFamily: "'DM Mono', monospace",
+          fontSize: 10,
+          letterSpacing: '0.16em',
+          textTransform: 'uppercase',
+          color: 'rgba(255,255,255,0.7)',
+          cursor: 'pointer',
+        }}
+      >
+        settings
+      </button>
 
       {/* "what's up?" headline — center */}
       <div
