@@ -63,6 +63,12 @@ import type {
   CyclePhaseWindow,
 } from '@ollie/logic/sleep';
 import { computePhaseForDate } from '@ollie/logic/cycle';
+import {
+  inferCaffeineFromTransactions,
+  correlateCaffeineAndSleep,
+} from '@ollie/logic/body';
+import type { CaffeineSleepResult } from '@ollie/logic/body';
+import type { FinanceRecord } from '@ollie/logic/finance';
 import type { Orchestrator } from './types';
 
 const DEBOUNCE_MS = 500;
@@ -360,6 +366,42 @@ export function createSleepOrchestrator(
             });
           } catch { /* non-fatal */ }
         }
+      }
+
+      // ── caffeine→sleep correlator (Drake 2013) ────────────────────────
+      // Cross-module: finance.records (coffee txns) + dump.items (mentions)
+      // paired to sleep.records. Result stored under sleep.caffeineSleep
+      // for UI consumption. Emit `pattern:caffeine_sleep_detected` only
+      // when correlation crosses threshold (non-empty copy), once per 24h
+      // cooldown per threshold-hour bucket.
+      try {
+        const financeRecords = store.get<FinanceRecord[]>('finance', 'records', []) ?? [];
+        const braindumps = dumpsForCorrelation; // {ts,text}[] already shaped
+        const caffeine = inferCaffeineFromTransactions(financeRecords, braindumps);
+        const result: CaffeineSleepResult = correlateCaffeineAndSleep(caffeine, records);
+        setKey('caffeineSleep', result);
+
+        if (result.copy && result.threshold) {
+          const cooldownKey = '_caffeineSleepEmittedAt';
+          const last = store.get<{ ts?: number; hours?: number } | null>(
+            'sleep', cooldownKey, null,
+          );
+          const lastTs = last?.ts ?? 0;
+          const lastH = last?.hours ?? -1;
+          const sameBucket = lastH === result.threshold.hours;
+          if (!sameBucket || now - lastTs > 24 * 3600_000) {
+            events.emit('pattern:caffeine_sleep_detected', {
+              correlation: result.correlation,
+              threshold: result.threshold,
+              sampleSize: result.sampleSize,
+              copy: result.copy,
+              ts: now,
+            });
+            store.set('sleep', cooldownKey, { ts: now, hours: result.threshold.hours });
+          }
+        }
+      } catch (err) {
+        console.warn('[orchestrator/sleep] caffeine-sleep correlator failed:', err);
       }
     } catch (e) {
       console.error('[orchestrator/sleep] recomputeDerived failed:', e);
