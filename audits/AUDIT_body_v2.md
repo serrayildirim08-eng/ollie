@@ -2,7 +2,60 @@
 
 **Note:** This audit supersedes `audits/AUDIT_body.md` (2026-05-11). It covers 35 features + 8 infrastructure items + 10 ML correlations + 12 notification copies.
 
-**Overall status:** WORKING features (cycle UI, sleep player, water tracking) + SCAFFOLDED cross-module integration (APNs, Burhan habit events, correlation reporting).
+> **Documents path requested by user (`~/Documents/Claude/Projects/void app/audits/AUDIT_body_v2.md`) is TCC-sandboxed — Claude Code cannot write there. This file lives in the repo at `audits/AUDIT_body_v2.md`.**
+
+---
+
+## Sprint Update — 2026-05-14 (post-gap-closure)
+
+**Overall status: ~35% → ~80% WIRED-CROSSMODULE** (Plaid-style HealthKit BLOCKED-EXTERNAL).
+
+Gap closure sprint shipped 7 priorities across 7 commits (round 1: 5 parallel agents; round 2: 2 parallel agents):
+
+| priority | feature | new status | commit |
+|---|---|---|---|
+| P1 | habits → burhan emit | WIRED-CROSSMODULE | `habits:completed` event registered + emitted + burhan SOURCE_EVENTS extended + leaf decoration |
+| P3 | caffeine-sleep correlator | WIRED-CROSSMODULE | Pearson rho on hour-of-day vs sleep quality delta; SleepModule UI replaces Drake-2013 placeholder with dynamic copy when sampleSize≥14 |
+| P4 | ovulation UI on moon dial | WIRED-CROSSMODULE | Sage dot + "ovulation likely · jun 14" caption (low-conf suffix); consent-gated |
+| P5 | wind-down checklist | WIRED-CROSSMODULE | Sequential 6-item ritual (5 if no supplement); opens bedtime±window; emits started/completed/skipped events |
+| P7 | weekly review (sunday 7pm) | WIRED-CROSSMODULE | `body:weekly_review` computed from 7d store; copy templates incl. sparse-data path; client-side scheduler primary, cron deferred |
+| P2 | APNs wiring for 12 body notifications | WIRED-CROSSMODULE | 11 new events + 11 push subscribers across cycle/sleep/body/habits; supplement_due aggregation; conservative defaults (posture + ovulation opt-in=false) |
+| P6 | correlation registry + cron | WIRED-CROSSMODULE | 5 real correlators (caffeine-sleep, luteal-spending, workout-skip-mood, sleep-debt-habits, evening-matcha-sleep) + 1 honest PENDING (water-focus, no focus-rating numeric in store) |
+| P8 | HealthKit | BLOCKED-EXTERNAL | Apple Dev approval awaited; not in this sprint |
+
+### Test delta
+- Logic: 943 → 1037 (+94)
+- Orchestrator: 121 → 190 (+69)
+- Web app (cycle + sleep): 201 → 229 (+28)
+- Total +191 tests across the sprint. All green.
+
+### What changed status
+- **APNs notifications: 0/12 → 11/12 wired** (1 deferred: dynamic supplement timezone edge case noted)
+- **Burhan integration: SCAFFOLDED → WIRED-CROSSMODULE** (habit completions now grow the tree)
+- **Caffeine-sleep correlator: NOT STARTED → WIRED-CROSSMODULE** (was UI cite only)
+- **Ovulation UI: SCAFFOLDED (logic only) → WIRED-CROSSMODULE** (was the audit's #1 surprise)
+- **Wind-down checklist: NOT STARTED → WIRED-CROSSMODULE**
+- **Weekly review: NOT STARTED → WIRED-CROSSMODULE**
+- **Spearman/Pearson math layer: surprise-unused → registry-wired** (P6 promoted from audit's #2 surprise)
+
+### Still outstanding (next sprint)
+1. **Boot-layer wiring** — `RootOrchestratorOptions.scheduleNotification` must be threaded from app boot to fire APNs end-to-end. Currently events emit + subscribers fire but the callback is injected via DI; Serra's app entry needs the wrapper around `scheduleServerJob`. One-line.
+2. **HealthKit integration** (BLOCKED-EXTERNAL, ~2 weeks Apple Dev approval per existing memory)
+3. **`water_focus` correlator** — needs `focus_rating` numeric in store, or alternate proxy
+4. **`pattern:detected` → APNs** — P6 emits but no push subscriber attached (P2 didn't subscribe to it; follow-up)
+5. **Server cron deployment** — `runBodyCorrelations` + `runBodyWeeklyReview` are stubs in cron worker until per-user encrypted data access design lands
+6. **ES localization pass** — all new copy has `// TODO: ES` comments
+7. **Symptom log persistence verification** — audit marked WORKING but no manual UI test in this sprint
+8. **Birth control pill detection heuristic** — orchestrator emits on `cycle.items[].action === 'pill'` but no UI surface logs them yet
+
+### Surprises that flipped
+1. ovulation prediction logic computed but never displayed → now visible
+2. Pearson + Spearman math layer existed unused → now registry-driven daily run
+3. Drake 2013 citation was static UI text → now dynamic copy with per-user threshold
+
+---
+
+**Overall (pre-sprint history below):** WORKING features (cycle UI, sleep player, water tracking) + SCAFFOLDED cross-module integration (APNs, Burhan habit events, correlation reporting).
 
 ---
 
