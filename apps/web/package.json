@@ -27,6 +27,8 @@
     "@ollie/sync": "workspace:*",
     "@react-three/drei": "^9.122.0",
     "@react-three/fiber": "^8.18.0",
+    "@sentry/capacitor": "^4.0.0",
+    "@sentry/react": "^10.43.0",
     "astronomy-engine": "2.1.19",
     "howler": "^2.2.4",
     "react": "^18.3.1",

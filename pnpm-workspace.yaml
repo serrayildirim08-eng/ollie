@@ -1,7 +1,9 @@
 packages:
   - "apps/*"
   - "packages/*"
+  - "workers/*"
 allowBuilds:
+  '@sentry/capacitor': true
   electron: true
   esbuild: true
   protobufjs: set this to true or false

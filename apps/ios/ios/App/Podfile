@@ -1,6 +1,6 @@
 require_relative '../../../../node_modules/.pnpm/@capacitor+ios@7.6.4_@capacitor+core@7.6.4/node_modules/@capacitor/ios/scripts/pods_helpers'
 
-platform :ios, '14.0'
+platform :ios, '15.0'
 use_frameworks!
 
 # workaround to avoid Xcode caching of Pods that requires
@@ -11,7 +11,7 @@ install! 'cocoapods', :disable_input_output_paths => true
 def capacitor_pods
   pod 'Capacitor', :path => '../../../../node_modules/.pnpm/@capacitor+ios@7.6.4_@capacitor+core@7.6.4/node_modules/@capacitor/ios'
   pod 'CapacitorCordova', :path => '../../../../node_modules/.pnpm/@capacitor+ios@7.6.4_@capacitor+core@7.6.4/node_modules/@capacitor/ios'
-
+  pod 'SentryCapacitor', :path => '../../../../node_modules/.pnpm/@sentry+capacitor@4.0.0_@capacitor+core@7.6.4_@sentry+react@10.53.1_react@18.3.1_/node_modules/@sentry/capacitor'
 end
 
 target 'App' do

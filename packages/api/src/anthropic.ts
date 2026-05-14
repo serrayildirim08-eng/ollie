@@ -126,6 +126,22 @@ function stripCodeFence(raw: string): string {
   return raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
 }
 
+/**
+ * Resolve the AI Worker endpoint from Vite env at runtime. Falls back to
+ * the legacy /v1/messages worker URL when VITE_AI_WORKER_URL is unset
+ * (e.g., in node/vitest environments). Tests can still pin via opts.endpoint.
+ *
+ * Privacy: the Worker hides ANTHROPIC_API_KEY; the client never sees it.
+ */
+function resolveAiWorkerEndpoint(): string {
+  const env = (import.meta as { env?: Record<string, string | undefined> }).env;
+  const base = env?.VITE_AI_WORKER_URL;
+  if (base && typeof base === 'string' && base.length > 0) {
+    return base.replace(/\/$/, '') + '/brain-dump';
+  }
+  return 'https://ollie-api.ollieapp.workers.dev/v1/messages';
+}
+
 // ─── public API ───────────────────────────────────────────────────────────────
 
 /**
@@ -144,8 +160,7 @@ export async function routeViaHaiku(
   context?: string,
   opts?: RouteViaHaikuOpts,
 ): Promise<Action[] | null> {
-  const endpoint =
-    opts?.endpoint ?? 'https://ollie-api.ollieapp.workers.dev/v1/messages';
+  const endpoint = opts?.endpoint ?? resolveAiWorkerEndpoint();
   const timeoutMs = opts?.timeoutMs ?? 10_000;
   const minGapMs = opts?.minGapMs ?? 3_000;
 

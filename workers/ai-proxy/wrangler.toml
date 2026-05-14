@@ -1,0 +1,19 @@
+name = "ollie-ai-proxy"
+main = "src/index.ts"
+compatibility_date = "2025-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+# ─── KV bindings ───────────────────────────────────────────────────────────────
+# Run once:
+#   wrangler kv:namespace create CACHE_KV
+#   wrangler kv:namespace create RATE_KV
+[[kv_namespaces]]
+binding = "CACHE_KV"
+id = "REPLACE_WITH_CACHE_KV_ID"
+
+[[kv_namespaces]]
+binding = "RATE_KV"
+id = "REPLACE_WITH_RATE_KV_ID"
+
+# ─── secrets (set with `wrangler secret put`) ──────────────────────────────────
+# ANTHROPIC_API_KEY — sk-ant-… key. NEVER ship to the client.

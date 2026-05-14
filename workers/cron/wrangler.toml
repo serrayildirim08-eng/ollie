@@ -1,0 +1,19 @@
+name = "ollie-cron"
+main = "src/index.ts"
+compatibility_date = "2025-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+# Daily at 03:00 UTC.
+[triggers]
+crons = ["0 3 * * *"]
+
+# ─── service binding to the APNs Worker ────────────────────────────────────────
+# Cron calls APNs via service binding (in-cluster, no public hop, no rate-limit
+# on egress). Deploy ollie-apns-push first so this binding resolves.
+[[services]]
+binding = "APNS_PUSH"
+service = "ollie-apns-push"
+
+# ─── secrets (set with `wrangler secret put`) ──────────────────────────────────
+# SUPABASE_URL                — https://<ref>.supabase.co
+# SUPABASE_SERVICE_ROLE_KEY   — server-only key, NEVER in client env
