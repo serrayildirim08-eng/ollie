@@ -34,10 +34,12 @@ import type {
   ForecastResult,
   AnySleepPattern,
 } from '@ollie/logic/sleep';
+import type { CaffeineSleepResult } from '@ollie/logic/body';
 import { useStoreSlice } from '../../store';
 import { ModuleHelp } from '../../components/ModuleHelp';
 import { SourcesLink } from '../../components/SourcesLink';
 import { SleepSoundPlayer } from '../../components/SleepSoundPlayer';
+import { WindDownChecklist } from './WindDownChecklist';
 
 // ─── palette ─────────────────────────────────────────────────────────────────
 
@@ -308,6 +310,13 @@ export function SleepModule({ onBack }: SleepModuleProps) {
     [storedPatterns],
   );
 
+  // Caffeine→sleep correlator result (Drake 2013, 6h half-life). Written by
+  // the sleep orchestrator. When `copy` is non-empty AND sampleSize >= 14
+  // we render it INSTEAD of the static caffeine_cutoff blurb.
+  const [caffeineSleep] = useStoreSlice<CaffeineSleepResult | null>(
+    'sleep', 'caffeineSleep', null,
+  );
+
   // ── synthesize fixed + dynamic patterns ─────────────────────────────────
   type AnnotatedPattern = AnySleepPattern & { _meta: PatternMeta };
 
@@ -385,11 +394,29 @@ export function SleepModule({ onBack }: SleepModuleProps) {
 
     for (const p of safePatterns) {
       const meta = PATTERN_META[p.pattern];
-      if (meta) out.push({ ...p, _meta: meta });
+      if (!meta) continue;
+      // Drake 2013 placeholder replacement: when the caffeine-sleep
+      // correlator has a non-empty copy + sampleSize >= 14, render the
+      // dynamic copy in place of the static "under 6h floor" blurb.
+      if (
+        p.pattern === 'caffeine_cutoff' &&
+        caffeineSleep &&
+        typeof caffeineSleep.copy === 'string' &&
+        caffeineSleep.copy.length > 0 &&
+        caffeineSleep.sampleSize >= 14
+      ) {
+        const dynamicMeta: PatternMeta = {
+          ...meta,
+          copy: () => caffeineSleep.copy,
+        };
+        out.push({ ...p, _meta: dynamicMeta });
+        continue;
+      }
+      out.push({ ...p, _meta: meta });
     }
 
     return out;
-  }, [drift, socialJetlag, dspsFlag, shortSleepRun, safePatterns]);
+  }, [drift, socialJetlag, dspsFlag, shortSleepRun, safePatterns, caffeineSleep]);
 
   const groups = useMemo(() => ({
     daily:      allPatterns.filter((p) => p._meta.group === 'daily'),
@@ -731,6 +758,11 @@ export function SleepModule({ onBack }: SleepModuleProps) {
                 color: C.inkSoft, marginBottom: 14, fontWeight: 700,
               }}>
                 wind down
+              </div>
+              {/* Sequential 6-item ritual. Self-gates on bedtime-60min window,
+                  so it renders null outside the wind-down hour. */}
+              <div style={{ marginBottom: 18 }}>
+                <WindDownChecklist />
               </div>
               <SleepSoundPlayer />
             </div>
