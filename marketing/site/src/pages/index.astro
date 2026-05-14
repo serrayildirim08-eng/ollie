@@ -1,0 +1,147 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+
+<BaseLayout
+  title="ollie"
+  description="a life operating system for adhd brains. private by design. opt-in research. made by people who needed it."
+  bareHeader={true}
+>
+  <section class="hero">
+    <div class="hero-inner">
+      <p class="eyebrow">ollie</p>
+
+      <h1 class="lede">a life operating system for adhd brains.</h1>
+
+      <p class="sub">
+        private by design. opt-in research.<br />
+        made by people who needed it.
+      </p>
+
+      <p class="cta">
+        <a
+          class="cta-link"
+          href="mailto:support@ollie.app?subject=waitlist"
+        >
+          join the waitlist
+        </a>
+      </p>
+
+      <p class="meta">
+        <a href="/privacy">privacy</a>
+        <span aria-hidden="true">·</span>
+        <a href="/terms">terms</a>
+        <span aria-hidden="true">·</span>
+        <a href="/support">support</a>
+        <span aria-hidden="true">·</span>
+        <a href="/about">about</a>
+      </p>
+    </div>
+  </section>
+</BaseLayout>
+
+<style>
+  .hero {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4rem var(--gutter);
+  }
+
+  .hero-inner {
+    max-width: 36rem;
+    width: 100%;
+    text-align: left;
+  }
+
+  .eyebrow {
+    font-family: var(--font-display);
+    font-size: clamp(1.5rem, 4vw, 1.75rem);
+    margin: 0 0 4rem;
+    letter-spacing: 0.01em;
+    color: var(--ink);
+  }
+
+  .lede {
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: clamp(2rem, 6vw, 3.25rem);
+    line-height: 1.1;
+    letter-spacing: -0.015em;
+    margin: 0 0 2rem;
+    color: var(--ink);
+  }
+
+  .sub {
+    font-family: var(--font-body);
+    font-size: clamp(1rem, 2.2vw, 1.125rem);
+    line-height: 1.6;
+    color: var(--graphite);
+    margin: 0 0 3rem;
+    max-width: 28rem;
+  }
+
+  .cta {
+    margin: 0 0 4rem;
+  }
+
+  .cta-link {
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    letter-spacing: 0.08em;
+    text-transform: lowercase;
+    text-decoration: none;
+    color: var(--ink);
+    border: 1px solid var(--ink);
+    padding: 0.85rem 1.5rem;
+    display: inline-block;
+    transition: background 160ms ease-out, color 160ms ease-out;
+  }
+
+  .cta-link:hover,
+  .cta-link:focus-visible {
+    background: var(--ink);
+    color: var(--paper);
+  }
+
+  .meta {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.06em;
+    color: var(--graphite);
+    margin: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    align-items: center;
+  }
+
+  .meta a {
+    color: var(--graphite);
+    text-decoration: none;
+  }
+
+  .meta a:hover {
+    color: var(--ink);
+  }
+
+  .meta span {
+    opacity: 0.5;
+  }
+
+  @media (max-width: 480px) {
+    .eyebrow {
+      margin-bottom: 3rem;
+    }
+    .lede {
+      margin-bottom: 1.5rem;
+    }
+    .sub {
+      margin-bottom: 2.5rem;
+    }
+    .cta {
+      margin-bottom: 3rem;
+    }
+  }
+</style>

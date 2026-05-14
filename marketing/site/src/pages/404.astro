@@ -1,0 +1,70 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+
+<BaseLayout
+  title="not found — ollie"
+  description="the page you are looking for is not here."
+>
+  <section class="notfound">
+    <p class="code">404</p>
+    <h1>not here.</h1>
+    <p class="sub">
+      the page you are looking for has moved, was never here, or never existed.
+    </p>
+    <p class="back">
+      <a href="/">return home</a>
+    </p>
+  </section>
+</BaseLayout>
+
+<style>
+  .notfound {
+    max-width: 32rem;
+    margin: 0 auto;
+    padding: clamp(4rem, 12vw, 8rem) var(--gutter);
+    text-align: left;
+  }
+
+  .code {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    letter-spacing: 0.08em;
+    color: var(--graphite);
+    margin: 0 0 2rem;
+  }
+
+  h1 {
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: clamp(2rem, 6vw, 3rem);
+    line-height: 1.1;
+    margin: 0 0 1.25rem;
+    color: var(--ink);
+  }
+
+  .sub {
+    color: var(--graphite);
+    margin: 0 0 2.5rem;
+    max-width: 26rem;
+  }
+
+  .back {
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    letter-spacing: 0.06em;
+    margin: 0;
+  }
+
+  .back a {
+    color: var(--ink);
+    text-decoration: none;
+    border-bottom: 1px solid var(--ink);
+    padding-bottom: 0.15rem;
+  }
+
+  .back a:hover {
+    color: var(--sage);
+    border-color: var(--sage);
+  }
+</style>

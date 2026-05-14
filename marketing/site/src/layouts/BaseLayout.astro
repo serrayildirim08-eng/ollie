@@ -1,0 +1,370 @@
+---
+interface Props {
+  title: string;
+  description?: string;
+  /** when true, hides the global nav (used on the landing page) */
+  bareHeader?: boolean;
+}
+
+const {
+  title,
+  description = 'ollie — a life operating system for adhd brains. private by design. opt-in research.',
+  bareHeader = false,
+} = Astro.props;
+
+const canonical = new URL(Astro.url.pathname, Astro.site).toString();
+const year = new Date().getFullYear();
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="generator" content={Astro.generator} />
+
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="ollie" />
+
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+
+    <link
+      rel="preconnect"
+      href="https://fonts.googleapis.com"
+      crossorigin
+    />
+    <link
+      rel="preconnect"
+      href="https://fonts.gstatic.com"
+      crossorigin
+    />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Mono:wght@400;500&family=Inter+Tight:wght@400;500&display=swap"
+    />
+  </head>
+  <body>
+    {
+      !bareHeader && (
+        <header class="site-header">
+          <a href="/" class="brand" aria-label="ollie home">
+            ollie
+          </a>
+          <nav aria-label="primary">
+            <a href="/about">about</a>
+            <a href="/privacy">privacy</a>
+            <a href="/terms">terms</a>
+            <a href="/support">support</a>
+          </nav>
+        </header>
+      )
+    }
+
+    <main>
+      <slot />
+    </main>
+
+    <footer class="site-footer">
+      <div class="footer-row">
+        <span>ollie</span>
+        <span class="dot" aria-hidden="true">·</span>
+        <span>{year}</span>
+        <span class="dot" aria-hidden="true">·</span>
+        <a href="mailto:support@ollie.app">support@ollie.app</a>
+      </div>
+      <div class="footer-row footer-links">
+        <a href="/privacy">privacy</a>
+        <a href="/terms">terms</a>
+        <a href="/support">support</a>
+        <a href="/about">about</a>
+      </div>
+    </footer>
+
+    <style is:global>
+      :root {
+        /* editorial luxury palette — light */
+        --paper: #f6f1e7;       /* cream */
+        --paper-soft: #efe8d8;
+        --ink: #1a1a1a;         /* near-black */
+        --ink-soft: #2c2c2c;
+        --graphite: #5a5a55;    /* warm grey */
+        --hairline: #d8cfbb;    /* hairline rule */
+        --sage: #6f7d63;        /* accent */
+        --rubric: #b8392e;      /* used sparingly */
+
+        --font-display: 'DM Serif Display', 'Iowan Old Style', 'Apple Garamond',
+          'Baskerville', serif;
+        --font-body: 'Inter Tight', system-ui, -apple-system, 'Segoe UI',
+          sans-serif;
+        --font-mono: 'DM Mono', ui-monospace, 'SF Mono', 'Menlo', monospace;
+
+        --measure: 36rem;
+        --gutter: clamp(1.25rem, 4vw, 2.5rem);
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --paper: #161412;
+          --paper-soft: #1d1a17;
+          --ink: #ece5d5;
+          --ink-soft: #d8d1c1;
+          --graphite: #9e978a;
+          --hairline: #2a2723;
+          --sage: #9aa68a;
+          --rubric: #d2604f;
+        }
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+      }
+
+      html {
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        text-rendering: optimizeLegibility;
+      }
+
+      body {
+        font-family: var(--font-body);
+        font-size: 17px;
+        line-height: 1.6;
+        color: var(--ink);
+        background: var(--paper);
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+
+      main {
+        flex: 1;
+        width: 100%;
+      }
+
+      a {
+        color: var(--ink);
+        text-underline-offset: 0.18em;
+        text-decoration-thickness: 1px;
+      }
+
+      a:hover {
+        color: var(--sage);
+      }
+
+      ::selection {
+        background: var(--ink);
+        color: var(--paper);
+      }
+
+      /* header */
+      .site-header {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 1.5rem;
+        padding: 1.75rem var(--gutter) 1.25rem;
+        border-bottom: 1px solid var(--hairline);
+        flex-wrap: wrap;
+      }
+
+      .brand {
+        font-family: var(--font-display);
+        font-size: 1.5rem;
+        letter-spacing: 0.01em;
+        text-decoration: none;
+      }
+
+      .site-header nav {
+        display: flex;
+        gap: 1.25rem;
+        font-family: var(--font-mono);
+        font-size: 0.78rem;
+        letter-spacing: 0.06em;
+        text-transform: lowercase;
+      }
+
+      .site-header nav a {
+        text-decoration: none;
+        color: var(--graphite);
+      }
+
+      .site-header nav a:hover {
+        color: var(--ink);
+      }
+
+      /* footer */
+      .site-footer {
+        border-top: 1px solid var(--hairline);
+        padding: 2rem var(--gutter);
+        font-family: var(--font-mono);
+        font-size: 0.72rem;
+        letter-spacing: 0.06em;
+        color: var(--graphite);
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+      }
+
+      .footer-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        align-items: center;
+      }
+
+      .footer-row .dot {
+        opacity: 0.5;
+      }
+
+      .footer-links {
+        gap: 1rem;
+      }
+
+      .footer-links a {
+        color: var(--graphite);
+        text-decoration: none;
+      }
+
+      .footer-links a:hover {
+        color: var(--ink);
+      }
+
+      /* shared markdown / page typography */
+      .prose {
+        max-width: var(--measure);
+        margin: 0 auto;
+        padding: clamp(2.5rem, 6vw, 5rem) var(--gutter);
+      }
+
+      .prose h1 {
+        font-family: var(--font-display);
+        font-weight: 400;
+        font-size: clamp(2rem, 5vw, 3rem);
+        line-height: 1.1;
+        margin: 0 0 1.25rem;
+        letter-spacing: -0.01em;
+      }
+
+      .prose h2 {
+        font-family: var(--font-display);
+        font-weight: 400;
+        font-size: clamp(1.4rem, 3vw, 1.75rem);
+        line-height: 1.2;
+        margin: 2.75rem 0 0.75rem;
+        letter-spacing: -0.005em;
+      }
+
+      .prose h3 {
+        font-family: var(--font-body);
+        font-weight: 500;
+        font-size: 1.05rem;
+        margin: 1.75rem 0 0.5rem;
+        letter-spacing: 0.005em;
+      }
+
+      .prose p {
+        margin: 0 0 1rem;
+        color: var(--ink-soft);
+      }
+
+      .prose strong {
+        color: var(--ink);
+        font-weight: 500;
+      }
+
+      .prose hr {
+        border: none;
+        border-top: 1px solid var(--hairline);
+        margin: 2.5rem 0;
+      }
+
+      .prose ul,
+      .prose ol {
+        padding-left: 1.25rem;
+        margin: 0 0 1rem;
+        color: var(--ink-soft);
+      }
+
+      .prose li {
+        margin: 0.25rem 0;
+      }
+
+      .prose blockquote {
+        border-left: 2px solid var(--hairline);
+        padding-left: 1rem;
+        margin: 1.5rem 0;
+        color: var(--graphite);
+        font-style: italic;
+      }
+
+      .prose code {
+        font-family: var(--font-mono);
+        font-size: 0.85em;
+        background: var(--paper-soft);
+        padding: 0.1em 0.35em;
+        border-radius: 2px;
+      }
+
+      .prose table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 1.25rem 0;
+        font-size: 0.92rem;
+      }
+
+      .prose th,
+      .prose td {
+        text-align: left;
+        padding: 0.6rem 0.75rem;
+        border-bottom: 1px solid var(--hairline);
+        vertical-align: top;
+      }
+
+      .prose th {
+        font-family: var(--font-mono);
+        font-size: 0.72rem;
+        letter-spacing: 0.06em;
+        text-transform: lowercase;
+        color: var(--graphite);
+        font-weight: 500;
+      }
+
+      .prose a {
+        color: var(--ink);
+        text-decoration: underline;
+        text-decoration-thickness: 1px;
+        text-underline-offset: 0.18em;
+      }
+
+      .prose a:hover {
+        color: var(--sage);
+      }
+
+      .prose .meta {
+        font-family: var(--font-mono);
+        font-size: 0.72rem;
+        letter-spacing: 0.06em;
+        color: var(--graphite);
+        text-transform: lowercase;
+      }
+    </style>
+  </body>
+</html>
