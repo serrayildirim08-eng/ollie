@@ -1,0 +1,10 @@
+name = "ollie-sentry-tunnel"
+main = "src/index.ts"
+compatibility_date = "2025-09-23"
+
+# Sentry tunnel — proxies SDK envelope payloads to Sentry's ingest
+# endpoint. Used to bypass ISP-level DPI blocks (Turkey blocks
+# *.sentry.io at the TLS layer; *.workers.dev is unblocked).
+#
+# No secrets required: the SDK envelope embeds its own DSN, which
+# the worker validates against the allow-list below.
