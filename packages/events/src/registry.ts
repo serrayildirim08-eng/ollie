@@ -95,6 +95,7 @@ export const REGISTRY: Registry = {
   'astrology:transit_change':      { payload: '{ aspect: string, planet1: string, planet2: string, ts: number }' },
 
   // ─── habits ─────────────────────────────────────────────────────
+  'habits:completed':                  { payload: '{ habitId: string, category: "health"|"mental"|"home"|"work"|"self_care", habitName: string, ts: number }' },
   'habits:pattern_detected':           { payload: '{ pattern: string, confidence: string, sample_n: number, ts: number }' },
   'habits:externalization_detected':   { payload: '{ confidence: string, sample_n: number, ts: number }' },
   'habits:luteal_collapse_detected':   { payload: '{ drop_pct: number, ts: number }' },
@@ -248,6 +249,9 @@ export const REGISTRY: Registry = {
   // (declared earlier in this registry).
   'finance:impulse_pause_started':     { payload: '{ id: string, amount: number, merchant: string, category: string, ts: number, expires_at: number }' },
   'finance:impulse_pause_resolved':    { payload: '{ id: string, amount: number, merchant: string, outcome: "purchased" | "skipped", ts: number }' },
+
+  // ─── body weekly review (Sunday 19:00 local) ────────────────────────────
+  'body:weekly_review': { payload: '{ ts: number, weekStartTs: number, weekEndTs: number, copy: string, summary: { habitsCompleted: number, habitsTotal: number, mostSkippedWeekday: string|null, sleepAvgHours: number|null, sleepNightsLogged: number, cyclePhaseAtEnd: string|null, supplementAdherencePct: number|null, waterAvgCups: number|null, isSparse: boolean } }' },
 
   // ─── retention telemetry (local-only until backend Group C ships) ────────
   // Local-first: backend may pick these up via research-stream later.

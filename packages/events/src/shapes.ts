@@ -57,6 +57,12 @@ export const SHAPES: Record<string, ShapeSpec> = {
   // Sprint 6 · impulse pause flow (FinanceModule)
   'finance:impulse_pause_started':  { id: 'string', amount: 'number', merchant: 'string', category: 'string', ts: 'number', expires_at: 'number' },
   'finance:impulse_pause_resolved': { id: 'string', amount: 'number', merchant: 'string', outcome: 'string', ts: 'number' },
+
+  // habits completion → garden
+  'habits:completed': { habitId: 'string', category: 'string', habitName: 'string', ts: 'number' },
+
+  // body weekly review
+  'body:weekly_review': { ts: 'number', weekStartTs: 'number', weekEndTs: 'number', copy: 'string', summary: 'object' },
 };
 
 export type ValidationResult = { ok: true } | { ok: false; reason: string };

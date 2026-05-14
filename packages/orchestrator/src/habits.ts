@@ -9,13 +9,18 @@
  *   patternsLastComputedAt timestamp of most recent recompute
  *
  * Subscriptions:
- *   shared.habits_v2       → schedule recompute
+ *   shared.habits_v2       → schedule recompute + scan completions
  *   shared.actionLog       → schedule recompute
  *   sleep.records          → schedule recompute (sleep-habit coupling)
  *   cycle.cycles           → schedule recompute (luteal collapse)
  *   goals.items            → schedule recompute (keystone anchor)
  *   work.sessions          → schedule recompute (hyperfocus spillover)
  *   void:braindump:submitted event → schedule recompute (habits items, v≥2 guard)
+ *
+ * Emits:
+ *   habits:completed       when a habit is marked done for the first time today
+ *                          Dedup: one emit per habitId per calendar day (UTC date string).
+ *                          Toggling off then back on within the same day does NOT re-emit.
  */
 
 import type { Store } from '@ollie/store';
@@ -27,6 +32,16 @@ import type { Orchestrator } from './types';
 
 const DEBOUNCE_MS = 500;
 
+type HabitsCompletedCategory = 'health' | 'mental' | 'home' | 'work' | 'self_care';
+
+// Best-effort mapping from cueTime to category.
+// Habits can add a `category` field in future; for now we infer from cueTime.
+function inferCategory(cueTime?: string): HabitsCompletedCategory {
+  if (cueTime === 'morning') return 'health';
+  if (cueTime === 'evening') return 'mental';
+  return 'self_care';
+}
+
 export function createHabitsOrchestrator(
   store: Store,
   { now: nowFn }: { now?: () => number } = {},
@@ -36,6 +51,36 @@ export function createHabitsOrchestrator(
   let initialized = false;
   const unsubs: Unsubscribe[] = [];
   let timer: ReturnType<typeof setTimeout> | null = null;
+
+  // Dedup set: "habitId:YYYY-MM-DD" entries that have already emitted habits:completed.
+  // Cleared on teardown so tests are isolated.
+  const emittedCompletions = new Set<string>();
+
+  function scanCompletions(): void {
+    const now = getNow();
+    const todayKey = new Date(now).toISOString().slice(0, 10);
+    const habitsRaw = store.get<Array<Habit & { cueTime?: string }>>('shared', 'habits_v2', []) ?? [];
+
+    for (const h of habitsRaw) {
+      if (!h?.id || !Array.isArray(h.completions)) continue;
+      const last = h.completions[h.completions.length - 1] as { ts?: number } | undefined;
+      if (!last || typeof last.ts !== 'number') continue;
+
+      const completionDay = new Date(last.ts).toISOString().slice(0, 10);
+      if (completionDay !== todayKey) continue;
+
+      const dedupKey = `${h.id}:${todayKey}`;
+      if (emittedCompletions.has(dedupKey)) continue;
+
+      emittedCompletions.add(dedupKey);
+      events.emit('habits:completed', {
+        habitId: h.id,
+        category: inferCategory(h.cueTime),
+        habitName: typeof h.name === 'string' ? h.name : '',
+        ts: last.ts,
+      });
+    }
+  }
 
   function recomputePatterns(): void {
     try {
@@ -109,11 +154,18 @@ export function createHabitsOrchestrator(
     timer = setTimeout(() => { timer = null; recomputePatterns(); }, DEBOUNCE_MS);
   }
 
+  // Called synchronously on each habits_v2 change so completion events
+  // fire as quickly as the store write lands (no debounce delay).
+  function scheduleWithCompletionScan(): void {
+    scanCompletions();
+    schedule();
+  }
+
   function init(): void {
     if (initialized) return;
     initialized = true;
 
-    unsubs.push(store.subscribeKey('shared', 'habits_v2', schedule));
+    unsubs.push(store.subscribeKey('shared', 'habits_v2', scheduleWithCompletionScan));
     unsubs.push(store.subscribeKey('shared', 'actionLog', schedule));
     unsubs.push(store.subscribeKey('sleep', 'records', schedule));
     unsubs.push(store.subscribeKey('cycle', 'cycles', schedule));
@@ -144,6 +196,7 @@ export function createHabitsOrchestrator(
   function teardown(): void {
     unsubs.splice(0).forEach((fn) => fn());
     if (timer) { clearTimeout(timer); timer = null; }
+    emittedCompletions.clear();
     initialized = false;
   }
 
