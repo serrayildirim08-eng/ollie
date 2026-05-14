@@ -15,6 +15,7 @@ import {
   deriveCycleStats,
   computePhaseForDate,
   predictNextPeriod,
+  predictOvulation,
   fertileWindow,
   findCorrelations,
 } from '@ollie/logic/cycle';
@@ -73,6 +74,11 @@ function fmtMonth(d: Date): string {
 function fmtFullDate(d: Date): string {
   return `${fmtDay(d)} ${fmtMonth(d)} ${d.getFullYear()}`;
 }
+function fmtOvulationDate(ts: number): string {
+  const d = new Date(ts);
+  return `${fmtMonth(d)} ${d.getDate()}`;
+}
+
 function fmtRange(range: [Date, Date] | null): string {
   if (!range) return '';
   const [a, b] = range;
@@ -593,6 +599,22 @@ export function CycleModule({ onBack }: CycleModuleProps) {
   }, [stats.last_period_start, now]);
 
   const dialLength = Math.round(stats.mean_length ?? 28);
+
+  const ovulationPrediction = useMemo(
+    () => (settings.show_dial ? predictOvulation(cycles) : null),
+    [cycles, settings.show_dial],
+  );
+
+  // Day index (0-based) of predicted ovulation within the current cycle.
+  // null when prediction is absent or ovulationTs falls outside cycle range.
+  const ovulationDayIndex = useMemo(() => {
+    if (!ovulationPrediction?.ovulationTs || !stats.last_period_start) return null;
+    const idx = Math.round(
+      (ovulationPrediction.ovulationTs - stats.last_period_start) / 86_400_000,
+    );
+    if (idx < 0 || idx >= dialLength) return null;
+    return idx;
+  }, [ovulationPrediction, stats.last_period_start, dialLength]);
   const currentDayLabel = currentDay ?? 1;
   const recentCycles = cycles.filter(c => c.cycleLengthDays).slice(-5);
 
@@ -654,6 +676,7 @@ export function CycleModule({ onBack }: CycleModuleProps) {
         ['--ceramic-ink-soft' as string]: '#5C5750',
         ['--ceramic-ink-faint' as string]: '#8A8377',
         ['--ceramic-accent' as string]: '#8A4B2C',
+        ['--ceramic-ovulation' as string]: '#5A7A5A',   // sage · distinct from umber accent
         background: '#E8DED0',
         color: '#1E1E1E',
         width: '100vw',
@@ -754,24 +777,64 @@ export function CycleModule({ onBack }: CycleModuleProps) {
           </div>
 
           {currentDay !== null && !stats.irregular_flag && (
-            <div
-              role="progressbar"
-              aria-valuenow={currentDay}
-              aria-valuemax={dialLength}
-              style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 120, padding: '0 16px' }}
-            >
-              {Array.from({ length: dialLength }).map((_, i) => (
-                <span
-                  key={i}
+            <>
+              <div
+                role="progressbar"
+                aria-valuenow={currentDay}
+                aria-valuemax={dialLength}
+                aria-label={
+                  ovulationDayIndex !== null
+                    ? t('cycle.day.aria', currentDay, cyclePhaseLabel(phaseName)) +
+                      ` · ${t('cycle.ovulation.caption', ovulationPrediction?.ovulationTs ? fmtOvulationDate(ovulationPrediction.ovulationTs) : '')}`
+                    : undefined
+                }
+                style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap', marginBottom: ovulationDayIndex !== null ? 16 : 120, padding: '0 16px' }}
+              >
+                {Array.from({ length: dialLength }).map((_, i) => {
+                  const isOvulation = i === ovulationDayIndex;
+                  return (
+                    <span
+                      key={i}
+                      aria-label={isOvulation ? 'ovulation' : undefined}
+                      style={{
+                        width: isOvulation ? 10 : 8,
+                        height: isOvulation ? 10 : 8,
+                        borderRadius: '50%',
+                        background: isOvulation
+                          ? 'var(--ceramic-ovulation)'
+                          : i < currentDay
+                            ? C.accent
+                            : 'transparent',
+                        border: isOvulation
+                          ? '1.5px solid var(--ceramic-ovulation)'
+                          : `1px solid ${i < currentDay ? C.accent : C.sand}`,
+                        flexShrink: 0,
+                        marginTop: isOvulation ? -1 : 0,
+                      }}
+                    />
+                  );
+                })}
+              </div>
+
+              {/* ovulation caption */}
+              {ovulationPrediction?.ovulationTs && (
+                <div
                   style={{
-                    width: 8, height: 8, borderRadius: '50%',
-                    background: i < currentDay ? C.accent : 'transparent',
-                    border: `1px solid ${i < currentDay ? C.accent : C.sand}`,
-                    flexShrink: 0,
+                    textAlign: 'center',
+                    fontFamily: "'DM Mono', monospace",
+                    fontSize: 11,
+                    letterSpacing: '0.14em',
+                    color: 'var(--ceramic-ovulation)',
+                    marginBottom: 120,
+                    paddingTop: 8,
                   }}
-                />
-              ))}
-            </div>
+                >
+                  {ovulationPrediction.confidence < 0.4
+                    ? t('cycle.ovulation.caption_low', fmtOvulationDate(ovulationPrediction.ovulationTs))
+                    : t('cycle.ovulation.caption', fmtOvulationDate(ovulationPrediction.ovulationTs))}
+                </div>
+              )}
+            </>
           )}
         </div>
 

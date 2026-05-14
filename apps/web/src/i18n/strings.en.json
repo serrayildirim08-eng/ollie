@@ -336,6 +336,10 @@
     "fertile": {
       "detail": "range, not a specific day."
     },
+    "ovulation": {
+      "caption": "ovulation likely · ${0}",
+      "caption_low": "ovulation likely · ${0} · low confidence"
+    },
     "record": {
       "unit_d": "d",
       "btn": {
