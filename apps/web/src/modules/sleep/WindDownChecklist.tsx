@@ -33,7 +33,7 @@
  *   - Faint cream → sky gradient on the card surface. No frosted glass,
  *     no neon, no playful bounce — editorial restraint per design DNA.
  *
- * TODO: ES — Spanish copy for item labels + subtitle.
+ * i18n: strings.en/es.json body.wind_down.*
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -119,6 +119,8 @@ interface WindDownItem {
   hint?: string;
 }
 
+// LOCALIZE_LATER — ES translations in strings.es.json body.wind_down.*
+// EN: keys body.wind_down.phone_away etc; ES: "celular lejos" etc.
 const ALL_ITEMS: WindDownItem[] = [
   { id: 'phone_away',     label: 'phone away' },
   { id: 'drink_water',    label: 'drink water' },
@@ -331,6 +333,7 @@ export function WindDownChecklist({ nowFn }: WindDownChecklistProps): React.Reac
           fontWeight: 400,
         }}
       >
+        {/* LOCALIZE_LATER — ES: body.wind_down.done "que descanses." */}
         rest well.
       </div>
     );
@@ -368,6 +371,7 @@ export function WindDownChecklist({ nowFn }: WindDownChecklistProps): React.Reac
             color: C.inkSoft,
           }}
         >
+          {/* LOCALIZE_LATER — ES: body.wind_down.subtitle "rutina nocturna · ${0} pasos" */}
           wind-down · {items.length} steps
         </span>
         <button
@@ -387,6 +391,7 @@ export function WindDownChecklist({ nowFn }: WindDownChecklistProps): React.Reac
             padding: '4px 0',
           }}
         >
+          {/* LOCALIZE_LATER — ES: body.wind_down.dismiss "esta noche no" */}
           not tonight
         </button>
       </div>

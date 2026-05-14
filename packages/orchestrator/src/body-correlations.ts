@@ -207,7 +207,9 @@ export interface PatternDetectedSubscriberOpts {
  *
  * Returns an unsubscribe function (mirrors finance/sleep teardown pattern).
  *
- * TODO: ES localization pass.
+ * i18n: title key body.patterns.noticed_something; body = pattern copy from correlator.
+ * ES key: body.patterns.noticed_something "algo notado" — wired in strings.es.json.
+ * Per-correlation ES copy keys: body.patterns.caffeine_sleep, luteal_spending, etc.
  */
 export function initPatternDetectedSubscriber(
   opts: PatternDetectedSubscriberOpts,
@@ -234,13 +236,12 @@ export function initPatternDetectedSubscriber(
 
       scheduleNotification(
         {
-          title: 'noticed something',
-          body: p.copy,
+          title: 'noticed something', // LOCALIZE_LATER — ES: body.patterns.noticed_something "algo notado"
+          body: p.copy, // LOCALIZE_LATER — ES copy from correlation registry (body.patterns.* keys)
           category: 'PATTERN_ALERT',
           dedupe_key: `pattern:${p.correlation_name}:${weekKey}`,
           aggregation_group: `pattern:detected:${weekKey}`,
           action_url: '/body',
-          // TODO: ES
         },
         now,
       );
