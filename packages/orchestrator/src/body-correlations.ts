@@ -29,7 +29,9 @@
  */
 
 import type { Store } from '@ollie/store';
+import type { Unsubscribe } from '@ollie/events';
 import * as events from '@ollie/events';
+import type { NotificationSpec } from '@ollie/notifications';
 import {
   runAllCorrelations,
   takeUserDataSnapshot,
@@ -158,6 +160,92 @@ export function nextLocal03(nowMs: number): number {
     return d.getTime() + DAY_MS;
   }
   return d.getTime();
+}
+
+// ─── APNs subscriber for pattern:detected ────────────────────────────────
+
+/**
+ * Returns the ISO 8601 week key (YYYY-Www) for a given timestamp.
+ * Used as the dedup + aggregation discriminator — one push per
+ * correlator per week.
+ */
+function isoWeekKey(ts: number): string {
+  const d = new Date(ts);
+  // ISO week: Monday = day 1; shift so Monday is 0
+  const day = (d.getUTCDay() + 6) % 7;
+  // Nearest Thursday (ISO rule: week belongs to the year of its Thursday)
+  const thursday = new Date(d);
+  thursday.setUTCDate(d.getUTCDate() - day + 3);
+  const yearStart = new Date(Date.UTC(thursday.getUTCFullYear(), 0, 1));
+  const week = Math.ceil(
+    ((thursday.getTime() - yearStart.getTime()) / 86_400_000 + 1) / 7,
+  );
+  return `${thursday.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
+}
+
+export interface PatternDetectedSubscriberOpts {
+  /**
+   * APNs push scheduler — injected by the app boot layer.
+   * Wraps scheduleServerJob() from @ollie/notifications/server-schedule.
+   * No-op when omitted (desktop, web, tests without APNs).
+   */
+  scheduleNotification: (spec: NotificationSpec, fireAt: number) => void;
+  /** Optional clock override (tests). Default Date.now. */
+  now?: () => number;
+}
+
+/**
+ * Subscribe to `pattern:detected` and forward to APNs.
+ *
+ * Dedup rules:
+ *   - Per correlator per ISO week: dedupe_key = `pattern:{name}:{weekKey}`
+ *   - Aggregation: all pattern:detected events in the same recompute pass
+ *     share aggregation_group = `pattern:detected:{weekKey}` so the
+ *     dispatcher coalesces them into one digest push.
+ *
+ * Sparse-data guard: copy === '' → silent skip.
+ *
+ * Returns an unsubscribe function (mirrors finance/sleep teardown pattern).
+ *
+ * TODO: ES localization pass.
+ */
+export function initPatternDetectedSubscriber(
+  opts: PatternDetectedSubscriberOpts,
+): Unsubscribe {
+  const { scheduleNotification } = opts;
+  const getNow = opts.now ?? (() => Date.now());
+
+  return events.on('pattern:detected', (raw: unknown) => {
+    try {
+      const p = (raw ?? {}) as {
+        correlation_name?: string;
+        correlation?: number;
+        sample_size?: number;
+        copy?: string;
+        ts?: number;
+      };
+
+      // Sparse-data guard — P6 emits copy:'' when sample insufficient
+      if (typeof p.copy !== 'string' || p.copy.trim().length === 0) return;
+      if (!p.correlation_name) return;
+
+      const now = typeof p.ts === 'number' ? p.ts : getNow();
+      const weekKey = isoWeekKey(now);
+
+      scheduleNotification(
+        {
+          title: 'noticed something',
+          body: p.copy,
+          category: 'PATTERN_ALERT',
+          dedupe_key: `pattern:${p.correlation_name}:${weekKey}`,
+          aggregation_group: `pattern:detected:${weekKey}`,
+          action_url: '/body',
+          // TODO: ES
+        },
+        now,
+      );
+    } catch { /* non-fatal */ }
+  });
 }
 
 export interface ScheduleBodyCorrelationPassOpts {
