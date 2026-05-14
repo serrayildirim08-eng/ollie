@@ -23,6 +23,8 @@ import {
 import { useStoreSlice as baseUseStoreSlice } from '@ollie/store/react';
 import type { BirthData } from '@ollie/logic/astrology';
 import { createOrchestrator } from '@ollie/orchestrator';
+import { scheduleServerJob } from '@ollie/notifications/server-schedule';
+import { getAccount } from './lib/account-boot';
 
 runMigrations(browserAdapter);
 
@@ -108,7 +110,25 @@ if (hasBirthOnLoad) {
 // Starts cycle, pets, body, grocery, sleep, finance, patterns.
 // Astrology runs via the inline orchestrator above; createOrchestrator does not
 // duplicate it. habits / work / goals / admin / dump are UI-only (no sub-orchestrator files).
-createOrchestrator(store).init();
+//
+// scheduleNotification is injected here so APNs server-side jobs fire for all
+// 11 body + finance subscribers. The wrapper reads getAccount() lazily — deps
+// (api, authJwt, userId) are only available after bootAccount() runs, which
+// happens in main.tsx just before first render. Calls before auth is ready are
+// a no-op because scheduleServerJob short-circuits on missing deps.
+function scheduleNotificationWrapper(spec: import('@ollie/notifications').NotificationSpec, fireAt: number): void {
+  const account = getAccount();
+  if (!account?.auth) return;
+  const session = account.auth.state().session;
+  if (!session) return;
+  void scheduleServerJob(
+    { api: account.api, authJwt: session.access_token, userId: session.user_id },
+    spec,
+    fireAt,
+  );
+}
+
+createOrchestrator(store, { scheduleNotification: scheduleNotificationWrapper }).init();
 
 import { createReminderScheduler, createCrossModuleRouter } from '@ollie/router';
 import * as appEvents from '@ollie/events';
