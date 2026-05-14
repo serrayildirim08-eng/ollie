@@ -55,6 +55,7 @@ export {
   runBodyCorrelationPass,
   scheduleBodyCorrelationPass,
   nextLocal03,
+  initPatternDetectedSubscriber,
 } from './body-correlations';
 export type {
   RunBodyCorrelationPassOpts,
