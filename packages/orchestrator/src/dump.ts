@@ -11,6 +11,10 @@
  *
  * Events emitted:
  *   journal:entries_added  — when new entries land (dump.items grew)
+ *   research:row_written   — Sprint B'' (2026-05-14): per-item emit for
+ *                            each new dump.items entry so the opt-in
+ *                            research orchestrator can scrub + label.
+ *                            Corpus table: brain_dump_log.
  */
 
 import type { Store } from '@ollie/store';
@@ -34,9 +38,14 @@ export interface JournalPattern {
   computedAt: number;
 }
 
+/** Locale token for research:row_written. Mirrors @ollie/pii-scrub Locale. */
+type DumpLocale = 'en' | 'es' | 'tr';
+
 export interface DumpOrchestratorOptions {
   /** Injected for tests; defaults to Date.now */
   now?: () => number;
+  /** Locale resolver for research:row_written. Defaults to 'en'. */
+  getLocale?: () => DumpLocale;
 }
 
 export function createDumpOrchestrator(
@@ -44,6 +53,7 @@ export function createDumpOrchestrator(
   opts: DumpOrchestratorOptions = {},
 ): Orchestrator {
   const nowFn = opts.now ?? (() => Date.now());
+  const getLocale = opts.getLocale ?? ((): DumpLocale => 'en');
   let initialized = false;
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
   const unsubs: Unsubscribe[] = [];
@@ -114,6 +124,32 @@ export function createDumpOrchestrator(
         count: newCount,
         extractor: 'orchestrator',
       });
+
+      // Sprint B'' (2026-05-14): emit research:row_written for each new
+      // dump item so the opt-in research orchestrator can scrub + label.
+      // We use `text` as the scrubbable field; rows with empty text are
+      // skipped (no signal to scrub). Consent gating lives in
+      // research.ts — emit unconditionally here.
+      const locale = getLocale();
+      const newItems = dumpItems.slice(-newCount);
+      for (const item of newItems) {
+        const text = typeof item?.text === 'string' ? item.text : '';
+        if (text.length === 0) continue;
+        const itemId = (item as { id?: unknown }).id;
+        const rowId =
+          typeof itemId === 'string' && itemId.length > 0
+            ? itemId
+            : `dump_${item.ts}`;
+        try {
+          events.emit('research:row_written', {
+            row_id: rowId,
+            table: 'brain_dump_log',
+            text,
+            locale,
+            ts: typeof item.ts === 'number' ? item.ts : now,
+          });
+        } catch { /* never block recompute */ }
+      }
     }
     lastItemCount = currentCount;
   }
