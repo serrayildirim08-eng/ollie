@@ -18,10 +18,15 @@ import { installDeeplinkHandler } from './lib/capacitor-deeplink';
 //   never leak to Sentry. ollie is privacy-first; any payload that
 //   touches an external service must be sanitised here.
 const sentryDsn = (import.meta.env.VITE_SENTRY_DSN as string | undefined) ?? '';
+// Tunnel — Turkish ISP DPI blocks TLS to *.sentry.io. Route envelopes
+// through our Cloudflare worker (workers.dev is unblocked) when the
+// tunnel URL is set. Falls back to direct ingest when unset.
+const sentryTunnel = (import.meta.env.VITE_SENTRY_TUNNEL_URL as string | undefined) ?? '';
 if (sentryDsn) {
   Sentry.init(
     {
       dsn: sentryDsn,
+      ...(sentryTunnel ? { tunnel: sentryTunnel } : {}),
       tracesSampleRate: 0.1,
       beforeSend(event) {
         // Strip the encrypted payload field from event.extra — privacy
