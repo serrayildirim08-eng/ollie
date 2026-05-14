@@ -5,7 +5,7 @@
  * Tone: dry, deadpan. No moralizing. No "you should save more".
  */
 
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   detectRecurring,
   predictNextDue,
@@ -29,11 +29,26 @@ import type {
   ADHDTaxRunningTotal as D3ADHDTaxRunningTotal,
   CycleSpendingPatternCard,
   SavingsTotals,
+  RecurringCandidate,
 } from '@ollie/logic/finance';
 import { buildSavingsCardCopy } from '@ollie/logic/finance';
 import { emit } from '@ollie/events';
 import { useStoreSlice } from '../../store';
 import { ModuleHelp } from '../../components/ModuleHelp';
+import {
+  ImpulsePauseModal,
+  thisMonthVariableTotal,
+  pctOfVariable,
+  findSimilarPurchases,
+  isHoldEligible,
+  type PendingPause,
+} from './ImpulsePauseModal';
+import {
+  PrivacyToggle,
+  isMaskedNow,
+  maskMoney,
+  type PrivacyState,
+} from './PrivacyToggle';
 
 // ─── palette tokens (dark) ───────────────────────────────────────────────────
 
@@ -424,6 +439,156 @@ function ProtectiveCards() {
   );
 }
 
+// ─── RecurringCandidateCards ──────────────────────────────────────────────
+// Surfaces candidates from detectRecurringEarly(). Fires on every braindump
+// parse via finance.recurringCandidates (written by orchestrator).
+// confirm → adds a bill to finance.bills; dismiss → hides permanently.
+// Brand voice: factual, no judgment.
+
+function fmtCandidateAmount(c: RecurringCandidate): string {
+  if (c.estimatedAmount == null) return '';
+  return ` · ~$${Math.round(c.estimatedAmount)}`;
+}
+
+function fmtCandidateInterval(c: RecurringCandidate): string {
+  if (c.estimatedInterval == null) return '';
+  if (c.estimatedInterval >= 28 && c.estimatedInterval <= 32) return 'monthly';
+  if (c.estimatedInterval >= 85 && c.estimatedInterval <= 95) return 'quarterly';
+  if (c.estimatedInterval >= 350 && c.estimatedInterval <= 380) return 'yearly';
+  if (c.estimatedInterval >= 6 && c.estimatedInterval <= 8) return 'weekly';
+  return `every ${c.estimatedInterval}d`;
+}
+
+function RecurringCandidateCards() {
+  const [candidates] = useStoreSlice<RecurringCandidate[]>('finance', 'recurringCandidates', []);
+  const [dismissed, setDismissed] = useStoreSlice<Record<string, number>>(
+    'finance', '_recurringCandidatesDismissed', {},
+  );
+  const [confirmed, setConfirmed] = useStoreSlice<Record<string, number>>(
+    'finance', '_recurringCandidatesConfirmed', {},
+  );
+  const [bills, setBills] = useStoreSlice<Array<{
+    id: string; name: string; preset?: string | null; amount: number;
+    frequency: 'monthly' | 'quarterly' | 'yearly'; dueDay: number;
+    anchorMonth?: number | null; payments: Array<{ ts: number; amount: number; periodKey: string }>;
+    lastPaidPeriod: string | null; ts: number;
+  }>>('finance', 'bills', []);
+
+  const list = (candidates ?? []).filter((c) => {
+    const id = `${c.merchant_normalized}:${c.confidence}`;
+    return !dismissed?.[id] && !confirmed?.[id];
+  });
+
+  if (list.length === 0) return null;
+
+  function dismissCandidate(c: RecurringCandidate) {
+    const id = `${c.merchant_normalized}:${c.confidence}`;
+    setDismissed({ ...(dismissed ?? {}), [id]: Date.now() });
+  }
+
+  function confirmCandidate(c: RecurringCandidate) {
+    const id = `${c.merchant_normalized}:${c.confidence}`;
+    // Derive frequency from estimatedInterval; fall back to monthly
+    let freq: 'monthly' | 'quarterly' | 'yearly' = 'monthly';
+    if (c.estimatedInterval != null) {
+      if (c.estimatedInterval >= 85 && c.estimatedInterval <= 95) freq = 'quarterly';
+      else if (c.estimatedInterval >= 350 && c.estimatedInterval <= 380) freq = 'yearly';
+    }
+    const newBill = {
+      id: `bill-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`,
+      name: c.merchant.toLowerCase().slice(0, 80),
+      preset: null,
+      amount: c.estimatedAmount ?? 0,
+      frequency: freq,
+      dueDay: new Date().getDate(),
+      anchorMonth: null,
+      payments: [],
+      lastPaidPeriod: null,
+      ts: Date.now(),
+    };
+    setBills([...(bills ?? []), newBill]);
+    setConfirmed({ ...(confirmed ?? {}), [id]: Date.now() });
+  }
+
+  return (
+    <section style={{ marginBottom: 48 }}>
+      <div style={{ paddingBottom: 10, borderBottom: `1px solid ${T.border}`, ...labelStyle }}>
+        looks recurring
+      </div>
+      {list.map((c) => {
+        const id = `${c.merchant_normalized}:${c.confidence}`;
+        const intervalLabel = fmtCandidateInterval(c);
+        const amtLabel = fmtCandidateAmount(c);
+        const copy = `${c.merchant.toLowerCase()}${amtLabel}${intervalLabel ? ` · ${intervalLabel}` : ''}`;
+        const category = (c as { category?: string }).category ?? 'unknown';
+        const isBill = category === 'bill';
+        const isSubscription = category === 'subscription';
+        const categoryLabel = isBill ? 'bill' : isSubscription ? 'subscription' : null;
+        const addLabel = isSubscription ? 'add as subscription' : 'add as bill';
+        const notLabel = isBill ? 'not a bill' : 'not recurring';
+        const descLabel = isBill
+          ? 'this looks like a recurring bill'
+          : isSubscription
+          ? 'this looks like a recurring subscription'
+          : 'this looks like a recurring charge';
+        return (
+          <div
+            key={id}
+            style={{
+              padding: '18px 20px',
+              background: T.paper,
+              borderBottom: `1px solid ${T.border}`,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 10,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 14, color: T.text }}>
+                {descLabel} — {copy}
+              </span>
+              {categoryLabel && (
+                <span style={{
+                  fontFamily: "'DM Mono', monospace",
+                  fontSize: 9,
+                  letterSpacing: '0.14em',
+                  textTransform: 'uppercase' as const,
+                  color: T.faint,
+                  border: `1px solid ${T.border}`,
+                  borderRadius: 3,
+                  padding: '2px 5px',
+                  flexShrink: 0,
+                }}>
+                  {categoryLabel}
+                </span>
+              )}
+            </div>
+            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: '0.18em', color: T.faint, textTransform: 'uppercase' }}>
+              {c.evidence.occurrenceCount} {c.evidence.occurrenceCount === 1 ? 'occurrence' : 'occurrences'} · {c.confidence} confidence
+            </div>
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={() => confirmCandidate(c)}
+                style={{ ...d3BtnStyle, color: T.text, borderColor: T.border }}
+              >
+                {addLabel}
+              </button>
+              <button
+                type="button"
+                onClick={() => dismissCandidate(c)}
+                style={d3BtnStyle}
+              >
+                {notLabel}
+              </button>
+            </div>
+          </div>
+        );
+      })}
+    </section>
+  );
+}
+
 // ─── SavingsCard · Sprint 2.5 / F1 ────────────────────────────────────────
 // Decision #14 (locked 2026-05-11): passive voice, "saved" never "you saved"
 // or "ollie saved you". Math is elapsed_months × monthly_amount, not
@@ -630,13 +795,14 @@ function FinanceNoticed() {
 
 // ─── FinanceSignalsSection ────────────────────────────────────────────────────
 
-function FinanceSignalsSection() {
+function FinanceSignalsSection({ masked = false }: { masked?: boolean }) {
   const [financeSettings] = useStoreSlice<FinanceSettings>('finance', 'settings', {});
   const [cycleCorrelation] = useStoreSlice<CycleCorrelation | null>('finance', 'cycleCorrelation', null);
   const [sleepCorrelation] = useStoreSlice<SleepCorrelation | null>('finance', 'sleepCorrelation', null);
   const [staleSubs] = useStoreSlice<StaleSubscription[]>('finance', 'staleSubs', []);
   const [postPaydaySpikes] = useStoreSlice<PostPaydaySpikesStore | null>('finance', 'postPaydaySpikes', null);
   const [anomalies] = useStoreSlice<FinanceRecord[]>('finance', 'anomalies', []);
+  const $fmt = (n: number | null | undefined) => maskMoney(masked, fmtMoney(n));
 
   const xCycleOn = financeSettings?.show_cross_cycle_correlation === true;
   const xSleepOn = financeSettings?.show_cross_sleep_correlation === true;
@@ -775,7 +941,7 @@ function FinanceSignalsSection() {
               >
                 <span>{a.merchant ?? a.category ?? 'unlabeled'}</span>
                 <span>
-                  {a.amount != null ? `$${fmtMoney(a.amount)}` : ''}
+                  {a.amount != null ? `$${$fmt(a.amount)}` : ''}
                   {a.event_date ? ` · ${String(a.event_date).slice(5)}` : ''}
                 </span>
               </div>
@@ -806,6 +972,11 @@ export function FinanceModule() {
   // orchestrator-derived
   const [derivedSafeToSpend] = useStoreSlice<SpendBand | null>('finance', 'safeToSpend', null);
 
+  // ── Sprint 6 · impulse pause + privacy mode ──────────────────────────────
+  const [pendingPauses, setPendingPauses] = useStoreSlice<PendingPause[]>('finance', 'pendingPauses', []);
+  const [savedByPause, setSavedByPause]   = useStoreSlice<{ count: number; total: number }>('finance', 'savedByPause', { count: 0, total: 0 });
+  const [privacy, setPrivacy]             = useStoreSlice<PrivacyState>('finance', 'privacy', { enabled: false, unlockedUntil: 0 });
+
   // ── local UI state ────────────────────────────────────────────────────────
   const [openForm, setOpenForm] = useState<string | null>(null);
   const [draft, setDraft] = useState<Record<string, string>>({});
@@ -814,7 +985,26 @@ export function FinanceModule() {
   const [txDraft, setTxDraft] = useState({
     amount: '', merchant: '', category: 'groceries', returnable_until: '',
   });
+  const [activePauseId, setActivePauseId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+
+  // Tick once a minute while privacy mode is enabled so the auto-relock
+  // window expires without a manual interaction. No-op when masked is off.
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    if (!privacy?.enabled || !privacy.unlockedUntil) return;
+    const remaining = privacy.unlockedUntil - Date.now();
+    if (remaining <= 0) { setTick((t) => t + 1); return; }
+    const id = window.setTimeout(() => setTick((t) => t + 1), Math.min(remaining + 100, 60_000));
+    return () => window.clearTimeout(id);
+  }, [privacy, tick]);
+
+  // Derived: are money figures currently hidden?
+  const masked = useMemo(() => isMaskedNow(privacy, Date.now()), [privacy, tick]);
+  // Bound formatter used everywhere a $-figure would be rendered.
+  const $fmt = useCallback((n: number | null | undefined): string => {
+    return maskMoney(masked, fmtMoney(n));
+  }, [masked]);
 
   const now = useMemo(() => Date.now(), []);
   const nowDate = useMemo(() => new Date(now), [now]);
@@ -1102,38 +1292,124 @@ export function FinanceModule() {
     setTxDraft({ amount: '', merchant: '', category: 'groceries', returnable_until: '' });
   }
 
-  function saveTx() {
-    const amt = parseFloat(txDraft.amount);
-    if (!amt || isNaN(amt) || amt <= 0) return;
-    let returnableUntil: number | null = null;
-    if (/^\d{4}-\d{2}-\d{2}$/.test(txDraft.returnable_until)) {
-      const [yy, mm, dd] = txDraft.returnable_until.split('-').map(Number);
-      if (yy && mm && dd) {
-        const t = new Date(yy, mm - 1, dd, 23, 59, 59).getTime();
-        if (Number.isFinite(t)) returnableUntil = t;
-      }
-    }
+  function parseReturnableUntil(raw: string): number | null {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
+    const [yy, mm, dd] = raw.split('-').map(Number);
+    if (!yy || !mm || !dd) return null;
+    const t = new Date(yy, mm - 1, dd, 23, 59, 59).getTime();
+    return Number.isFinite(t) ? t : null;
+  }
+
+  function commitTransaction(args: {
+    amount: number;
+    merchant: string;
+    category: string;
+    returnable_until: number | null;
+  }): StoredTransaction {
     const entry: StoredTransaction = {
       id: mkId('tx'),
       ts: Date.now(),
-      amount: amt,
-      merchant: txDraft.merchant.slice(0, 80),
-      category: txDraft.category,
+      amount: args.amount,
+      merchant: args.merchant.slice(0, 80),
+      category: args.category,
       direction: 'out',
       notes: '',
-      returnable_until: returnableUntil,
+      returnable_until: args.returnable_until,
       return_status: null,
     };
     setTransactions([...transactions, entry]);
+    return entry;
+  }
+
+  function saveTx() {
+    const amt = parseFloat(txDraft.amount);
+    if (!amt || isNaN(amt) || amt <= 0) return;
+    const entry = commitTransaction({
+      amount: amt,
+      merchant: txDraft.merchant,
+      category: txDraft.category,
+      returnable_until: parseReturnableUntil(txDraft.returnable_until),
+    });
     closeTxForm();
     showToast(`logged · $${Math.round(amt)} ${entry.category}.`);
+  }
+
+  // Sprint 6 · impulse pause: stash the draft + 24h timer instead of committing.
+  function startPause() {
+    const amt = parseFloat(txDraft.amount);
+    if (!amt || isNaN(amt) || amt <= 0) return;
+    const startTs = Date.now();
+    const expires = startTs + 24 * 3600_000;
+    const pause: PendingPause = {
+      id: mkId('pause'),
+      amount: amt,
+      merchant: txDraft.merchant.slice(0, 80),
+      category: txDraft.category,
+      ts: startTs,
+      expires_at: expires,
+      draft: { returnable_until: parseReturnableUntil(txDraft.returnable_until) },
+    };
+    setPendingPauses([...(pendingPauses ?? []), pause]);
+    try {
+      emit('finance:impulse_pause_started', {
+        id: pause.id,
+        amount: pause.amount,
+        merchant: pause.merchant,
+        category: pause.category,
+        ts: pause.ts,
+        expires_at: pause.expires_at,
+      });
+      // Re-use the existing reminder pathway so the user sees a toast when
+      // the 24h window closes. Backend agent's `finance:impulse_pause_summary`
+      // worker is independent — it aggregates resolved pauses on a separate
+      // schedule.
+      emit('void:reminder:scheduled', {
+        id: `impulse:${pause.id}`,
+        fireAt: pause.expires_at,
+        message: `24h hold passed · $${Math.round(pause.amount)}${pause.merchant ? ` · ${pause.merchant.toLowerCase()}` : ''}`,
+        module: 'finance',
+        source: 'impulse-pause',
+      });
+    } catch { /* event bus non-fatal */ }
+    setActivePauseId(pause.id);
+    closeTxForm();
+    showToast(`held · $${Math.round(amt)}. resolve when ready.`);
+  }
+
+  function resolvePause(pause: PendingPause, outcome: 'purchased' | 'skipped') {
+    setPendingPauses((pendingPauses ?? []).filter((p) => p.id !== pause.id));
+    try {
+      emit('finance:impulse_pause_resolved', {
+        id: pause.id,
+        amount: pause.amount,
+        merchant: pause.merchant,
+        outcome,
+        ts: Date.now(),
+      });
+    } catch { /* non-fatal */ }
+    if (outcome === 'purchased') {
+      commitTransaction({
+        amount: pause.amount,
+        merchant: pause.merchant,
+        category: pause.category,
+        returnable_until: pause.draft.returnable_until,
+      });
+      showToast(`logged · $${Math.round(pause.amount)} ${pause.category}.`);
+    } else {
+      setSavedByPause({
+        count: (savedByPause?.count ?? 0) + 1,
+        total: (savedByPause?.total ?? 0) + pause.amount,
+      });
+      showToast(`saved · $${Math.round(pause.amount)}.`);
+    }
+    if (activePauseId === pause.id) setActivePauseId(null);
   }
 
   function heroCaption(): string | null {
     if (!nextBill) return null;
     const paidAll = bills.length > 0 && unpaidBills.length === 0;
     if (paidAll) return 'all caught up this cycle.';
-    const amt = nextBill.amount ? ` · $${fmtMoney(nextBill.amount)}` : '';
+    const amt = nextBill.amount ? ` · $${$fmt(nextBill.amount)}` : '';
     const tail =
       nextDays === 0 ? '. today.'
       : nextDays === 1 ? '. tomorrow. just saying.'
@@ -1178,6 +1454,11 @@ export function FinanceModule() {
             <div style={{ ...labelStyle, marginTop: 6 }}>{dateStr}</div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <PrivacyToggle
+              state={privacy ?? { enabled: false, unlockedUntil: 0 }}
+              onChange={setPrivacy}
+              onToast={showToast}
+            />
             <button
               type="button"
               onClick={() => setTxOpen((o) => !o)}
@@ -1226,6 +1507,32 @@ export function FinanceModule() {
                 save
               </button>
             </div>
+
+            {/* Sprint 6 · impulse hold opt-in. Surfaces only when the
+                drafted category is a non-essential variable category. */}
+            {isHoldEligible(txDraft.category) && parseFloat(txDraft.amount) > 0 && (
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 14, paddingTop: 12, borderTop: `1px solid ${T.border}` }}>
+                <span style={{ ...labelStyle, fontSize: 9, opacity: 0.8 }}>impulse?</span>
+                <button
+                  type="button"
+                  onClick={startPause}
+                  aria-label="hold this purchase for 24 hours"
+                  style={{
+                    ...ghostBtn,
+                    color: T.accent,
+                    borderColor: T.accent,
+                    padding: '8px 14px',
+                    fontSize: 10,
+                  }}
+                >
+                  hold 24 hours
+                </button>
+                <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: T.faint, letterSpacing: '0.12em' }}>
+                  optional · stashes the draft. resolve later.
+                </span>
+              </div>
+            )}
+
             <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 12 }}>
               <label style={{ ...labelStyle, fontSize: 9, opacity: 0.8 }}>returnable until</label>
               <input
@@ -1244,7 +1551,7 @@ export function FinanceModule() {
                 <div style={{ ...labelStyle, opacity: 0.8, fontSize: 9 }}>recent · {transactions.length} logged</div>
                 {[...transactions].slice(-4).reverse().map((t) => (
                   <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', fontFamily: "'DM Mono', monospace", fontSize: 11, color: T.muted, letterSpacing: '0.05em' }}>
-                    <span>${Math.round(t.amount).toLocaleString()} · {t.category}{t.merchant ? ` · ${t.merchant}` : ''}</span>
+                    <span>${$fmt(t.amount)} · {t.category}{t.merchant ? ` · ${t.merchant}` : ''}</span>
                     <span>{new Date(t.ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }).toLowerCase()}</span>
                   </div>
                 ))}
@@ -1265,7 +1572,7 @@ export function FinanceModule() {
                 {heroCaption()}
               </div>
               <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: T.faint, marginTop: 10, letterSpacing: '0.14em' }}>
-                monthly burn · ${fmtMoney(billsMonthly + subsMonthly)}
+                monthly burn · ${$fmt(billsMonthly + subsMonthly)}
               </div>
             </>
           ) : (
@@ -1284,11 +1591,11 @@ export function FinanceModule() {
         <div style={{ marginBottom: 48, paddingTop: 20, borderTop: `1px solid ${T.border}` }}>
           <div style={{ ...labelStyle, letterSpacing: '0.22em' }}>safe to spend this week</div>
           <div style={{ fontFamily: "'DM Serif Display', serif", fontSize: 56, fontWeight: 400, lineHeight: 1, letterSpacing: '-0.01em', margin: '14px 0 4px', color: T.text }}>
-            {haveIncomeSignal ? `$${safeToSpendAmount.toLocaleString()}` : '—'}
+            {haveIncomeSignal ? `$${$fmt(safeToSpendAmount)}` : '—'}
           </div>
           {haveIncomeSignal && computedSafeToSpend && typeof computedSafeToSpend.sigma === 'number' && computedSafeToSpend.sigma > 0 && (
             <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', color: T.faint, marginTop: 8 }}>
-              range · ${Math.max(0, Math.round(computedSafeToSpend.central - computedSafeToSpend.sigma)).toLocaleString()} — ${Math.round(computedSafeToSpend.central + computedSafeToSpend.sigma).toLocaleString()}
+              range · ${$fmt(Math.max(0, Math.round(computedSafeToSpend.central - computedSafeToSpend.sigma)))} — ${$fmt(Math.round(computedSafeToSpend.central + computedSafeToSpend.sigma))}
             </div>
           )}
           {safeToSpendCaveat && (
@@ -1317,7 +1624,7 @@ export function FinanceModule() {
                   </div>
                   <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: ub.daysUntil <= 3 ? 'rgba(220,160,100,0.75)' : T.muted, letterSpacing: '0.12em', marginTop: 4 }}>
                     {ub.daysUntil === 0 ? 'today' : `${ub.daysUntil}d`}
-                    {ub.bill.amount_median != null ? ` · ~$${fmtMoney(ub.bill.amount_median)}` : ''}
+                    {ub.bill.amount_median != null ? ` · ~$${$fmt(ub.bill.amount_median)}` : ''}
                     {` · ${ub.confidence} confidence`}
                   </div>
                 </div>
@@ -1327,7 +1634,7 @@ export function FinanceModule() {
         )}
 
         {/* Signals */}
-        <FinanceSignalsSection />
+        <FinanceSignalsSection masked={masked} />
 
         {/* Bill overview donut */}
         {donutItems.length > 0 && (
@@ -1340,9 +1647,9 @@ export function FinanceModule() {
                 <FinanceDonut items={donutItems} total={billsMonthly} size={180} />
                 <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
                   <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 8, letterSpacing: '0.22em', color: T.muted, textTransform: 'uppercase', marginBottom: 4 }}>per month</div>
-                  <div style={{ fontFamily: "'DM Serif Display', serif", fontSize: 30, color: T.text, lineHeight: 1 }}>${fmtMoney(billsMonthly)}</div>
+                  <div style={{ fontFamily: "'DM Serif Display', serif", fontSize: 30, color: T.text, lineHeight: 1 }}>${$fmt(billsMonthly)}</div>
                   {subsMonthly > 0 && (
-                    <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: T.faint, letterSpacing: '0.14em', marginTop: 6 }}>+${fmtMoney(subsMonthly)} subs</div>
+                    <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: T.faint, letterSpacing: '0.14em', marginTop: 6 }}>+${$fmt(subsMonthly)} subs</div>
                   )}
                 </div>
               </div>
@@ -1350,13 +1657,13 @@ export function FinanceModule() {
                 {donutItems.map((it) => {
                   const pct = billsMonthly > 0 ? (it.value / billsMonthly) * 100 : 0;
                   const shown = it.freq === 'monthly' ? it.amount : it.value;
-                  const freqTag = it.freq === 'yearly' ? ` · $${fmtMoney(it.amount)}/yr` : it.freq === 'quarterly' ? ` · $${fmtMoney(it.amount)}/qtr` : '';
+                  const freqTag = it.freq === 'yearly' ? ` · $${$fmt(it.amount)}/yr` : it.freq === 'quarterly' ? ` · $${$fmt(it.amount)}/qtr` : '';
                   return (
                     <div key={it.key} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '7px 0' }}>
                       <div style={{ width: 10, height: 10, borderRadius: 2, background: it.color, flexShrink: 0 }} aria-hidden="true" />
                       <div style={{ flex: 1, fontFamily: "'DM Sans', sans-serif", fontSize: 13, color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.name}</div>
                       <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: T.muted, letterSpacing: '0.12em', whiteSpace: 'nowrap' }}>
-                        ${fmtMoney(shown)}{freqTag ? '' : '/mo'}{freqTag}
+                        ${$fmt(shown)}{freqTag ? '' : '/mo'}{freqTag}
                       </div>
                       <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: T.faint, letterSpacing: '0.1em', minWidth: 34, textAlign: 'right' }}>
                         {pct < 1 ? '<1' : Math.round(pct)}%
@@ -1368,6 +1675,9 @@ export function FinanceModule() {
             </div>
           </section>
         )}
+
+        {/* Recurring candidate cards — braindump-driven early detection */}
+        <RecurringCandidateCards />
 
         {/* Recurring bills */}
         <section style={{ marginBottom: 48 }}>
@@ -1530,7 +1840,7 @@ export function FinanceModule() {
             const countdown = paid ? `paid · next in ${d}d` : d === 0 ? 'today' : `${d}d`;
             const meta = [`day ${b.dueDay}`];
             if (b.frequency !== 'monthly') meta.push(freqLabel);
-            if (b.amount) meta.push(`$${fmtMoney(b.amount)}`);
+            if (b.amount) meta.push(`$${$fmt(b.amount)}`);
 
             return (
               <div
@@ -1566,7 +1876,7 @@ export function FinanceModule() {
         {/* Subscriptions */}
         <section style={{ marginBottom: 48 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 10, borderBottom: `1px solid ${T.border}` }}>
-            <div style={labelStyle}>subscriptions{subs.length > 0 ? ` · $${fmtMoney(subsMonthly)}/mo` : ''}</div>
+            <div style={labelStyle}>subscriptions{subs.length > 0 ? ` · $${$fmt(subsMonthly)}/mo` : ''}</div>
             <button type="button" onClick={() => openForm === 'sub' ? cancel() : startDraft('sub')} style={addBtn}>
               {openForm === 'sub' ? '× close' : '+ add'}
             </button>
@@ -1597,8 +1907,8 @@ export function FinanceModule() {
                 <div>
                   <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 15, color: T.text }}>{s.name}</div>
                   <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: T.muted, letterSpacing: '0.12em', marginTop: 4 }}>
-                    ${fmtMoney(s.amount)}/{s.period === 'yearly' ? 'yr' : 'mo'}
-                    {s.period === 'yearly' ? ` · ≈$${fmtMoney(s.amount / 12)}/mo` : ''}
+                    ${$fmt(s.amount)}/{s.period === 'yearly' ? 'yr' : 'mo'}
+                    {s.period === 'yearly' ? ` · ≈$${$fmt(s.amount / 12)}/mo` : ''}
                     {marked ? ` · marked ${daysMarked}d` : ''}
                   </div>
                 </div>
@@ -1652,7 +1962,7 @@ export function FinanceModule() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
                   <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 15, color: T.text }}>{g.name}</div>
                   <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: T.muted, letterSpacing: '0.12em' }}>
-                    ${fmtMoney(g.saved)} / ${fmtMoney(g.target)} · {pct}%
+                    ${$fmt(g.saved)} / ${$fmt(g.target)} · {pct}%
                   </div>
                 </div>
                 <div
@@ -1667,7 +1977,7 @@ export function FinanceModule() {
                 </div>
                 {progress?.pace && (
                   <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: T.faint, marginTop: 8, letterSpacing: '0.12em' }}>
-                    ~${fmtMoney(progress.pace.monthlyContribution)}/mo · {progress.pace.eta ? `eta ${new Date(progress.pace.eta).toLocaleDateString(undefined, { month: 'short', year: 'numeric' }).toLowerCase()}` : 'at this rate'}
+                    ~${$fmt(progress.pace.monthlyContribution)}/mo · {progress.pace.eta ? `eta ${new Date(progress.pace.eta).toLocaleDateString(undefined, { month: 'short', year: 'numeric' }).toLowerCase()}` : 'at this rate'}
                   </div>
                 )}
                 <div style={{ display: 'flex', gap: 6, marginTop: 12, flexWrap: 'wrap' }}>
@@ -1686,7 +1996,7 @@ export function FinanceModule() {
         <section style={{ marginBottom: 48 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 10, borderBottom: `1px solid ${T.border}` }}>
             <div style={labelStyle}>
-              adhd tax{taxThisMonth.length > 0 ? ` · $${fmtMoney(taxMTD)} this month` : ''}
+              adhd tax{taxThisMonth.length > 0 ? ` · $${$fmt(taxMTD)} this month` : ''}
             </div>
             <button type="button" onClick={() => openForm === 'tax' ? cancel() : startDraft('tax')} style={addBtn}>
               {openForm === 'tax' ? '× close' : '+ log'}
@@ -1695,7 +2005,7 @@ export function FinanceModule() {
           {/* ADHD tax summary from logic */}
           {adhdTaxSummary.count > 0 && (
             <div style={{ padding: '12px 0', fontFamily: "'DM Mono', monospace", fontSize: 10, color: T.faint, letterSpacing: '0.12em' }}>
-              {adhdTaxSummary.count} events · ${fmtMoney(adhdTaxSummary.total)} total (90 days)
+              {adhdTaxSummary.count} events · ${$fmt(adhdTaxSummary.total)} total (90 days)
             </div>
           )}
           {openForm === 'tax' && (
@@ -1713,7 +2023,7 @@ export function FinanceModule() {
               <div>
                 <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 14, color: T.text }}>{entry.text}</div>
                 <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: T.muted, letterSpacing: '0.12em', marginTop: 4 }}>
-                  {entry.amount ? `$${fmtMoney(entry.amount)} · ` : ''}
+                  {entry.amount ? `$${$fmt(entry.amount)} · ` : ''}
                   {new Date(entry.ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }).toLowerCase()}
                 </div>
               </div>
@@ -1721,6 +2031,65 @@ export function FinanceModule() {
             </div>
           ))}
         </section>
+
+        {/* Sprint 6 · held purchases (impulse pause flow). Resolves to the
+            modal on click; auto-presents the modal when a pause was just
+            started or its 24h window has lapsed. */}
+        {(pendingPauses?.length ?? 0) > 0 && (
+          <section style={{ marginBottom: 48 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', paddingBottom: 10, borderBottom: `1px solid ${T.border}` }}>
+              <div style={labelStyle}>held · {pendingPauses.length}</div>
+              {(savedByPause?.count ?? 0) > 0 && (
+                <div style={{ ...labelStyle, color: T.accent, letterSpacing: '0.18em' }}>
+                  saved by pause · ${$fmt(savedByPause?.total ?? 0)} · {savedByPause?.count ?? 0}×
+                </div>
+              )}
+            </div>
+            {pendingPauses.map((p) => {
+              const expired = p.expires_at <= Date.now();
+              const hLeft = Math.max(0, Math.round((p.expires_at - Date.now()) / 3600_000));
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => setActivePauseId(p.id)}
+                  aria-label={`open held purchase ${p.merchant || p.category}`}
+                  style={{
+                    width: '100%',
+                    textAlign: 'left',
+                    padding: '16px 20px',
+                    background: T.paper,
+                    border: 'none',
+                    borderBottom: `1px solid ${T.border}`,
+                    cursor: 'pointer',
+                    color: T.text,
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: 12,
+                  }}
+                >
+                  <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 15 }}>
+                    ${$fmt(p.amount)}{p.merchant ? ` · ${p.merchant.toLowerCase()}` : ''} · {p.category}
+                  </span>
+                  <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: expired ? T.accent : T.muted, letterSpacing: '0.14em', textTransform: 'uppercase' }}>
+                    {expired ? 'window passed' : `${hLeft}h left`}
+                  </span>
+                </button>
+              );
+            })}
+          </section>
+        )}
+        {(savedByPause?.count ?? 0) > 0 && (pendingPauses?.length ?? 0) === 0 && (
+          <section style={{ marginBottom: 48 }}>
+            <div style={{ paddingBottom: 10, borderBottom: `1px solid ${T.border}`, ...labelStyle }}>
+              saved by pause
+            </div>
+            <div style={{ padding: '18px 20px', background: T.paper, fontFamily: "'DM Sans', sans-serif", fontSize: 14, color: T.text }}>
+              ${$fmt(savedByPause?.total ?? 0)} across {savedByPause?.count ?? 0} pause{savedByPause?.count === 1 ? '' : 's'}. didn't buy.
+            </div>
+          </section>
+        )}
 
         {/* D3 Canva-style alerts (quiet cards, no push) */}
         <FinanceD3Cards />
@@ -1734,6 +2103,33 @@ export function FinanceModule() {
         {/* Patterns (noticed) */}
         <FinanceNoticed />
       </div>
+
+      {/* Sprint 6 · impulse pause modal. The active pause is whichever id
+          is currently held in local state. Closing the modal does NOT
+          resolve the pause — it stays pending in the store. */}
+      {(() => {
+        if (!activePauseId) return null;
+        const active = (pendingPauses ?? []).find((p) => p.id === activePauseId);
+        if (!active) return null;
+        const monthVariable = thisMonthVariableTotal(transactions, Date.now());
+        const pct = pctOfVariable(active.amount, monthVariable);
+        const similar = findSimilarPurchases(
+          transactions,
+          { merchant: active.merchant, category: active.category },
+          Date.now(),
+        );
+        return (
+          <ImpulsePauseModal
+            open
+            pause={active}
+            variableBudgetPct={pct}
+            similar={similar}
+            onSkip={(p) => resolvePause(p, 'skipped')}
+            onPurchase={(p) => resolvePause(p, 'purchased')}
+            onClose={() => setActivePauseId(null)}
+          />
+        );
+      })()}
 
       {/* Toast */}
       {toast && (
