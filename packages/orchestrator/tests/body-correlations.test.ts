@@ -9,15 +9,17 @@
  *   - Cooldown clears after 24h AND magnitude shift
  *   - nextLocal03 schedules into the future
  *   - scheduleBodyCorrelationPass first-run + teardown
+ *   - initPatternDetectedSubscriber APNs wiring (dedup, aggregation, sparse guard)
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createStore, createMemoryAdapter } from '@ollie/store';
-import { _clearAllHandlers, on } from '@ollie/events';
+import { _clearAllHandlers, on, emit } from '@ollie/events';
 import {
   runBodyCorrelationPass,
   scheduleBodyCorrelationPass,
   nextLocal03,
+  initPatternDetectedSubscriber,
 } from '../src/body-correlations';
 
 const DAY_MS = 86_400_000;
@@ -215,5 +217,128 @@ describe('scheduleBodyCorrelationPass', () => {
     const persisted = store.get('body', 'correlations', null);
     expect(persisted).toBeNull();
     teardown();
+  });
+});
+
+// ─── initPatternDetectedSubscriber ───────────────────────────────────────
+
+describe('initPatternDetectedSubscriber', () => {
+  type ScheduleCall = { spec: { title?: string; body?: string; dedupe_key?: string; aggregation_group?: string }; fireAt: number };
+
+  beforeEach(() => {
+    _clearAllHandlers();
+  });
+
+  afterEach(() => {
+    _clearAllHandlers();
+  });
+
+  function makeOpts(calls: ScheduleCall[]) {
+    return {
+      scheduleNotification: (spec: ScheduleCall['spec'], fireAt: number) => {
+        calls.push({ spec, fireAt });
+      },
+      now: () => FIXED_NOW,
+    };
+  }
+
+  it('calls scheduleNotification with correct shape on pattern:detected', () => {
+    const calls: ScheduleCall[] = [];
+    const unsub = initPatternDetectedSubscriber(makeOpts(calls));
+    emit('pattern:detected', {
+      correlation_name: 'luteal_spending',
+      correlation: 0.62,
+      sample_size: 18,
+      copy: 'luteal phase tracks with higher spending. just data.',
+      ts: FIXED_NOW,
+    });
+    unsub();
+
+    expect(calls).toHaveLength(1);
+    const { spec } = calls[0];
+    expect(spec.title).toBe('noticed something');
+    expect(spec.body).toBe('luteal phase tracks with higher spending. just data.');
+    expect(spec.dedupe_key).toMatch(/^pattern:luteal_spending:20\d\d-W\d{2}$/);
+    expect(spec.aggregation_group).toMatch(/^pattern:detected:20\d\d-W\d{2}$/);
+  });
+
+  it('dedup: same correlation_name + same week emits only once', () => {
+    const calls: ScheduleCall[] = [];
+    const unsub = initPatternDetectedSubscriber(makeOpts(calls));
+
+    // Emit twice with same name — both fire (dedup is in the push layer via dedupe_key,
+    // not in the subscriber itself). Both calls share the SAME dedupe_key so APNs
+    // dispatcher suppresses the second. Verify the dedupe_key is identical.
+    emit('pattern:detected', { correlation_name: 'luteal_spending', correlation: 0.6, sample_size: 15, copy: 'spending climbs in luteal.', ts: FIXED_NOW });
+    emit('pattern:detected', { correlation_name: 'luteal_spending', correlation: 0.62, sample_size: 15, copy: 'spending climbs in luteal.', ts: FIXED_NOW });
+    unsub();
+
+    expect(calls).toHaveLength(2);
+    // Both use identical dedupe_key — APNs layer deduplicates
+    expect(calls[0].spec.dedupe_key).toBe(calls[1].spec.dedupe_key);
+  });
+
+  it('aggregation: two different correlators in the same pass share aggregation_group', () => {
+    const calls: ScheduleCall[] = [];
+    const unsub = initPatternDetectedSubscriber(makeOpts(calls));
+    emit('pattern:detected', { correlation_name: 'luteal_spending', correlation: 0.6, sample_size: 15, copy: 'spending climbs across luteal.', ts: FIXED_NOW });
+    emit('pattern:detected', { correlation_name: 'sleep_debt_habits', correlation: -0.5, sample_size: 21, copy: 'habit completion drops as sleep debt climbs.', ts: FIXED_NOW });
+    unsub();
+
+    expect(calls).toHaveLength(2);
+    expect(calls[0].spec.aggregation_group).toBe(calls[1].spec.aggregation_group);
+    expect(calls[0].spec.dedupe_key).not.toBe(calls[1].spec.dedupe_key);
+  });
+
+  it('sparse-data guard: copy="" → no scheduleNotification call', () => {
+    const calls: ScheduleCall[] = [];
+    const unsub = initPatternDetectedSubscriber(makeOpts(calls));
+    emit('pattern:detected', { correlation_name: 'luteal_spending', correlation: 0.1, sample_size: 3, copy: '', ts: FIXED_NOW });
+    unsub();
+
+    expect(calls).toHaveLength(0);
+  });
+
+  it('sparse-data guard: copy whitespace-only → no scheduleNotification call', () => {
+    const calls: ScheduleCall[] = [];
+    const unsub = initPatternDetectedSubscriber(makeOpts(calls));
+    emit('pattern:detected', { correlation_name: 'sleep_debt_habits', correlation: 0.0, sample_size: 2, copy: '   ', ts: FIXED_NOW });
+    unsub();
+
+    expect(calls).toHaveLength(0);
+  });
+
+  it('different weeks produce different dedupe_keys for the same correlator', () => {
+    const calls: ScheduleCall[] = [];
+    // Week 1: 2026-05-10 (W19), Week 2: 2026-05-18 (W21)
+    const week1Ts = new Date('2026-05-10T12:00:00').getTime();
+    const week2Ts = new Date('2026-05-18T12:00:00').getTime();
+
+    // Subscriber 1: week1 — subscribe, emit, then unsub before week2 emit
+    const unsub = initPatternDetectedSubscriber({
+      scheduleNotification: (spec, fireAt) => calls.push({ spec, fireAt }),
+      now: () => week1Ts,
+    });
+    emit('pattern:detected', { correlation_name: 'luteal_spending', correlation: 0.6, sample_size: 15, copy: 'spending climbs.', ts: week1Ts });
+    unsub();
+
+    // Subscriber 2: week2 — separate subscriber so keys are independent
+    const unsub2 = initPatternDetectedSubscriber({
+      scheduleNotification: (spec, fireAt) => calls.push({ spec, fireAt }),
+      now: () => week2Ts,
+    });
+    emit('pattern:detected', { correlation_name: 'luteal_spending', correlation: 0.61, sample_size: 16, copy: 'spending climbs.', ts: week2Ts });
+    unsub2();
+
+    expect(calls).toHaveLength(2);
+    expect(calls[0].spec.dedupe_key).not.toBe(calls[1].spec.dedupe_key);
+  });
+
+  it('returns an unsubscribe fn; after calling it, no more calls fire', () => {
+    const calls: ScheduleCall[] = [];
+    const unsub = initPatternDetectedSubscriber(makeOpts(calls));
+    unsub();
+    emit('pattern:detected', { correlation_name: 'luteal_spending', correlation: 0.6, sample_size: 15, copy: 'spending climbs.', ts: FIXED_NOW });
+    expect(calls).toHaveLength(0);
   });
 });
