@@ -116,7 +116,7 @@ describe('@ollie/consent', () => {
     const store = memoryStore();
     configureConsent({ store });
 
-    // @ts-expect-error — necessary:false is not a valid patch
+    // necessary is silently coerced to true regardless of input
     await setConsent('u1', { necessary: false });
     const state = await getConsent('u1');
     expect(state.necessary).toBe(true);
