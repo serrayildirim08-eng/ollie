@@ -33,7 +33,10 @@ Previous audit: SCAFFOLDED-trending-WORKING. After gap-closure sprint + 5-item f
 | # | Item | Before | After | Notes |
 |---|---|---|---|---|
 | A | Bank aggregation (Plaid/TrueLayer) | NOT STARTED | **BLOCKED-EXTERNAL** | Plaid sandbox functional end-to-end. `drainPlaidInbox()` shipped in @ollie/sync (worker-proxy decrypt → user-key re-encrypt → finance_records). Worker has `/inbox/drain` + `/inbox/ack`. Plaintext bounded to worker memory + TLS + one client iteration. TrueLayer scaffold present. Production approval ~2 weeks. |
-| B | Encryption | WORKING | **WIRED-CROSSMODULE** | Now wraps finance_records sync (AES-GCM-256 + PBKDF2 100k, fresh IV per row) |
+| B | Encryption | WORKING | **DEPRECATED-PIVOT** | Pivot 2026-05-14 abandoned the server-blind default. `@ollie/crypto` retained for future opt-out path but no longer the default posture. See `project_ollie_b2b_pivot.md` + Sprint B'. AES-GCM-256 + PBKDF2 wrappers stay in tree for the opt-out path a B2B customer might demand, but `finance_records` sync now goes through the consent + scrub + corpus pipeline by default. |
+| G | Consent reader (`@ollie/consent`) | — | **WIRED-CROSSMODULE** | Gates the finance research path. `description` field on `finance_records` is scrubbed + labeled only on opt-in. Sprint B' 2026-05-14. |
+| H | PII scrub (`@ollie/pii-scrub`, locale-aware) | — | **WIRED-CROSSMODULE** | All `finance_records.description` text passes through scrubber before /label. Money amounts ($/€/₺) preserved; account numbers stripped. |
+| I | Research corpus + cache | — | **WIRED-CROSSMODULE** | Finance dumps land in `research_corpus` with `sector='fin'` (or model-inferred). `getSectorPatterns('fin')` powers B2B pitch finance-sector slice. |
 | C | Cross-module event bus | WORKING | **WIRED-CROSSMODULE** | 7 new finance:* events registered + shape-validated + cross-module reflected |
 | D | ML pattern stack | WORKING | **WORKING** | Modified z-score (Iglewicz & Hoaglin), post-payday spike, pay-frequency classifier. No ARIMA / isolation-forest — not needed yet. |
 | E | Notifications wiring | SCAFFOLDED | **WIRED-CROSSMODULE** | 7 finance push subscribers wired to APNs worker (deployed 2026-05-14) via `scheduleNotification` injection. Per-event dedup + aggregation digests. |
