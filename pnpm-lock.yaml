@@ -73,6 +73,9 @@ importers:
       '@ollie/backup':
         specifier: workspace:*
         version: link:../../packages/backup
+      '@ollie/consent':
+        specifier: workspace:*
+        version: link:../../packages/consent
       '@ollie/crypto':
         specifier: workspace:*
         version: link:../../packages/crypto
@@ -222,6 +225,31 @@ importers:
         specifier: ^2.1.5
         version: 2.1.9(@types/node@25.6.2)(jsdom@29.1.1)
 
+  packages/capacitor-healthkit:
+    dependencies:
+      '@capacitor/core':
+        specifier: '>=7.0.0'
+        version: 7.6.4
+      '@capgo/capacitor-health':
+        specifier: 7.2.15
+        version: 7.2.15(@capacitor/core@7.6.4)
+    devDependencies:
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.5
+        version: 2.1.9(@types/node@25.6.2)(jsdom@29.1.1)
+
+  packages/consent:
+    devDependencies:
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.5
+        version: 2.1.9(@types/node@25.6.2)(jsdom@29.1.1)
+
   packages/crypto:
     devDependencies:
       typescript:
@@ -289,6 +317,9 @@ importers:
 
   packages/orchestrator:
     dependencies:
+      '@ollie/consent':
+        specifier: workspace:*
+        version: link:../consent
       '@ollie/events':
         specifier: workspace:*
         version: link:../events
@@ -298,9 +329,21 @@ importers:
       '@ollie/notifications':
         specifier: workspace:*
         version: link:../notifications
+      '@ollie/pii-scrub':
+        specifier: workspace:*
+        version: link:../pii-scrub
       '@ollie/store':
         specifier: workspace:*
         version: link:../store
+    devDependencies:
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.5
+        version: 2.1.9(@types/node@25.6.2)(jsdom@29.1.1)
+
+  packages/pii-scrub:
     devDependencies:
       typescript:
         specifier: ^5.6.0
@@ -318,6 +361,15 @@ importers:
       tsx:
         specifier: ^4.19.2
         version: 4.21.0
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.5
+        version: 2.1.9(@types/node@25.6.2)(jsdom@29.1.1)
+
+  packages/research-cache:
+    devDependencies:
       typescript:
         specifier: ^5.6.0
         version: 5.9.3
@@ -597,6 +649,11 @@ packages:
     resolution: {integrity: sha512-yoF91mlnIK/+sMa9oWNWiWtAj7rVY4N32HOTp2vKL9UwEIFTN4Vul/w5WvMEbLabrs/tIqBIKcnPH7FkhO3j1Q==}
     peerDependencies:
       '@capacitor/core': ^7.6.0
+
+  '@capgo/capacitor-health@7.2.15':
+    resolution: {integrity: sha512-ptxPjg8X0LE0CvazuFkFcM++9IEKODJgt9wDJ1D3H3rWq/FW2cM5KzEp/3ynR/hRVfldurKrTbM5Aup0+7k0gw==}
+    peerDependencies:
+      '@capacitor/core': '>=7.0.0'
 
   '@capgo/capacitor-native-biometric@8.4.5':
     resolution: {integrity: sha512-wTIdngpibWLKr8GdUTyRBQ5xIDFsb6XzZlZ4qtF19hciZHkG49YL36rwNTmkN8XqSqGp59sogDDgtD0MNkgiWA==}
@@ -4835,6 +4892,10 @@ snapshots:
       tslib: 2.8.1
 
   '@capacitor/ios@7.6.4(@capacitor/core@7.6.4)':
+    dependencies:
+      '@capacitor/core': 7.6.4
+
+  '@capgo/capacitor-health@7.2.15(@capacitor/core@7.6.4)':
     dependencies:
       '@capacitor/core': 7.6.4
 

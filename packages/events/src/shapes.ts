@@ -61,6 +61,15 @@ export const SHAPES: Record<string, ShapeSpec> = {
   // habits completion → garden
   'habits:completed': { habitId: 'string', category: 'string', habitName: 'string', ts: 'number' },
 
+  // consent (B2B pivot 2026-05-14) — every persist via setConsent() fires this.
+  'consent:set': {
+    necessary: 'boolean',
+    marketing: 'boolean',
+    research_optin: 'boolean',
+    source: 'string',
+    ts: 'number',
+  },
+
   // body weekly review
   'body:weekly_review': { ts: 'number', weekStartTs: 'number', weekEndTs: 'number', copy: 'string', summary: 'object' },
 

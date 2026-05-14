@@ -16,6 +16,11 @@ import { ChipFlyHost, chipFly } from './components/ChipFly';
 import { OnboardingScreen } from './pages/OnboardingScreen';
 import { AuthFlow } from './components/AuthFlow';
 import { ConsentScreen } from './components/ConsentScreen';
+import { ConsentStep } from './screens/onboarding/ConsentStep';
+import {
+  configureConsent,
+  type ConsentState,
+} from '@ollie/consent';
 import { useApplyBrainDump } from './hooks/useApplyBrainDump';
 import { trackSession } from './lib/retention';
 import { emit as emitEvent } from '@ollie/events';
@@ -145,6 +150,27 @@ function AppInner() {
   // returning users with consent.necessary === true skip it.
   const necessaryRaw = store.get<boolean>('shared', 'consent.necessary', false);
   const [consentGiven, setConsentGiven] = useState<boolean>(Boolean(necessaryRaw));
+
+  // Sprint B' (pivot 2026-05-14): research opt-in gate. Reads the
+  // canonical @ollie/consent state. Three signals:
+  //   - null  → never prompted → must mount ConsentStep
+  //   - true  → opted in → research-stream + ai-proxy /label active
+  //   - false → opted out → research paths no-op
+  //
+  // Pre-pivot users (Sprint 6 returning) come in with set_at before
+  // the pivot date; @ollie/consent's getConsent() migrates them to
+  // research_optin: null so the UI re-prompts.
+  const consentBootedRef = React.useRef(false);
+  if (!consentBootedRef.current) {
+    configureConsent({ store });
+    consentBootedRef.current = true;
+  }
+  const consentPersisted = store.get<ConsentState | null>('consent', 'state', null);
+  const initialResearchOptin: boolean | null =
+    consentPersisted?.research_optin ?? null;
+  const [researchOptin, setResearchOptin] = useState<boolean | null>(
+    initialResearchOptin,
+  );
 
   const [screen, setScreen] = useState<Screen>('home');
   const [selectedModule, setSelectedModule] = useState<string>('');
@@ -289,6 +315,40 @@ function AppInner() {
       <>
         <ConsentScreen
           onContinue={() => setConsentGiven(true)}
+        />
+        <ToastHost />
+        <ChipFlyHost />
+        {!SUPABASE_CONFIGURED && <DevModeBanner />}
+      </>
+    );
+  }
+
+  // Sprint B' (pivot 2026-05-14): research opt-in gate. Three doors:
+  //   - Fresh post-pivot sign-up: ConsentScreen flipped necessary,
+  //     research_optin is still null → mount ConsentStep with
+  //     source: 'onboarding'.
+  //   - Pre-pivot returning user: their state was migrated by
+  //     @ollie/consent on first read to research_optin: null →
+  //     mount ConsentStep with source: 'reprompt'.
+  //   - Already-decided user: research_optin is true | false → skip.
+  if (researchOptin === null) {
+    const session = accountRef.current.auth.state().session;
+    const userId = session?.user_id ?? 'local-dev';
+    const source: 'onboarding' | 'reprompt' =
+      Boolean(onboardedRaw) ? 'reprompt' : 'onboarding';
+    return (
+      <>
+        <ConsentStep
+          userId={userId}
+          source={source}
+          initial={{
+            marketing: consentPersisted?.marketing ?? false,
+            research_optin: false,
+          }}
+          onContinue={() => {
+            const written = store.get<ConsentState | null>('consent', 'state', null);
+            setResearchOptin(written?.research_optin ?? false);
+          }}
         />
         <ToastHost />
         <ChipFlyHost />
