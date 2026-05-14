@@ -22,7 +22,7 @@ import {
 } from '@ollie/store';
 import { useStoreSlice as baseUseStoreSlice } from '@ollie/store/react';
 import type { BirthData } from '@ollie/logic/astrology';
-import { createOrchestrator } from '@ollie/orchestrator';
+import { createOrchestrator, initPatternDetectedSubscriber } from '@ollie/orchestrator';
 import { scheduleServerJob } from '@ollie/notifications/server-schedule';
 import { getAccount } from './lib/account-boot';
 
@@ -129,6 +129,7 @@ function scheduleNotificationWrapper(spec: import('@ollie/notifications').Notifi
 }
 
 createOrchestrator(store, { scheduleNotification: scheduleNotificationWrapper }).init();
+initPatternDetectedSubscriber({ store, scheduleNotification: scheduleNotificationWrapper });
 
 import { createReminderScheduler, createCrossModuleRouter } from '@ollie/router';
 import * as appEvents from '@ollie/events';
