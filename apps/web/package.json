@@ -27,6 +27,7 @@
     "@ollie/router": "workspace:*",
     "@ollie/store": "workspace:*",
     "@ollie/plaid": "workspace:*",
+    "@ollie/capacitor-healthkit": "workspace:*",
     "@ollie/sync": "workspace:*",
     "@react-three/drei": "^9.122.0",
     "react-plaid-link": "^3.6.1",
