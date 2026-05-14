@@ -783,6 +783,19 @@ export function CycleModule({ onBack }: CycleModuleProps) {
     birth_control_enabled: false,
     birth_control_type: 'combined',
   });
+  // birth_control_enabled is authoritative at shared.settings.birth_control_enabled.
+  // One-time migration: if cycle.settings has it true and shared.settings doesn't, copy it.
+  const [sharedBirthControl, setSharedBirthControl] = useStoreSlice<boolean>(
+    'shared',
+    'settings.birth_control_enabled',
+    false,
+  );
+  useEffect(() => {
+    if (settings.birth_control_enabled && !sharedBirthControl) {
+      setSharedBirthControl(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [lastEditedByCycle, setLastEditedByCycle] = useStoreSlice<Record<number, number>>('cycle', 'lastEditedByCycle', {});
   const [asks, setAsks] = useStoreSlice<string[]>('cycle', 'asks', []);
 
@@ -1221,8 +1234,8 @@ export function CycleModule({ onBack }: CycleModuleProps) {
 
           {recordOpen && <RecordPanel onSave={saveRecord} onCancel={() => setRecordOpen(false)} />}
 
-          {/* birth control pill log */}
-          {settings.birth_control_enabled && (
+          {/* birth control pill log — gated on shared.settings.birth_control_enabled */}
+          {sharedBirthControl && (
             <div style={{ marginTop: 80 }}>
               <PillLogSection
                 items={items}
@@ -1269,8 +1282,12 @@ export function CycleModule({ onBack }: CycleModuleProps) {
       {/* settings panel */}
       {settingsOpen && (
         <SettingsPanel
-          settings={settings}
+          settings={{ ...settings, birth_control_enabled: sharedBirthControl }}
           onChange={next => {
+            // birth_control_enabled authoritative in shared.settings; keep in sync
+            if (next.birth_control_enabled !== sharedBirthControl) {
+              setSharedBirthControl(next.birth_control_enabled);
+            }
             setSettings(next);
           }}
           onClose={() => setSettingsOpen(false)}

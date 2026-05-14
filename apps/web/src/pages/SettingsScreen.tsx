@@ -554,6 +554,136 @@ function NotificationsSection() {
   );
 }
 
+// ─── Health section ───────────────────────────────────────────────────────────
+//
+// Surfaces shared.settings.birth_control_enabled — lifted from CycleModule.
+// Gates the pill log section and daily pill check notification.
+// LOCALIZE_LATER — ES copy needed.
+
+export function HealthSection() {
+  const [birthControl, setBirthControl] = useStoreSlice<boolean>(
+    'shared',
+    'settings.birth_control_enabled',
+    false,
+  );
+
+  return (
+    <section style={styles.section} aria-label="health">
+      <h2 style={styles.sectionHeader}>health</h2>
+
+      <div style={styles.row}>
+        <div>
+          <p style={styles.rowLabel}>track birth control</p>
+          {/* LOCALIZE_LATER */}
+          <p style={styles.rowHint}>shows daily pill check + missed-dose notification</p>
+        </div>
+        <Toggle
+          on={birthControl}
+          onChange={setBirthControl}
+          ariaLabel="track birth control"
+        />
+      </div>
+    </section>
+  );
+}
+
+// ─── Finance section ──────────────────────────────────────────────────────────
+//
+// Surfaces finance.taxProfile.selfEmployed — previously store-only.
+// When enabled, monthly tax set-aside reminders fire on the 1st.
+// Sub-radio selects jurisdiction: us / uk / eu (writes finance.taxProfile.calculator.kind).
+// LOCALIZE_LATER — ES copy needed.
+
+type TaxJurisdiction = 'us' | 'uk' | 'eu';
+
+interface TaxProfile {
+  selfEmployed: boolean;
+  calculator?: { kind: TaxJurisdiction };
+}
+
+const TAX_JURISDICTIONS: { id: TaxJurisdiction; label: string }[] = [
+  { id: 'us', label: 'us' },
+  { id: 'uk', label: 'uk' },
+  { id: 'eu', label: 'eu' },
+];
+
+export function FinanceSection() {
+  const [taxProfile, setTaxProfile] = useStoreSlice<TaxProfile>(
+    'finance',
+    'taxProfile',
+    { selfEmployed: false },
+  );
+  const selfEmployed = taxProfile?.selfEmployed ?? false;
+  const jurisdiction: TaxJurisdiction = taxProfile?.calculator?.kind ?? 'us';
+
+  function handleSelfEmployedChange(next: boolean) {
+    setTaxProfile({ ...taxProfile, selfEmployed: next });
+  }
+
+  function handleJurisdictionChange(next: TaxJurisdiction) {
+    setTaxProfile({ ...taxProfile, calculator: { kind: next } });
+  }
+
+  return (
+    <section style={styles.section} aria-label="finance settings">
+      <h2 style={styles.sectionHeader}>finance</h2>
+
+      <div style={styles.row}>
+        <div>
+          <p style={styles.rowLabel}>self-employed</p>
+          {/* LOCALIZE_LATER */}
+          <p style={styles.rowHint}>enables monthly tax set-aside reminders</p>
+        </div>
+        <Toggle
+          on={selfEmployed}
+          onChange={handleSelfEmployedChange}
+          ariaLabel="self-employed"
+        />
+      </div>
+
+      {selfEmployed && (
+        <div style={{ ...styles.row, flexDirection: 'column', alignItems: 'flex-start', gap: '10px' }}>
+          <p style={styles.rowLabel}>tax jurisdiction</p>
+          {/* LOCALIZE_LATER */}
+          <div
+            role="radiogroup"
+            aria-label="tax jurisdiction"
+            style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}
+          >
+            {TAX_JURISDICTIONS.map((j) => {
+              const active = jurisdiction === j.id;
+              return (
+                <button
+                  key={j.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={active}
+                  onClick={() => handleJurisdictionChange(j.id)}
+                  style={{
+                    padding: '6px 16px',
+                    border: `1px solid ${active ? 'var(--accent)' : 'var(--rule)'}`,
+                    borderRadius: '20px',
+                    background: active ? 'var(--accent)' : 'transparent',
+                    color: active ? 'var(--bone)' : 'var(--ink-soft)',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 'var(--t-caption)',
+                    letterSpacing: 'var(--ls-caps)',
+                    textTransform: 'uppercase',
+                    cursor: 'pointer',
+                    transition: 'background 150ms ease, color 150ms ease',
+                  }}
+                >
+                  {j.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
 // ─── Privacy section ─────────────────────────────────────────────────────────
 
 function PrivacySection() {
@@ -1428,6 +1558,8 @@ export function SettingsScreen({ auth, onBack, onSignedOut }: SettingsScreenProp
         <AccountSection auth={auth} onSignedOut={onSignedOut} />
         <InviteSection />
         <NotificationsSection />
+        <HealthSection />
+        <FinanceSection />
         <PrivacySection />
         <ResearchSection userId={userId} />
         <EncryptionSection />
