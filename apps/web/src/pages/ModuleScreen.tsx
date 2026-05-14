@@ -22,7 +22,7 @@ const BodyModule      = lazy(() => import('../modules/body/BodyModule').then(m =
 const GoalsModule     = lazy(() => import('../modules/goals/GoalsModule').then(m => ({ default: m.GoalsModule })));
 const AdminModule     = lazy(() => import('../modules/admin/AdminModule').then(m => ({ default: m.AdminModule })));
 const DumpModule      = lazy(() => import('../modules/dump/DumpModule').then(m => ({ default: m.DumpModule })));
-const AstrologyModule = lazy(() => import('../modules/astrology/AstrologyModule').then(m => ({ default: m.AstrologyModule })));
+// AstrologyModule removed — deferred to backlog per audits/DECISIONS_2026-05-14.md Decision 2
 const MedicationModule = lazy(() => import('../modules/medication/MedicationModule').then(m => ({ default: m.MedicationModule })));
 
 // ─── fallback ─────────────────────────────────────────────────────────────────
@@ -261,27 +261,12 @@ export function ModuleScreen({
     );
   }
 
-  // Astrology: cut from launch — only accessible with ?astrology=1.
-  // The prior consent.astrology gate is gone with the consent rewrite
-  // (Sprint 6); the URL gate alone keeps the module hidden from
-  // unsuspecting users.
+  // Astrology deferred to backlog — redirect to dashboard.
+  // See audits/DECISIONS_2026-05-14.md Decision 2.
   if (moduleId === 'astrology') {
-    const urlGate =
-      typeof window !== 'undefined' &&
-      new URLSearchParams(window.location.search).get('astrology') === '1';
-    if (!urlGate) {
-      // Silently redirect to dashboard rather than showing a dead page.
-      onNavigate('dashboard');
-      return null;
-    }
-    return (
-      <>
-        <Suspense fallback={<ModuleLoading />}>
-          <AstrologyModule onBack={() => onNavigate('dashboard')} />
-        </Suspense>
-        <BrainDumpInput onSubmit={onBrainDump} />
-      </>
-    );
+    console.warn('[ModuleScreen] astrology deferred to backlog');
+    onNavigate('dashboard');
+    return null;
   }
 
   // Medication: dedicated module (E1) — cream bg
