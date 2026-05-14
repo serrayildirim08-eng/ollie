@@ -611,7 +611,7 @@ function SubscriptionsScreen({
       <div
         role="group"
         aria-label="subscriptions"
-        style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '32px' }}
+        style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '24px' }}
       >
         {DEFAULT_SUBS.map((item) => (
           <Chip
@@ -623,6 +623,24 @@ function SubscriptionsScreen({
           />
         ))}
       </div>
+      {/* Audit disclosure — surfaces the heuristic dormancy feature in
+          plain language before the user starts adding subs. Lowercase,
+          factual, no exclamation mark. Locale-aware copy lives in the
+          lexicon (finance.audit.disclosure_short). */}
+      <p
+        style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 11,
+          color: 'var(--ink-faint)',
+          letterSpacing: '0.06em',
+          lineHeight: 1.55,
+          marginBottom: '32px',
+          marginTop: 0,
+        }}
+      >
+        ollie audits these by comparing your charges with your writing.
+        nothing leaves your device.
+      </p>
       <PrimaryBtn label="next" onClick={onNext} />
     </>
   );

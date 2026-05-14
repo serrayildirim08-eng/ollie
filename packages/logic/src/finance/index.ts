@@ -124,6 +124,32 @@ export type {
   FinanceTaxSetAsideDuePayload,
 } from './tax-setaside';
 
+// Subscription audit (heuristic dormancy detection) — see
+// subscription-dormancy.ts. Pure client-side scoring; consumer must
+// pass already-decrypted brain-dump entries.
+export {
+  SUBSCRIPTION_ALIASES,
+  SUBSCRIPTION_ALIAS_COUNT,
+  matchAliasKey,
+  scanMentions,
+} from './subscription-aliases';
+export type { SubscriptionAliasKey, MentionScan } from './subscription-aliases';
+export {
+  SUBSCRIPTION_CANCEL_URLS,
+  SUBSCRIPTION_CANCEL_URL_COUNT,
+  APPLE_SUBSCRIPTIONS_DEEP_LINK,
+  getCancelUrl,
+  isAppleManaged,
+} from './cancel-urls';
+export { scoreDormancy, summarize } from './subscription-dormancy';
+export type {
+  DormancyRecommendation,
+  DormancySignal,
+  DormancySummary,
+  StoredSubLike,
+  BrainDumpEntry,
+} from './subscription-dormancy';
+
 // Export (CSV + structured annual ADHD-tax report)
 export {
   exportToCSV,

@@ -50,6 +50,7 @@ import {
   maskMoney,
   type PrivacyState,
 } from './PrivacyToggle';
+import { AuditSubscriptions, useAuditEntryKicker } from './AuditSubscriptions';
 
 // ─── palette tokens (dark) ───────────────────────────────────────────────────
 
@@ -955,6 +956,35 @@ function FinanceSignalsSection({ masked = false }: { masked?: boolean }) {
   );
 }
 
+// ─── AuditEntryLink ──────────────────────────────────────────────────────────
+// Compact "§ N to review" link surfaced inside the subscriptions section
+// header. Uses the same store slices the audit screen consumes so the
+// kicker count stays in sync without a recompute round-trip.
+
+function AuditEntryLink({ onOpen }: { onOpen: () => void }) {
+  const { candidateCount, kickerLabel } = useAuditEntryKicker();
+  const hasCandidates = candidateCount > 0;
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      aria-label="open subscription audit"
+      style={{
+        background: 'none',
+        border: 'none',
+        cursor: 'pointer',
+        color: hasCandidates ? T.accent : T.muted,
+        fontFamily: "'DM Mono', monospace",
+        fontSize: 10,
+        letterSpacing: '0.12em',
+        padding: 0,
+      }}
+    >
+      {`§ ${kickerLabel}`}
+    </button>
+  );
+}
+
 // ─── FinanceModule ────────────────────────────────────────────────────────────
 
 export function FinanceModule() {
@@ -988,6 +1018,7 @@ export function FinanceModule() {
   });
   const [activePauseId, setActivePauseId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [auditOpen, setAuditOpen] = useState(false);
 
   // Tick once a minute while privacy mode is enabled so the auto-relock
   // window expires without a manual interaction. No-op when masked is off.
@@ -1426,6 +1457,13 @@ export function FinanceModule() {
   }));
 
   // ── render ────────────────────────────────────────────────────────────────
+
+  // Audit overlay takes over the screen when open. It uses the v2 paper
+  // design system; the rest of FinanceModule stays on the dark v1
+  // ledger style until the broader v2 redesign lands.
+  if (auditOpen) {
+    return <AuditSubscriptions onBack={() => setAuditOpen(false)} />;
+  }
 
   return (
     <div
@@ -1881,9 +1919,12 @@ export function FinanceModule() {
         <section style={{ marginBottom: 48 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 10, borderBottom: `1px solid ${T.border}` }}>
             <div style={labelStyle}>subscriptions{subs.length > 0 ? ` · $${$fmt(subsMonthly)}/mo` : ''}</div>
-            <button type="button" onClick={() => openForm === 'sub' ? cancel() : startDraft('sub')} style={addBtn}>
-              {openForm === 'sub' ? '× close' : '+ add'}
-            </button>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+              {subs.length > 0 && <AuditEntryLink onOpen={() => setAuditOpen(true)} />}
+              <button type="button" onClick={() => openForm === 'sub' ? cancel() : startDraft('sub')} style={addBtn}>
+                {openForm === 'sub' ? '× close' : '+ add'}
+              </button>
+            </div>
           </div>
           {openForm === 'sub' && (
             <div style={{ display: 'flex', gap: 8, padding: '16px 0', flexWrap: 'wrap' }}>

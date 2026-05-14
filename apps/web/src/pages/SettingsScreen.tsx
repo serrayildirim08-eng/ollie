@@ -684,6 +684,24 @@ function PrivacySection() {
           {importMsg}
         </p>
       )}
+
+      {/* Subscription audit disclosure — full text. Surfaces under
+          privacy so users see exactly what the audit feature does
+          before encountering it in the money module. Plain prose, no
+          exclamation marks. */}
+      <div style={{ ...styles.row, alignItems: 'flex-start', paddingTop: '20px' }}>
+        <div>
+          <p style={styles.rowLabel}>subscription audit</p>
+          <p style={{ ...styles.rowHint, lineHeight: 1.55, maxWidth: 520 }}>
+            ollie audits your subscriptions by comparing two things you
+            already share with it: how often you&apos;re charged, and how
+            often you write about them. nothing leaves your device for
+            this. we cannot see what you do inside netflix — only that
+            netflix shows up in your charge history and not in your
+            words.
+          </p>
+        </div>
+      </div>
     </section>
   );
 }
