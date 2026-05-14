@@ -26,6 +26,11 @@ import { SUPPORTED_COUNTRIES } from '../lib/country';
 import { getAccount } from '../lib/account-boot';
 import { readUserHash } from '../lib/user-hash';
 import { getAppVersion } from '../lib/device';
+import {
+  hasSessionPassphrase,
+  setSessionPassphrase,
+  clearSessionPassphrase,
+} from '../lib/encryption-boot';
 
 const APP_VERSION = '0.0.1';
 const PRIVACY_URL = 'https://ollie.app/privacy';
@@ -378,6 +383,8 @@ function AccountSection({
 }) {
   const session = auth?.state().session ?? null;
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   async function handleSignOut() {
     if (!auth) return;
@@ -385,29 +392,41 @@ function AccountSection({
     onSignedOut();
   }
 
-  function handleDeleteAccount() {
-    // Local-first delete: clear all modules from localStorage. The
-    // Supabase row is left orphaned (no server delete endpoint in
-    // current API surface) — that's documented and acceptable for
-    // alpha. Future: add api.deleteUser().
-    //
-    // Store keys live under `void.state.<mod>.v<N>` (see
-    // packages/store/src/store.ts:21). Match that prefix so the wipe
-    // hits the real data, not a phantom `ollie:` namespace.
+  async function handleDeleteAccount() {
+    if (!auth) return;
+    // Server-cascade deletion (Sprint B'). The auth client posts the
+    // user's JWT + confirm token to `/account/delete`, which cascades
+    // every user-scoped table via service-role and then deletes the
+    // auth.users row last. The client only wipes local data AFTER the
+    // server reports success — if the server fails the user keeps
+    // their local data and can retry without losing access.
+    setDeleting(true);
+    setDeleteError(null);
     try {
-      if (typeof localStorage !== 'undefined') {
-        const keys: string[] = [];
-        for (let i = 0; i < localStorage.length; i++) {
-          const k = localStorage.key(i);
-          if (k && k.startsWith('void.state.')) keys.push(k);
-        }
-        for (const k of keys) localStorage.removeItem(k);
+      const r = await auth.deleteAccount();
+      if (!r.ok) {
+        const msg =
+          r.code === 'no-endpoint'
+            ? 'account deletion is not enabled in this build'
+            : r.code === 'unauthorized'
+            ? 'session expired — sign in again and retry'
+            : r.code === 'network'
+            ? 'network error — check your connection and retry'
+            : r.code === 'cascade-failed' || r.code === 'auth-delete-failed'
+            ? 'partial deletion — please retry'
+            : r.message;
+        setDeleteError(msg);
+        setDeleting(false);
+        return;
       }
-    } catch { /* non-fatal */ }
-    setConfirmDelete(false);
-    onSignedOut();
-    // Hard reload to drop in-memory state.
-    if (typeof window !== 'undefined') window.location.reload();
+      setConfirmDelete(false);
+      setDeleting(false);
+      onSignedOut();
+      if (typeof window !== 'undefined') window.location.reload();
+    } catch (err) {
+      setDeleteError('deletion failed: ' + (err as Error).message);
+      setDeleting(false);
+    }
   }
 
   return (
@@ -434,20 +453,34 @@ function AccountSection({
       <div style={styles.row}>
         <div>
           <p style={styles.rowLabel}>delete account</p>
-          <p style={styles.rowHint}>removes local data · encrypted server row stays orphaned</p>
+          <p style={styles.rowHint}>erases local data and every server row · final</p>
         </div>
-        <button type="button" onClick={() => setConfirmDelete(true)} style={styles.destructive}>
+        <button
+          type="button"
+          onClick={() => setConfirmDelete(true)}
+          style={styles.destructive}
+          disabled={!auth || !session}
+        >
           delete
         </button>
       </div>
 
+      {deleteError && (
+        <p
+          role="alert"
+          style={{ ...styles.rowHint, color: 'var(--umber)', marginTop: '8px' }}
+        >
+          {deleteError}
+        </p>
+      )}
+
       <ConfirmModal
         open={confirmDelete}
         title="delete account?"
-        body="this wipes ollie's local data from this device. the encrypted server row stays but is unreadable without your passphrase. there is no undo."
-        confirmLabel="delete"
-        onConfirm={handleDeleteAccount}
-        onCancel={() => setConfirmDelete(false)}
+        body="this erases ollie's data on this device AND every row tied to your account on ollie's server. anonymized research contributions you opted into stay in the corpus. there is no undo."
+        confirmLabel={deleting ? 'deleting…' : 'delete'}
+        onConfirm={() => { if (!deleting) void handleDeleteAccount(); }}
+        onCancel={() => { if (!deleting) setConfirmDelete(false); }}
       />
     </section>
   );
@@ -707,6 +740,197 @@ function PrivacySection() {
   );
 }
 
+// ─── Encryption section ──────────────────────────────────────────────────────
+//
+// Wires the AES-GCM-256 snapshot path (work + goals) to a Settings-provided
+// passphrase. The store.ts boot reads sessionStorage at launch; if missing,
+// modules stay plaintext until the user saves a passphrase here. Saving
+// re-invokes bootEncryption() so the encrypted snapshot is restored into the
+// live store before the next render. Clearing requires a reload to drop the
+// decrypted plaintext mirror — we warn the user before reload.
+//
+// Voice: dry editorial, no shame; sage accent on save. Min 8 chars. The
+// confirm input prevents a typo'd passphrase from locking the user out.
+
+function EncryptionSection() {
+  const [open, setOpen] = useState(false);
+  const [pass, setPass] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [err, setErr] = useState('');
+  const [saving, setSaving] = useState(false);
+  // Force a re-render after save/clear without subscribing to anything —
+  // sessionStorage isn't reactive, so we read at render time + bump a tick
+  // to refresh the status row.
+  const [, setTick] = useState(0);
+  const encrypted = hasSessionPassphrase();
+
+  async function handleSave() {
+    setErr('');
+    if (pass.length < 8) {
+      setErr('passphrase must be 8+ characters');
+      return;
+    }
+    if (pass !== confirm) {
+      setErr('confirm does not match');
+      return;
+    }
+    setSaving(true);
+    try {
+      await setSessionPassphrase(store, pass);
+      setPass('');
+      setConfirm('');
+      setOpen(false);
+      setTick((t) => t + 1);
+    } catch (e) {
+      setErr('save failed: ' + (e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function handleClear() {
+    const ok = typeof window !== 'undefined'
+      ? window.confirm(
+          'clear passphrase? work + goals data on disk will stay encrypted but ollie won\'t decrypt them this session. the app will reload.',
+        )
+      : true;
+    if (!ok) return;
+    clearSessionPassphrase();
+    if (typeof window !== 'undefined') window.location.reload();
+  }
+
+  return (
+    <section style={styles.section} aria-label="encryption">
+      <h2 style={styles.sectionHeader}>encryption</h2>
+
+      <div style={styles.row}>
+        <div>
+          <p style={styles.rowLabel}>status</p>
+          <p style={styles.rowHint}>
+            {encrypted
+              ? 'work + goals snapshots encrypted at rest with your passphrase'
+              : 'work + goals stored as plaintext on this device'}
+          </p>
+        </div>
+        <span
+          style={{
+            ...styles.rowValue,
+            color: encrypted ? 'var(--accent)' : 'var(--ink-faint)',
+          }}
+        >
+          {encrypted ? 'encrypted' : 'plaintext'}
+        </span>
+      </div>
+
+      <div style={styles.row}>
+        <div>
+          <p style={styles.rowLabel}>{encrypted ? 'change passphrase' : 'set passphrase'}</p>
+          <p style={styles.rowHint}>aes-gcm 256 · derived via pbkdf2 100k iterations</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => { setOpen((o) => !o); setErr(''); }}
+          style={styles.linkBtn}
+        >
+          {open ? 'cancel' : (encrypted ? 'change' : 'set')}
+        </button>
+      </div>
+
+      {open && (
+        <div
+          style={{
+            padding: '20px 0 4px',
+            display: 'grid',
+            gap: '12px',
+          }}
+        >
+          <label style={{ display: 'grid', gap: '6px' }}>
+            <span style={styles.rowHint}>passphrase · 8+ chars</span>
+            <input
+              type="password"
+              value={pass}
+              onChange={(e) => setPass(e.target.value)}
+              autoComplete="new-password"
+              aria-label="encryption passphrase"
+              style={{
+                padding: '10px 12px',
+                background: 'var(--bone)',
+                border: '1px solid var(--rule)',
+                borderRadius: '6px',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 'var(--t-body)',
+                color: 'var(--ink)',
+                outline: 'none',
+              }}
+            />
+          </label>
+          <label style={{ display: 'grid', gap: '6px' }}>
+            <span style={styles.rowHint}>confirm</span>
+            <input
+              type="password"
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+              autoComplete="new-password"
+              aria-label="confirm passphrase"
+              onKeyDown={(e) => { if (e.key === 'Enter') void handleSave(); }}
+              style={{
+                padding: '10px 12px',
+                background: 'var(--bone)',
+                border: '1px solid var(--rule)',
+                borderRadius: '6px',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 'var(--t-body)',
+                color: 'var(--ink)',
+                outline: 'none',
+              }}
+            />
+          </label>
+          {err && (
+            <p style={{ ...styles.rowHint, color: 'var(--umber)' }}>{err}</p>
+          )}
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button
+              type="button"
+              onClick={() => void handleSave()}
+              disabled={saving || !pass || !confirm}
+              style={{
+                padding: '10px 20px',
+                background: saving || !pass || !confirm ? 'transparent' : 'var(--accent)',
+                color: saving || !pass || !confirm ? 'var(--ink-faint)' : 'var(--bone)',
+                border: `1px solid ${saving || !pass || !confirm ? 'var(--rule)' : 'var(--accent)'}`,
+                borderRadius: '20px',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 'var(--t-caption)',
+                letterSpacing: 'var(--ls-caps)',
+                textTransform: 'uppercase',
+                cursor: saving || !pass || !confirm ? 'default' : 'pointer',
+              }}
+            >
+              {saving ? 'saving…' : 'save'}
+            </button>
+          </div>
+          <p style={{ ...styles.rowHint, marginTop: '4px', lineHeight: 1.5 }}>
+            ollie can&apos;t recover this. write it down somewhere safe. losing the
+            passphrase means losing the work + goals data on this device.
+          </p>
+        </div>
+      )}
+
+      {encrypted && !open && (
+        <div style={styles.row}>
+          <div>
+            <p style={styles.rowLabel}>clear passphrase</p>
+            <p style={styles.rowHint}>app reloads · data stays encrypted on disk</p>
+          </div>
+          <button type="button" onClick={handleClear} style={styles.destructive}>
+            clear
+          </button>
+        </div>
+      )}
+    </section>
+  );
+}
+
 // ─── About section ───────────────────────────────────────────────────────────
 
 function AboutSection() {
@@ -775,6 +999,7 @@ export function SettingsScreen({ auth, onBack, onSignedOut }: SettingsScreenProp
         <AccountSection auth={auth} onSignedOut={onSignedOut} />
         <NotificationsSection />
         <PrivacySection />
+        <EncryptionSection />
         <AboutSection />
       </div>
     </main>
