@@ -4,10 +4,12 @@
  * B2B research data layer — PHYSICALLY ISOLATED from user data.
  * Anonymous, opt-in, GDPR-compliant. The product side (rigid schema,
  * k-anonymity bucketing, week / amount / merchant specifics) is
- * deferred to Sprint 6+ when the B2B product is designed.
+ * deferred until the B2B product is designed.
  *
  * What ships now (foundation):
- *   - opt-in toggle: shared.consent.spending_research (default off)
+ *   - opt-in toggle: shared.consent.necessary (default off — written
+ *     true by ConsentScreen at sign-up; this is the master gate that
+ *     replaced the older per-feature consent.spending_research key)
  *   - flexible JSON event capture: track(type, payload)
  *   - random_uuid per device (NO link to user_id, email, anything)
  *   - GDPR endpoints: exportContributions(), deleteContributions(),
@@ -49,6 +51,14 @@ export interface ResearchDeps {
   endpointUrl?: string;
   /** Bearer token if the research API requires one. */
   bearerToken?: string;
+  /**
+   * Optional URL of the ollie-ai-proxy worker. When set, trackTable()
+   * POSTs `{table,row}` directly to `${ingestUrl}/ingest-event`. When
+   * omitted, trackTable() is a silent no-op (consent gated either way).
+   */
+  ingestUrl?: string;
+  /** Injected for tests. Defaults to global fetch. */
+  fetchImpl?: typeof fetch;
   /** Injected for tests. */
   now?: () => number;
   /** Pluggable connectivity check. Default navigator.onLine. */
@@ -61,6 +71,16 @@ export interface ResearchClient {
    * Caller-tolerant — never throws on offline / queue full.
    */
   track(type: string, payload?: Record<string, unknown>): void;
+  /**
+   * Server-shaped capture. Fire-and-forget POSTs `{table,row}` to the
+   * ollie-ai-proxy worker's `/ingest-event` endpoint. No-op when consent
+   * is off OR `ingestUrl` was not configured. Never throws.
+   *
+   * Used by retention.ts (D1/D7), session/module event hooks, and the
+   * consent-audit writer. The legacy `track()` queue stays for any future
+   * batch-shaped use cases.
+   */
+  trackTable(table: string, row: Record<string, unknown>): void;
   /** Manually flush the queue once. */
   flush(): Promise<void>;
   /** Start the background flush loop. */
@@ -81,7 +101,7 @@ export interface ResearchClient {
   _inspect(): { queueDepth: number; deviceId: string | null; running: boolean };
 }
 
-const CONSENT_KEY = 'consent.spending_research';
+const CONSENT_KEY = 'consent.necessary';
 const DEVICE_ID_KEY = '_research_device_id';
 const QUEUE_KEY = '_research_queue';
 
@@ -131,6 +151,27 @@ export function createResearchStream(deps: ResearchDeps): ResearchClient {
     writeQueue(q);
     try { events.emit('research:event_queued', { event_id: `${event.device_id}:${event.ts}:${event.type}`, ts: nowFn() }); }
     catch { /* registry warn ok */ }
+  }
+
+  function trackTable(table: string, row: Record<string, unknown>): void {
+    if (!hasConsent()) return;
+    if (!deps.ingestUrl) return;
+    if (!table || typeof table !== 'string') return;
+    if (!row || typeof row !== 'object') return;
+    const url = `${deps.ingestUrl.replace(/\/$/, '')}/ingest-event`;
+    const f = deps.fetchImpl ?? (typeof fetch === 'function' ? fetch : null);
+    if (!f) return;
+    // Fire-and-forget. We swallow promise rejections so a transient worker
+    // failure never bubbles up into UI code that called us synchronously.
+    try {
+      void f(url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ table, row }),
+      }).catch(() => { /* best-effort */ });
+    } catch {
+      /* best-effort */
+    }
   }
 
   async function flush(): Promise<void> {
@@ -215,6 +256,7 @@ export function createResearchStream(deps: ResearchDeps): ResearchClient {
 
   return {
     track,
+    trackTable,
     flush,
     start,
     stop,

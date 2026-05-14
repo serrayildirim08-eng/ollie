@@ -15,6 +15,7 @@ export default defineConfig({
       { find: '@ollie/logic', replacement: path.resolve(__dirname, '../../packages/logic/src/index.ts') },
       { find: '@ollie/events', replacement: path.resolve(__dirname, '../../packages/events/src/index.ts') },
       { find: '@ollie/orchestrator', replacement: path.resolve(__dirname, '../../packages/orchestrator/src/index.ts') },
+      { find: '@ollie/research-stream', replacement: path.resolve(__dirname, '../../packages/research-stream/src/index.ts') },
     ],
   },
   test: {

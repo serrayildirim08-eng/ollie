@@ -7,6 +7,8 @@ import {
   parseFinanceDump,
   mergeRecord,
   detectRecurring,
+  detectRecurringEarly,
+  classifyRecurringCategory,
   predictNextDue,
   detectAnomaly,
   trackADHDTaxEvents,
@@ -26,6 +28,12 @@ import {
   computeMonthlyOutflow,
   DAY_MS,
   isoDate,
+  detectSavingsTransfers,
+  matchTransfersToGoals,
+  detectSavingsFromBraindump,
+  detectADHDTaxFromTxn,
+  detectDuplicatePurchases,
+  detectADHDTaxFromBraindump,
 } from '../src/finance';
 import type { FinanceRecord, RecurringPattern } from '../src/finance';
 
@@ -627,3 +635,1006 @@ describe('upcomingBills', () => {
 });
 
 const HOUR_MS = 3_600_000;
+
+// ─── detectRecurringEarly ─────────────────────────────────────────────
+
+// Epoch anchor — 2026-05-14 for readability.
+const ANCHOR_MS = new Date('2026-05-14T12:00:00Z').getTime();
+
+function daysAgo(n: number): string {
+  return isoDate(ANCHOR_MS - n * DAY_MS);
+}
+
+describe('detectRecurringEarly', () => {
+  it('returns empty for empty input', () => {
+    expect(detectRecurringEarly([])).toEqual([]);
+  });
+
+  it('returns empty for income records (direction=in)', () => {
+    const r = rec(daysAgo(0), 15, 'in', 'netflix');
+    expect(detectRecurringEarly([r])).toEqual([]);
+  });
+
+  // ── low confidence ────────────────────────────────────────────────
+
+  it('low: single occurrence of known-recurring merchant (netflix)', () => {
+    const r = rec(daysAgo(10), 15.99, 'out', 'netflix');
+    const result = detectRecurringEarly([r]);
+    expect(result).toHaveLength(1);
+    expect(result[0].confidence).toBe('low');
+    expect(result[0].evidence.occurrenceCount).toBe(1);
+    expect(result[0].merchant_normalized).toBe('netflix');
+  });
+
+  it('low: single occurrence of "rent" merchant', () => {
+    const r = rec(daysAgo(5), 1200, 'out', 'rent');
+    const result = detectRecurringEarly([r]);
+    expect(result).toHaveLength(1);
+    expect(result[0].confidence).toBe('low');
+  });
+
+  it('low: single occurrence with "electricity" in name', () => {
+    const r = rec(daysAgo(5), 80, 'out', 'electricity');
+    const result = detectRecurringEarly([r]);
+    expect(result[0].confidence).toBe('low');
+    expect(result[0].estimatedInterval).toBeNull();
+    expect(result[0].nextDueDate).toBeNull();
+  });
+
+  it('low: single occurrence of unknown merchant does NOT trigger', () => {
+    const r = rec(daysAgo(5), 42, 'out', 'random-coffee-shop');
+    const result = detectRecurringEarly([r]);
+    expect(result).toHaveLength(0);
+  });
+
+  it('low: single occurrence of "gym" is known recurring', () => {
+    const r = rec(daysAgo(3), 55, 'out', 'gym');
+    const result = detectRecurringEarly([r]);
+    expect(result).toHaveLength(1);
+    expect(result[0].confidence).toBe('low');
+  });
+
+  // ── medium confidence ─────────────────────────────────────────────
+
+  it('medium: 2 occurrences with consistent amount and monthly interval', () => {
+    const r1 = rec(daysAgo(60), 15.99, 'out', 'spotify');
+    const r2 = rec(daysAgo(30), 15.99, 'out', 'spotify');
+    const result = detectRecurringEarly([r1, r2]);
+    expect(result).toHaveLength(1);
+    expect(result[0].confidence).toBe('medium');
+    expect(result[0].evidence.occurrenceCount).toBe(2);
+    expect(result[0].estimatedInterval).toBeCloseTo(30, 1);
+    expect(result[0].nextDueDate).not.toBeNull();
+  });
+
+  it('medium: 2 occurrences unknown merchant still qualifies on interval alone', () => {
+    const r1 = rec(daysAgo(60), 200, 'out', 'acme-corp-billing');
+    const r2 = rec(daysAgo(30), 200, 'out', 'acme-corp-billing');
+    const result = detectRecurringEarly([r1, r2]);
+    expect(result).toHaveLength(1);
+    expect(result[0].confidence).toBe('medium');
+  });
+
+  it('medium: 2 occurrences with amount within 5% tolerance', () => {
+    // 15.00 vs 15.49 — ~3.2% variance, within ±5%
+    const r1 = rec(daysAgo(60), 15.00, 'out', 'some-service');
+    const r2 = rec(daysAgo(30), 15.49, 'out', 'some-service');
+    const result = detectRecurringEarly([r1, r2]);
+    expect(result).toHaveLength(1);
+    expect(result[0].confidence).toBe('medium');
+  });
+
+  it('medium: 2 occurrences with large amount variance does NOT produce candidate', () => {
+    // 10 vs 50 — 80% variance, exceeds ±5%
+    const r1 = rec(daysAgo(60), 10, 'out', 'erratic-merchant');
+    const r2 = rec(daysAgo(30), 50, 'out', 'erratic-merchant');
+    const result = detectRecurringEarly([r1, r2]);
+    // MAD/median = (20) / 30 ≈ 0.67 > 0.05 → no match
+    expect(result).toHaveLength(0);
+  });
+
+  it('medium: 2 occurrences only 1 day apart — interval not plausible, no candidate', () => {
+    const r1 = rec(daysAgo(5), 15, 'out', 'flash-charge');
+    const r2 = rec(daysAgo(4), 15, 'out', 'flash-charge');
+    const result = detectRecurringEarly([r1, r2]);
+    expect(result).toHaveLength(0);
+  });
+
+  // ── high confidence ───────────────────────────────────────────────
+
+  it('high: 3+ occurrences produce high-confidence candidate', () => {
+    const r1 = rec(daysAgo(90), 9.99, 'out', 'hulu');
+    const r2 = rec(daysAgo(60), 9.99, 'out', 'hulu');
+    const r3 = rec(daysAgo(30), 9.99, 'out', 'hulu');
+    const result = detectRecurringEarly([r1, r2, r3]);
+    expect(result).toHaveLength(1);
+    expect(result[0].confidence).toBe('high');
+    expect(result[0].evidence.occurrenceCount).toBe(3);
+  });
+
+  it('high: estimatedInterval is ~30 for monthly records', () => {
+    const r1 = rec(daysAgo(90), 50, 'out', 'internet');
+    const r2 = rec(daysAgo(60), 50, 'out', 'internet');
+    const r3 = rec(daysAgo(30), 50, 'out', 'internet');
+    const [c] = detectRecurringEarly([r1, r2, r3]);
+    expect(c.estimatedInterval).toBeCloseTo(30, 1);
+    expect(c.nextDueDate).not.toBeNull();
+  });
+
+  // ── backward compat ───────────────────────────────────────────────
+
+  it('detectRecurring still works unchanged after refactor', () => {
+    const recs = [
+      rec(daysAgo(90), 15, 'out', 'netflix'),
+      rec(daysAgo(60), 15, 'out', 'netflix'),
+      rec(daysAgo(30), 15, 'out', 'netflix'),
+    ];
+    const dr = detectRecurring(recs);
+    expect(dr.recurring.length + dr.earlyDetection.length).toBeGreaterThanOrEqual(1);
+  });
+
+  // ── edge cases ────────────────────────────────────────────────────
+
+  it('handles records with null amounts', () => {
+    const r1 = rec(daysAgo(60), null, 'out', 'netflix');
+    const r2 = rec(daysAgo(30), null, 'out', 'netflix');
+    const result = detectRecurringEarly([r1, r2]);
+    expect(result).toHaveLength(1);
+    expect(result[0].estimatedAmount).toBeNull();
+  });
+
+  it('handles records with no merchant_normalized (skips silently)', () => {
+    const r = rec(daysAgo(10), 15, 'out', undefined);
+    const result = detectRecurringEarly([r]);
+    expect(result).toHaveLength(0);
+  });
+
+  it('fuzzy-clusters similar merchant names (netflix vs netflix inc)', () => {
+    const r1 = rec(daysAgo(60), 15.99, 'out', 'netflix');
+    // Jaro-Winkler of "netflix" vs "netflix" = 1.0, will cluster
+    const r2 = rec(daysAgo(30), 15.99, 'out', 'netflix');
+    const result = detectRecurringEarly([r1, r2]);
+    expect(result).toHaveLength(1);
+    expect(result[0].evidence.occurrenceCount).toBe(2);
+  });
+});
+
+// ─── classifyRecurringCategory ────────────────────────────────────────────
+describe('classifyRecurringCategory', () => {
+  it('classifies rent as bill', () => {
+    expect(classifyRecurringCategory('rent', 1200)).toBe('bill');
+  });
+
+  it('classifies mortgage as bill', () => {
+    expect(classifyRecurringCategory('mortgage', 2000)).toBe('bill');
+  });
+
+  it('classifies electricity as bill', () => {
+    expect(classifyRecurringCategory('electric utility', 80)).toBe('bill');
+  });
+
+  it('classifies insurance as bill', () => {
+    expect(classifyRecurringCategory('insurance premium', 150)).toBe('bill');
+  });
+
+  it('classifies loan as bill', () => {
+    expect(classifyRecurringCategory('student loan payment', 300)).toBe('bill');
+  });
+
+  it('classifies netflix as subscription', () => {
+    expect(classifyRecurringCategory('netflix', 15.99)).toBe('subscription');
+  });
+
+  it('classifies spotify as subscription', () => {
+    expect(classifyRecurringCategory('spotify', 9.99)).toBe('subscription');
+  });
+
+  it('amount >=50 unknown merchant → bill', () => {
+    expect(classifyRecurringCategory('unknown-service', 75)).toBe('bill');
+  });
+
+  it('amount <30 unknown merchant → subscription', () => {
+    expect(classifyRecurringCategory('unknown-service', 12)).toBe('subscription');
+  });
+
+  it('amount null unknown merchant → unknown', () => {
+    expect(classifyRecurringCategory('unknown-service', null)).toBe('unknown');
+  });
+
+  it('detectRecurringEarly attaches category to candidates', () => {
+    const r = rec(daysAgo(10), 1200, 'out', 'rent');
+    const results = detectRecurringEarly([r]);
+    expect(results.length).toBeGreaterThanOrEqual(1);
+    const candidate = results.find((c) => c.merchant_normalized === 'rent');
+    expect(candidate?.category).toBe('bill');
+  });
+
+  it('subscription candidate is categorised correctly', () => {
+    const r = rec(daysAgo(5), 9.99, 'out', 'spotify');
+    const results = detectRecurringEarly([r]);
+    const candidate = results.find((c) => c.merchant_normalized === 'spotify');
+    expect(candidate?.category).toBe('subscription');
+  });
+});
+
+// ─── detectSavingsTransfers ───────────────────────────────────────────────
+describe('detectSavingsTransfers', () => {
+  it('returns empty for empty input', () => {
+    expect(detectSavingsTransfers([])).toHaveLength(0);
+  });
+
+  it('detects high-confidence matched pair (same day same amount)', () => {
+    const outRec = rec('2026-03-01', 500, 'out', undefined, { notes: 'transfer to savings' });
+    const inRec  = rec('2026-03-01', 500, 'in',  undefined, { notes: 'from checking' });
+    const results = detectSavingsTransfers([outRec, inRec]);
+    expect(results.length).toBeGreaterThanOrEqual(1);
+    const match = results.find((t) => t.is_matched_pair);
+    expect(match).toBeDefined();
+    expect(match?.confidence).toBe('high');
+    expect(match?.amount).toBe(500);
+  });
+
+  it('detects medium-confidence single-sided transfer to high-yield', () => {
+    const r = rec('2026-03-05', 300, 'out', undefined, { notes: 'to high-yield savings' });
+    const results = detectSavingsTransfers([r]);
+    expect(results.length).toBeGreaterThanOrEqual(1);
+    expect(results[0].confidence).toBe('medium');
+    expect(results[0].is_matched_pair).toBe(false);
+  });
+
+  it('does not return low-confidence transfers', () => {
+    // Only "deposit" keyword alone → low confidence, filtered out
+    const r = rec('2026-03-07', 100, 'out', 'coffee shop', { notes: 'deposit' });
+    // Weak keyword but no amount-pair — should be suppressed
+    const results = detectSavingsTransfers([r]);
+    expect(results.every((t) => t.confidence !== 'low')).toBe(true);
+  });
+
+  it('does not match pair when amounts differ by more than 1 cent', () => {
+    const outRec = rec('2026-03-01', 500, 'out', undefined, { notes: 'transfer' });
+    const inRec  = rec('2026-03-01', 499, 'in',  undefined, {});
+    const results = detectSavingsTransfers([outRec, inRec]);
+    const match = results.find((t) => t.is_matched_pair);
+    expect(match).toBeUndefined();
+  });
+
+  it('ignores income records for outbound scan', () => {
+    const r = rec('2026-04-01', 1000, 'in', undefined, { notes: 'to high-yield savings' });
+    const results = detectSavingsTransfers([r]);
+    // inbound records are not candidates for outbound transfers
+    expect(results.every((t) => t.record_id !== r.id)).toBe(true);
+  });
+});
+
+// ─── matchTransfersToGoals ────────────────────────────────────────────────
+describe('matchTransfersToGoals', () => {
+  it('returns empty for empty inputs', () => {
+    expect(matchTransfersToGoals([], [])).toHaveLength(0);
+  });
+
+  it('matches by explicit goal name in memo', () => {
+    const outRec = rec('2026-03-01', 200, 'out', undefined, { notes: 'emergency fund deposit' });
+    const inRec  = rec('2026-03-01', 200, 'in',  undefined, {});
+    const transfers = detectSavingsTransfers([outRec, inRec]);
+    const goals = [{ id: 'g1', name: 'emergency fund', target: 1000 }];
+    const attributions = matchTransfersToGoals(transfers, goals);
+    expect(attributions.length).toBeGreaterThanOrEqual(1);
+    const explicit = attributions.find((a) => a.match_reason === 'explicit_memo');
+    expect(explicit).toBeDefined();
+    expect(explicit?.auto_apply).toBe(true);
+    expect(explicit?.goal_id).toBe('g1');
+  });
+
+  it('marks ambiguous when multiple goals match amount', () => {
+    const outRec = rec('2026-03-01', 200, 'out', undefined, { notes: 'transfer to savings' });
+    const transfers = detectSavingsTransfers([outRec]);
+    const goals = [
+      { id: 'g1', name: 'vacation', target: 2000, contributions: [{ amount: 200 }] },
+      { id: 'g2', name: 'emergency', target: 3000, contributions: [{ amount: 200 }] },
+    ];
+    const attributions = matchTransfersToGoals(transfers, goals);
+    const ambiguous = attributions.filter((a) => a.match_reason === 'ambiguous');
+    expect(ambiguous.length).toBeGreaterThanOrEqual(2);
+    expect(ambiguous.every((a) => a.auto_apply === false)).toBe(true);
+  });
+});
+
+// ─── detectSavingsFromBraindump ───────────────────────────────────────────
+describe('detectSavingsFromBraindump', () => {
+  it('returns empty for empty text', () => {
+    expect(detectSavingsFromBraindump('')).toHaveLength(0);
+  });
+
+  it('detects "moved $300 to savings"', () => {
+    const results = detectSavingsFromBraindump('moved $300 to savings today');
+    expect(results.length).toBeGreaterThanOrEqual(1);
+    expect(results[0].amount).toBe(300);
+    expect(results[0].confidence).toBe('medium');
+  });
+
+  it('detects "put $500 into savings"', () => {
+    const results = detectSavingsFromBraindump('put $500 into savings account');
+    expect(results.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('does not fire on unrelated text', () => {
+    const results = detectSavingsFromBraindump('bought coffee for $5 at the cafe today');
+    expect(results).toHaveLength(0);
+  });
+});
+
+// ─── detectADHDTaxFromTxn ────────────────────────────────────────────────
+describe('detectADHDTaxFromTxn', () => {
+  it('returns null for income records', () => {
+    const r = rec('2026-01-01', 35, 'in', undefined, { notes: 'late fee rebate' });
+    expect(detectADHDTaxFromTxn(r)).toBeNull();
+  });
+
+  it('returns null when no matching memo', () => {
+    const r = rec('2026-01-01', 15, 'out', 'coffee shop', { notes: 'latte' });
+    expect(detectADHDTaxFromTxn(r)).toBeNull();
+  });
+
+  it('detects late fee with high confidence (auto_add=true)', () => {
+    const r = rec('2026-01-05', 35, 'out', undefined, { notes: 'late fee charged' });
+    const result = detectADHDTaxFromTxn(r);
+    expect(result).not.toBeNull();
+    expect(result?.category).toBe('late_fee');
+    expect(result?.confidence).toBe('high');
+    expect(result?.auto_add).toBe(true);
+    expect(result?.amount).toBe(35);
+  });
+
+  it('detects overdraft fee with high confidence', () => {
+    const r = rec('2026-01-06', 34, 'out', 'bank', { notes: 'overdraft fee' });
+    const result = detectADHDTaxFromTxn(r);
+    expect(result?.category).toBe('late_fee');
+    expect(result?.confidence).toBe('high');
+  });
+
+  it('detects NSF fee with high confidence', () => {
+    const r = rec('2026-01-07', 27, 'out', 'bank', { notes: 'NSF fee charged' });
+    const result = detectADHDTaxFromTxn(r);
+    expect(result?.confidence).toBe('high');
+  });
+
+  it('detects replacement with medium confidence (auto_add=false)', () => {
+    const r = rec('2026-01-08', 60, 'out', 'best buy', { notes: 'replacement charger' });
+    const result = detectADHDTaxFromTxn(r);
+    expect(result?.category).toBe('replacement');
+    expect(result?.confidence).toBe('medium');
+    expect(result?.auto_add).toBe(false);
+  });
+
+  it('detects duplicate order with medium confidence', () => {
+    const r = rec('2026-01-09', 45, 'out', 'amazon', { notes: 'duplicate order refund pending' });
+    const result = detectADHDTaxFromTxn(r);
+    expect(result?.category).toBe('duplicate');
+    expect(result?.confidence).toBe('medium');
+  });
+
+  it('copy is factual — no judgment phrases', () => {
+    const r = rec('2026-01-05', 35, 'out', undefined, { notes: 'late fee charged' });
+    const result = detectADHDTaxFromTxn(r);
+    // Must not contain banned phrases
+    expect(result?.copy).not.toMatch(/oof|oops|be careful|should have/i);
+    // Must be factual
+    expect(result?.copy).toContain('late fee');
+  });
+});
+
+// ─── detectDuplicatePurchases ─────────────────────────────────────────────
+describe('detectDuplicatePurchases', () => {
+  it('returns empty for empty input', () => {
+    expect(detectDuplicatePurchases([])).toHaveLength(0);
+  });
+
+  it('returns empty when only one record per merchant', () => {
+    const records = [
+      rec('2026-01-01', 50, 'out', 'amazon'),
+      rec('2026-01-05', 30, 'out', 'spotify'),
+    ];
+    expect(detectDuplicatePurchases(records)).toHaveLength(0);
+  });
+
+  it('detects exact-amount duplicate within 7 days', () => {
+    const records = [
+      rec('2026-01-01', 50, 'out', 'amazon'),
+      rec('2026-01-05', 50, 'out', 'amazon'),
+    ];
+    const results = detectDuplicatePurchases(records, 7);
+    expect(results.length).toBeGreaterThanOrEqual(1);
+    expect(results[0].confidence).toBe('medium');
+    expect(results[0].merchant_normalized).toBe('amazon');
+  });
+
+  it('detects same-amount-within-5pct duplicate', () => {
+    const records = [
+      rec('2026-02-01', 100, 'out', 'etsy'),
+      rec('2026-02-03', 103, 'out', 'etsy'), // 3% difference — within 5%
+    ];
+    const results = detectDuplicatePurchases(records, 7);
+    expect(results.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('does not flag purchases outside window', () => {
+    const records = [
+      rec('2026-01-01', 50, 'out', 'amazon'),
+      rec('2026-01-15', 50, 'out', 'amazon'), // 14 days apart — outside 7-day window
+    ];
+    expect(detectDuplicatePurchases(records, 7)).toHaveLength(0);
+  });
+
+  it('does not flag purchases with >5% amount difference', () => {
+    const records = [
+      rec('2026-02-01', 100, 'out', 'shop'),
+      rec('2026-02-02', 120, 'out', 'shop'), // 20% difference
+    ];
+    expect(detectDuplicatePurchases(records, 7)).toHaveLength(0);
+  });
+});
+
+// ─── detectADHDTaxFromBraindump ───────────────────────────────────────────
+describe('detectADHDTaxFromBraindump', () => {
+  it('returns empty for empty text', () => {
+    expect(detectADHDTaxFromBraindump('')).toHaveLength(0);
+  });
+
+  it('detects "forgot to pay"', () => {
+    const results = detectADHDTaxFromBraindump('forgot to pay my credit card this month');
+    expect(results.length).toBeGreaterThanOrEqual(1);
+    expect(results[0].category).toBe('late_fee');
+    expect(results[0].confidence).toBe('medium');
+    expect(results[0].auto_add).toBe(false);
+  });
+
+  it('detects "missed payment"', () => {
+    const results = detectADHDTaxFromBraindump('i missed a payment again');
+    expect(results.length).toBeGreaterThanOrEqual(1);
+    expect(results[0].category).toBe('late_fee');
+  });
+
+  it('detects "double charged"', () => {
+    const results = detectADHDTaxFromBraindump('i was double charged for netflix');
+    expect(results.length).toBeGreaterThanOrEqual(1);
+    expect(results[0].category).toBe('duplicate');
+  });
+
+  it('negative test: "saved $5 late fee at the cafe" does NOT trigger', () => {
+    // Must not classify as late_fee — the phrase describes saving, not incurring a fee.
+    const results = detectADHDTaxFromBraindump('saved $5 late fee at the cafe');
+    const lateFeeHit = results.find((r) => r.category === 'late_fee');
+    expect(lateFeeHit).toBeUndefined();
+  });
+
+  it('negative test: random text produces no candidates', () => {
+    const results = detectADHDTaxFromBraindump('went for a walk today, feeling good');
+    expect(results).toHaveLength(0);
+  });
+
+  it('copy is factual — no banned phrases', () => {
+    const results = detectADHDTaxFromBraindump('forgot to pay my rent this week');
+    if (results.length > 0) {
+      expect(results[0].copy).not.toMatch(/oof|oops|be careful|should have/i);
+    }
+  });
+});
+
+// ─── money-module gap closure: variable income tracking ─────────────────
+import {
+  classifyPayFrequencyDetailed,
+  detectInvoicePayments,
+  monthlyVolatility,
+} from '../src/finance';
+
+describe('classifyPayFrequencyDetailed', () => {
+  it('returns random/low for <3 events', () => {
+    const recs = [
+      rec(daysAgo(20), 1000, 'in', 'employer'),
+      rec(daysAgo(6),  1000, 'in', 'employer'),
+    ];
+    const r = classifyPayFrequencyDetailed(recs);
+    expect(r.frequency).toBe('random');
+    expect(r.confidence).toBe('low');
+    expect(r.cadenceDays).toBeNull();
+    expect(r.evidence.n_events).toBe(2);
+  });
+
+  it('returns random for an empty list', () => {
+    const r = classifyPayFrequencyDetailed([]);
+    expect(r.frequency).toBe('random');
+    expect(r.evidence.n_events).toBe(0);
+    expect(r.evidence.n_intervals).toBe(0);
+  });
+
+  it('classifies a clean biweekly pay schedule as biweekly', () => {
+    const recs = [0, 14, 28, 42, 56, 70].map((d) => rec(daysAgo(80 - d), 2200, 'in', 'employer'));
+    const r = classifyPayFrequencyDetailed(recs);
+    expect(r.frequency).toBe('biweekly');
+    expect(r.cadenceDays).toBeCloseTo(14, 0);
+    expect(r.confidence).toBe('high');
+  });
+
+  it('classifies a clean weekly pay schedule as weekly', () => {
+    const recs = [0, 7, 14, 21, 28, 35, 42].map((d) =>
+      rec(daysAgo(50 - d), 500, 'in', 'employer'),
+    );
+    const r = classifyPayFrequencyDetailed(recs);
+    expect(r.frequency).toBe('weekly');
+    expect(r.cadenceDays).toBeCloseTo(7, 0);
+  });
+
+  it('classifies a calendar-month schedule (~30d) as monthly', () => {
+    const recs = [0, 30, 60, 91, 121].map((d) => rec(daysAgo(130 - d), 4500, 'in', 'employer'));
+    const r = classifyPayFrequencyDetailed(recs);
+    expect(r.frequency).toBe('monthly');
+  });
+
+  it('classifies highly irregular freelance income as random', () => {
+    const recs = [0, 3, 18, 40, 47, 70, 95].map((d) =>
+      rec(daysAgo(100 - d), 800 + d * 7, 'in', 'client'),
+    );
+    const r = classifyPayFrequencyDetailed(recs);
+    expect(r.frequency).toBe('random');
+    expect(r.confidence).toBe('low');
+    expect(r.cadenceDays).toBeNull();
+  });
+
+  it('ignores outbound records entirely', () => {
+    const recs = [
+      rec(daysAgo(60), 1000, 'out', 'rent'),
+      rec(daysAgo(30), 1000, 'out', 'rent'),
+      rec(daysAgo(0),  1000, 'out', 'rent'),
+    ];
+    const r = classifyPayFrequencyDetailed(recs);
+    expect(r.frequency).toBe('random');
+    expect(r.evidence.n_events).toBe(0);
+  });
+});
+
+describe('detectInvoicePayments', () => {
+  it('returns empty list for empty input', () => {
+    expect(detectInvoicePayments([])).toEqual([]);
+  });
+
+  it('surfaces a 2-occurrence recurring inbound from the same client', () => {
+    const recs = [
+      rec(daysAgo(60), 2500, 'in', 'acme-corp'),
+      rec(daysAgo(30), 2500, 'in', 'acme-corp'),
+    ];
+    const payments = detectInvoicePayments(recs);
+    expect(payments).toHaveLength(1);
+    expect(payments[0].client_normalized).toBe('acme-corp');
+    expect(payments[0].occurrence_count).toBe(2);
+    expect(payments[0].amount_median).toBe(2500);
+  });
+
+  it('clusters multiple clients separately', () => {
+    const recs = [
+      rec(daysAgo(60), 2500, 'in', 'acme-corp'),
+      rec(daysAgo(30), 2500, 'in', 'acme-corp'),
+      rec(daysAgo(50), 1200, 'in', 'globex'),
+      rec(daysAgo(20), 1200, 'in', 'globex'),
+    ];
+    const payments = detectInvoicePayments(recs);
+    expect(payments).toHaveLength(2);
+    const clients = payments.map((p) => p.client_normalized).sort();
+    expect(clients).toEqual(['acme-corp', 'globex']);
+  });
+
+  it('ignores outbound and zero/negative amounts', () => {
+    const recs = [
+      rec(daysAgo(60), 2500, 'out', 'acme-corp'),
+      rec(daysAgo(30), 0,    'in',  'acme-corp'),
+      rec(daysAgo(20), -100, 'in',  'acme-corp'),
+    ];
+    expect(detectInvoicePayments(recs)).toEqual([]);
+  });
+
+  it('respects custom minOccurrences threshold', () => {
+    const recs = [
+      rec(daysAgo(30), 2500, 'in', 'acme-corp'),
+    ];
+    expect(detectInvoicePayments(recs, undefined, { minOccurrences: 1 })).toHaveLength(1);
+    expect(detectInvoicePayments(recs, undefined, { minOccurrences: 2 })).toHaveLength(0);
+  });
+
+  it('flags matched_known_client when the merchant matches the hint list', () => {
+    const recs = [
+      rec(daysAgo(60), 2500, 'in', 'acme-corp'),
+      rec(daysAgo(30), 2500, 'in', 'acme-corp'),
+    ];
+    const payments = detectInvoicePayments(recs, ['acme-corp']);
+    expect(payments[0].matched_known_client).toBe(true);
+  });
+
+  it('reports null interval mad for 2-occurrence clusters', () => {
+    const recs = [
+      rec(daysAgo(60), 2500, 'in', 'acme-corp'),
+      rec(daysAgo(30), 2500, 'in', 'acme-corp'),
+    ];
+    const [p] = detectInvoicePayments(recs);
+    expect(p.interval_days_median).not.toBeNull();
+    expect(p.interval_days_mad).toBeNull();
+  });
+
+  it('returns intervals when cluster has 3+ occurrences', () => {
+    const recs = [
+      rec(daysAgo(90), 2500, 'in', 'acme-corp'),
+      rec(daysAgo(60), 2500, 'in', 'acme-corp'),
+      rec(daysAgo(30), 2500, 'in', 'acme-corp'),
+    ];
+    const [p] = detectInvoicePayments(recs);
+    expect(p.interval_days_median).toBeCloseTo(30, 0);
+    expect(p.interval_days_mad).not.toBeNull();
+  });
+});
+
+describe('monthlyVolatility', () => {
+  const NOW = new Date('2026-05-14T12:00:00Z').getTime();
+
+  it('returns zeros for empty records', () => {
+    const r = monthlyVolatility([], NOW);
+    expect(r.thisMonth).toBe(0);
+    expect(r.threeMonthAvg).toBe(0);
+    expect(r.deltaPct).toBe(0);
+  });
+
+  it('computes this-month total correctly', () => {
+    const recs = [
+      rec('2026-05-01', 1000, 'in', 'employer'),
+      rec('2026-05-10', 1500, 'in', 'client'),
+    ];
+    const r = monthlyVolatility(recs, NOW);
+    expect(r.thisMonth).toBe(2500);
+  });
+
+  it('averages the 3 prior calendar months', () => {
+    const recs = [
+      rec('2026-02-15', 3000, 'in', 'employer'),
+      rec('2026-03-15', 3000, 'in', 'employer'),
+      rec('2026-04-15', 3000, 'in', 'employer'),
+      rec('2026-05-15', 3000, 'in', 'employer'),
+    ];
+    const r = monthlyVolatility(recs, NOW);
+    expect(r.thisMonth).toBe(3000);
+    expect(r.threeMonthAvg).toBe(3000);
+    expect(r.deltaPct).toBe(0);
+  });
+
+  it('reports a negative deltaPct when this month is under the trailing avg', () => {
+    const recs = [
+      rec('2026-02-15', 4000, 'in', 'employer'),
+      rec('2026-03-15', 4000, 'in', 'employer'),
+      rec('2026-04-15', 4000, 'in', 'employer'),
+      rec('2026-05-10', 2000, 'in', 'employer'),
+    ];
+    const r = monthlyVolatility(recs, NOW);
+    expect(r.thisMonth).toBe(2000);
+    expect(r.threeMonthAvg).toBe(4000);
+    expect(r.deltaPct).toBeCloseTo(-0.5, 2);
+  });
+
+  it('ignores outbound records', () => {
+    const recs = [
+      rec('2026-05-10', 9999, 'out', 'rent'),
+    ];
+    const r = monthlyVolatility(recs, NOW);
+    expect(r.thisMonth).toBe(0);
+  });
+});
+
+// ─── money-module gap closure: tax set-aside calculator ─────────────────
+import {
+  calculateUSSelfEmployedSetAside,
+  calculateUKSelfEmployedSetAside,
+  calculateEUFreelancerSetAside,
+  monthlySetAsideReminder,
+  FINANCE_TAX_SETASIDE_DUE_EVENT,
+} from '../src/finance';
+
+describe('calculateUSSelfEmployedSetAside', () => {
+  it('returns zero for zero income', () => {
+    const r = calculateUSSelfEmployedSetAside(0);
+    expect(r.federal).toBe(0);
+    expect(r.state).toBe(0);
+    expect(r.selfEmploymentTax).toBe(0);
+    expect(r.total).toBe(0);
+    expect(r.suggestedPct).toBe(0);
+  });
+
+  it('applies CA state rate', () => {
+    const r = calculateUSSelfEmployedSetAside(50_000, { state: 'CA' });
+    expect(r.state).toBeCloseTo(50_000 * 0.093, 0);
+    expect(r.stateCode).toBe('CA');
+  });
+
+  it('uses 0% state for TX/FL/WA', () => {
+    expect(calculateUSSelfEmployedSetAside(50_000, { state: 'TX' }).state).toBe(0);
+    expect(calculateUSSelfEmployedSetAside(50_000, { state: 'FL' }).state).toBe(0);
+    expect(calculateUSSelfEmployedSetAside(50_000, { state: 'WA' }).state).toBe(0);
+  });
+
+  it('falls back to OTHER 5% when state omitted', () => {
+    const r = calculateUSSelfEmployedSetAside(50_000);
+    expect(r.stateCode).toBe('OTHER');
+    expect(r.state).toBeCloseTo(50_000 * 0.05, 0);
+  });
+
+  it('self-employment tax = 15.3% * 92.35% * income', () => {
+    const r = calculateUSSelfEmployedSetAside(100_000);
+    expect(r.selfEmploymentTax).toBeCloseTo(100_000 * 0.9235 * 0.153, 0);
+  });
+
+  it('suggestedPct in conservative mode rounds up to next 5%', () => {
+    const r = calculateUSSelfEmployedSetAside(100_000, { state: 'TX' });
+    // federal 22% + SE ~14.13% ≈ 36.13% → round up to 40%
+    expect(r.suggestedPct).toBeCloseTo(0.4, 2);
+  });
+
+  it('non-conservative mode rounds to 1%', () => {
+    const r = calculateUSSelfEmployedSetAside(100_000, { state: 'TX', conservative: false });
+    expect(r.suggestedPct).toBeGreaterThan(0.36);
+    expect(r.suggestedPct).toBeLessThan(0.40);
+  });
+});
+
+describe('calculateUKSelfEmployedSetAside', () => {
+  it('returns near-zero on income at or below the personal allowance', () => {
+    const r = calculateUKSelfEmployedSetAside(10_000);
+    expect(r.incomeTax).toBe(0);
+    // Only the NI Class 2 flat
+    expect(r.ni).toBeCloseTo(180, 0);
+  });
+
+  it('applies basic 20% above personal allowance', () => {
+    const r = calculateUKSelfEmployedSetAside(30_000);
+    const taxable = 30_000 - 12_570;
+    expect(r.incomeTax).toBeCloseTo(taxable * 0.20, 0);
+  });
+
+  it('crosses into higher rate above £50k', () => {
+    const r = calculateUKSelfEmployedSetAside(80_000);
+    expect(r.incomeTax).toBeGreaterThan((50_270 - 12_570) * 0.20);
+  });
+
+  it('crosses into additional rate above £125k', () => {
+    const r = calculateUKSelfEmployedSetAside(200_000);
+    expect(r.incomeTax).toBeGreaterThan(50_000);
+  });
+
+  it('returns a suggestedPct rounded up to 5%', () => {
+    const r = calculateUKSelfEmployedSetAside(50_000);
+    expect(r.suggestedPct).toBeGreaterThan(0);
+    expect((r.suggestedPct * 100) % 5).toBeCloseTo(0, 6);
+  });
+});
+
+describe('calculateEUFreelancerSetAside', () => {
+  it('applies the DE blended rate', () => {
+    const r = calculateEUFreelancerSetAside(50_000, 'DE');
+    expect(r.total).toBeCloseTo(50_000 * 0.42, 0);
+    expect(r.country).toBe('DE');
+    expect(r.blendedRate).toBeCloseTo(0.42, 2);
+  });
+
+  it('applies the FR blended rate (highest in set)', () => {
+    const r = calculateEUFreelancerSetAside(50_000, 'FR');
+    expect(r.total).toBeCloseTo(50_000 * 0.45, 0);
+  });
+
+  it('rounds suggestedPct up to 5%', () => {
+    const r = calculateEUFreelancerSetAside(50_000, 'NL');
+    expect((r.suggestedPct * 100) % 5).toBeCloseTo(0, 6);
+  });
+});
+
+describe('monthlySetAsideReminder', () => {
+  it('returns 0 amount on zero income', () => {
+    const r = monthlySetAsideReminder(0, { kind: 'us', opts: { state: 'TX' } });
+    expect(r.amount).toBe(0);
+    expect(r.message).toMatch(/tax buffer/);
+  });
+
+  it('US calculator produces a non-zero amount', () => {
+    const r = monthlySetAsideReminder(5000, { kind: 'us', opts: { state: 'CA' } });
+    expect(r.amount).toBeGreaterThan(0);
+    expect(r.message).toMatch(/tax buffer for this month/);
+  });
+
+  it('UK calculator works through the reminder shape', () => {
+    const r = monthlySetAsideReminder(4000, { kind: 'uk' });
+    expect(r.amount).toBeGreaterThan(0);
+  });
+
+  it('EU calculator works through the reminder shape', () => {
+    const r = monthlySetAsideReminder(4000, { kind: 'eu', country: 'DE' });
+    expect(r.amount).toBeGreaterThan(0);
+  });
+
+  it('uses lowercase, no exclamation, no streak language', () => {
+    const r = monthlySetAsideReminder(3000, { kind: 'us' });
+    expect(r.message).not.toMatch(/!/);
+    expect(r.message).not.toMatch(/great job|streak|crushing/i);
+  });
+
+  it('exports a registered event name', () => {
+    expect(FINANCE_TAX_SETASIDE_DUE_EVENT).toBe('finance:tax_setaside_due');
+  });
+});
+
+// ─── money-module gap closure: export (CSV + annual report) ──────────────
+import {
+  exportToCSV,
+  exportADHDTaxReport,
+  encryptExport,
+} from '../src/finance';
+import type { CryptoPrimitives } from '../src/finance';
+
+describe('exportToCSV', () => {
+  it('returns just the header for empty input', () => {
+    const csv = exportToCSV([]);
+    expect(csv.split('\r\n')[0]).toMatch(/^event_date,amount,/);
+    expect(csv.split('\r\n')).toHaveLength(1);
+  });
+
+  it('emits a row per record in stable column order', () => {
+    const csv = exportToCSV([
+      rec('2026-05-10', 12.34, 'out', 'cafe', { category: 'food', notes: 'morning' }),
+    ]);
+    const lines = csv.split('\r\n');
+    expect(lines[1]).toContain('2026-05-10');
+    expect(lines[1]).toContain('12.34');
+    expect(lines[1]).toContain('out');
+    expect(lines[1]).toContain('food');
+    expect(lines[1]).toContain('morning');
+  });
+
+  it('escapes fields containing commas, quotes, and newlines (RFC 4180)', () => {
+    const csv = exportToCSV([
+      rec('2026-05-10', 5, 'out', 'shop', { notes: 'a, "quoted" b\nnext line' }),
+    ]);
+    expect(csv).toContain('"a, ""quoted"" b\nnext line"');
+  });
+
+  it('respects fromDate/toDate filters', () => {
+    const records = [
+      rec('2026-01-01', 10, 'out', 'a'),
+      rec('2026-05-01', 20, 'out', 'b'),
+      rec('2026-09-01', 30, 'out', 'c'),
+    ];
+    const csv = exportToCSV(records, { fromDate: '2026-03-01', toDate: '2026-07-01' });
+    expect(csv).toContain('2026-05-01');
+    expect(csv).not.toContain('2026-01-01');
+    expect(csv).not.toContain('2026-09-01');
+  });
+
+  it('filters by direction', () => {
+    const records = [
+      rec('2026-05-01', 100, 'in',  'salary'),
+      rec('2026-05-02', 20,  'out', 'cafe'),
+    ];
+    const csv = exportToCSV(records, { direction: 'in' });
+    expect(csv).toContain('salary');
+    expect(csv).not.toContain('cafe');
+  });
+
+  it('omits header when omitHeader=true', () => {
+    const csv = exportToCSV(
+      [rec('2026-05-10', 5, 'out', 'cafe')],
+      { omitHeader: true },
+    );
+    expect(csv.split('\r\n')[0]).not.toContain('event_date');
+  });
+
+  it('renders boolean is_adhd_tax as "true"/"false"', () => {
+    const csv = exportToCSV([
+      rec('2026-05-10', 5, 'out', 'cafe', { is_adhd_tax: true, adhd_tax_type: 'late_fee' }),
+    ]);
+    expect(csv).toContain('true');
+    expect(csv).toContain('late_fee');
+  });
+});
+
+describe('exportADHDTaxReport', () => {
+  it('returns 12 month rows even for an empty year', () => {
+    const r = exportADHDTaxReport([], 2026);
+    expect(r.months).toHaveLength(12);
+    expect(r.months[0].month).toBe('2026-01');
+    expect(r.months[11].month).toBe('2026-12');
+    expect(r.yoyDelta).toBe(0);
+  });
+
+  it('aggregates income and expenses per month', () => {
+    const recs = [
+      rec('2026-05-01', 3000, 'in',  'salary'),
+      rec('2026-05-15', 50,   'out', 'cafe', { category: 'food' }),
+      rec('2026-06-10', 3000, 'in',  'salary'),
+    ];
+    const r = exportADHDTaxReport(recs, 2026);
+    expect(r.months[4].income).toBe(3000);
+    expect(r.months[4].expenses).toBe(50);
+    expect(r.months[4].net).toBe(2950);
+    expect(r.months[5].income).toBe(3000);
+  });
+
+  it('categorises adhd_tax records correctly', () => {
+    const recs = [
+      rec('2026-05-01', 50, 'out', 'shop', { is_adhd_tax: true, adhd_tax_type: 'late_fee' }),
+      rec('2026-05-02', 30, 'out', 'shop', { is_adhd_tax: true, adhd_tax_type: 'duplicate' }),
+    ];
+    const r = exportADHDTaxReport(recs, 2026);
+    expect(r.categorizedTotals.adhd_tax).toBe(80);
+    expect(r.yearTotals.adhd_tax_total).toBe(80);
+    expect(r.yearTotals.adhd_tax_count).toBe(2);
+    expect(r.months[4].adhd_tax_count).toBe(2);
+  });
+
+  it('classifies common categories into tax buckets', () => {
+    const recs = [
+      rec('2026-05-01', 100, 'out', 'uber',    { category: 'transport' }),
+      rec('2026-05-02', 100, 'out', 'doctor',  { category: 'health' }),
+      rec('2026-05-03', 100, 'out', 'figma',   { category: 'software' }),
+      rec('2026-05-04', 100, 'out', 'spotify', { category: 'subscription' }),
+    ];
+    const r = exportADHDTaxReport(recs, 2026);
+    expect(r.categorizedTotals.transport).toBe(100);
+    expect(r.categorizedTotals.health).toBe(100);
+    expect(r.categorizedTotals.business_expense).toBe(100);
+    expect(r.categorizedTotals.subscriptions).toBe(100);
+  });
+
+  it('computes year-over-year delta vs the prior year', () => {
+    const recs = [
+      rec('2025-05-01', 1000, 'in',  'salary'),
+      rec('2025-05-02', 200,  'out', 'cafe', { category: 'food' }),
+      rec('2026-05-01', 2000, 'in',  'salary'),
+      rec('2026-05-02', 200,  'out', 'cafe', { category: 'food' }),
+    ];
+    const r = exportADHDTaxReport(recs, 2026);
+    // 2025 net = 800; 2026 net = 1800 → delta = (1800-800)/800 = 1.25
+    expect(r.yoyDelta).toBeCloseTo(1.25, 2);
+  });
+
+  it('falls back to uncategorized for unknown categories', () => {
+    const recs = [
+      rec('2026-05-01', 50, 'out', 'mystery'),
+    ];
+    const r = exportADHDTaxReport(recs, 2026);
+    expect(r.categorizedTotals.uncategorized).toBe(50);
+  });
+});
+
+describe('encryptExport', () => {
+  // Deterministic fake primitives that mirror @ollie/crypto's contract.
+  // Real crypto is exercised in @ollie/crypto's own test suite.
+  const fakeCrypto: CryptoPrimitives = {
+    randomSalt: () => new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]),
+    deriveKey: async () => ({} as CryptoKey),
+    encryptData: async () => ({
+      iv: new Uint8Array([9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9]),
+      ciphertext: new Uint8Array([42, 42, 42, 42]),
+    }),
+    bytesToBase64: (bytes) => Buffer.from(bytes).toString('base64'),
+  };
+
+  it('throws when passphrase is missing', async () => {
+    await expect(encryptExport('hello', '', fakeCrypto)).rejects.toThrow(/passphrase/);
+  });
+
+  it('returns a v1 envelope JSON string with salt/iv/ciphertext fields', async () => {
+    const json = await encryptExport('hello,world', 'my-passphrase', fakeCrypto);
+    const env = JSON.parse(json);
+    expect(env.v).toBe(1);
+    expect(env.alg).toBe('AES-GCM-256+PBKDF2-SHA256-100k');
+    expect(typeof env.salt).toBe('string');
+    expect(typeof env.iv).toBe('string');
+    expect(typeof env.ciphertext).toBe('string');
+    expect(env.contentType).toBe('text/csv');
+  });
+
+  it('honours a custom contentType', async () => {
+    const json = await encryptExport('x', 'pw', fakeCrypto, { contentType: 'application/pdf' });
+    expect(JSON.parse(json).contentType).toBe('application/pdf');
+  });
+});

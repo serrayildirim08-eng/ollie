@@ -1,0 +1,21 @@
+name = "ollie-ai-proxy"
+main = "src/index.ts"
+compatibility_date = "2025-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+# ─── KV bindings ───────────────────────────────────────────────────────────────
+# Run once:
+#   wrangler kv:namespace create CACHE_KV
+#   wrangler kv:namespace create RATE_KV
+[[kv_namespaces]]
+binding = "CACHE_KV"
+id = "6031aea7f9c14f96884e55ec1be527f3"
+
+[[kv_namespaces]]
+binding = "RATE_KV"
+id = "5e222944bc8f450cb3cca05e709e3b88"
+
+# ─── secrets (set with `wrangler secret put`) ──────────────────────────────────
+# ANTHROPIC_API_KEY       — sk-ant-… key. NEVER ship to the client.
+# SUPABASE_URL            — https://<ref>.supabase.co (used by /ingest-event)
+# SUPABASE_SERVICE_ROLE   — server-only key (used by /ingest-event)

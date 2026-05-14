@@ -24,6 +24,10 @@ import { parseReminder } from '@ollie/router';
 // instead of creating a second instance. Two schedulers with their
 // own timer maps couldn't cancel each other's schedules (audit H4).
 import { reminderScheduler } from '../store';
+import { postEnrichDump } from '../lib/enrich-bridge';
+import { readUserHash } from '../lib/user-hash';
+import { getAccount } from '../lib/account-boot';
+import { getDeviceId, getAppVersion } from '../lib/device';
 
 // Re-export so callers only need one import.
 export { applyRoute } from './applyRoute';
@@ -50,7 +54,10 @@ export function useApplyBrainDump(): (text: string, fromRect?: DOMRect) => Promi
   const toast = useToast();
   const [settings] = useStoreSlice<{ locale?: string; country?: string }>('shared', 'settings', {});
   const locale = (settings?.locale ?? 'en') as Locale;
-  const country = settings?.country ?? 'TR';
+  // F3 (Sprint 5): no hardcoded TR fallback. If country is null/unset
+  // we fall through to crisis.hotline_INTL below (global directory).
+  // Onboarding now sets this via browser-locale detection + manual picker.
+  const country = settings?.country ?? null;
 
   return useCallback(
     async (text: string, fromRect?: DOMRect): Promise<void> => {
@@ -58,8 +65,10 @@ export function useApplyBrainDump(): (text: string, fromRect?: DOMRect) => Promi
       const { match, line } = detectCrisis(text);
       if (match) {
         emit('void:crisis:detected', { text, matchedLine: line, ts: Date.now() });
-        const hotlineKey =
-          COUNTRY_TO_HOTLINE_KEY[(country || '').toUpperCase()] ?? 'crisis.hotline_INTL';
+        const upper = (country || '').toUpperCase();
+        const hotlineKey = upper && COUNTRY_TO_HOTLINE_KEY[upper]
+          ? COUNTRY_TO_HOTLINE_KEY[upper]
+          : 'crisis.hotline_INTL';
         const opener = getString(locale, 'crisis.opener_no_name');
         const hotline = getString(locale, hotlineKey);
         const close = getString(locale, 'crisis.close');
@@ -115,6 +124,26 @@ export function useApplyBrainDump(): (text: string, fromRect?: DOMRect) => Promi
       // ── 4. Summary toast ──────────────────────────────────────────────────
       const moduleList = [...modulesHit].join(', ');
       toast.show(`routed → ${moduleList}`, { module: actions[0].module });
+
+      // ── 5. Server enrichment (fire-and-forget) ────────────────────────────
+      // Gated by consent inside the research client; if consent is off this
+      // is a no-op. user_hash is null until sign-in finishes; pre-sign-in
+      // dumps stay local.
+      const account = getAccount();
+      const userHash = readUserHash();
+      if (account?.research.hasConsent() && userHash) {
+        const primaryModule = actions[0]?.module ?? null;
+        postEnrichDump({
+          user_hash: userHash,
+          device_id: getDeviceId(),
+          app_version: getAppVersion(),
+          raw_text: text,
+          modality: 'text',
+          routing_module: primaryModule,
+          country: country ?? 'INTL',
+          locale,
+        });
+      }
     },
     [toast, locale, country],
   );

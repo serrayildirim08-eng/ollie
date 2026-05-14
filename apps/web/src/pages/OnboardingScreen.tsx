@@ -6,10 +6,16 @@
  *   1  Pets          — yes/no; if yes: add pets
  *   2  Pantry        — tap-to-remove staples chips
  *   3  Subscriptions — tap-to-confirm subscription chips
- *   4  SpendResearch — anonymous spending-research opt-in
+ *   4  BankLink      — optional Plaid Link (sandbox scaffold; hidden
+ *                       until VITE_PLAID_SYNC_WORKER_URL is set)
  *   5  WorkTime      — best-work-time chips
- *   6  Cycle         — cycle tracking opt-in
+ *   6  Cycle         — cycle tracking question (drives module visibility)
  *   7  Burhan        — seedling intro + "let's go" CTA
+ *
+ * Consent rewrite (Sprint 6): the per-feature consent toggles
+ * (spending-research, cycle, astrology) are gone. The single master
+ * consent gate now lives in ConsentScreen, shown BEFORE this flow.
+ * The cycle-tracking question stays — it's a preference, not a consent.
  *
  * Props:
  *   onComplete — called after screen 7 or after Skip. Sets onboarded = true.
@@ -17,39 +23,24 @@
 
 import React, { useReducer, useRef, useEffect } from 'react';
 import { Burhan3D } from '../components/Burhan3D';
+import { PlaidLinkButton } from '../components/PlaidLinkButton';
 import { store } from '../store';
+import { SUPPORTED_COUNTRIES, detectCountryFromLocale } from '../lib/country';
+import { commitAll, type State } from './OnboardingScreen.commit';
 
-// ─── types ──────────────────────────────────────────────────────────────────
-
-interface PetDraft {
-  id: string;
-  name: string;
-  species: string;
-}
-
-interface State {
-  screen: number;
-  name: string;
-  hasPets: boolean | null;
-  petDrafts: PetDraft[];
-  pantryItems: string[];
-  subscriptions: string[];
-  spendResearch: boolean | null;
-  workTime: string;
-  cycleTracking: string;
-  // transition
-  visible: boolean;
-}
+// Re-export for callers that read the public surface from this file.
+export type { State } from './OnboardingScreen.commit';
+export { commitAll } from './OnboardingScreen.commit';
 
 type Action =
   | { type: 'SET_NAME'; value: string }
+  | { type: 'SET_COUNTRY'; value: string }
   | { type: 'SET_HAS_PETS'; value: boolean }
   | { type: 'ADD_PET' }
   | { type: 'UPDATE_PET'; index: number; field: 'name' | 'species'; value: string }
   | { type: 'REMOVE_PET'; index: number }
   | { type: 'TOGGLE_PANTRY'; item: string }
   | { type: 'TOGGLE_SUB'; item: string }
-  | { type: 'SET_SPEND_RESEARCH'; value: boolean }
   | { type: 'SET_WORK_TIME'; value: string }
   | { type: 'SET_CYCLE'; value: string }
   | { type: 'NEXT' }
@@ -75,6 +66,9 @@ const WORK_TIMES = [
   { id: 'all_over',   label: 'all over the place' },
 ];
 
+// F3 (Sprint 5): SUPPORTED_COUNTRIES + detectCountryFromLocale live in
+// ../lib/country.ts so tests can import them without pulling in Burhan3D.
+
 // ─── reducer ─────────────────────────────────────────────────────────────────
 
 function uid(): string {
@@ -85,6 +79,8 @@ function reducer(state: State, action: Action): State {
   switch (action.type) {
     case 'SET_NAME':
       return { ...state, name: action.value };
+    case 'SET_COUNTRY':
+      return { ...state, country: action.value };
     case 'SET_HAS_PETS':
       return { ...state, hasPets: action.value };
     case 'ADD_PET':
@@ -121,8 +117,6 @@ function reducer(state: State, action: Action): State {
           : [...state.subscriptions, action.item],
       };
     }
-    case 'SET_SPEND_RESEARCH':
-      return { ...state, spendResearch: action.value };
     case 'SET_WORK_TIME':
       return { ...state, workTime: action.value };
     case 'SET_CYCLE':
@@ -139,65 +133,20 @@ function reducer(state: State, action: Action): State {
 const INITIAL: State = {
   screen: 0,
   name: '',
+  country: detectCountryFromLocale(),
   hasPets: null,
   petDrafts: [],
   pantryItems: [...DEFAULT_PANTRY],
   subscriptions: [],
-  spendResearch: null,
   workTime: '',
   cycleTracking: '',
   visible: true,
 };
 
-// ─── commit helpers ──────────────────────────────────────────────────────────
-
-function commitAll(state: State): void {
-  const ts = Date.now();
-
-  // shared.settings — dotted namespace matches the keys other surfaces read.
-  // Credibility audit NC4: previously these were written as flat keys
-  // (`has_pets`, `consent_spending_research`) and silently lost.
-  store.set('shared', 'name', state.name.trim() || null);
-  store.set('shared', 'settings.has_pets', state.hasPets ?? false);
-  store.set('shared', 'settings.work_time', state.workTime || null);
-  store.set('shared', 'settings.cycle_tracking', state.cycleTracking || null);
-  store.set('shared', 'onboarded', true);
-
-  // shared.consent — dotted keys match Garden gate + research-stream client.
-  store.set('shared', 'consent.spending_research', state.spendResearch ?? false);
-  store.set('shared', 'consent.cycle', state.cycleTracking === 'yes');
-
-  // pets.pets
-  if (state.hasPets && state.petDrafts.length > 0) {
-    const pets = state.petDrafts
-      .filter((p) => p.name.trim())
-      .map((p) => ({
-        id: p.id,
-        name: p.name.trim(),
-        species: p.species.trim() || 'unknown',
-        ts,
-      }));
-    store.set('pets', 'pets', pets);
-  } else {
-    store.set('pets', 'pets', []);
-  }
-
-  // grocery.pantry
-  const pantry = state.pantryItems.map((name) => ({
-    id: uid(),
-    name,
-    ts,
-  }));
-  store.set('grocery', 'pantry', pantry);
-
-  // finance.subscriptions
-  const subs = state.subscriptions.map((name) => ({
-    id: uid(),
-    name,
-    ts,
-  }));
-  store.set('finance', 'subscriptions', subs);
-}
+// commitAll lives in ./OnboardingScreen.commit (pure, no React imports)
+// so unit tests can call it without pulling Burhan3D / three.js through
+// this file. Re-exported at the top for callers that read this file's
+// public surface.
 
 // ─── shared sub-components ───────────────────────────────────────────────────
 
@@ -419,10 +368,54 @@ function WelcomeScreen({
           outline: 'none',
           width: '100%',
           maxWidth: '360px',
-          marginBottom: '32px',
+          marginBottom: '24px',
           letterSpacing: '0.04em',
         }}
       />
+
+      {/* F3 (Sprint 5): country picker — auto-detected from browser locale.
+          Used by the crisis hotline path so the right number shows up. */}
+      <div style={{ marginBottom: '32px' }}>
+        <label
+          htmlFor="onb-country"
+          style={{
+            display: 'block',
+            fontFamily: "'DM Mono', monospace",
+            fontSize: 'var(--t-meta)',
+            letterSpacing: 'var(--ls-caps-small)',
+            textTransform: 'uppercase',
+            color: 'var(--ink-faint)',
+            marginBottom: '6px',
+          }}
+        >
+          where are you?
+        </label>
+        <select
+          id="onb-country"
+          value={state.country}
+          onChange={(e) => dispatch({ type: 'SET_COUNTRY', value: e.target.value })}
+          aria-label="country"
+          style={{
+            fontFamily: "'DM Mono', monospace",
+            fontSize: 'var(--t-caption)',
+            padding: '10px 0',
+            border: 'none',
+            borderBottom: '1px solid var(--rule)',
+            background: 'transparent',
+            color: 'var(--ink)',
+            outline: 'none',
+            width: '100%',
+            maxWidth: '360px',
+            letterSpacing: '0.04em',
+            cursor: 'pointer',
+          }}
+        >
+          {SUPPORTED_COUNTRIES.map((c) => (
+            <option key={c.code} value={c.code}>{c.label}</option>
+          ))}
+        </select>
+      </div>
+
       <PrimaryBtn label="let's go" onClick={onNext} />
     </>
   );
@@ -618,7 +611,7 @@ function SubscriptionsScreen({
       <div
         role="group"
         aria-label="subscriptions"
-        style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '32px' }}
+        style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '24px' }}
       >
         {DEFAULT_SUBS.map((item) => (
           <Chip
@@ -630,51 +623,44 @@ function SubscriptionsScreen({
           />
         ))}
       </div>
+      {/* Audit disclosure — surfaces the heuristic dormancy feature in
+          plain language before the user starts adding subs. Lowercase,
+          factual, no exclamation mark. Locale-aware copy lives in the
+          lexicon (finance.audit.disclosure_short). */}
+      <p
+        style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 11,
+          color: 'var(--ink-faint)',
+          letterSpacing: '0.06em',
+          lineHeight: 1.55,
+          marginBottom: '32px',
+          marginTop: 0,
+        }}
+      >
+        ollie audits these by comparing your charges with your writing.
+        nothing leaves your device.
+      </p>
       <PrimaryBtn label="next" onClick={onNext} />
     </>
   );
 }
 
-// ─── Screen 4: Spending Research ─────────────────────────────────────────────
+// ─── Screen 4: Bank Link (optional · Plaid scaffolding) ─────────────────────
 
-function SpendResearchScreen({
-  state,
-  dispatch,
-  onNext,
-}: {
-  state: State;
-  dispatch: React.Dispatch<Action>;
-  onNext: () => void;
-}) {
+function BankLinkScreen({ onNext }: { onNext: () => void }) {
   return (
     <>
-      <Headline>one more thing.</Headline>
+      <Headline>connect a bank account?</Headline>
       <Sub>
-        you can help us understand how adhd brains spend. anonymous. off by default. change
-        this anytime in settings.
+        optional. when connected, ollie auto-imports transactions to power
+        spending patterns + subscription tracking. read-only. you can
+        disconnect anytime in settings.
       </Sub>
-      {state.spendResearch === null && (
-        <div style={{ display: 'flex', gap: '12px', marginBottom: '32px' }}>
-          <Chip
-            label="yes, help out"
-            selected={false}
-            variant="tap-confirm"
-            onClick={() => {
-              dispatch({ type: 'SET_SPEND_RESEARCH', value: true });
-              onNext();
-            }}
-          />
-          <Chip
-            label="no thanks"
-            selected={false}
-            variant="tap-confirm"
-            onClick={() => {
-              dispatch({ type: 'SET_SPEND_RESEARCH', value: false });
-              onNext();
-            }}
-          />
-        </div>
-      )}
+      <PlaidLinkButton onLinked={() => onNext()} onSkip={() => { /* user can hit next */ }} />
+      <div style={{ marginTop: '24px' }}>
+        <PrimaryBtn label="skip for now" onClick={onNext} />
+      </div>
     </>
   );
 }
@@ -837,9 +823,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
       );
       break;
     case 4:
-      screenContent = (
-        <SpendResearchScreen state={state} dispatch={dispatch} onNext={advance} />
-      );
+      screenContent = <BankLinkScreen onNext={advance} />;
       break;
     case 5:
       screenContent = (

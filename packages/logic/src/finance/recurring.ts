@@ -231,6 +231,253 @@ export function predictNextDue(p: RecurringPattern, _now: number): NextDuePredic
   };
 }
 
+// ─── detectRecurringEarly ─────────────────────────────────────────────
+
+/**
+ * Known-recurring merchant patterns for low-confidence single-occurrence
+ * detection. Normalised (lowercase, no TLD). Add new entries here only —
+ * never widen an existing pattern to avoid false positives.
+ */
+const KNOWN_RECURRING_PATTERNS: RegExp[] = [
+  // streaming
+  /\bnetflix\b/, /\bspotify\b/, /\bhulu\b/, /\bdisney\b/, /\bapple\s*tv\b/,
+  /\bhbo\b/, /\bamazon\s*prime\b/, /\bparamount\b/, /\bpandora\b/, /\btidal\b/,
+  // utilities
+  /\belectr(ic|icity)\b/, /\bwater\s*bill\b/, /\bgas\s*bill\b/, /\binternet\b/,
+  /\bphone\s*bill\b/, /\bmobile\s*plan\b/, /\bcell\s*phone\b/,
+  // housing
+  /\brent\b/, /\bmortgage\b/, /\bhoa\b/,
+  // insurance
+  /\binsurance\b/, /\bgeico\b/, /\bstate\s*farm\b/, /\ballstate\b/,
+  // software / cloud
+  /\badobe\b/, /\bmicrosoft\b/, /\boffice\s*365\b/, /\bdropbox\b/, /\bgoogle\s*one\b/,
+  /\bicloud\b/, /\bslack\b/, /\bgithub\b/, /\bnotion\b/, /\bfigma\b/,
+  // health + fitness
+  /\bgym\b/, /\bpeloton\b/, /\bheadspace\b/, /\bcalm\b/,
+  // food subscriptions
+  /\bhello\s*fresh\b/, /\bblue\s*apron\b/,
+  // loans / financing
+  /\bloan\b/, /\bstudent\s*loan\b/, /\bauto\s*loan\b/, /\bcar\s*(payment|loan)\b/,
+  /\bcredit\s*card\s*payment\b/,
+  // additional utility providers
+  /\bcomcast\b/, /\bxfinity\b/, /\bverizon\b/, /\bat&t\b/, /\bt-mobile\b/,
+  /\bspectrum\b/, /\bpge\b/, /\bconedison\b/, /\bcon\s*ed\b/,
+];
+
+/**
+ * Patterns that strongly indicate 'bill' category (essential, recurring, typically >$50).
+ * Checked against merchant_normalized (lowercase). Order: most-specific first.
+ */
+const BILL_PATTERNS: RegExp[] = [
+  /\brent\b/, /\bmortgage\b/, /\bhoa\b/,
+  /\belectr(ic|icity)\b/, /\bwater\s*bill\b/, /\bgas\s*bill\b/,
+  /\binternet\b/, /\bphone\s*bill\b/, /\bmobile\s*plan\b/, /\bcell\s*phone\b/,
+  /\binsurance\b/, /\bgeico\b/, /\bstate\s*farm\b/, /\ballstate\b/,
+  /\bloan\b/, /\bstudent\s*loan\b/, /\bauto\s*loan\b/, /\bcar\s*(payment|loan)\b/,
+  /\bcredit\s*card\s*payment\b/,
+  /\bcomcast\b/, /\bxfinity\b/, /\bverizon\b/, /\bat&t\b/, /\bt-mobile\b/,
+  /\bspectrum\b/, /\bpge\b/, /\bconedison\b/, /\bcon\s*ed\b/,
+];
+
+/**
+ * Patterns that strongly indicate 'subscription' category (typically <$30, optional services).
+ */
+const SUBSCRIPTION_PATTERNS: RegExp[] = [
+  /\bnetflix\b/, /\bspotify\b/, /\bhulu\b/, /\bdisney\b/, /\bapple\s*tv\b/,
+  /\bhbo\b/, /\bamazon\s*prime\b/, /\bparamount\b/, /\bpandora\b/, /\btidal\b/,
+  /\badobe\b/, /\bmicrosoft\b/, /\boffice\s*365\b/, /\bdropbox\b/, /\bgoogle\s*one\b/,
+  /\bicloud\b/, /\bslack\b/, /\bgithub\b/, /\bnotion\b/, /\bfigma\b/,
+  /\bgym\b/, /\bpeloton\b/, /\bheadspace\b/, /\bcalm\b/,
+  /\bhello\s*fresh\b/, /\bblue\s*apron\b/,
+];
+
+/** Threshold: amounts at or above this are presumed essential bills. */
+const BILL_AMOUNT_THRESHOLD = 50;
+
+/**
+ * Classify a candidate as 'bill', 'subscription', or 'unknown'.
+ * Rules (in priority order):
+ *   1. Merchant matches BILL_PATTERNS → 'bill'
+ *   2. Merchant matches SUBSCRIPTION_PATTERNS → 'subscription'
+ *   3. Amount ≥ $50 → 'bill'
+ *   4. Amount < $30 and not null → 'subscription'
+ *   5. 'unknown'
+ */
+export function classifyRecurringCategory(
+  merchantNormalized: string,
+  estimatedAmount: number | null,
+): RecurringCandidateCategory {
+  const norm = merchantNormalized.toLowerCase();
+  if (BILL_PATTERNS.some((re) => re.test(norm))) return 'bill';
+  if (SUBSCRIPTION_PATTERNS.some((re) => re.test(norm))) return 'subscription';
+  if (estimatedAmount != null && estimatedAmount >= BILL_AMOUNT_THRESHOLD) return 'bill';
+  if (estimatedAmount != null && estimatedAmount < 30) return 'subscription';
+  return 'unknown';
+}
+
+export type EarlyConfidence = 'low' | 'medium' | 'high';
+
+export interface RecurringCandidateEvidence {
+  occurrenceCount: number;
+  amountVariance: number | null;  // coefficient of variation; null when single occurrence
+  intervalVariance: number | null; // MAD in days; null when fewer than 2 intervals
+}
+
+export type RecurringCandidateCategory = 'bill' | 'subscription' | 'unknown';
+
+export interface RecurringCandidate {
+  merchant: string;
+  merchant_normalized: string;
+  estimatedAmount: number | null;
+  estimatedInterval: number | null;  // days
+  nextDueDate: number | null;        // ms timestamp
+  confidence: EarlyConfidence;
+  evidence: RecurringCandidateEvidence;
+  /** 'bill' for essential recurring (rent, utilities, insurance, loan).
+   *  'subscription' for recurring entertainment/SaaS typically <$30.
+   *  'unknown' when heuristics are inconclusive. */
+  category: RecurringCandidateCategory;
+}
+
+export interface DetectRecurringEarlyOpts {
+  /** Amount tolerance as a fraction. Default 0.05 (±5%). */
+  amountTolerance?: number;
+  /** Interval tolerance in days. Default 5. */
+  intervalToleranceDays?: number;
+  /** Jaro-Winkler threshold for merchant clustering. Default 0.88. */
+  fuzzyMatchThreshold?: number;
+}
+
+/**
+ * detectRecurringEarly — surfaces candidate recurring bills with 1–2 occurrences.
+ *
+ * Confidence rules:
+ *   high   — ≥3 occurrences (delegates to caller; included for completeness)
+ *   medium — 2 occurrences with consistent amount (±5%) and interval (±5d)
+ *   low    — 1 occurrence AND merchant matches KNOWN_RECURRING_PATTERNS
+ *
+ * Pure function; no side effects. Does NOT replace detectRecurring().
+ */
+export function detectRecurringEarly(
+  records: FinanceRecord[],
+  opts?: DetectRecurringEarlyOpts,
+): RecurringCandidate[] {
+  if (!Array.isArray(records) || records.length === 0) return [];
+
+  const o = opts ?? {};
+  const amtTol = o.amountTolerance ?? 0.05;
+  const ivTol = o.intervalToleranceDays ?? 5;
+  const fuzzyTh = o.fuzzyMatchThreshold ?? 0.88;
+
+  // Only consider expense records with a merchant
+  const withM = records.filter((r) => r?.merchant_normalized && r.direction !== 'in');
+
+  // Cluster by merchant (same logic as detectRecurring)
+  const clusters: Array<{ key: string; displayName: string | null; records: FinanceRecord[] }> = [];
+  for (const r of withM) {
+    let bi = -1;
+    let bs = 0;
+    for (let i = 0; i < clusters.length; i++) {
+      const sim = jaroWinkler(r.merchant_normalized!, clusters[i].key);
+      if (sim > bs) { bs = sim; bi = i; }
+    }
+    if (bi >= 0 && bs >= fuzzyTh) {
+      clusters[bi].records.push(r);
+    } else {
+      clusters.push({ key: r.merchant_normalized!, displayName: r.merchant ?? null, records: [r] });
+    }
+  }
+
+  const candidates: RecurringCandidate[] = [];
+
+  for (const c of clusters) {
+    const sorted = [...c.records].sort((a, b) =>
+      (a.event_date ?? '').localeCompare(b.event_date ?? ''),
+    );
+    const count = sorted.length;
+    const amounts = sorted.map((r) => r.amount).filter((v): v is number => v != null);
+    const medAmt = amounts.length ? fMedian(amounts) : null;
+    const madAmt = amounts.length > 1 ? fMad(amounts, medAmt ?? 0) : 0;
+    const cvAmt = (medAmt && medAmt > 0) ? madAmt / medAmt : null;
+
+    if (count >= 3) {
+      // high confidence — pass through; detectRecurring() is the authority
+      const intervals: number[] = [];
+      for (let i = 1; i < sorted.length; i++) {
+        intervals.push(daysBetween(sorted[i - 1].event_date, sorted[i].event_date));
+      }
+      const medI = fMedian(intervals) ?? 0;
+      const madI = fMad(intervals, medI);
+      const lastAt = new Date(sorted[sorted.length - 1].event_date + 'T12:00:00').getTime();
+      candidates.push({
+        merchant: c.displayName ?? c.key,
+        merchant_normalized: c.key,
+        estimatedAmount: medAmt,
+        estimatedInterval: medI || null,
+        nextDueDate: medI > 0 ? lastAt + medI * 86_400_000 : null,
+        confidence: 'high',
+        category: classifyRecurringCategory(c.key, medAmt),
+        evidence: {
+          occurrenceCount: count,
+          amountVariance: cvAmt,
+          intervalVariance: madI,
+        },
+      });
+      continue;
+    }
+
+    if (count === 2) {
+      const interval = daysBetween(sorted[0].event_date, sorted[1].event_date);
+      const amountConsistent = cvAmt === null || cvAmt <= amtTol;
+      // interval must be plausibly recurring: 3–400 days, variance within tolerance
+      const intervalPlausible = interval >= 3 && interval <= 400;
+      const lastAt = new Date(sorted[1].event_date + 'T12:00:00').getTime();
+      if (amountConsistent && intervalPlausible) {
+        candidates.push({
+          merchant: c.displayName ?? c.key,
+          merchant_normalized: c.key,
+          estimatedAmount: medAmt,
+          estimatedInterval: interval,
+          nextDueDate: lastAt + interval * 86_400_000,
+          confidence: 'medium',
+          category: classifyRecurringCategory(c.key, medAmt),
+          evidence: {
+            occurrenceCount: 2,
+            amountVariance: cvAmt,
+            intervalVariance: ivTol, // we only have 1 interval; report the tolerance
+          },
+        });
+      }
+      continue;
+    }
+
+    if (count === 1) {
+      const norm = c.key.toLowerCase();
+      const isKnown = KNOWN_RECURRING_PATTERNS.some((re) => re.test(norm));
+      if (!isKnown) continue;
+      const lastAt = new Date(sorted[0].event_date + 'T12:00:00').getTime();
+      candidates.push({
+        merchant: c.displayName ?? c.key,
+        merchant_normalized: c.key,
+        estimatedAmount: medAmt,
+        estimatedInterval: null,
+        nextDueDate: null,
+        confidence: 'low',
+        category: classifyRecurringCategory(c.key, medAmt),
+        evidence: {
+          occurrenceCount: 1,
+          amountVariance: null,
+          intervalVariance: null,
+        },
+      });
+      void lastAt; // suppress unused-var lint
+      continue;
+    }
+  }
+
+  return candidates;
+}
+
 // ─── reports ──────────────────────────────────────────────────────────
 import type { MonthlyFlowResult, MoMDelta } from './types';
 

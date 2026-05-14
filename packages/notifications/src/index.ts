@@ -262,6 +262,12 @@ export async function notify(spec: NotificationSpec): Promise<NotificationDispat
   const fireAt = coerceScheduleAt(spec.schedule_at);
 
   if (state.store) {
+    // Consent rewrite (Sprint 6): the per-feature consent.astrology
+    // gate is gone. Astrology is cut from the launch surface (only
+    // reachable via the ?astrology=1 URL gate). Daily-reading /
+    // transit-ping features don't ship to alpha users, so no
+    // per-feature delivery gate is needed here.
+
     if (isRecentlySeen(state.store, spec.dedupe_key, now)) {
       const entry: NotificationLogEntry = {
         ts: now,

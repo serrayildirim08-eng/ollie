@@ -82,6 +82,22 @@ describe('cross-module router', () => {
     expect(seen).toHaveLength(1);
   });
 
+  it('hydration drop reflects into habits.surface_water_habit so the UI can render', () => {
+    // Regression: previously this rule had no `reflect` block. The event
+    // fired but the store was never written, so HabitsWaterPrompt (which
+    // reads habits.surface_water_habit) was dead code.
+    events.emit('body:hydration_drop_detected', { drop_pct: 35, ts: 1_700_000_000_000 });
+
+    const surfaced = store.get<Array<{ id: string; reason: string }>>(
+      'habits',
+      'surface_water_habit',
+      [],
+    ) ?? [];
+    expect(surfaced.length).toBe(1);
+    expect(surfaced[0].id).toContain('water:');
+    expect(surfaced[0].reason).toContain('hydration drop');
+  });
+
   it('lineage records every dispatched cross-module event', () => {
     events.emit('finance:reminder_set', {
       pattern_id: 'rent-1',

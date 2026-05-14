@@ -1,0 +1,40 @@
+name = "ollie-cron"
+main = "src/index.ts"
+compatibility_date = "2025-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+# Two schedules:
+#   - 03:00 UTC nightly  — daily intelligence layer (stubs today)
+#   - every 5 minutes    — drain the brain-dump enrichment queue
+[triggers]
+crons = ["0 3 * * *", "*/5 * * * *"]
+
+# ─── KV binding ────────────────────────────────────────────────────────────────
+# Re-use the ai-proxy CACHE_KV namespace so /enrich-dump and the drain handler
+# share one storage. Replace the id with the same id used in
+# workers/ai-proxy/wrangler.toml.
+[[kv_namespaces]]
+binding = "CACHE_KV"
+id = "6031aea7f9c14f96884e55ec1be527f3"
+
+# ─── service binding to the APNs Worker ────────────────────────────────────────
+# Cron calls APNs via service binding (in-cluster, no public hop, no rate-limit
+# on egress). Deploy ollie-apns-push first so this binding resolves.
+[[services]]
+binding = "APNS_PUSH"
+service = "ollie-apns-push"
+
+# ─── service binding to ai-proxy ───────────────────────────────────────────────
+# Cron calls ai-proxy via service binding (in-cluster, bypasses public DNS).
+# Public worker-to-worker over .workers.dev URLs gets 1042 / 404 errors.
+[[services]]
+binding = "AI_PROXY"
+service = "ollie-ai-proxy"
+
+# ─── secrets (set with `wrangler secret put`) ──────────────────────────────────
+# SUPABASE_URL                — https://<ref>.supabase.co
+# SUPABASE_SERVICE_ROLE       — server-only key, NEVER in client env
+# SUPABASE_SERVICE_ROLE_KEY   — alias kept for the daily-stub handlers
+#
+# Note: ANTHROPIC_API_KEY is NOT needed here — the drain handler routes through
+# ai-proxy/v1/messages which holds the Anthropic key. One key to rotate.
