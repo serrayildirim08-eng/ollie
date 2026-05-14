@@ -6,8 +6,11 @@
  * encrypted_state table via @ollie/api. Pulls all rows on boot,
  * decrypts, and writes back to the store using LWW.
  *
- * Constitutional:
- *   - server never sees plaintext (zero-knowledge)
+ * Constitutional (Sprint B' pivot 2026-05-14):
+ *   - opt-out encrypted sync (this file) is retained as the opt-out path;
+ *     opt-in users route through the research pipeline instead (see
+ *     `@ollie/orchestrator/research`, which sends scrubbed text to /label).
+ *     The original blanket "server never sees plaintext" default is gone.
  *   - sync is opt-in (shared.settings.sync_enabled default false)
  *   - offline queue caps at 10k entries; reconnect drains it
  *   - toggle off → zero network calls

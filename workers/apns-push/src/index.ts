@@ -4,9 +4,10 @@
  * Hides the Apple p8 signing key on the server side and forwards push
  * payloads to api.push.apple.com. Clients never see the key.
  *
- * Privacy note (ollie zero-knowledge-ish posture):
+ * Privacy note (post Sprint B' pivot 2026-05-14):
  *   Push payloads SHOULD already be encrypted by the caller for any
- *   user-derived content. We never decrypt or log payload bodies.
+ *   user-derived content. We never decrypt or log payload bodies on
+ *   this worker — payload content is a passthrough to APNs.
  *
  * Endpoint:
  *   POST /push        body: { deviceToken: string, payload: object,
