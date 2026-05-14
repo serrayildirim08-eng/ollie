@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { fixMeshyMaterials } from './fixMaterials';
 import { findFirstMesh } from './glbHelpers';
 
-useGLTF.preload('/assets/garden/daisies.glb');
+useGLTF.preload('/models/garden/daisies.glb');
 
 interface Patch {
   pos: [number, number, number];
@@ -35,7 +35,7 @@ function buildPatches(): Patch[] {
 }
 
 export function Daisies() {
-  const { scene } = useGLTF('/assets/garden/daisies.glb');
+  const { scene } = useGLTF('/models/garden/daisies.glb');
   const invalidate = useThree((s) => s.invalidate);
   useEffect(() => { fixMeshyMaterials(scene); invalidate(); }, [scene, invalidate]);
 

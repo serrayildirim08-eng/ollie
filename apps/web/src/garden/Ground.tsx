@@ -4,7 +4,7 @@ import { useGLTF, Instances, Instance } from '@react-three/drei';
 import * as THREE from 'three';
 import { fixMeshyMaterials } from './fixMaterials';
 
-useGLTF.preload('/assets/garden/ground.glb');
+useGLTF.preload('/models/garden/ground.glb');
 
 // 5 opacity tiers → 5 InstancedMesh draw calls for the entire floor,
 // regardless of patch count. Sharing geometry + per-bucket material is
@@ -60,7 +60,7 @@ function findFirstMesh(root: THREE.Object3D): THREE.Mesh | null {
 }
 
 export function Ground() {
-  const { scene } = useGLTF('/assets/garden/ground.glb');
+  const { scene } = useGLTF('/models/garden/ground.glb');
   const invalidate = useThree((s) => s.invalidate);
   useEffect(() => { fixMeshyMaterials(scene); invalidate(); }, [scene, invalidate]);
 
