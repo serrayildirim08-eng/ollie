@@ -3,10 +3,10 @@ import { useThree } from '@react-three/fiber';
 import { useGLTF, Text } from '@react-three/drei';
 import { fixMeshyMaterials } from './fixMaterials';
 
-useGLTF.preload('/assets/garden/signboard.glb');
+useGLTF.preload('/models/garden/signboard.glb');
 
 export function Signboard() {
-  const { scene } = useGLTF('/assets/garden/signboard.glb');
+  const { scene } = useGLTF('/models/garden/signboard.glb');
   const cloned = useMemo(() => scene.clone(true), [scene]);
   const invalidate = useThree((s) => s.invalidate);
 

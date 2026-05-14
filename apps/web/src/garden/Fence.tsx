@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { fixMeshyMaterials } from './fixMaterials';
 import { findFirstMesh } from './glbHelpers';
 
-useGLTF.preload('/assets/garden/wooden-fence.glb');
+useGLTF.preload('/models/garden/wooden-fence.glb');
 
 const FENCE_Y = 0.85;
 const POSITIONS: [number, number, number][] = (() => {
@@ -15,7 +15,7 @@ const POSITIONS: [number, number, number][] = (() => {
 })();
 
 export function Fence() {
-  const { scene } = useGLTF('/assets/garden/wooden-fence.glb');
+  const { scene } = useGLTF('/models/garden/wooden-fence.glb');
   const invalidate = useThree((s) => s.invalidate);
 
   useEffect(() => {
