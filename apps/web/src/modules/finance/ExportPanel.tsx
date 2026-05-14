@@ -3,13 +3,11 @@
  *
  * Two actions:
  *   1. Export CSV — full transaction dump, RFC 4180.
- *   2. Export annual ADHD-tax report — structured data only for now;
- *      the PDF rendering target is parked until a tiny PDF lib (jspdf
- *      or pdfmake) is added to package.json. Until then this button
- *      downloads a .json with the report structure so the user can
- *      hand it to a CPA or import to Numbers/Excel.
+ *   2. Export annual ADHD-tax report (PDF) — editorial 4-page layout;
+ *      see renderADHDTaxReportPDF.ts.
  *
- * Encryption: passphrase required (UX rule — tax records).
+ * Both paths are encrypted with a passphrase before download. There is
+ * no plaintext escape hatch — tax records leave the device sealed.
  *
  * Banned-phrase audit: lowercase factual copy throughout.
  */
@@ -29,6 +27,10 @@ import {
   bytesToBase64,
 } from '@ollie/crypto';
 import { useStoreSlice } from '../../store';
+import {
+  renderADHDTaxReportPDF,
+  type JsPDFFactory,
+} from './renderADHDTaxReportPDF';
 
 // ─── style tokens (match FinanceModule dark palette) ─────────────────────
 
@@ -214,11 +216,28 @@ function PassphraseModal({ open, busy, onCancel, onSubmit }: PassphraseModalProp
 export interface ExportPanelProps {
   /** Optional override (used in tests). Defaults to store slice. */
   records?: FinanceRecord[];
+  /** Test seam — inject a fake jsPDF factory. Production defaults to dynamic-import. */
+  jsPDFFactory?: JsPDFFactory;
+  /** Test seam — override the year picker. */
+  yearOverride?: number;
 }
 
 type PendingKind = 'csv' | 'annual';
 
-export function ExportPanel({ records: recordsProp }: ExportPanelProps) {
+// PDF bytes → base64 (so encryptExport, which takes a string, can wrap
+// the binary payload inside its v1 envelope verbatim).
+function bytesToBase64Local(bytes: Uint8Array): string {
+  let bin = '';
+  for (let i = 0; i < bytes.byteLength; i++) bin += String.fromCharCode(bytes[i]);
+  const g: { btoa?: (s: string) => string } = globalThis as unknown as {
+    btoa?: (s: string) => string;
+  };
+  if (typeof g.btoa === 'function') return g.btoa(bin);
+  // Buffer fallback (Node / jsdom-without-btoa).
+  return Buffer.from(bytes).toString('base64');
+}
+
+export function ExportPanel({ records: recordsProp, jsPDFFactory, yearOverride }: ExportPanelProps) {
   const [storeRecords] = useStoreSlice<FinanceRecord[]>('finance', 'records', []);
   const records = recordsProp ?? storeRecords;
 
@@ -244,23 +263,25 @@ export function ExportPanel({ records: recordsProp }: ExportPanelProps) {
         );
         setMessage(`exported ${records.length} records (encrypted).`);
       } else if (pending === 'annual') {
-        const year = new Date().getFullYear();
+        const year = yearOverride ?? new Date().getFullYear();
         const report = exportADHDTaxReport(records, year);
-        // PDF rendering deferred — see note at top of file. Until a PDF
-        // lib lands we ship the structured JSON so the report is still
-        // useful at tax time.
-        const envelopeJson = await encryptExport(
-          JSON.stringify(report, null, 2),
-          passphrase,
-          CRYPTO,
-          { contentType: 'application/json' },
-        );
+        // Render the 4-page PDF, then base64-wrap the bytes so the v1
+        // envelope (which stores text) can carry the binary payload.
+        const buf = (await renderADHDTaxReportPDF(report, {
+          year,
+          jsPDFFactory,
+          output: 'arraybuffer',
+        })) as ArrayBuffer;
+        const pdfB64 = bytesToBase64Local(new Uint8Array(buf));
+        const envelopeJson = await encryptExport(pdfB64, passphrase, CRYPTO, {
+          contentType: 'application/pdf;encoding=base64',
+        });
         triggerDownload(
           envelopeJson,
-          `ollie-tax-report-${year}.json.enc.json`,
+          `adhd-tax-report-${year}.enc`,
           'application/json',
         );
-        setMessage(`exported ${year} report (encrypted). pdf rendering coming.`);
+        setMessage(`exported ${year} report (encrypted).`);
       }
       setPending(null);
     } catch (e) {
@@ -304,8 +325,8 @@ export function ExportPanel({ records: recordsProp }: ExportPanelProps) {
           export annual adhd-tax report (pdf)
         </button>
         <p style={{ color: T.faint, fontSize: 10, lineHeight: 1.5, margin: '4px 0 0' }}>
-          pdf rendering is in progress. for now the annual report exports as
-          structured json so a cpa or spreadsheet can open it.
+          a four-page pdf. cover, month-by-month, categorized, year-over-year.
+          encrypted in the same envelope as the csv path.
         </p>
       </div>
 
