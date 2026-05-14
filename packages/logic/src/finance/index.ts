@@ -12,10 +12,19 @@ export { parseFinanceDump } from './parse';
 export { mergeRecord } from './merge';
 export {
   detectRecurring,
+  detectRecurringEarly,
   predictNextDue,
   computeMonthlyOutflow,
   monthOverMonthDelta,
 } from './recurring';
+export type {
+  RecurringCandidate,
+  RecurringCandidateEvidence,
+  RecurringCandidateCategory,
+  EarlyConfidence,
+  DetectRecurringEarlyOpts,
+} from './recurring';
+export { classifyRecurringCategory } from './recurring';
 export { detectAnomaly, detectPostPaydaySpikes, trackADHDTaxEvents, detectSubscriptionStale } from './anomaly';
 export {
   savingsGoalProgress,
@@ -54,3 +63,79 @@ export type {
   SavingsEntry,
   SavingsTotals,
 } from './savings';
+export {
+  detectSavingsTransfers,
+  matchTransfersToGoals,
+  detectSavingsFromBraindump,
+} from './savings-detection';
+export type {
+  SavingsTransfer,
+  SavingsTransferConfidence,
+  GoalAttribution,
+  BraindumpSavingsCandidate,
+} from './savings-detection';
+export {
+  detectADHDTaxFromTxn,
+  detectDuplicatePurchases,
+  detectADHDTaxFromBraindump,
+} from './adhd-tax-detection';
+export type {
+  ADHDTaxCandidate,
+  ADHDTaxCandidateCategory,
+  ADHDTaxConfidence,
+  DuplicatePurchase,
+} from './adhd-tax-detection';
+
+// ─── money-module gap closure ─────────────────────────────────────────
+// Variable-income tracking. Renamed export to avoid collision with
+// reports.ts:classifyPayFrequency (which has a different return shape).
+export {
+  classifyPayFrequency as classifyPayFrequencyDetailed,
+  detectInvoicePayments,
+  monthlyVolatility,
+} from './income-detection';
+export type {
+  PayFrequencyLabel,
+  PayFrequencyConfidence,
+  PayFrequencyEvidence,
+  ClassifyPayFrequencyResult,
+  InvoicePayment,
+  DetectInvoicePaymentsOpts,
+  MonthlyVolatilityResult,
+} from './income-detection';
+
+// Tax set-aside calculator (US / UK / EU)
+export {
+  calculateUSSelfEmployedSetAside,
+  calculateUKSelfEmployedSetAside,
+  calculateEUFreelancerSetAside,
+  monthlySetAsideReminder,
+  FINANCE_TAX_SETASIDE_DUE_EVENT,
+} from './tax-setaside';
+export type {
+  USState,
+  USSetAsideOpts,
+  USSetAsideResult,
+  UKSetAsideResult,
+  EUCountry,
+  EUSetAsideResult,
+  TaxCalculator,
+  MonthlySetAsideReminder,
+  FinanceTaxSetAsideDuePayload,
+} from './tax-setaside';
+
+// Export (CSV + structured annual ADHD-tax report)
+export {
+  exportToCSV,
+  exportADHDTaxReport,
+  encryptExport,
+} from './export';
+export type {
+  ExportCSVOpts,
+  MonthBreakdown,
+  ExportADHDTaxReportResult,
+  TaxCategory,
+  EncryptedExportEnvelope,
+  EncryptExportOpts,
+  CryptoPrimitives,
+} from './export';

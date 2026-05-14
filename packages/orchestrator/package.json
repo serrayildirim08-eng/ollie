@@ -16,7 +16,8 @@
   "dependencies": {
     "@ollie/store": "workspace:*",
     "@ollie/events": "workspace:*",
-    "@ollie/logic": "workspace:*"
+    "@ollie/logic": "workspace:*",
+    "@ollie/notifications": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.6.0",

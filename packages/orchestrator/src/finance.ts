@@ -25,17 +25,26 @@
  *   lastRecomputeAt         number
  *
  * Events emitted:
- *   finance:record_added      — new FinanceRecord ingested from a dump item
- *   finance:pattern_detected  — new PatternCard pattern key observed
+ *   finance:record_added             — new FinanceRecord ingested from a dump item
+ *   finance:pattern_detected         — new PatternCard pattern key observed
+ *   finance:bill_due_predicted       — upcoming bill within 3 days (for push scheduling)
+ *
+ * Push notifications (APNs pipeline):
+ *   Subscribers added in init() listen to the 4 finance events listed in the brief
+ *   and call the injected scheduleNotification() callback with a NotificationSpec.
+ *   The callback is optional — no-op when not injected (e.g. in tests or desktop).
+ *   Caller (app boot) injects a wrapper around scheduleServerJob().
  */
 
 import type { Store } from '@ollie/store';
 import type { Unsubscribe } from '@ollie/events';
 import * as events from '@ollie/events';
+import type { NotificationSpec } from '@ollie/notifications';
 import {
   parseFinanceDump,
   mergeRecord,
   detectRecurring,
+  detectRecurringEarly,
   computeMonthlyOutflow,
   monthOverMonthDelta,
   trackADHDTaxEvents,
@@ -50,6 +59,11 @@ import {
   tagResearchLoops,
   detectD3Patterns,
   computeSavings,
+  detectSavingsTransfers,
+  detectSavingsFromBraindump,
+  detectADHDTaxFromTxn,
+  detectDuplicatePurchases,
+  detectADHDTaxFromBraindump,
 } from '@ollie/logic/finance';
 import type {
   DetectedSubscriptionCard,
@@ -58,6 +72,9 @@ import type {
   CycleBoundary,
   Cancellation,
   SavingsTotals,
+  SavingsTransfer,
+  ADHDTaxCandidate,
+  DuplicatePurchase,
 } from '@ollie/logic/finance';
 import type {
   FinanceRecord,
@@ -74,6 +91,14 @@ const MAX_DUMP_LEN = 4000;
 export interface FinanceOrchestratorOptions {
   /** Injected for tests; defaults to Date.now */
   now?: () => number;
+  /**
+   * Optional push-notification scheduler injected by the app layer.
+   * When present, the orchestrator calls it with a NotificationSpec + fireAt
+   * for each finance event that warrants a server-side scheduled push.
+   * Wraps scheduleServerJob() from @ollie/notifications/server-schedule.
+   * Omit in tests or environments without APNs (desktop, web).
+   */
+  scheduleNotification?: (spec: NotificationSpec, fireAt: number) => void;
 }
 
 // Settings shape mirroring DEFAULT_SETTINGS in void-app.html §finance.orchestrator.
@@ -160,6 +185,7 @@ export function createFinanceOrchestrator(
   opts: FinanceOrchestratorOptions = {},
 ): Orchestrator & { processDump(item: DumpItem): ProcessResult; processBacklog(): void; recomputeDerived(): void } {
   const getNow = opts.now ?? (() => Date.now());
+  const scheduleNotification = opts.scheduleNotification ?? null;
 
   let initialized = false;
   const unsubs: Unsubscribe[] = [];
@@ -237,20 +263,103 @@ export function createFinanceOrchestrator(
       const detect = detectRecurring(records, { minOccurrences: settings.recurring_maturity_minocc });
       setKey('recurring', detect.recurring);
       setKey('earlyDetection', detect.earlyDetection);
+
+      // ── Early recurring candidates (1-2 occurrences) ─────────────────────
+      // Runs on every recompute (i.e. every braindump parse) and emits
+      // finance:recurring_candidate_detected for newly seen candidates.
+      // UI reads finance.recurringCandidates and surfaces confirm/dismiss cards.
+      try {
+        const candidates = detectRecurringEarly(records);
+        setKey('recurringCandidates', candidates);
+
+        // Emit only for candidates not already emitted or confirmed/dismissed.
+        const dismissed = store.get<Record<string, number>>('finance', '_recurringCandidatesDismissed', {}) ?? {};
+        const confirmed = store.get<Record<string, number>>('finance', '_recurringCandidatesConfirmed', {}) ?? {};
+        const seenEmit = new Set(store.get<string[]>('finance', '_recurringCandidatesEmitted', []) ?? []);
+        const freshEmitted: string[] = [];
+
+        for (const c of candidates) {
+          const id = `${c.merchant_normalized}:${c.confidence}`;
+          if (seenEmit.has(id)) continue;
+          if (dismissed[id] || confirmed[id]) continue;
+          try {
+            events.emit('finance:recurring_candidate_detected', {
+              merchant: c.merchant,
+              merchant_normalized: c.merchant_normalized,
+              estimatedAmount: c.estimatedAmount,
+              estimatedInterval: c.estimatedInterval,
+              nextDueDate: c.nextDueDate,
+              confidence: c.confidence,
+              evidence: c.evidence,
+              ts: now,
+            });
+          } catch { /* non-fatal */ }
+          freshEmitted.push(id);
+        }
+        if (freshEmitted.length) {
+          store.set('finance', '_recurringCandidatesEmitted', [...seenEmit, ...freshEmitted]);
+        }
+      } catch (err) {
+        console.error('[orchestrator/finance] detectRecurringEarly failed', err);
+      }
       setKey('monthly', computeMonthlyOutflow(records, 0, now));
       setKey('momDelta', monthOverMonthDelta(records, 3, now));
       setKey('adhdTax', trackADHDTaxEvents(records, 90, now));
-      setKey(
-        'staleSubs',
-        detectSubscriptionStale(
-          detect.recurring,
-          dumps,
-          new Set(settings.dismissed_stale_pattern_ids),
-          settings.stale_subscription_threshold_days,
-          now,
-        ),
+      const staleSubs = detectSubscriptionStale(
+        detect.recurring,
+        dumps,
+        new Set(settings.dismissed_stale_pattern_ids),
+        settings.stale_subscription_threshold_days,
+        now,
       );
-      setKey('upcoming', upcomingBills(detect.recurring, 14, now));
+      setKey('staleSubs', staleSubs);
+
+      // Emit finance:subscription_stale for newly stale subs (dedup per pattern_id).
+      try {
+        const seenStale = new Set(store.get<string[]>('finance', '_staleSubEmittedIds', []) ?? []);
+        const freshStale: string[] = [];
+        for (const s of staleSubs) {
+          if (!s?.pattern_id || seenStale.has(s.pattern_id)) continue;
+          const pattern = detect.recurring.find((p) => p.id === s.pattern_id);
+          const amount = pattern?.amount_median ?? 0;
+          freshStale.push(s.pattern_id);
+          events.emit('finance:subscription_stale', {
+            pattern_id: s.pattern_id,
+            merchant: s.display_name ?? s.pattern_id,
+            amount,
+            days_since: s.days_since,
+            ts: now,
+          });
+        }
+        if (freshStale.length) {
+          store.set('finance', '_staleSubEmittedIds', [...seenStale, ...freshStale]);
+        }
+      } catch { /* non-fatal */ }
+      const upcoming = upcomingBills(detect.recurring, 14, now);
+      setKey('upcoming', upcoming);
+
+      // Emit finance:bill_due_predicted for bills within 3 days (new ones only).
+      try {
+        const seenBillDue = new Set(store.get<string[]>('finance', '_billDuePredictedIds', []) ?? []);
+        const freshBillDue: string[] = [];
+        for (const bill of upcoming) {
+          if (bill.daysUntil > 3) continue;
+          const dedupeId = `${bill.bill.id}:${bill.dueAt}`;
+          if (seenBillDue.has(dedupeId)) continue;
+          freshBillDue.push(dedupeId);
+          events.emit('finance:bill_due_predicted', {
+            pattern_id: bill.bill.id,
+            merchant: bill.bill.display_name ?? bill.bill.merchant_normalized,
+            amount: bill.bill.amount_median ?? 0,
+            due_at: bill.dueAt,
+            days_until: bill.daysUntil,
+            ts: now,
+          });
+        }
+        if (freshBillDue.length) {
+          store.set('finance', '_billDuePredictedIds', [...seenBillDue, ...freshBillDue]);
+        }
+      } catch { /* non-fatal */ }
 
       const incomeRecs = records.filter((r) => r?.direction === 'in');
       const detectIncome = detectRecurring(incomeRecs, { minOccurrences: settings.recurring_maturity_minocc });
@@ -484,6 +593,262 @@ export function createFinanceOrchestrator(
         console.error('[orchestrator/finance] savings totals failed', err);
       }
 
+      // ── savings_milestone · emit on 25/50/75/100% threshold crossings ────
+      try {
+        type SavingsGoalStore = { id: string; name: string; target: number; saved: number };
+        const goals = store.get<SavingsGoalStore[]>('finance', 'goals', []) ?? [];
+        const prevMilestones = store.get<Record<string, number>>('finance', '_savingsMilestoneLastPct', {}) ?? {};
+        const updatedMilestones: Record<string, number> = { ...prevMilestones };
+        const THRESHOLDS = [25, 50, 75, 100];
+        for (const goal of goals) {
+          if (!goal?.id || !goal.target || goal.target <= 0) continue;
+          const current = typeof goal.saved === 'number' ? goal.saved : 0;
+          const pct = Math.min(100, (current / goal.target) * 100);
+          const lastPct = prevMilestones[goal.id] ?? 0;
+          for (const threshold of THRESHOLDS) {
+            if (pct >= threshold && lastPct < threshold) {
+              try {
+                events.emit('finance:savings_milestone', {
+                  goal_id: goal.id,
+                  goal_name: goal.name ?? goal.id,
+                  current,
+                  target: goal.target,
+                  milestone_pct: threshold,
+                  ts: now,
+                });
+              } catch { /* non-fatal */ }
+              // Track the highest crossed threshold for this goal.
+              updatedMilestones[goal.id] = threshold;
+              break;
+            }
+          }
+          // If no threshold crossed, still persist current position so
+          // future recomputes have an accurate baseline.
+          if (!(goal.id in updatedMilestones) || updatedMilestones[goal.id] === prevMilestones[goal.id]) {
+            updatedMilestones[goal.id] = Math.max(prevMilestones[goal.id] ?? 0, THRESHOLDS.filter((t) => pct >= t).pop() ?? 0);
+          }
+        }
+        store.set('finance', '_savingsMilestoneLastPct', updatedMilestones);
+      } catch (err) {
+        console.error('[orchestrator/finance] savings_milestone emit failed', err);
+      }
+
+      // ── impulse_pause_summary · monthly digest on the 1st of each month ─
+      // Reads finance.impulse_pauses (written by UI when user taps "pause"
+      // on an impulse-buy card). Emits once per calendar month via a
+      // date-keyed dedup sentinel.
+      try {
+        const today = new Date(now);
+        const dayOfMonth = today.getUTCDate();
+        if (dayOfMonth === 1) {
+          // month_start is the first ms of this calendar month (UTC).
+          const monthStart = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1);
+          const digestKey = `${today.getUTCFullYear()}-${String(today.getUTCMonth() + 1).padStart(2, '0')}`;
+          const lastDigest = store.get<string>('finance', '_impulsePauseDigestMonth', '') ?? '';
+          if (lastDigest !== digestKey) {
+            type ImpulsePause = { amount?: number; ts?: number };
+            const pauses = store.get<ImpulsePause[]>('finance', 'impulse_pauses', []) ?? [];
+            // Count pauses in the previous calendar month.
+            const prevMonthStart = Date.UTC(
+              today.getUTCMonth() === 0 ? today.getUTCFullYear() - 1 : today.getUTCFullYear(),
+              today.getUTCMonth() === 0 ? 11 : today.getUTCMonth() - 1,
+              1,
+            );
+            const relevant = pauses.filter(
+              (p) => typeof p?.ts === 'number' && p.ts >= prevMonthStart && p.ts < monthStart,
+            );
+            const count = relevant.length;
+            const total = relevant.reduce((s, p) => s + (p.amount ?? 0), 0);
+            if (count > 0) {
+              events.emit('finance:impulse_pause_summary', {
+                count,
+                total: Math.round(total * 100) / 100,
+                month_start: prevMonthStart,
+                ts: now,
+              });
+            }
+            store.set('finance', '_impulsePauseDigestMonth', digestKey);
+          }
+        }
+      } catch (err) {
+        console.error('[orchestrator/finance] impulse_pause_summary emit failed', err);
+      }
+
+      // ── anomaly_detected · per-day dedup to prevent flooding ─────────────
+      // Fires for each new AnomalyCard not yet notified, capped to 1 per
+      // merchant per UTC calendar day. Routes through dedicated push event
+      // (separate from spending_spike_detected which feeds the body module).
+      try {
+        const todayKey = new Date(now).toISOString().slice(0, 10);
+        const seenAnomNotified = new Set(
+          store.get<string[]>('finance', '_anomalyNotifiedIds', []) ?? [],
+        );
+        const freshAnomNotified: string[] = [];
+        // Per-day merchant guard: no more than 1 anomaly push per merchant per day.
+        const merchantDaysSeen = new Set<string>();
+        for (const card of anomalyCards) {
+          if (seenAnomNotified.has(card.id)) continue;
+          const merchantDayKey = `${card.merchant ?? '_'}:${todayKey}`;
+          if (merchantDaysSeen.has(merchantDayKey)) continue;
+          merchantDaysSeen.add(merchantDayKey);
+          freshAnomNotified.push(card.id);
+          events.emit('finance:anomaly_detected', {
+            anomaly_id: card.id,
+            merchant: card.merchant,
+            amount: card.amount,
+            median: card.median,
+            ts: now,
+          });
+        }
+        if (freshAnomNotified.length) {
+          store.set('finance', '_anomalyNotifiedIds', [...seenAnomNotified, ...freshAnomNotified]);
+        }
+      } catch (err) {
+        console.error('[orchestrator/finance] anomaly_detected emit failed', err);
+      }
+
+      // ── Money module gap closure · savings deposit detection ─────────────
+      try {
+        const savingsTransfers = detectSavingsTransfers(records);
+        setKey('savingsTransfers', savingsTransfers satisfies SavingsTransfer[]);
+
+        const seenSavings = new Set(
+          store.get<string[]>('finance', '_savingsDepositEmittedIds', []) ?? [],
+        );
+        const freshSavings: string[] = [];
+        for (const t of savingsTransfers) {
+          if (t.confidence === 'low') continue;
+          if (seenSavings.has(t.id)) continue;
+          freshSavings.push(t.id);
+          try {
+            events.emit('finance:savings_deposit_detected', {
+              transfer_id: t.id,
+              record_id: t.record_id,
+              paired_record_id: t.paired_record_id,
+              amount: t.amount,
+              date: t.date,
+              memo: t.memo,
+              matched_keyword: t.matched_keyword,
+              confidence: t.confidence,
+              is_matched_pair: t.is_matched_pair,
+              ts: now,
+            });
+          } catch { /* non-fatal */ }
+        }
+
+        // Also scan recent dump text for savings mentions.
+        const braindumpSeenKeys = new Set<string>(seenSavings);
+        for (const d of dumps) {
+          const bdCandidates = detectSavingsFromBraindump(d.text);
+          for (const candidate of bdCandidates) {
+            if (candidate.confidence === 'low') continue;
+            const dumpKey = `braindump:${d.ts}:${candidate.matched_keyword}`;
+            if (braindumpSeenKeys.has(dumpKey)) continue;
+            braindumpSeenKeys.add(dumpKey);
+            freshSavings.push(dumpKey);
+            try {
+              events.emit('finance:savings_deposit_detected', {
+                transfer_id: dumpKey,
+                record_id: null,
+                paired_record_id: null,
+                amount: candidate.amount,
+                date: new Date(d.ts).toISOString().slice(0, 10),
+                memo: candidate.text,
+                matched_keyword: candidate.matched_keyword,
+                confidence: candidate.confidence,
+                is_matched_pair: false,
+                ts: now,
+              });
+            } catch { /* non-fatal */ }
+          }
+        }
+        if (freshSavings.length) {
+          store.set('finance', '_savingsDepositEmittedIds', [...seenSavings, ...freshSavings]);
+        }
+      } catch (err) {
+        console.error('[orchestrator/finance] savings deposit detection failed', err);
+      }
+
+      // ── Money module gap closure · ADHD tax auto-detection ───────────────
+      try {
+        const seenAdhdTax = new Set(
+          store.get<string[]>('finance', '_adhdTaxCandidateEmittedIds', []) ?? [],
+        );
+        const freshAdhdTax: string[] = [];
+
+        // Per-record memo analysis.
+        for (const r of records) {
+          if (!r?.id) continue;
+          const candidate = detectADHDTaxFromTxn(r);
+          if (!candidate) continue;
+          const key = `txn:${r.id}:${candidate.category}`;
+          if (seenAdhdTax.has(key)) continue;
+          freshAdhdTax.push(key);
+          try {
+            events.emit('finance:adhd_tax_candidate_detected', {
+              record_id: candidate.record_id,
+              category: candidate.category,
+              confidence: candidate.confidence,
+              amount: candidate.amount,
+              matched_phrase: candidate.matched_phrase,
+              copy: candidate.copy,
+              auto_add: candidate.auto_add,
+              ts: now,
+            });
+          } catch { /* non-fatal */ }
+        }
+
+        // Duplicate purchase detection.
+        const duplicates: DuplicatePurchase[] = detectDuplicatePurchases(records, 7);
+        setKey('duplicatePurchaseCandidates', duplicates);
+        for (const dup of duplicates) {
+          const key = `dup:${[...dup.record_ids].sort().join(',')}`;
+          if (seenAdhdTax.has(key)) continue;
+          freshAdhdTax.push(key);
+          try {
+            events.emit('finance:adhd_tax_candidate_detected', {
+              record_id: dup.record_ids[0] ?? null,
+              category: 'duplicate',
+              confidence: dup.confidence,
+              amount: dup.amounts[0] ?? null,
+              matched_phrase: 'duplicate purchase',
+              copy: dup.copy,
+              auto_add: false,
+              ts: now,
+            });
+          } catch { /* non-fatal */ }
+        }
+
+        // Braindump keyword scan.
+        for (const d of dumps) {
+          const bdAdhdCandidates = detectADHDTaxFromBraindump(d.text);
+          for (const candidate of bdAdhdCandidates) {
+            if (candidate.confidence === 'low') continue;
+            const key = `braindump:${d.ts}:${candidate.matched_phrase}`;
+            if (seenAdhdTax.has(key)) continue;
+            freshAdhdTax.push(key);
+            try {
+              events.emit('finance:adhd_tax_candidate_detected', {
+                record_id: null,
+                category: candidate.category,
+                confidence: candidate.confidence,
+                amount: null,
+                matched_phrase: candidate.matched_phrase,
+                copy: candidate.copy,
+                auto_add: false,
+                ts: now,
+              });
+            } catch { /* non-fatal */ }
+          }
+        }
+
+        if (freshAdhdTax.length) {
+          store.set('finance', '_adhdTaxCandidateEmittedIds', [...seenAdhdTax, ...freshAdhdTax]);
+        }
+      } catch (err) {
+        console.error('[orchestrator/finance] ADHD tax detection failed', err);
+      }
+
       setKey('lastRecomputeAt', now);
     } catch (err) {
       console.error('[orchestrator/finance] recomputeDerived failed:', err);
@@ -625,6 +990,228 @@ export function createFinanceOrchestrator(
         }
       }),
     );
+
+    // ── APNs push subscribers ────────────────────────────────────────────
+    // Wire the 4 finance events to scheduleServerJob via the injected callback.
+    // Callback is null when APNs is not configured (desktop, web, tests).
+
+    if (scheduleNotification) {
+      // finance:bill_due_predicted → push 3 days before due date
+      unsubs.push(events.on('finance:bill_due_predicted', (raw) => {
+        try {
+          const p = (raw ?? {}) as {
+            pattern_id?: string;
+            merchant?: string;
+            amount?: number;
+            due_at?: number;
+            days_until?: number;
+          };
+          if (typeof p.due_at !== 'number' || !p.merchant) return;
+          const merchant = p.merchant;
+          const amount = typeof p.amount === 'number' ? p.amount : null;
+          const days = typeof p.days_until === 'number' ? p.days_until : 3;
+          const amountStr = amount != null ? ` — $${amount.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}` : '';
+          // fire 3 days before due (or now if already within 3 days)
+          const fireAt = p.due_at - 3 * 86_400_000;
+          scheduleNotification(
+            {
+              title: `${merchant} due in ${days} day${days === 1 ? '' : 's'}${amountStr}`,
+              category: 'REMINDER',
+              dedupe_key: `finance:bill_due_predicted:${p.pattern_id ?? merchant}:${p.due_at}`,
+              action_url: '/finance',
+            },
+            Math.max(fireAt, getNow()),
+          );
+        } catch { /* non-fatal */ }
+      }));
+
+      // finance:subscription_detected → push next morning (8am local, approximated as +16h from now)
+      unsubs.push(events.on('finance:subscription_detected', (raw) => {
+        try {
+          const p = (raw ?? {}) as {
+            pattern_id?: string;
+            merchant?: string;
+            amount?: number;
+          };
+          if (!p.merchant || !p.pattern_id) return;
+          const merchant = p.merchant;
+          const amount = typeof p.amount === 'number' ? p.amount : null;
+          const timesStr = amount != null ? ` ${amount > 0 ? `$${amount}` : ''}` : '';
+          // next morning ≈ 16 hours from now (avoids computing local tz on server)
+          const fireAt = getNow() + 16 * 60 * 60 * 1000;
+          scheduleNotification(
+            {
+              title: `${merchant} charged${timesStr} — worth cancelling?`,
+              category: 'PATTERN_ALERT',
+              dedupe_key: `finance:subscription_detected:${p.pattern_id}`,
+              action_url: '/finance/subscriptions',
+            },
+            fireAt,
+          );
+        } catch { /* non-fatal */ }
+      }));
+
+      // finance:cycle_spending_pattern_detected → push 2 days before next luteal start
+      unsubs.push(events.on('finance:cycle_spending_pattern_detected', (raw) => {
+        try {
+          const p = (raw ?? {}) as { cycle_count?: number; ts?: number };
+          if (!p.cycle_count) return;
+          // Compute next luteal start from cycle store data.
+          // Formula mirrors pattern-detection.ts: lutealStart = cycleStart + floor(lenDays/2) * DAY
+          const cycles = store.get<Array<{ startTs?: number; endTs?: number | null; lengthDays?: number }>>('cycle', 'cycles', []) ?? [];
+          if (cycles.length === 0) return;
+          const sorted = [...cycles]
+            .filter((c) => typeof c?.startTs === 'number')
+            .sort((a, b) => (a.startTs ?? 0) - (b.startTs ?? 0));
+          const lastCycle = sorted[sorted.length - 1];
+          if (!lastCycle?.startTs) return;
+          const avgLen = sorted.length > 1
+            ? Math.round(sorted.reduce((s, c) => s + (c.lengthDays ?? 28), 0) / sorted.length)
+            : (lastCycle.lengthDays ?? 28);
+          const lutealStartTs = lastCycle.startTs + Math.floor(avgLen / 2) * 86_400_000;
+          // fire 2 days before luteal start; skip if already past
+          const fireAt = lutealStartTs - 2 * 86_400_000;
+          if (fireAt <= getNow()) return;
+          scheduleNotification(
+            {
+              title: 'spending tends to shift this phase',
+              body: 'pattern, not a rule — spending tends to spike around luteal phase',
+              category: 'PATTERN_ALERT',
+              dedupe_key: `finance:cycle_spending_pattern_detected:${lastCycle.startTs}`,
+              action_url: '/finance',
+              // TODO: add ES translation when i18n layer supports notification copy
+            },
+            fireAt,
+          );
+        } catch { /* non-fatal */ }
+      }));
+
+      // finance:adhd_tax_updated → weekly digest only (aggregation_group prevents per-event spam)
+      unsubs.push(events.on('finance:adhd_tax_updated', (raw) => {
+        try {
+          const p = (raw ?? {}) as { total_30d?: number; count_30d?: number };
+          if (typeof p.total_30d !== 'number' || p.count_30d == null || p.count_30d < 1) return;
+          const total = p.total_30d;
+          // Weekly digest fires Sunday 9am — approximate as 7 days from now.
+          // Actual aggregation_group deduplication prevents flooding.
+          const fireAt = getNow() + 7 * 24 * 60 * 60 * 1000;
+          scheduleNotification(
+            {
+              title: `${p.count_30d} adhd-tax item${p.count_30d === 1 ? '' : 's'} tracked this month — $${total.toFixed(0)} total`,
+              category: 'PATTERN_ALERT',
+              dedupe_key: `finance:adhd_tax_digest:${new Date(getNow()).toISOString().slice(0, 10)}`,
+              aggregation_group: 'finance:adhd_tax_digest',
+              action_url: '/finance/adhd-tax',
+            },
+            fireAt,
+          );
+        } catch { /* non-fatal */ }
+      }));
+
+      // finance:subscription_stale → push next morning (~16h) once per pattern
+      // TODO: ES
+      unsubs.push(events.on('finance:subscription_stale', (raw) => {
+        try {
+          const p = (raw ?? {}) as {
+            pattern_id?: string;
+            merchant?: string;
+            amount?: number;
+            days_since?: number;
+          };
+          if (!p.pattern_id || !p.merchant) return;
+          const merchant = p.merchant;
+          const days = typeof p.days_since === 'number' ? p.days_since : 90;
+          const amount = typeof p.amount === 'number' ? p.amount : null;
+          const amountStr = amount != null && amount > 0 ? ` $${amount.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}` : '';
+          const fireAt = getNow() + 16 * 60 * 60 * 1000;
+          scheduleNotification(
+            {
+              title: `${merchant} — not opened in ${days} days. still paying${amountStr}.`,
+              category: 'PATTERN_ALERT',
+              dedupe_key: `finance:subscription_stale:${p.pattern_id}`,
+              action_url: '/finance/subscriptions',
+            },
+            fireAt,
+          );
+        } catch { /* non-fatal */ }
+      }));
+
+      // finance:savings_milestone → immediate push (milestone is the moment)
+      // TODO: ES
+      unsubs.push(events.on('finance:savings_milestone', (raw) => {
+        try {
+          const p = (raw ?? {}) as {
+            goal_id?: string;
+            goal_name?: string;
+            current?: number;
+            target?: number;
+            milestone_pct?: number;
+          };
+          if (!p.goal_id || typeof p.current !== 'number' || typeof p.target !== 'number') return;
+          if (typeof p.milestone_pct !== 'number') return;
+          const name = p.goal_name ?? p.goal_id;
+          const currentStr = p.current.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+          const targetStr = p.target.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+          scheduleNotification(
+            {
+              title: `${name}: $${currentStr} of $${targetStr}. quietly growing.`,
+              category: 'PATTERN_ALERT',
+              dedupe_key: `finance:savings_milestone:${p.goal_id}:${p.milestone_pct}`,
+              action_url: '/finance/goals',
+            },
+            getNow(),
+          );
+        } catch { /* non-fatal */ }
+      }));
+
+      // finance:impulse_pause_summary → monthly digest, fires same day (1st of month)
+      // aggregation_group coalesces multiple emits within the digest window.
+      // TODO: ES
+      unsubs.push(events.on('finance:impulse_pause_summary', (raw) => {
+        try {
+          const p = (raw ?? {}) as { count?: number; total?: number };
+          if (typeof p.count !== 'number' || p.count < 1) return;
+          const total = typeof p.total === 'number' ? p.total : 0;
+          const totalStr = total.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+          const digestKey = new Date(getNow()).toISOString().slice(0, 7); // YYYY-MM
+          scheduleNotification(
+            {
+              title: `${p.count} impulse buy${p.count === 1 ? '' : 's'} paused this month. saved approx $${totalStr}.`,
+              category: 'PATTERN_ALERT',
+              dedupe_key: `finance:impulse_pause_digest:${digestKey}`,
+              aggregation_group: 'finance:impulse_pause_digest',
+              action_url: '/finance',
+            },
+            getNow(),
+          );
+        } catch { /* non-fatal */ }
+      }));
+
+      // finance:anomaly_detected → push within 1h (already per-day deduped at emit site)
+      // TODO: ES
+      unsubs.push(events.on('finance:anomaly_detected', (raw) => {
+        try {
+          const p = (raw ?? {}) as {
+            anomaly_id?: string;
+            merchant?: string | null;
+            amount?: number;
+            median?: number | null;
+          };
+          if (!p.anomaly_id || typeof p.amount !== 'number') return;
+          const amountStr = p.amount.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+          const fireAt = getNow() + 60 * 60 * 1000; // ~1h from now
+          scheduleNotification(
+            {
+              title: `this $${amountStr} charge looks unusual. confirm or flag?`,
+              category: 'PATTERN_ALERT',
+              dedupe_key: `finance:anomaly_detected:${p.anomaly_id}`,
+              action_url: '/finance',
+            },
+            fireAt,
+          );
+        } catch { /* non-fatal */ }
+      }));
+    }
 
     // Cold start — backfill + initial derived compute.
     try { processBacklog(); } catch (err) { console.error('[orchestrator/finance] first-run backfill failed', err); }

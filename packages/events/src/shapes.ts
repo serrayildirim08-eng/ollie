@@ -43,9 +43,20 @@ export const SHAPES: Record<string, ShapeSpec> = {
   'finance:subscription_detected':           { pattern_id: 'string', merchant: 'string', amount: 'number', cadence: 'string', occurrence_count: 'number', ts: 'number' },
   'finance:adhd_tax_updated':                { total_30d: 'number', count_30d: 'number', ts: 'number' },
   'finance:cycle_spending_pattern_detected': { luteal_ratio: 'number', cycle_count: 'number', ts: 'number' },
+  'finance:bill_due_predicted':              { pattern_id: 'string', merchant: 'string', amount: 'number', due_at: 'number', days_until: 'number', ts: 'number' },
 
   // Sprint 3 / D2 cross-module wires
   'cycle:period_logged':       { ts: 'number', source: 'string' },
+
+  // push notification events (money module gap closure)
+  'finance:subscription_stale':    { pattern_id: 'string', merchant: 'string', amount: 'number', days_since: 'number', ts: 'number' },
+  'finance:savings_milestone':     { goal_id: 'string', goal_name: 'string', current: 'number', target: 'number', milestone_pct: 'number', ts: 'number' },
+  'finance:impulse_pause_summary': { count: 'number', total: 'number', month_start: 'number', ts: 'number' },
+  'finance:anomaly_detected':      { anomaly_id: 'string', 'merchant?': 'string', amount: 'number', 'median?': 'number', ts: 'number' },
+
+  // Sprint 6 · impulse pause flow (FinanceModule)
+  'finance:impulse_pause_started':  { id: 'string', amount: 'number', merchant: 'string', category: 'string', ts: 'number', expires_at: 'number' },
+  'finance:impulse_pause_resolved': { id: 'string', amount: 'number', merchant: 'string', outcome: 'string', ts: 'number' },
 };
 
 export type ValidationResult = { ok: true } | { ok: false; reason: string };

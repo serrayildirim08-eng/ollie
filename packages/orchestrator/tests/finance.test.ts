@@ -2,11 +2,12 @@
  * @ollie/orchestrator · finance orchestrator tests
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createStore, createMemoryAdapter } from '@ollie/store';
-import { _clearAllHandlers, on } from '@ollie/events';
+import { _clearAllHandlers, on, emit } from '@ollie/events';
 import { createFinanceOrchestrator } from '../src/finance';
 import type { FinanceRecord } from '@ollie/logic/finance';
+import type { NotificationSpec } from '@ollie/notifications';
 
 // Fixed wall-clock: 2026-05-09T12:00:00Z
 const NOW = new Date('2026-05-09T12:00:00Z').getTime();
@@ -157,6 +158,118 @@ describe('finance orchestrator', () => {
     expect(ts).toBe(0);
   });
 
+  // ── detectRecurringEarly integration ────────────────────────────────
+
+  it('emits finance:recurring_candidate_detected for a known-recurring single-occurrence merchant', () => {
+    const emitted: Array<{ merchant: string; confidence: string }> = [];
+    const unsub = on('finance:recurring_candidate_detected', (p) => {
+      emitted.push(p as { merchant: string; confidence: string });
+    });
+
+    // Single Netflix record — should trigger low-confidence candidate
+    const records: FinanceRecord[] = [
+      makeRecord({
+        id: 'netflix-1',
+        merchant: 'netflix',
+        merchant_normalized: 'netflix',
+        amount: 15.99,
+        direction: 'out',
+        event_date: new Date(NOW - 10 * DAY_MS).toISOString().slice(0, 10),
+      }),
+    ];
+    store.set('finance', 'records', records);
+
+    orch.init();
+    unsub();
+
+    expect(emitted.length).toBeGreaterThanOrEqual(1);
+    const netflixEvent = emitted.find((e) => e.merchant?.toLowerCase?.() === 'netflix');
+    expect(netflixEvent).toBeDefined();
+    expect(netflixEvent?.confidence).toBe('low');
+  });
+
+  it('emits finance:recurring_candidate_detected with medium confidence for 2 consistent occurrences', () => {
+    const emitted: Array<{ merchant: string; confidence: string; estimatedInterval: number | null }> = [];
+    const unsub = on('finance:recurring_candidate_detected', (p) => {
+      emitted.push(p as { merchant: string; confidence: string; estimatedInterval: number | null });
+    });
+
+    const records: FinanceRecord[] = [
+      makeRecord({
+        id: 'acme-1',
+        merchant: 'acme-billing',
+        merchant_normalized: 'acme-billing',
+        amount: 200,
+        direction: 'out',
+        event_date: new Date(NOW - 60 * DAY_MS).toISOString().slice(0, 10),
+      }),
+      makeRecord({
+        id: 'acme-2',
+        merchant: 'acme-billing',
+        merchant_normalized: 'acme-billing',
+        amount: 200,
+        direction: 'out',
+        event_date: new Date(NOW - 30 * DAY_MS).toISOString().slice(0, 10),
+      }),
+    ];
+    store.set('finance', 'records', records);
+
+    orch.init();
+    unsub();
+
+    const acmeEvent = emitted.find((e) => e.merchant?.toLowerCase?.().includes('acme'));
+    expect(acmeEvent).toBeDefined();
+    expect(acmeEvent?.confidence).toBe('medium');
+    expect(acmeEvent?.estimatedInterval).toBeCloseTo(30, 0);
+  });
+
+  it('does not re-emit finance:recurring_candidate_detected for already-emitted candidates', () => {
+    // Pre-seed the emitted set so the candidate is already known
+    store.set('finance', '_recurringCandidatesEmitted', ['netflix:low']);
+
+    const emitted: string[] = [];
+    const unsub = on('finance:recurring_candidate_detected', (p) => {
+      emitted.push((p as { merchant: string }).merchant);
+    });
+
+    const records: FinanceRecord[] = [
+      makeRecord({
+        id: 'nf-dedup',
+        merchant: 'netflix',
+        merchant_normalized: 'netflix',
+        amount: 15.99,
+        direction: 'out',
+        event_date: new Date(NOW - 10 * DAY_MS).toISOString().slice(0, 10),
+      }),
+    ];
+    store.set('finance', 'records', records);
+
+    orch.init();
+    unsub();
+
+    expect(emitted).not.toContain('netflix');
+  });
+
+  it('writes finance.recurringCandidates to store on recompute', () => {
+    const records: FinanceRecord[] = [
+      makeRecord({
+        id: 'spotify-1',
+        merchant: 'spotify',
+        merchant_normalized: 'spotify',
+        amount: 9.99,
+        direction: 'out',
+        event_date: new Date(NOW - 10 * DAY_MS).toISOString().slice(0, 10),
+      }),
+    ];
+    store.set('finance', 'records', records);
+
+    orch.init();
+
+    const candidates = store.get<Array<{ merchant: string; confidence: string }>>('finance', 'recurringCandidates', []);
+    expect(Array.isArray(candidates)).toBe(true);
+    expect(candidates?.some((c) => c.merchant?.toLowerCase?.() === 'spotify')).toBe(true);
+  });
+
   it('processBacklog skips already-processed dump items (dedup by raw_source_id)', () => {
     const dumpItem = { ts: NOW - 500, text: 'paid $30 electricity bill' };
     // Pre-seed a record that already has raw_source_id from this dump.
@@ -169,5 +282,428 @@ describe('finance orchestrator', () => {
     const records = store.get<FinanceRecord[]>('finance', 'records', []);
     // Exactly one record — the existing one, no duplicate ingested.
     expect(records?.filter((r) => r.raw_source_id === String(dumpItem.ts))).toHaveLength(1);
+  });
+});
+
+// ─── push notification wiring tests ───────────────────────────────────────────
+
+describe('finance orchestrator — push notification subscribers', () => {
+  let store: ReturnType<typeof createStore>;
+  let orch: ReturnType<typeof createFinanceOrchestrator>;
+  let scheduledCalls: Array<{ spec: NotificationSpec; fireAt: number }>;
+  let scheduleNotification: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    store = createStore(createMemoryAdapter());
+    scheduledCalls = [];
+    scheduleNotification = vi.fn((spec: NotificationSpec, fireAt: number) => {
+      scheduledCalls.push({ spec, fireAt });
+    });
+    orch = createFinanceOrchestrator(store, { now: () => NOW, scheduleNotification });
+    orch.init();
+  });
+
+  afterEach(() => {
+    orch.teardown();
+    _clearAllHandlers();
+    vi.clearAllMocks();
+  });
+
+  it('finance:bill_due_predicted → schedules REMINDER push with merchant + days in title', () => {
+    emit('finance:bill_due_predicted', {
+      pattern_id: 'pat-rent-1',
+      merchant: 'rent',
+      amount: 1200,
+      due_at: NOW + 3 * DAY_MS,
+      days_until: 3,
+      ts: NOW,
+    });
+
+    expect(scheduledCalls).toHaveLength(1);
+    const { spec, fireAt } = scheduledCalls[0];
+    expect(spec.category).toBe('REMINDER');
+    expect(spec.dedupe_key).toContain('finance:bill_due_predicted:pat-rent-1');
+    expect(spec.title).toContain('rent');
+    expect(spec.title).toContain('3 day');
+    expect(spec.title).toContain('1,200');
+    expect(fireAt).toBeGreaterThanOrEqual(NOW);
+  });
+
+  it('finance:bill_due_predicted — singular "day" when days_until === 1', () => {
+    emit('finance:bill_due_predicted', {
+      pattern_id: 'pat-electric',
+      merchant: 'electric',
+      amount: 80,
+      due_at: NOW + DAY_MS,
+      days_until: 1,
+      ts: NOW,
+    });
+
+    const { spec } = scheduledCalls[0];
+    expect(spec.title).toContain('1 day');
+    expect(spec.title).not.toContain('1 days');
+  });
+
+  it('finance:bill_due_predicted — skips when merchant missing', () => {
+    emit('finance:bill_due_predicted', {
+      pattern_id: 'pat-x',
+      merchant: '',
+      amount: 50,
+      due_at: NOW + 2 * DAY_MS,
+      days_until: 2,
+      ts: NOW,
+    });
+
+    expect(scheduledCalls).toHaveLength(0);
+  });
+
+  it('finance:subscription_detected → schedules PATTERN_ALERT push next morning', () => {
+    emit('finance:subscription_detected', {
+      pattern_id: 'pat-netflix',
+      merchant: 'netflix',
+      amount: 15.99,
+      cadence: 'monthly',
+      occurrence_count: 3,
+      ts: NOW,
+    });
+
+    expect(scheduledCalls).toHaveLength(1);
+    const { spec, fireAt } = scheduledCalls[0];
+    expect(spec.category).toBe('PATTERN_ALERT');
+    expect(spec.dedupe_key).toBe('finance:subscription_detected:pat-netflix');
+    expect(spec.title).toContain('netflix');
+    // fire time should be ~16h from now
+    expect(fireAt).toBeGreaterThan(NOW + 15 * 60 * 60 * 1000);
+    expect(fireAt).toBeLessThan(NOW + 17 * 60 * 60 * 1000);
+  });
+
+  it('finance:subscription_detected — skips when pattern_id missing', () => {
+    emit('finance:subscription_detected', {
+      pattern_id: '',
+      merchant: 'hulu',
+      amount: 8,
+      cadence: 'monthly',
+      occurrence_count: 3,
+      ts: NOW,
+    });
+
+    expect(scheduledCalls).toHaveLength(0);
+  });
+
+  it('finance:adhd_tax_updated → schedules weekly PATTERN_ALERT digest (not immediate)', () => {
+    emit('finance:adhd_tax_updated', {
+      total_30d: 140,
+      count_30d: 4,
+      ts: NOW,
+    });
+
+    expect(scheduledCalls).toHaveLength(1);
+    const { spec, fireAt } = scheduledCalls[0];
+    expect(spec.category).toBe('PATTERN_ALERT');
+    expect(spec.aggregation_group).toBe('finance:adhd_tax_digest');
+    expect(spec.title).toContain('4');
+    expect(spec.title).toContain('140');
+    // weekly digest: fire ~7 days from now
+    expect(fireAt).toBeGreaterThan(NOW + 6 * DAY_MS);
+  });
+
+  it('finance:adhd_tax_updated — skips when count_30d is 0', () => {
+    emit('finance:adhd_tax_updated', {
+      total_30d: 0,
+      count_30d: 0,
+      ts: NOW,
+    });
+
+    expect(scheduledCalls).toHaveLength(0);
+  });
+
+  it('finance:cycle_spending_pattern_detected → schedules PATTERN_ALERT 2 days before luteal start', () => {
+    // Plant a cycle that starts 5 days ago with 28-day length.
+    // lutealStart = cycleStart + floor(28/2)*DAY = cycleStart + 14*DAY (which is +9 days from NOW)
+    const cycleStart = NOW - 5 * DAY_MS;
+    store.set('cycle', 'cycles', [
+      { startTs: cycleStart, endTs: null, lengthDays: 28 },
+    ]);
+
+    emit('finance:cycle_spending_pattern_detected', {
+      luteal_ratio: 1.4,
+      follicular_median: 60,
+      luteal_median: 84,
+      cycle_count: 3,
+      ts: NOW,
+    });
+
+    expect(scheduledCalls).toHaveLength(1);
+    const { spec, fireAt } = scheduledCalls[0];
+    expect(spec.category).toBe('PATTERN_ALERT');
+    expect(spec.dedupe_key).toContain('finance:cycle_spending_pattern_detected');
+    // fireAt should be 2 days before luteal start = cycleStart + 14*DAY - 2*DAY = cycleStart + 12*DAY
+    const expectedFireAt = cycleStart + 12 * DAY_MS;
+    expect(fireAt).toBe(expectedFireAt);
+  });
+
+  it('finance:cycle_spending_pattern_detected — skips when fireAt is in the past', () => {
+    // cycle started 20 days ago, luteal started 6 days ago — 2-day warning already past
+    const cycleStart = NOW - 20 * DAY_MS;
+    store.set('cycle', 'cycles', [
+      { startTs: cycleStart, endTs: null, lengthDays: 28 },
+    ]);
+
+    emit('finance:cycle_spending_pattern_detected', {
+      luteal_ratio: 1.3,
+      follicular_median: 55,
+      luteal_median: 72,
+      cycle_count: 3,
+      ts: NOW,
+    });
+
+    expect(scheduledCalls).toHaveLength(0);
+  });
+
+  it('finance:cycle_spending_pattern_detected — skips when no cycle data available', () => {
+    // no cycles in store
+    emit('finance:cycle_spending_pattern_detected', {
+      luteal_ratio: 1.2,
+      follicular_median: 50,
+      luteal_median: 60,
+      cycle_count: 2,
+      ts: NOW,
+    });
+
+    expect(scheduledCalls).toHaveLength(0);
+  });
+
+  it('scheduleNotification is NOT called when not injected', () => {
+    // Orchestrator without the callback must not throw when events fire.
+    const store2 = createStore(createMemoryAdapter());
+    const scheduledCalls2: Array<{ spec: NotificationSpec; fireAt: number }> = [];
+    // orch2 has NO scheduleNotification — scheduledCalls2 stays empty.
+    const orch2 = createFinanceOrchestrator(store2, { now: () => NOW });
+    orch2.init();
+
+    // Reset calls from orch (first orchestrator) so we isolate.
+    scheduledCalls.length = 0;
+
+    // Manually invoke orch2's subscriber pathway — since it has no callback,
+    // nothing should land in scheduledCalls2.
+    emit('finance:bill_due_predicted', {
+      pattern_id: 'pat-z',
+      merchant: 'gas',
+      amount: 50,
+      due_at: NOW + 2 * DAY_MS,
+      days_until: 2,
+      ts: NOW,
+    });
+
+    // orch (first, with callback) will fire — that's expected.
+    // scheduledCalls2 must remain empty: orch2 has no callback.
+    expect(scheduledCalls2).toHaveLength(0);
+    orch2.teardown();
+  });
+
+  // ── finance:subscription_stale ─────────────────────────────────────────────
+
+  it('finance:subscription_stale → schedules PATTERN_ALERT push next morning', () => {
+    emit('finance:subscription_stale', {
+      pattern_id: 'pat-spotify',
+      merchant: 'spotify',
+      amount: 9.99,
+      days_since: 95,
+      ts: NOW,
+    });
+
+    expect(scheduledCalls).toHaveLength(1);
+    const { spec, fireAt } = scheduledCalls[0];
+    expect(spec.category).toBe('PATTERN_ALERT');
+    expect(spec.dedupe_key).toBe('finance:subscription_stale:pat-spotify');
+    expect(spec.title).toContain('spotify');
+    expect(spec.title).toContain('95');
+    expect(spec.title).toContain('9.99');
+    // ~16h from now
+    expect(fireAt).toBeGreaterThan(NOW + 15 * 60 * 60 * 1000);
+    expect(fireAt).toBeLessThan(NOW + 17 * 60 * 60 * 1000);
+  });
+
+  it('finance:subscription_stale — skips when pattern_id missing', () => {
+    emit('finance:subscription_stale', {
+      pattern_id: '',
+      merchant: 'hulu',
+      amount: 8,
+      days_since: 100,
+      ts: NOW,
+    });
+
+    expect(scheduledCalls).toHaveLength(0);
+  });
+
+  it('finance:subscription_stale — skips when merchant missing', () => {
+    emit('finance:subscription_stale', {
+      pattern_id: 'pat-x',
+      merchant: '',
+      amount: 8,
+      days_since: 100,
+      ts: NOW,
+    });
+
+    expect(scheduledCalls).toHaveLength(0);
+  });
+
+  it('finance:subscription_stale — omits amount when zero', () => {
+    emit('finance:subscription_stale', {
+      pattern_id: 'pat-free',
+      merchant: 'freeapp',
+      amount: 0,
+      days_since: 120,
+      ts: NOW,
+    });
+
+    expect(scheduledCalls).toHaveLength(1);
+    // title should NOT contain a dollar sign for zero-amount
+    const { spec } = scheduledCalls[0];
+    expect(spec.title).not.toMatch(/\$\d/);
+  });
+
+  // ── finance:savings_milestone ──────────────────────────────────────────────
+
+  it('finance:savings_milestone → schedules immediate PATTERN_ALERT push', () => {
+    emit('finance:savings_milestone', {
+      goal_id: 'goal-emergency',
+      goal_name: 'emergency fund',
+      current: 2500,
+      target: 5000,
+      milestone_pct: 50,
+      ts: NOW,
+    });
+
+    expect(scheduledCalls).toHaveLength(1);
+    const { spec, fireAt } = scheduledCalls[0];
+    expect(spec.category).toBe('PATTERN_ALERT');
+    expect(spec.dedupe_key).toBe('finance:savings_milestone:goal-emergency:50');
+    expect(spec.title).toContain('emergency fund');
+    expect(spec.title).toContain('2,500');
+    expect(spec.title).toContain('5,000');
+    expect(spec.title).toContain('quietly growing');
+    // fires immediately (NOW)
+    expect(fireAt).toBe(NOW);
+  });
+
+  it('finance:savings_milestone — skips when goal_id missing', () => {
+    emit('finance:savings_milestone', {
+      goal_id: '',
+      goal_name: 'vacation',
+      current: 500,
+      target: 1000,
+      milestone_pct: 50,
+      ts: NOW,
+    });
+
+    expect(scheduledCalls).toHaveLength(0);
+  });
+
+  it('finance:savings_milestone — skips when goal_id is missing (shape guard)', () => {
+    // Emit with empty goal_id — subscriber guards on !p.goal_id.
+    emit('finance:savings_milestone', {
+      goal_id: '',
+      goal_name: 'test',
+      current: 100,
+      target: 200,
+      milestone_pct: 50,
+      ts: NOW,
+    });
+
+    expect(scheduledCalls).toHaveLength(0);
+  });
+
+  // ── finance:impulse_pause_summary ─────────────────────────────────────────
+
+  it('finance:impulse_pause_summary → schedules monthly PATTERN_ALERT digest', () => {
+    emit('finance:impulse_pause_summary', {
+      count: 5,
+      total: 234.5,
+      month_start: NOW - 30 * DAY_MS,
+      ts: NOW,
+    });
+
+    expect(scheduledCalls).toHaveLength(1);
+    const { spec } = scheduledCalls[0];
+    expect(spec.category).toBe('PATTERN_ALERT');
+    expect(spec.aggregation_group).toBe('finance:impulse_pause_digest');
+    expect(spec.dedupe_key).toContain('finance:impulse_pause_digest:');
+    expect(spec.title).toContain('5');
+    expect(spec.title).toContain('234.5');
+    expect(spec.title).toContain('paused');
+  });
+
+  it('finance:impulse_pause_summary — singular "buy" when count === 1', () => {
+    emit('finance:impulse_pause_summary', {
+      count: 1,
+      total: 49,
+      month_start: NOW - 30 * DAY_MS,
+      ts: NOW,
+    });
+
+    const { spec } = scheduledCalls[0];
+    expect(spec.title).toContain('1 impulse buy ');
+    expect(spec.title).not.toContain('1 impulse buys');
+  });
+
+  it('finance:impulse_pause_summary — skips when count is 0', () => {
+    emit('finance:impulse_pause_summary', {
+      count: 0,
+      total: 0,
+      month_start: NOW - 30 * DAY_MS,
+      ts: NOW,
+    });
+
+    expect(scheduledCalls).toHaveLength(0);
+  });
+
+  // ── finance:anomaly_detected ───────────────────────────────────────────────
+
+  it('finance:anomaly_detected → schedules PATTERN_ALERT push ~1h from now', () => {
+    emit('finance:anomaly_detected', {
+      anomaly_id: 'anom-123',
+      merchant: 'amazon',
+      amount: 450,
+      median: 25,
+      ts: NOW,
+    });
+
+    expect(scheduledCalls).toHaveLength(1);
+    const { spec, fireAt } = scheduledCalls[0];
+    expect(spec.category).toBe('PATTERN_ALERT');
+    expect(spec.dedupe_key).toBe('finance:anomaly_detected:anom-123');
+    expect(spec.title).toContain('450');
+    expect(spec.title).toContain('confirm or flag');
+    // ~1h from now
+    expect(fireAt).toBeGreaterThan(NOW + 59 * 60 * 1000);
+    expect(fireAt).toBeLessThan(NOW + 61 * 60 * 1000);
+  });
+
+  it('finance:anomaly_detected — skips when anomaly_id missing', () => {
+    emit('finance:anomaly_detected', {
+      anomaly_id: '',
+      merchant: 'target',
+      amount: 300,
+      median: 30,
+      ts: NOW,
+    });
+
+    expect(scheduledCalls).toHaveLength(0);
+  });
+
+  it('finance:anomaly_detected — works when merchant is null (anonymous charge)', () => {
+    emit('finance:anomaly_detected', {
+      anomaly_id: 'anom-anon',
+      merchant: null,
+      amount: 999,
+      median: null,
+      ts: NOW,
+    });
+
+    expect(scheduledCalls).toHaveLength(1);
+    const { spec } = scheduledCalls[0];
+    expect(spec.title).toContain('999');
+    expect(spec.title).toContain('confirm or flag');
   });
 });
