@@ -4,16 +4,13 @@
  * Single-purpose gate for the Money module's privacy mode. Locks all $
  * figures behind a platform-biometric prompt when the user opts in.
  *
- *   Web         → WebAuthn (`navigator.credentials.get`) with a discoverable
- *                 credential. On first unlock we silently register a resident
- *                 key so subsequent unlocks need no username/UI chrome.
- *   Capacitor   → TODO: `@capacitor-community/native-biometric` is not yet
- *                 in `apps/web/package.json`. Until it ships, Capacitor
- *                 builds fall through to the WebAuthn path (most modern iOS
- *                 Safari + Android Chrome WebViews speak it). To wire native:
- *                 add the dep, then replace `unlock()` below with:
- *                   import { NativeBiometric } from '@capacitor-community/native-biometric';
- *                   await NativeBiometric.verifyIdentity({ reason: 'unlock money' });
+ *   Web / SSR    → WebAuthn (`navigator.credentials.get`) with a discoverable
+ *                  credential. On first unlock we silently register a resident
+ *                  key so subsequent unlocks need no username/UI chrome.
+ *   Capacitor    → `@capacitor-community/native-biometric` via dynamic import.
+ *                  Dispatched when `Capacitor.isNativePlatform()` returns true.
+ *                  If the module is not yet installed at runtime (workspace
+ *                  install lag) we warn and fall back to WebAuthn.
  *
  * Returns a discriminated result instead of throwing — the caller renders a
  * quiet inline error rather than a runtime crash.
@@ -28,6 +25,19 @@ export type BiometricResult =
 
 const RP_NAME = 'ollie';
 const CREDENTIAL_STORAGE_KEY = 'ollie:biometric:credentialId';
+
+// ─── runtime detection ────────────────────────────────────────────────────
+
+interface CapacitorGlobal {
+  Capacitor?: { isNativePlatform?: () => boolean };
+}
+
+function isCapacitorNative(): boolean {
+  const g = globalThis as unknown as CapacitorGlobal;
+  return g.Capacitor?.isNativePlatform?.() === true;
+}
+
+// ─── WebAuthn helpers ─────────────────────────────────────────────────────
 
 function isWebAuthnAvailable(): boolean {
   return (
@@ -122,22 +132,13 @@ async function registerCredential(): Promise<ArrayBuffer | null> {
   }
 }
 
-/**
- * Prompt for biometric unlock. Registers a credential on first run, then
- * uses it for every subsequent call.
- */
-export async function unlock(): Promise<BiometricResult> {
-  // Dev bypass — Vite exposes `import.meta.env.DEV`. Lets test fixtures and
-  // local development skip the prompt; production builds (`vite build`) get
-  // the real path.
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const env = (import.meta as any)?.env;
-    if (env?.DEV && env?.VITE_BYPASS_BIOMETRIC === '1') {
-      return { ok: true, method: 'dev-bypass' };
-    }
-  } catch { /* no import.meta — fall through */ }
+// ─── WebAuthn path (kept as named export for tests + internal use) ────────
 
+/**
+ * Prompt for biometric unlock via WebAuthn. Registers a credential on first
+ * run, then uses it for every subsequent call.
+ */
+export async function unlockViaWebAuthn(): Promise<BiometricResult> {
   if (!isWebAuthnAvailable()) {
     return { ok: false, reason: 'unsupported', detail: 'webauthn not available' };
   }
@@ -173,8 +174,81 @@ export async function unlock(): Promise<BiometricResult> {
   }
 }
 
+// ─── Capacitor native path ─────────────────────────────────────────────────
+
+async function unlockViaNative(): Promise<BiometricResult> {
+  // Dynamic import so the web bundle doesn't choke when the dep is absent.
+  let NativeBiometric: { isAvailable: () => Promise<{ isAvailable: boolean }>; verifyIdentity: (opts: Record<string, unknown>) => Promise<void> };
+  try {
+    const mod = await import('@capgo/capacitor-native-biometric');
+    NativeBiometric = mod.NativeBiometric as typeof NativeBiometric;
+  } catch (importErr) {
+    console.warn('[biometric] @capgo/capacitor-native-biometric not installed; falling back to WebAuthn', importErr);
+    return unlockViaWebAuthn();
+  }
+
+  // Check availability (no biometry enrolled, hardware absent, etc.)
+  let available = false;
+  try {
+    const check = await NativeBiometric.isAvailable();
+    available = check.isAvailable;
+  } catch {
+    available = false;
+  }
+  if (!available) {
+    return { ok: false, reason: 'unsupported', detail: 'native biometry not available' };
+  }
+
+  try {
+    await NativeBiometric.verifyIdentity({
+      reason: 'unlock finance privacy mode', // TODO: ES
+      title: 'unlock', // TODO: ES
+      subtitle: '',
+      description: '',
+    });
+    return { ok: true, method: 'capacitor' };
+  } catch (err: unknown) {
+    // Plugin rejects on cancel or failure; no standardised error code across
+    // iOS + Android, so we inspect the message string conservatively.
+    const msg = (err as { message?: string })?.message ?? '';
+    const isCancel =
+      msg.toLowerCase().includes('cancel') ||
+      msg.toLowerCase().includes('user cancel') ||
+      msg.toLowerCase().includes('dismissed');
+    if (isCancel) {
+      return { ok: false, reason: 'cancelled' };
+    }
+    return { ok: false, reason: 'unsupported', detail: msg };
+  }
+}
+
+// ─── public API ───────────────────────────────────────────────────────────
+
+/**
+ * Prompt for biometric unlock. Dispatches to the native Capacitor plugin
+ * when running inside a Capacitor native shell, and falls back to WebAuthn
+ * everywhere else (web, SSR, Node test environments).
+ */
+export async function unlock(): Promise<BiometricResult> {
+  // Dev bypass — Vite exposes `import.meta.env.DEV`. Lets test fixtures and
+  // local development skip the prompt; production builds (`vite build`) get
+  // the real path.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const env = (import.meta as any)?.env;
+    if (env?.DEV && env?.VITE_BYPASS_BIOMETRIC === '1') {
+      return { ok: true, method: 'dev-bypass' };
+    }
+  } catch { /* no import.meta — fall through */ }
+
+  if (isCapacitorNative()) {
+    return unlockViaNative();
+  }
+  return unlockViaWebAuthn();
+}
+
 export function isBiometricSupported(): boolean {
-  return isWebAuthnAvailable();
+  return isCapacitorNative() || isWebAuthnAvailable();
 }
 
 /** Test-only: reset stored credential. */
