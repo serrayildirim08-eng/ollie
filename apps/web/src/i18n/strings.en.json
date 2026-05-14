@@ -397,6 +397,21 @@
       "summary_many": "${0} requests noted.",
       "empty": "nothing selected."
     },
+    "pill": {
+      "section_title": "birth control",
+      "today_logged": "logged today",
+      "today_unlogged": "log today's pill",
+      "retroactive_prompt": "missed yesterday? tap to log.",
+      "retroactive_logged": "logged",
+      "retroactive_too_old": "too far back",
+      "type_label": "pill type",
+      "type_combined": "combined",
+      "type_progestin": "progestin-only",
+      "type_other": "other",
+      "aria_dot_logged": "pill logged — ${0}",
+      "aria_dot_unlogged": "pill not logged — ${0}",
+      "aria_today_btn": "log today's pill"
+    },
     "settings": {
       "title": "settings",
       "sub": "cycle module preferences.",
@@ -407,6 +422,14 @@
       "dial": {
         "label": "show moon dial",
         "sub": "the visual cycle position indicator."
+      },
+      "birth_control": {
+        "label": "birth control tracking",
+        "sub": "log daily pill. missed-day detection runs after 2 days of history."
+      },
+      "pill_type": {
+        "label": "pill type",
+        "sub": "metadata only — no display logic yet."
       },
       "passphrase": {
         "label": "backup passphrase hint",
@@ -419,6 +442,48 @@
     "archive": {
       "export": "export archive",
       "import": "import archive"
+    }
+  },
+
+  "body": {
+    "patterns": {
+      "noticed_something": "noticed something",
+      "caffeine_sleep": "caffeine after ${0} is shifting your sleep. average drop: ${1} min.",
+      "luteal_spending": "luteal phase starts ${0}. spending tends up ${1}% for you. energy may dip.",
+      "workout_skip_mood": "when workouts drop off, mood follows ${0} days later. pattern across ${1} weeks.",
+      "sleep_debt_habits": "sleep debt over ${0}h correlates with habit completion dropping. this week: ${1}h short.",
+      "evening_matcha_sleep": "evening matcha is shifting your sleep onset. average: ${0} min later.",
+      "water_focus": "hydration below ${0} cups correlates with focus dips. today: ${1} cups."
+    },
+    "weekly": {
+      "normal": "week ${0}. ${1} habits complete. sleep avg ${2}h. water avg ${3} cups.",
+      "short_sleep": "week ${0}. sleep short by ${1}h total. ${2} habits held.",
+      "sparse": "week ${0}. not enough data yet — keep going."
+    },
+    "wind_down": {
+      "subtitle": "wind-down · ${0} steps",
+      "dismiss": "not tonight",
+      "done": "rest well.",
+      "phone_away": "phone away",
+      "drink_water": "drink water",
+      "supplement": "supplement",
+      "lights_low": "lights low",
+      "breath_journal": "breath / journal",
+      "breath_journal_hint": "2 min",
+      "into_bed": "into bed",
+      "aria_done": "${0} (done)",
+      "aria_mark_done": "mark ${0} done",
+      "aria_locked": "${0} (locked)",
+      "aria_dismiss": "dismiss wind-down checklist for tonight",
+      "aria_section": "wind-down checklist"
+    }
+  },
+
+  "sleep": {
+    "push": {
+      "wind_down_approaching": "wind-down window in ${0} min.",
+      "sleep_debt_high": "sleep short by ${0}h this week. ideal tonight: ${1}.",
+      "caffeine_cutoff": "coffee after ${0} — sleep usually dips ${1} min."
     }
   },
 
@@ -474,6 +539,73 @@
       "disclosure_short": "ollie audits subscriptions by comparing your charges with your writing. nothing leaves your device.",
       "disclosure_full": "ollie audits your subscriptions by comparing two things you already share with it: how often you're charged, and how often you write about them. nothing leaves your device for this. we cannot see what you do inside netflix — only that netflix shows up in your charge history and not in your words.",
       "domain_apple": "settings"
+    },
+    "push": {
+      "subscription_detected": "${0} — worth cancelling?",
+      "subscription_stale": "${0} — not opened in ${1} days. still paying${2}.",
+      "savings_milestone": "${0}: ${1} of ${2}. quietly growing.",
+      "impulse_pause_summary_one": "1 impulse buy paused this month. saved approx ${0}.",
+      "impulse_pause_summary_many": "${0} impulse buys paused this month. saved approx ${1}.",
+      "anomaly_detected": "this ${0} charge looks unusual. confirm or flag?",
+      "tax_setaside": "tax set-aside · ${0} for ${1}. monthly nudge, not a deadline.",
+      "cycle_spending": "spending tends to shift this phase",
+      "cycle_spending_body": "pattern, not a rule — spending tends to spike around luteal phase",
+      "adhd_tax_digest_one": "1 adhd-tax item tracked this month — ${0} total",
+      "adhd_tax_digest_many": "${0} adhd-tax items tracked this month — ${1} total"
+    },
+    "income": {
+      "this_month": "this month",
+      "average_3mo": "average · 3 mo",
+      "delta": "delta",
+      "title": "income",
+      "title_variable": "income · variable",
+      "subtitle_irregular": "irregular · pattern emerges around month 3.",
+      "subtitle_variable": "variable · typical for ${0} income."
+    },
+    "privacy": {
+      "locked": "locked",
+      "on": "on",
+      "private": "private",
+      "aria_enable": "enable privacy mode",
+      "aria_unlock": "unlock money figures",
+      "aria_lock": "lock money figures",
+      "biometric_unavailable": "biometric unavailable. privacy mode off.",
+      "unlock_cancelled": "unlock cancelled.",
+      "unlock_failed": "unlock failed.",
+      "biometric_reason": "unlock finance privacy mode",
+      "biometric_title": "unlock"
+    },
+    "export": {
+      "label": "export",
+      "description": "all exports are encrypted with a passphrase you choose. tax records stay on your device until you share them.",
+      "btn_csv": "export csv (${0} records)",
+      "btn_annual_pdf": "export annual adhd-tax report (pdf)",
+      "pdf_description": "a four-page pdf. cover, month-by-month, categorized, year-over-year. encrypted in the same envelope as the csv path.",
+      "passphrase_label": "encrypt this export",
+      "passphrase_body": "choose a passphrase. you will need it to open this file later. 16+ characters. ollie cannot recover it for you.",
+      "passphrase_placeholder": "16+ character passphrase",
+      "passphrase_show": "show",
+      "passphrase_more": "${0} more",
+      "btn_cancel": "cancel",
+      "btn_encrypt": "encrypt + download",
+      "btn_encrypting": "encrypting...",
+      "done_csv": "exported ${0} records (encrypted).",
+      "done_annual": "exported ${0} report (encrypted).",
+      "fail": "export failed. ${0}",
+      "aria_csv": "export csv",
+      "aria_annual": "export annual adhd-tax report",
+      "aria_passphrase_dialog": "passphrase to encrypt this export"
+    },
+    "impulse": {
+      "hold_label": "hold 24 hours",
+      "window_passed": "window passed",
+      "similar_label": "similar · last 90 days",
+      "btn_skip": "didn't buy",
+      "btn_purchase": "bought anyway",
+      "footer": "pause stays pending if you close this. resolve later from the held list.",
+      "aria_dialog": "impulse hold",
+      "today": "today",
+      "yesterday": "yesterday"
     }
   }
 }
