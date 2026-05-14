@@ -32,6 +32,7 @@ export {
 } from './correlations/water-focus';
 export type {
   WaterFocusResult,
+  CorrelateWaterFocusOpts,
 } from './correlations/water-focus';
 export {
   correlateSleepDebtAndHabits,

@@ -31,6 +31,7 @@ import type {
   SleepRecord as HabitsSleepRecord,
 } from '../habits/types';
 import type { CycleRecord } from '../cycle/types';
+import type { WaterEntry } from './types';
 
 // ─── Public types ────────────────────────────────────────────────────────
 
@@ -59,6 +60,7 @@ export interface UserDataSnapshot {
   sleepRecords: readonly SleepRecordCanonical[];
   cycles: readonly CycleRecord[];
   habits: readonly Habit[];
+  waterLog: readonly WaterEntry[];
   sleepTargetHours?: number;
 }
 
@@ -100,10 +102,8 @@ export const CORRELATION_REGISTRY: readonly CorrelationEntry[] = [
     name: 'water_focus',
     threshold: 0.30,
     minSampleSize: 14,
-    description: 'hydration cups → focus rating',
-    implemented: false,
-    reason:
-      'no focus_rating numeric in store · awaiting either self-rated focus quality or a brain-dump clarity proxy',
+    description: 'daily water cups → brain-dump clarity ratio (Option B proxy)',
+    implemented: true,
   },
   {
     name: 'sleep_debt_habits',
@@ -166,6 +166,7 @@ export function takeUserDataSnapshot(
     store.get<SleepRecordCanonical[]>('sleep', 'records', []) ?? [];
   const cycles = store.get<CycleRecord[]>('cycle', 'cycles', []) ?? [];
   const habits = store.get<Habit[]>('shared', 'habits_v2', []) ?? [];
+  const waterLog = store.get<WaterEntry[]>('body', 'water_log', []) ?? [];
 
   const sleepSettings = store.get<{ target_hours?: number }>('sleep', 'settings', {});
   const sleepTargetHours =
@@ -179,6 +180,7 @@ export function takeUserDataSnapshot(
     sleepRecords,
     cycles,
     habits,
+    waterLog,
     sleepTargetHours,
   };
 }
@@ -330,14 +332,22 @@ export function runAllCorrelations(snapshot: UserDataSnapshot): CorrelationRunRe
           break;
         }
         case 'water_focus': {
-          const r = correlateWaterAndFocus(null, null, { now });
+          const r = correlateWaterAndFocus(
+            snapshot.waterLog,
+            snapshot.dumps,
+            {
+              now,
+              minSampleSize: entry.minSampleSize,
+              thresholdRho: entry.threshold,
+            },
+          );
           out.push({
             name: entry.name,
             correlation: r.correlation,
             sampleSize: r.sampleSize,
-            copy: null,
-            detected: false,
-            implemented: false,
+            copy: r.copy || null,
+            detected: !!r.copy,
+            implemented: true,
             ts: now,
           });
           break;
