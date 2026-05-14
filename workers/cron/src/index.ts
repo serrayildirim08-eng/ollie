@@ -40,6 +40,13 @@ const DAILY_SCHEDULE = '0 3 * * *';
 // via scheduleWeeklyReview() in packages/orchestrator/src/body-weekly.ts.
 // Uncomment the wrangler.toml crons entry when server path is ready.
 const WEEKLY_REVIEW_SCHEDULE = '0 19 * * 0';
+// 03:00 UTC daily — body-correlation registry pass (cross-module).
+// Same as DAILY_SCHEDULE so we don't add a new cron entry; the handler
+// is a stub today and the primary path is client-side scheduling via
+// `scheduleBodyCorrelationPass()` in packages/orchestrator/src/body-correlations.ts.
+// When server-side per-user data access is wired, this stub becomes
+// real and runs alongside pattern-detection on the existing trigger.
+const BODY_CORRELATION_SCHEDULE = '0 3 * * *';
 
 export default {
   /**
@@ -64,6 +71,10 @@ export default {
       ctx.waitUntil(safe('period-prediction',  () => runPeriodPrediction(env)));
       ctx.waitUntil(safe('subscription-detect', () => runSubscriptionDetection(env)));
       ctx.waitUntil(safe('notification-queue', () => flushNotificationQueue(env)));
+      // Body-correlation registry pass — same 03:00 UTC trigger. Stub
+      // until per-user encrypted data access is wired. Primary path =
+      // client-side scheduleBodyCorrelationPass().
+      ctx.waitUntil(safe('body-correlations', () => runBodyCorrelations(env)));
     }
 
     // Sunday 19:00 UTC — body weekly review server-side trigger.
@@ -103,6 +114,16 @@ export default {
     //   curl -X POST https://<worker>/weekly-review
     if (url.pathname === '/weekly-review') {
       ctx.waitUntil(safe('manual-weekly-review', () => runBodyWeeklyReview(env)));
+      return new Response(JSON.stringify({ queued: true }), {
+        status: 202,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+
+    // Manual trigger for body-correlation registry pass:
+    //   curl -X POST https://<worker>/body-correlations
+    if (url.pathname === '/body-correlations') {
+      ctx.waitUntil(safe('manual-body-correlations', () => runBodyCorrelations(env)));
       return new Response(JSON.stringify({ queued: true }), {
         status: 202,
         headers: { 'content-type': 'application/json' },
@@ -180,6 +201,29 @@ async function flushNotificationQueue(_env: Env): Promise<void> {
 async function runBodyWeeklyReview(_env: Env): Promise<void> {
   // intentionally empty: server-side cron deferred.
   // trigger in wrangler.toml is commented out — see note at top of file.
+}
+
+/**
+ * 03:00 UTC — body-correlation registry pass (audit infra D follow-up).
+ *
+ * Primary path today is CLIENT-SIDE:
+ *   packages/orchestrator/src/body-correlations.ts
+ *   `scheduleBodyCorrelationPass()` fires daily at 03:00 LOCAL.
+ *
+ * This server path is a follow-up once per-user encrypted data access
+ * is wired (same blocker as runBodyWeeklyReview). The schedule is
+ * piggybacked on DAILY_SCHEDULE (0 3 * * *) — no new wrangler.toml
+ * entry is needed. When the stub becomes real, it'll fan out via
+ * APNS_PUSH service binding for any pattern:detected hits.
+ *
+ * TODO(backend-senior): decrypt per-user finance/sleep/habits/cycle/
+ *   dump payloads, call runAllCorrelations(snapshot), fan out APNs push
+ *   for each detected result whose copy passes the banned-phrase scanner.
+ */
+async function runBodyCorrelations(_env: Env): Promise<void> {
+  // intentionally empty: server-side cron deferred.
+  // Bound to DAILY_SCHEDULE inside scheduled(); no new cron entry.
+  void BODY_CORRELATION_SCHEDULE;
 }
 
 // ─── helpers ───────────────────────────────────────────────────────────────────
