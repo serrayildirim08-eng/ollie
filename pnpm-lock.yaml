@@ -85,6 +85,9 @@ importers:
       '@ollie/events':
         specifier: workspace:*
         version: link:../../packages/events
+      '@ollie/garden':
+        specifier: workspace:*
+        version: link:../../packages/garden
       '@ollie/logic':
         specifier: workspace:*
         version: link:../../packages/logic
