@@ -14,7 +14,8 @@
  * suite can import it without dragging the whole module's store-singleton
  * import graph through the test environment.
  *
- * TODO: ES — copy is en-only for v1; Spanish coverage in next pass.
+ * i18n: strings.en/es.json finance.income.* — LOCALIZE_LATER (wire locale injection
+ * when FinanceModule passes locale prop; keys are ready in i18n files).
  */
 
 import React, { useMemo } from 'react';
@@ -108,12 +109,12 @@ export function IncomeCard({ records, now, masked, $fmt }: IncomeCardProps) {
     showFreqBadge && freq.frequency !== 'random' && freq.confidence !== 'high';
 
   // Subtitle: one editorial line, optional.
+  // LOCALIZE_LATER — ES keys: finance.income.subtitle_irregular / finance.income.subtitle_variable
+  // ES: "irregular · el patrón aparece alrededor del mes 3." / "variable · habitual en ingresos ${freq.frequency}."
   let subtitle: string | null = null;
   if (freq.frequency === 'random' && freq.evidence.n_events >= 3) {
-    // TODO: ES — irregular framing copy
     subtitle = 'irregular · pattern emerges around month 3.';
   } else if (isVariable && freq.frequency !== 'random') {
-    // TODO: ES — variability framing
     subtitle = `variable · typical for ${freq.frequency} income.`;
   }
 
@@ -186,6 +187,7 @@ export function IncomeCard({ records, now, masked, $fmt }: IncomeCardProps) {
               color: T.muted,
             }}
           >
+            {/* LOCALIZE_LATER — ES: finance.income.this_month "este mes" */}
             this month
           </span>
           <span
@@ -211,6 +213,7 @@ export function IncomeCard({ records, now, masked, $fmt }: IncomeCardProps) {
               color: T.muted,
             }}
           >
+            {/* LOCALIZE_LATER — ES: finance.income.average_3mo "promedio · 3 meses" */}
             average · 3 mo
           </span>
           <span
@@ -237,6 +240,7 @@ export function IncomeCard({ records, now, masked, $fmt }: IncomeCardProps) {
                 color: T.muted,
               }}
             >
+              {/* LOCALIZE_LATER — ES: finance.income.delta "variación" */}
               delta
             </span>
             <span

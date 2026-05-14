@@ -399,10 +399,10 @@ function SignUpScreen({
   return (
     <Shell>
       <CapHeader>create account</CapHeader>
-      <Headline>your data, your key.</Headline>
+      <Headline>your data. anonymized. opt-in only.</Headline>
       <Sub>
-        the passphrase below encrypts everything ollie ever holds for you. we never see it.
-        we can't reset it. write it down.
+        the passphrase below protects your login. research data is anonymized and opt-in —
+        off-switch in settings any time. we can't reset this passphrase. write it down.
       </Sub>
 
       <form

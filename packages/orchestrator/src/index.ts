@@ -11,6 +11,7 @@
 
 import type { Store } from '@ollie/store';
 import type { Orchestrator } from './types';
+import type { NotificationSpec } from '@ollie/notifications';
 import { createCycleOrchestrator } from './cycle';
 import { createPetsOrchestrator } from './pets';
 import { createBodyOrchestrator } from './body';
@@ -25,6 +26,7 @@ import { createWorkOrchestrator } from './work';
 import { createGoalsOrchestrator } from './goals';
 import { createBurhanOrchestrator } from './burhan';
 import { createMedicationOrchestrator } from './medication';
+import { createResearchOrchestrator } from './research';
 
 export type { Orchestrator } from './types';
 export { createCycleOrchestrator } from './cycle';
@@ -41,6 +43,39 @@ export { createWorkOrchestrator } from './work';
 export { createGoalsOrchestrator } from './goals';
 export { createBurhanOrchestrator } from './burhan';
 export { createMedicationOrchestrator } from './medication';
+export {
+  createResearchOrchestrator,
+  runResearchPipeline,
+  RESEARCH_INTAKE_EVENT,
+  SCRUBBABLE_TABLES,
+} from './research';
+export type {
+  LabelClient,
+  ResearchOrchestratorOptions,
+  ScrubbableTable,
+  ScrubbableWrite,
+} from './research';
+export {
+  computeWeeklyReview,
+  emitWeeklyReview,
+  scheduleWeeklyReview,
+  nextSunday19,
+  isoWeekKey,
+  SPARSE_THRESHOLD,
+} from './body-weekly';
+export type { WeeklyReviewInput, WeeklyReviewResult, WeeklyReviewSummary, WeeklyReviewEmitOptions } from './body-weekly';
+export {
+  runBodyCorrelationPass,
+  scheduleBodyCorrelationPass,
+  nextLocal03,
+  initPatternDetectedSubscriber,
+} from './body-correlations';
+export type {
+  RunBodyCorrelationPassOpts,
+  ScheduleBodyCorrelationPassOpts,
+} from './body-correlations';
+export { routeBrainDump, dispatchAction } from './braindump-dispatch';
+export type { RouteBrainDumpResult } from './braindump-dispatch';
 
 export interface RootOrchestrator extends Orchestrator {
   cycle: ReturnType<typeof createCycleOrchestrator>;
@@ -59,22 +94,45 @@ export interface RootOrchestrator extends Orchestrator {
   medication: ReturnType<typeof createMedicationOrchestrator>;
 }
 
+export interface RootOrchestratorOptions {
+  /** APNs push scheduler injected from the app layer. Passed through to
+   *  cycle / sleep / body / habits / finance orchestrators. Omit in tests
+   *  and contexts without APNs (desktop, web). */
+  scheduleNotification?: (spec: NotificationSpec, fireAt: number) => void;
+  /** Opt-in for ovulation notifications (cycle.cycle:ovulation_imminent). */
+  ovulationOptIn?: boolean;
+}
+
 /**
  * Wire all sub-orchestrators and return a single object with `init()` /
  * `teardown()`. The `store` parameter is the @ollie/store singleton;
  * events are consumed from the @ollie/events module-level bus.
  */
-export function createOrchestrator(store: Store): RootOrchestrator {
-  const cycleOrch = createCycleOrchestrator(store);
+export function createOrchestrator(
+  store: Store,
+  opts: RootOrchestratorOptions = {},
+): RootOrchestrator {
+  const cycleOrch = createCycleOrchestrator(store, {
+    scheduleNotification: opts.scheduleNotification,
+    ovulationOptIn: opts.ovulationOptIn,
+  });
   const petsOrch = createPetsOrchestrator(store);
-  const bodyOrch = createBodyOrchestrator(store);
+  const bodyOrch = createBodyOrchestrator(store, {
+    scheduleNotification: opts.scheduleNotification,
+  });
   const groceryOrch = createGroceryOrchestrator(store);
-  const sleepOrch = createSleepOrchestrator(store);
-  const financeOrch = createFinanceOrchestrator(store);
+  const sleepOrch = createSleepOrchestrator(store, {
+    scheduleNotification: opts.scheduleNotification,
+  });
+  const financeOrch = createFinanceOrchestrator(store, {
+    scheduleNotification: opts.scheduleNotification,
+  });
   const patternsOrch = createPatternsOrchestrator(store);
   const adminOrch = createAdminOrchestrator(store);
   const dumpOrch = createDumpOrchestrator(store);
-  const habitsOrch = createHabitsOrchestrator(store);
+  const habitsOrch = createHabitsOrchestrator(store, {
+    scheduleNotification: opts.scheduleNotification,
+  });
   const workOrch = createWorkOrchestrator(store);
   const goalsOrch = createGoalsOrchestrator(store);
   const burhanOrch = createBurhanOrchestrator(store);

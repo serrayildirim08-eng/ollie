@@ -128,16 +128,17 @@ export function positionedAll(state: BurhanState): PositionedElement[] {
 /** Map an event-bus event name → element type. Returns null when unmapped. */
 export function elementTypeFor(eventName: string): BurhanElementType | null {
   switch (eventName) {
-    case 'cycle:period_logged':        return 'flower';
+    case 'cycle:period_logged':           return 'flower';
     case 'finance:subscription_cancelled': return 'fruit';
-    case 'admin:appointment_completed': return 'leaf';
-    case 'finance:bill_paid_on_time':   return 'gold_leaf';
-    case 'body:doctor_visit_completed': return 'canopy_fruit';
-    case 'burhan:add_leaf':          return 'leaf';
-    case 'burhan:add_gold_leaf':     return 'gold_leaf';
-    case 'burhan:add_fruit':         return 'fruit';
-    case 'burhan:add_flower':        return 'flower';
-    case 'burhan:add_canopy_fruit':  return 'canopy_fruit';
-    default:                          return null;
+    case 'admin:appointment_completed':   return 'leaf';
+    case 'finance:bill_paid_on_time':     return 'gold_leaf';
+    case 'body:doctor_visit_completed':   return 'canopy_fruit';
+    case 'habits:completed':              return 'leaf';
+    case 'burhan:add_leaf':               return 'leaf';
+    case 'burhan:add_gold_leaf':          return 'gold_leaf';
+    case 'burhan:add_fruit':              return 'fruit';
+    case 'burhan:add_flower':             return 'flower';
+    case 'burhan:add_canopy_fruit':       return 'canopy_fruit';
+    default:                              return null;
   }
 }

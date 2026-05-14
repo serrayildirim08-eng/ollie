@@ -130,7 +130,10 @@
     "doktor_none": "nada que registrar. eso es bueno.",
     "work_none": "sin tareas. día tranquilo.",
     "astrology_no_birth": "dime cuándo y dónde naciste.",
-    "consumption_none": "esta semana no se detectaron marcas."
+    "consumption_none": "esta semana no se detectaron marcas.",
+    "cta": {
+      "cycle": "registra tu última regla para empezar."
+    }
   },
 
   "push": {
@@ -275,6 +278,216 @@
     }
   },
 
+  "cycle": {
+    "title": "ciclo",
+    "btn": {
+      "settings": "ajustes",
+      "back": "volver"
+    },
+    "phase": {
+      "menstrual": "menstrual",
+      "follicular": "folicular",
+      "ovulation_window": "ventana de ovulación",
+      "luteal": "lútea",
+      "late_luteal": "lútea tardía o retrasada",
+      "unknown": "desconocida"
+    },
+    "adherence": {
+      "body": "tu último ciclo duró ${0} días. es inusualmente largo. ¿olvidaste registrar una regla, o fue así de largo?",
+      "btn": {
+        "was_long": "fue largo",
+        "missed": "olvidé registrar uno"
+      }
+    },
+    "irregular": {
+      "copy": "el patrón del ciclo es variable. sin fase útil este mes."
+    },
+    "day": {
+      "aria": "día de ciclo ${0}, fase ${1}",
+      "aria_empty": "sin día de ciclo registrado",
+      "sub": "día de ciclo ${0} de ~${1}",
+      "empty_sub": "sin regla registrada. usa el registro de abajo para empezar."
+    },
+    "section": {
+      "next_period": "próxima regla",
+      "patterns": "patrones",
+      "clinician": "vale la pena comentarlo con tu médico",
+      "fertile_window": "ventana fértil",
+      "record_one": "registro — último ${0} ciclo",
+      "record_many": "registro — últimos ${0} ciclos",
+      "ask_partner": "pedir a tu pareja · señal sin explicar"
+    },
+    "next": {
+      "approximately": "aproximadamente ${0}",
+      "need_logged": "registra una regla para predecir.",
+      "cycles_logged_one": "${0} ciclo registrado",
+      "cycles_logged_many": "${0} ciclos registrados"
+    },
+    "confidence": {
+      "cold": "primera predicción — basada en ciclos típicos",
+      "warming": "aprendiendo tu patrón",
+      "personalized": "personalizado",
+      "variable": "patrón variable — solo una ventana aproximada",
+      "shifting": "el patrón cambió — usando solo ciclos recientes",
+      "fallback": "aprendiendo tu patrón"
+    },
+    "pattern": {
+      "body": "${0} se han agrupado en tu fase ${1} a lo largo de ${2} ciclos. patrón, no médico."
+    },
+    "fertile": {
+      "detail": "rango, no un día específico."
+    },
+    "ovulation": {
+      "caption": "ovulación probable · ${0}",
+      "caption_low": "ovulación probable · ${0} · baja confianza"
+    },
+    "record": {
+      "unit_d": "d",
+      "btn": {
+        "close": "cerrar",
+        "open": "registrar hoy",
+        "save": "guardar",
+        "cancel": "cancelar"
+      },
+      "note_ph": "algo más que valga anotar",
+      "tag": {
+        "cramps": "calambres",
+        "bloating": "hinchazón",
+        "fatigue": "fatiga",
+        "headache": "dolor de cabeza",
+        "mood_shift": "cambio de ánimo",
+        "bleeding_day_1": "sangrado día 1",
+        "bleeding": "sangrado",
+        "spotting": "manchado",
+        "clear": "sin síntomas",
+        "energy": "energía"
+      }
+    },
+    "partner": {
+      "cat": {
+        "material": "material",
+        "touch": "contacto",
+        "labor": "tareas",
+        "emotional": "emocional"
+      },
+      "material": {
+        "flowers": "flores",
+        "chocolate": "chocolate",
+        "takeout": "comida a domicilio",
+        "advil": "ibuprofeno y bolsa de calor"
+      },
+      "touch": {
+        "hug": "un abrazo",
+        "held": "que me abracen",
+        "back_rub": "masaje de espalda",
+        "space": "espacio, sin contacto"
+      },
+      "labor": {
+        "dishes": "fregar esta noche",
+        "cook": "preparar la cena",
+        "grocery": "hacer la compra",
+        "laundry": "poner la ropa"
+      },
+      "emotional": {
+        "listen": "que me escuchen",
+        "distract": "una distracción",
+        "reassure": "que me tranquilicen",
+        "alone": "que me dejen sola"
+      },
+      "summary_one": "${0} petición anotada.",
+      "summary_many": "${0} peticiones anotadas.",
+      "empty": "nada seleccionado."
+    },
+    "pill": {
+      "section_title": "anticonceptivos",
+      "today_logged": "registrado hoy",
+      "today_unlogged": "registrar la pastilla de hoy",
+      "retroactive_prompt": "¿olvidaste ayer? toca para registrar.",
+      "retroactive_logged": "registrado",
+      "retroactive_too_old": "demasiado atrás",
+      "type_label": "tipo de pastilla",
+      "type_combined": "combinada",
+      "type_progestin": "solo progestina",
+      "type_other": "otra",
+      "aria_dot_logged": "pastilla registrada — ${0}",
+      "aria_dot_unlogged": "pastilla no registrada — ${0}",
+      "aria_today_btn": "registrar la pastilla de hoy"
+    },
+    "settings": {
+      "title": "ajustes",
+      "sub": "preferencias del módulo de ciclo.",
+      "fertility": {
+        "label": "seguimiento de fertilidad",
+        "sub": "muestra la estimación de ventana fértil cuando está activado."
+      },
+      "dial": {
+        "label": "mostrar el dial lunar",
+        "sub": "el indicador visual de posición en el ciclo."
+      },
+      "birth_control": {
+        "label": "registro de anticonceptivos",
+        "sub": "registra la pastilla diaria. la detección de días olvidados arranca con 2 días de historial."
+      },
+      "pill_type": {
+        "label": "tipo de pastilla",
+        "sub": "solo metadatos — sin lógica de pantalla aún."
+      },
+      "passphrase": {
+        "label": "pista de contraseña de respaldo",
+        "sub": "una pista para recordar tu contraseña del archivo .void."
+      },
+      "aria": {
+        "close": "cerrar ajustes"
+      }
+    },
+    "archive": {
+      "export": "exportar archivo",
+      "import": "importar archivo"
+    }
+  },
+
+  "body": {
+    "patterns": {
+      "noticed_something": "algo notado",
+      "caffeine_sleep": "cafeína después de las ${0} está afectando tu sueño. bajada promedio: ${1} min.",
+      "luteal_spending": "fase lútea empieza el ${0}. tus gastos suelen subir ${1}%. la energía puede bajar.",
+      "workout_skip_mood": "cuando se saltan los entrenamientos, el ánimo baja ${0} días después. patrón en ${1} semanas.",
+      "sleep_debt_habits": "la deuda de sueño por encima de ${0}h se correlaciona con menos hábitos completados. esta semana: ${1}h de déficit.",
+      "evening_matcha_sleep": "el matcha de la tarde está retrasando tu sueño. promedio: ${0} min más tarde.",
+      "water_focus": "menos de ${0} vasos de agua se correlaciona con bajadas de foco. hoy: ${1} vasos."
+    },
+    "weekly": {
+      "normal": "semana ${0}. ${1} hábitos completados. sueño promedio ${2}h. agua promedio ${3} vasos.",
+      "short_sleep": "semana ${0}. sueño corto por ${1}h en total. ${2} hábitos se mantuvieron.",
+      "sparse": "semana ${0}. aún no hay suficientes datos — sigue."
+    },
+    "wind_down": {
+      "subtitle": "rutina nocturna · ${0} pasos",
+      "dismiss": "esta noche no",
+      "done": "que descanses.",
+      "phone_away": "celular lejos",
+      "drink_water": "beber agua",
+      "supplement": "suplemento",
+      "lights_low": "luces bajas",
+      "breath_journal": "respirar / escribir",
+      "breath_journal_hint": "2 min",
+      "into_bed": "a la cama",
+      "aria_done": "${0} (listo)",
+      "aria_mark_done": "marcar ${0} como listo",
+      "aria_locked": "${0} (bloqueado)",
+      "aria_dismiss": "cerrar lista de rutina nocturna para esta noche",
+      "aria_section": "lista de rutina nocturna"
+    }
+  },
+
+  "sleep": {
+    "push": {
+      "wind_down_approaching": "rutina nocturna en ${0} min.",
+      "sleep_debt_high": "sueño corto por ${0}h esta semana. ideal esta noche: ${1}.",
+      "caffeine_cutoff": "café después de las ${0} — el sueño suele bajar ${1} min."
+    }
+  },
+
   "finance": {
     "audit": {
       "title": "auditoría",
@@ -327,6 +540,73 @@
       "disclosure_short": "ollie audita suscripciones comparando tus cargos con tu escritura. nada sale de tu dispositivo.",
       "disclosure_full": "ollie audita tus suscripciones comparando dos cosas que ya compartes con él: con qué frecuencia te cobran y con qué frecuencia escribes sobre ellas. nada sale de tu dispositivo para esto. no podemos ver qué haces dentro de netflix — solo que netflix aparece en tu historial de cargos y no en tus palabras.",
       "domain_apple": "ajustes"
+    },
+    "push": {
+      "subscription_detected": "${0} — ¿vale la pena cancelar?",
+      "subscription_stale": "${0} — sin abrir en ${1} días. sigues pagando${2}.",
+      "savings_milestone": "${0}: ${1} de ${2}. creciendo en silencio.",
+      "impulse_pause_summary_one": "1 compra impulsiva pausada este mes. ahorro aprox. ${0}.",
+      "impulse_pause_summary_many": "${0} compras impulsivas pausadas este mes. ahorro aprox. ${1}.",
+      "anomaly_detected": "este cargo de ${0} parece inusual. ¿confirmar o marcar?",
+      "tax_setaside": "reserva fiscal · ${0} para ${1}. aviso mensual, no es una fecha límite.",
+      "cycle_spending": "los gastos suelen cambiar en esta fase",
+      "cycle_spending_body": "patrón, no una regla — los gastos suelen subir en la fase lútea",
+      "adhd_tax_digest_one": "1 gasto imprevisto registrado este mes — ${0} en total",
+      "adhd_tax_digest_many": "${0} gastos imprevistos registrados este mes — ${1} en total"
+    },
+    "income": {
+      "this_month": "este mes",
+      "average_3mo": "promedio · 3 meses",
+      "delta": "variación",
+      "title": "ingresos",
+      "title_variable": "ingresos · variable",
+      "subtitle_irregular": "irregular · el patrón aparece alrededor del mes 3.",
+      "subtitle_variable": "variable · habitual en ingresos ${0}."
+    },
+    "privacy": {
+      "locked": "bloqueado",
+      "on": "encendido",
+      "private": "privado",
+      "aria_enable": "activar modo privado",
+      "aria_unlock": "desbloquear cifras de dinero",
+      "aria_lock": "bloquear cifras de dinero",
+      "biometric_unavailable": "biometría no disponible. modo privado desactivado.",
+      "unlock_cancelled": "desbloqueo cancelado.",
+      "unlock_failed": "desbloqueo fallido.",
+      "biometric_reason": "desbloquear modo privado de finanzas",
+      "biometric_title": "desbloquear"
+    },
+    "export": {
+      "label": "exportar",
+      "description": "todos los exports se cifran con una contraseña que tú eliges. los registros fiscales se quedan en tu dispositivo hasta que los compartas.",
+      "btn_csv": "exportar csv (${0} registros)",
+      "btn_annual_pdf": "exportar informe anual de gastos imprevistos (pdf)",
+      "pdf_description": "un pdf de cuatro páginas. portada, mes a mes, por categoría, año a año. cifrado en el mismo formato que el csv.",
+      "passphrase_label": "cifrar este export",
+      "passphrase_body": "elige una contraseña. la necesitarás para abrir este archivo. 16+ caracteres. ollie no puede recuperarla.",
+      "passphrase_placeholder": "contraseña de 16+ caracteres",
+      "passphrase_show": "mostrar",
+      "passphrase_more": "${0} más",
+      "btn_cancel": "cancelar",
+      "btn_encrypt": "cifrar + descargar",
+      "btn_encrypting": "cifrando...",
+      "done_csv": "exportados ${0} registros (cifrado).",
+      "done_annual": "informe ${0} exportado (cifrado).",
+      "fail": "exportación fallida. ${0}",
+      "aria_csv": "exportar csv",
+      "aria_annual": "exportar informe anual de gastos imprevistos",
+      "aria_passphrase_dialog": "contraseña para cifrar este export"
+    },
+    "impulse": {
+      "hold_label": "pausa 24 horas",
+      "window_passed": "ventana cerrada",
+      "similar_label": "similares · últimos 90 días",
+      "btn_skip": "no compré",
+      "btn_purchase": "compré igual",
+      "footer": "la pausa queda pendiente si cierras esto. resuélvela desde la lista de pendientes.",
+      "aria_dialog": "pausa de compra impulsiva",
+      "today": "hoy",
+      "yesterday": "ayer"
     }
   }
 }

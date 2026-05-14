@@ -1,7 +1,15 @@
 /**
  * @ollie/auth · account model + auth flow (Sprint 5 · F1 — Pattern A)
  *
- * THREAT MODEL — Pattern A · zero-knowledge.
+ * THREAT MODEL — Pattern A · passphrase-only-on-device.
+ *
+ * NOTE (Sprint B' pivot 2026-05-14): the original posture was a strict
+ * server-blind dogma. That was abandoned; opt-in anonymized data collection
+ * (see `@ollie/consent` + `@ollie/pii-scrub`) is the new default. The
+ * passphrase-on-device guard in this file still holds for the LOGIN
+ * passphrase — Supabase still never sees the user's passphrase — but the
+ * old blanket privacy claim no longer applies to brain-dump content for
+ * opted-in users. See `project_ollie_b2b_pivot.md`.
  *
  *   1. signUp:
  *      - generate 32 random bytes → `serverPassword` (hex). This is the
@@ -52,8 +60,8 @@
  *
  * The derived CryptoKey is held in-process only — never persisted.
  *
- * SAFETY ASSERTION: a unit test in __tests__/zero-knowledge.test.ts spies
- * on every supabase call argument and FAILS if the passphrase string
+ * SAFETY ASSERTION: a unit test in __tests__/passphrase-on-device.test.ts
+ * spies on every supabase call argument and FAILS if the passphrase string
  * appears anywhere. Do not regress this.
  */
 
@@ -246,7 +254,7 @@ export function createAuthClient(deps: AuthDeps): AuthClient {
     const encryptedServerPw = await packServerPw(inMemoryKey, serverPassword);
 
     // SAFETY: the only password ever sent to Supabase is `serverPassword`,
-    // which is uncorrelated with `input.passphrase`. See zero-knowledge
+    // which is uncorrelated with `input.passphrase`. See passphrase-on-device
     // assertion test.
     const r = await deps.api.supabase.auth.signUp(input.email, serverPassword);
     if (!r.ok) {

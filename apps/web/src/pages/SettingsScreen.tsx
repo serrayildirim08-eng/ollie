@@ -28,8 +28,9 @@ import { readUserHash } from '../lib/user-hash';
 import { getAppVersion } from '../lib/device';
 
 const APP_VERSION = '0.0.1';
-const PRIVACY_URL = 'https://ollie.computer/privacy';
-const TERMS_URL = 'https://ollie.computer/terms';
+const PRIVACY_URL = 'https://ollie.app/privacy';
+const TERMS_URL = 'https://ollie.app/terms';
+const SUPPORT_URL = 'https://ollie.app/support';
 
 type NotificationCategory = 'REMINDER' | 'PATTERN_ALERT' | 'CONTENT_DELIVERY';
 
@@ -739,6 +740,18 @@ function AboutSection() {
           style={styles.linkBtn as React.CSSProperties}
         >
           read
+        </a>
+      </div>
+
+      <div style={styles.row}>
+        <p style={styles.rowLabel}>support</p>
+        <a
+          href={SUPPORT_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={styles.linkBtn as React.CSSProperties}
+        >
+          contact
         </a>
       </div>
     </section>

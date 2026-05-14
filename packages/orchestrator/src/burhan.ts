@@ -13,6 +13,7 @@
  *   admin:appointment_completed      → leaf  (or canopy_fruit if kind=doctor)
  *   finance:bill_paid_on_time        → gold_leaf
  *   body:doctor_visit_completed      → canopy_fruit
+ *   habits:completed                 → leaf
  *   burhan:add_*                     → matching element (manual / cross-wire)
  *
  * Writes:
@@ -41,6 +42,7 @@ const SOURCE_EVENTS = [
   'admin:appointment_completed',
   'finance:bill_paid_on_time',
   'body:doctor_visit_completed',
+  'habits:completed',
   'burhan:add_leaf',
   'burhan:add_gold_leaf',
   'burhan:add_fruit',
