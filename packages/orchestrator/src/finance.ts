@@ -102,6 +102,12 @@ export interface FinanceOrchestratorOptions {
    * Omit in tests or environments without APNs (desktop, web).
    */
   scheduleNotification?: (spec: NotificationSpec, fireAt: number) => void;
+  /**
+   * Locale resolver for research:row_written. Defaults to 'en'.
+   * Sprint B'' (2026-05-14): the research orchestrator's PII scrubber
+   * needs a locale token to pick the right name wordlist.
+   */
+  getLocale?: () => 'en' | 'es' | 'tr';
 }
 
 // Settings shape mirroring DEFAULT_SETTINGS in void-app.html §finance.orchestrator.
@@ -189,6 +195,7 @@ export function createFinanceOrchestrator(
 ): Orchestrator & { processDump(item: DumpItem): ProcessResult; processBacklog(): void; recomputeDerived(): void } {
   const getNow = opts.now ?? (() => Date.now());
   const scheduleNotification = opts.scheduleNotification ?? null;
+  const getLocale = opts.getLocale ?? ((): 'en' | 'es' | 'tr' => 'en');
 
   let initialized = false;
   const unsubs: Unsubscribe[] = [];
@@ -246,6 +253,22 @@ export function createFinanceOrchestrator(
         is_adhd_tax: built.is_adhd_tax,
         ts: dumpItem.ts,
       });
+    } catch { /* non-fatal */ }
+
+    // Sprint B'' (2026-05-14): finance_records is one of the 5 scrubbable
+    // tables in the research corpus. We emit the raw dump text (the
+    // description-equivalent) so the research orchestrator can scrub +
+    // label. Consent gating lives downstream — emit unconditionally.
+    try {
+      if (raw && raw.length > 0) {
+        events.emit('research:row_written', {
+          row_id: built.id ?? String(dumpItem.ts),
+          table: 'finance_records',
+          text: raw,
+          locale: getLocale(),
+          ts: dumpItem.ts,
+        });
+      }
     } catch { /* non-fatal */ }
 
     return { ok: true, id: built.id };
