@@ -87,6 +87,14 @@ export default {
       return handleWebhook(req, env);
     }
 
+    if (req.method === 'POST' && url.pathname === '/inbox/drain') {
+      return handleInboxDrain(req, env);
+    }
+
+    if (req.method === 'POST' && url.pathname === '/inbox/ack') {
+      return handleInboxAck(req, env);
+    }
+
     return json({ error: 'not_found' }, 404);
   },
 
@@ -352,6 +360,198 @@ async function handleWebhook(req: Request, env: Env): Promise<Response> {
 }
 
 // ──────────────────────────────────────────────────────────────────────────
+// /inbox/drain — return decrypted staged rows to the authenticated user
+//
+// The client cannot decrypt plaid_inbox rows itself (the server-key is
+// worker-only). This endpoint:
+//   1. Validates the Supabase JWT.
+//   2. Pins the body.userId to the JWT sub (no cross-user reads).
+//   3. SELECTs N oldest unacked rows for that user.
+//   4. Decrypts each with PLAID_INBOX_ENCRYPTION_KEY.
+//   5. Returns plaintext over TLS for the client to re-encrypt under
+//      the user's own key + write to finance_records.
+//
+// SECURITY:
+//   - Worker key never leaves the worker.
+//   - Plaintext exists only inside this handler's memory + on the wire
+//     under TLS.
+//   - We do NOT delete rows here — the client confirms via /inbox/ack
+//     after successful encrypted upsert. Crash-safe.
+//
+// Manual cURL (sandbox-only):
+//
+//   curl -X POST https://plaid-sync.<acct>.workers.dev/inbox/drain \
+//     -H "authorization: Bearer $SUPABASE_JWT" \
+//     -H "content-type: application/json" \
+//     -d '{"userId":"<uuid>","limit":50}'
+//
+// Tests are deferred — the worker scaffold has no test runner config
+// yet. The client-side plaid-drain.test.ts mocks fetch and covers the
+// contract on the consumer side.
+// ──────────────────────────────────────────────────────────────────────────
+
+interface InboxDrainRequestBody {
+  userId: string;
+  limit?: number;
+}
+
+interface InboxDrainResponseRow {
+  id: string;
+  item_id: string;
+  record_kind: 'sync_marker' | 'tombstones' | 'transaction';
+  transaction: unknown;
+  created_at: string;
+}
+
+interface InboxDrainResponse {
+  rows: InboxDrainResponseRow[];
+}
+
+async function handleInboxDrain(req: Request, env: Env): Promise<Response> {
+  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE) {
+    return json({ error: 'supabase_not_configured' }, 503);
+  }
+  if (!env.PLAID_INBOX_ENCRYPTION_KEY) {
+    return json({ error: 'inbox_key_not_configured' }, 503);
+  }
+
+  const authHeader = req.headers.get('authorization');
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return json({ error: 'unauthorized' }, 401);
+  }
+  const sub = parseJwtSub(authHeader.slice('Bearer '.length));
+  if (!sub) return json({ error: 'invalid_jwt' }, 401);
+
+  let body: InboxDrainRequestBody;
+  try {
+    body = (await req.json()) as InboxDrainRequestBody;
+  } catch {
+    return json({ error: 'invalid_json' }, 400);
+  }
+  if (!body.userId) return json({ error: 'missing_fields' }, 400);
+  if (body.userId !== sub) {
+    // Defense in depth — RLS would also block this, but we reject
+    // ASAP without a round-trip to Supabase.
+    return json({ error: 'user_mismatch' }, 403);
+  }
+
+  const limit = Math.min(Math.max(body.limit ?? 50, 1), 200);
+
+  // SELECT via service-role. RLS still requires user_id filter on the
+  // policy side; we filter explicitly to mirror the client's contract.
+  const sel = await supabaseSelect<{
+    id: string;
+    user_id: string;
+    item_id: string;
+    record_kind: 'sync_marker' | 'tombstones' | 'transaction';
+    encrypted_with_server_key: string;
+    server_iv: string;
+    created_at: string;
+  }>(
+    env,
+    'plaid_inbox',
+    `select=id,user_id,item_id,record_kind,encrypted_with_server_key,server_iv,created_at` +
+      `&user_id=eq.${encodeURIComponent(body.userId)}` +
+      `&order=created_at.asc&limit=${limit}`,
+  );
+  if (!sel.ok) {
+    return json({ error: 'select_failed' }, 502);
+  }
+
+  const out: InboxDrainResponseRow[] = [];
+  for (const row of sel.rows) {
+    // Server-side ownership check — service-role bypasses RLS, so we
+    // assert here that the row really belongs to the requester.
+    if (row.user_id !== body.userId) {
+      console.warn('[plaid-sync] inbox row user_id mismatch — skipping', row.id);
+      continue;
+    }
+    let plaintext: string;
+    try {
+      plaintext = await _serverUnwrap(env, row.encrypted_with_server_key, row.server_iv);
+    } catch (err) {
+      console.warn('[plaid-sync] inbox decrypt failed — skipping', row.id, err);
+      continue;
+    }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(plaintext);
+    } catch {
+      console.warn('[plaid-sync] inbox JSON parse failed — skipping', row.id);
+      continue;
+    }
+    out.push({
+      id: row.id,
+      item_id: row.item_id,
+      record_kind: row.record_kind,
+      transaction: parsed,
+      created_at: row.created_at,
+    });
+  }
+
+  const resp: InboxDrainResponse = { rows: out };
+  return json(resp);
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// /inbox/ack — delete staging rows the client successfully ingested
+//
+// Body: { userId, ids: string[] }
+//
+// We DELETE FROM plaid_inbox WHERE user_id = body.userId AND id IN (...).
+// auth.uid() match is asserted (defense in depth on top of RLS).
+// ──────────────────────────────────────────────────────────────────────────
+
+interface InboxAckRequestBody {
+  userId: string;
+  ids: string[];
+}
+
+async function handleInboxAck(req: Request, env: Env): Promise<Response> {
+  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE) {
+    return json({ error: 'supabase_not_configured' }, 503);
+  }
+
+  const authHeader = req.headers.get('authorization');
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return json({ error: 'unauthorized' }, 401);
+  }
+  const sub = parseJwtSub(authHeader.slice('Bearer '.length));
+  if (!sub) return json({ error: 'invalid_jwt' }, 401);
+
+  let body: InboxAckRequestBody;
+  try {
+    body = (await req.json()) as InboxAckRequestBody;
+  } catch {
+    return json({ error: 'invalid_json' }, 400);
+  }
+  if (!body.userId || !Array.isArray(body.ids)) {
+    return json({ error: 'missing_fields' }, 400);
+  }
+  if (body.userId !== sub) {
+    return json({ error: 'user_mismatch' }, 403);
+  }
+  // Tight cap — prevents URL-length explosions and a runaway ack.
+  if (body.ids.length === 0) return json({ ok: true, deleted: 0 });
+  if (body.ids.length > 200) return json({ error: 'too_many_ids' }, 400);
+  for (const id of body.ids) {
+    if (typeof id !== 'string' || !/^[0-9a-fA-F-]{36}$/.test(id)) {
+      return json({ error: 'invalid_id' }, 400);
+    }
+  }
+
+  // PostgREST `id=in.(uuid,uuid)` filter. We pair with user_id=eq.<sub>
+  // so a stolen JWT cannot delete another user's rows (RLS also blocks).
+  const idList = body.ids.map((id) => id).join(',');
+  const ok = await supabaseDelete(env, 'plaid_inbox', {
+    user_id: `eq.${body.userId}`,
+    id: `in.(${idList})`,
+  });
+  if (!ok) return json({ error: 'delete_failed' }, 502);
+  return json({ ok: true, deleted: body.ids.length });
+}
+
+// ──────────────────────────────────────────────────────────────────────────
 // Supabase service-role helpers
 // ──────────────────────────────────────────────────────────────────────────
 
@@ -424,6 +624,31 @@ async function supabaseUpdate(
   });
   if (!r.ok) {
     console.error('[plaid-sync] supabaseUpdate failed', table, r.status, await r.text());
+    return false;
+  }
+  return true;
+}
+
+async function supabaseDelete(
+  env: Env,
+  table: string,
+  filter: Record<string, string>,
+): Promise<boolean> {
+  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE) return false;
+  const params = new URLSearchParams();
+  for (const [k, v] of Object.entries(filter)) params.set(k, v);
+  const url = `${env.SUPABASE_URL}/rest/v1/${table}?${params.toString()}`;
+  const r = await fetch(url, {
+    method: 'DELETE',
+    headers: {
+      apikey: env.SUPABASE_SERVICE_ROLE,
+      authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE}`,
+      'content-type': 'application/json',
+      prefer: 'return=minimal',
+    },
+  });
+  if (!r.ok) {
+    console.error('[plaid-sync] supabaseDelete failed', table, r.status, await r.text());
     return false;
   }
   return true;

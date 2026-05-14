@@ -171,6 +171,23 @@ export interface FinanceSyncClient {
   syncOut(): Promise<void>;
   /** Pull every record updated since the local cursor. */
   syncIn(): Promise<void>;
+  /**
+   * Encrypt + enqueue a single record for upsert into finance_records.
+   *
+   * Used by the Plaid inbox drain (see ./plaid-drain.ts) to land
+   * webhook-delivered transactions into the user-encrypted store
+   * without round-tripping through `store.set('finance', …)`.
+   *
+   * Errors propagate so the caller can decide whether to ack the
+   * staging row.
+   *
+   * TODO(serra): wire `setInterval(drainPlaidInbox, 60_000)` from
+   * account-boot.ts once Plaid env URLs are stable.
+   */
+  upsertRecord(
+    row: SyncableFinanceRow,
+    recordType?: FinanceRecordType,
+  ): Promise<void>;
   setAuthJwt(jwt: string): void;
   setEncryptionKey(key: CryptoKey): void;
   /** Read-only queue depth + cursor — for tests / debug. */
@@ -588,11 +605,40 @@ export function createFinanceSyncClient(initialDeps: FinanceSyncDeps): FinanceSy
     running = false;
   }
 
+  // ── Public single-record upsert (used by plaid-drain) ─────────────────
+  // Encrypt the row with the user's key, enqueue, and request a drain.
+  // We deliberately do NOT route through `store.set('finance', …)` for
+  // two reasons:
+  //   1. The store path piggybacks on the subscriber tick which would
+  //      also pull the row into the in-memory FinanceModule arrays
+  //      (records[]). That's the right end-state, but the LWW reconcile
+  //      via syncIn() on the next page-load handles it cleanly without
+  //      the drain having to know the FinanceRecord shape.
+  //   2. Keeps the drain free of any store-shape coupling — if the
+  //      module store schema changes, the drain still works.
+  async function upsertRecord(
+    row: SyncableFinanceRow,
+    recordType: FinanceRecordType = 'transaction',
+  ): Promise<void> {
+    if (!isEnabled()) {
+      // Sync is opt-out — caller (plaid-drain) should treat this as a
+      // hard fail so the staging row is NOT acked. The next session
+      // with sync enabled will drain.
+      throw new Error('finance sync disabled (consent or settings)');
+    }
+    if (!row || typeof row !== 'object' || !row.id) {
+      throw new Error('upsertRecord: row.id required');
+    }
+    await enqueueUpsert(row, recordType);
+    scheduleDrain();
+  }
+
   return {
     start,
     stop,
     syncOut,
     syncIn,
+    upsertRecord,
     setAuthJwt(jwt) { deps.authJwt = jwt; },
     setEncryptionKey(key) { deps.encryptionKey = key; },
     _inspect() {

@@ -318,3 +318,19 @@ export type {
   SyncableFinanceRow,
   RemoteFinanceRow,
 } from './finance';
+
+// Plaid inbox drain — see ./plaid-drain.ts for full architecture +
+// plaintext-lifetime audit. Boot wiring (setInterval) is deliberately
+// NOT done here; account-boot.ts will pick this up once the
+// VITE_PLAID_SYNC_WORKER_URL env var is stable.
+export {
+  drainPlaidInbox,
+  validateDrainedRow,
+} from './plaid-drain';
+export type {
+  PlaidDrainDeps,
+  PlaidDrainResult,
+  PlaidDrainError,
+  PlaidDrainResponse,
+  PlaidInboxDrainedRow,
+} from './plaid-drain';
