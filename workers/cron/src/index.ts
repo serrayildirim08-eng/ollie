@@ -34,6 +34,12 @@ export interface Env extends DrainEnv {
 
 const DRAIN_SCHEDULE = '*/5 * * * *';
 const DAILY_SCHEDULE = '0 3 * * *';
+// Sunday 19:00 UTC — body weekly review server-side trigger.
+// NOTE: cron trigger commented out in wrangler.toml pending Serra sign-off
+// on server-cron path (deferred). Primary path is client-side scheduling
+// via scheduleWeeklyReview() in packages/orchestrator/src/body-weekly.ts.
+// Uncomment the wrangler.toml crons entry when server path is ready.
+const WEEKLY_REVIEW_SCHEDULE = '0 19 * * 0';
 
 export default {
   /**
@@ -59,6 +65,13 @@ export default {
       ctx.waitUntil(safe('subscription-detect', () => runSubscriptionDetection(env)));
       ctx.waitUntil(safe('notification-queue', () => flushNotificationQueue(env)));
     }
+
+    // Sunday 19:00 UTC — body weekly review server-side trigger.
+    // NOTE: server cron is deferred. Primary path = client-side scheduleWeeklyReview().
+    // This branch is a stub ready for when server-side user data access is wired.
+    if (event.cron === WEEKLY_REVIEW_SCHEDULE) {
+      ctx.waitUntil(safe('body-weekly-review', () => runBodyWeeklyReview(env)));
+    }
   },
 
   /**
@@ -80,6 +93,16 @@ export default {
         await runSubscriptionDetection(env);
         await flushNotificationQueue(env);
       }));
+      return new Response(JSON.stringify({ queued: true }), {
+        status: 202,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+
+    // Manual trigger for body weekly review:
+    //   curl -X POST https://<worker>/weekly-review
+    if (url.pathname === '/weekly-review') {
+      ctx.waitUntil(safe('manual-weekly-review', () => runBodyWeeklyReview(env)));
       return new Response(JSON.stringify({ queued: true }), {
         status: 202,
         headers: { 'content-type': 'application/json' },
@@ -142,6 +165,21 @@ async function runSubscriptionDetection(_env: Env): Promise<void> {
  */
 async function flushNotificationQueue(_env: Env): Promise<void> {
   // intentionally empty until notifications layer lands.
+}
+
+/**
+ * Sunday 19:00 UTC — body weekly review server-side stub.
+ *
+ * Primary path today is CLIENT-SIDE: packages/orchestrator/src/body-weekly.ts
+ * `scheduleWeeklyReview()` fires when the user is online on Sunday evening.
+ * This server path is a follow-up once per-user encrypted data access is wired.
+ *
+ * TODO(backend-senior): decrypt per-user body/habits/sleep payload,
+ *   call computeWeeklyReview(), fan out APNs push via APNS_PUSH service binding.
+ */
+async function runBodyWeeklyReview(_env: Env): Promise<void> {
+  // intentionally empty: server-side cron deferred.
+  // trigger in wrangler.toml is commented out — see note at top of file.
 }
 
 // ─── helpers ───────────────────────────────────────────────────────────────────
