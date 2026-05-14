@@ -1,269 +1,168 @@
 /**
- * Smoke tests for OnboardingScreen side-effects.
+ * OnboardingScreen · commitAll tests.
  *
- * We test the store mutations directly — no React render needed.
- * Uses a memory store, matching the pattern in useApplyBrainDump.test.ts.
+ * Calls the REAL commitAll exported from OnboardingScreen.tsx — the
+ * prior version of this file duplicated the function body with flat
+ * keys (`consent_spending_research`, `has_pets`) that haven't matched
+ * the production code in months. We mock `../store` so the writes hit
+ * an in-memory map we can assert against.
+ *
+ * Consent rewrite (Sprint 6) note: the old commitAll wrote
+ * `consent.cycle` and `consent.spending_research`. The new one writes
+ * neither — the master consent toggle lives in ConsentScreen and the
+ * per-feature flags are gone. These tests pin that absence.
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
-import { createStore, createMemoryAdapter } from '@ollie/store';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-// ── helpers matching commitAll() logic in OnboardingScreen.tsx ────────────────
+// Mock the store BEFORE importing commitAll — Vitest hoists vi.mock,
+// so by the time OnboardingScreen.tsx evaluates `import { store }`,
+// the mock is in place.
+vi.mock('../store', () => {
+  const data = new Map<string, unknown>();
+  return {
+    store: {
+      set: (mod: string, key: string, value: unknown) => {
+        data.set(`${mod}:${key}`, value);
+      },
+      get: <T,>(mod: string, key: string, fallback: T): T => {
+        const k = `${mod}:${key}`;
+        return (data.has(k) ? (data.get(k) as T) : fallback);
+      },
+      __data: data,
+    },
+    useStoreSlice: <T,>(_mod: string, _key: string, fallback: T) => [fallback, () => {}],
+  };
+});
 
-function uid(): string {
-  return Math.random().toString(36).slice(2, 10);
+import { commitAll, type State } from './OnboardingScreen.commit';
+import { store } from '../store';
+
+const data = (store as unknown as { __data: Map<string, unknown> }).__data;
+
+function baseState(overrides: Partial<State> = {}): State {
+  return {
+    screen: 0,
+    name: '',
+    country: 'INTL',
+    hasPets: null,
+    petDrafts: [],
+    pantryItems: [],
+    subscriptions: [],
+    workTime: '',
+    cycleTracking: '',
+    visible: true,
+    ...overrides,
+  };
 }
 
-type PetDraft = { id: string; name: string; species: string };
-
-interface OnboardingState {
-  name: string;
-  hasPets: boolean | null;
-  petDrafts: PetDraft[];
-  pantryItems: string[];
-  subscriptions: string[];
-  spendResearch: boolean | null;
-  workTime: string;
-  cycleTracking: string;
-}
-
-function commitAll(
-  state: OnboardingState,
-  store: ReturnType<typeof createStore>,
-): void {
-  const ts = Date.now();
-
-  store.set('shared', 'name', state.name.trim() || null);
-  store.set('shared', 'has_pets', state.hasPets ?? false);
-  store.set('shared', 'work_time', state.workTime || null);
-  store.set('shared', 'cycle_tracking', state.cycleTracking || null);
-  store.set('shared', 'onboarded', true);
-  store.set('shared', 'consent_spending_research', state.spendResearch ?? false);
-  store.set('shared', 'consent_cycle', state.cycleTracking === 'yes');
-
-  if (state.hasPets && state.petDrafts.length > 0) {
-    const pets = state.petDrafts
-      .filter((p) => p.name.trim())
-      .map((p) => ({
-        id: p.id,
-        name: p.name.trim(),
-        species: p.species.trim() || 'unknown',
-        ts,
-      }));
-    store.set('pets', 'pets', pets);
-  } else {
-    store.set('pets', 'pets', []);
-  }
-
-  const pantry = state.pantryItems.map((name) => ({ id: uid(), name, ts }));
-  store.set('grocery', 'pantry', pantry);
-
-  const subs = state.subscriptions.map((name) => ({ id: uid(), name, ts }));
-  store.set('finance', 'subscriptions', subs);
-}
-
-function makeStore() {
-  return createStore(createMemoryAdapter());
-}
-
-// ── test suite ────────────────────────────────────────────────────────────────
+beforeEach(() => {
+  data.clear();
+});
 
 describe('OnboardingScreen · commitAll', () => {
-  let store: ReturnType<typeof makeStore>;
-
-  beforeEach(() => {
-    store = makeStore();
+  it('sets shared.onboarded = true', () => {
+    commitAll(baseState({ name: 'Serra', cycleTracking: 'yes' }));
+    expect(data.get('shared:onboarded')).toBe(true);
   });
 
-  it('sets shared.onboarded = true on completion', () => {
-    commitAll(
-      {
-        name: 'Serra',
-        hasPets: false,
-        petDrafts: [],
-        pantryItems: ['eggs', 'milk'],
-        subscriptions: [],
-        spendResearch: null,
-        workTime: 'morning',
-        cycleTracking: 'yes',
-      },
-      store,
-    );
-    expect(store.get('shared', 'onboarded', false)).toBe(true);
+  it('persists name (trimmed) when provided', () => {
+    commitAll(baseState({ name: '  Serra  ' }));
+    expect(data.get('shared:name')).toBe('Serra');
   });
 
-  it('sets shared.onboarded = true on skip', () => {
-    // Skip path: just writes onboarded flag
-    store.set('shared', 'onboarded', true);
-    expect(store.get('shared', 'onboarded', false)).toBe(true);
+  it('persists null name when blank', () => {
+    commitAll(baseState({ name: '' }));
+    expect(data.get('shared:name')).toBeNull();
+  });
+
+  it('persists has_pets under the dotted settings namespace', () => {
+    commitAll(baseState({ hasPets: true }));
+    expect(data.get('shared:settings.has_pets')).toBe(true);
   });
 
   it('pets-no path leaves pets.pets empty', () => {
-    commitAll(
-      {
-        name: 'Serra',
-        hasPets: false,
-        petDrafts: [{ id: 'x', name: 'Tontin', species: 'guinea pig' }],
-        pantryItems: [],
-        subscriptions: [],
-        spendResearch: false,
-        workTime: '',
-        cycleTracking: 'no',
-      },
-      store,
-    );
-    const pets = store.get<unknown[]>('pets', 'pets', []);
+    commitAll(baseState({
+      hasPets: false,
+      petDrafts: [{ id: 'x', name: 'Tontin', species: 'guinea pig' }],
+    }));
+    const pets = data.get('pets:pets') as unknown[];
     expect(pets).toHaveLength(0);
   });
 
   it('pets-yes path seeds pets.pets with provided entries', () => {
-    commitAll(
-      {
-        name: 'Serra',
-        hasPets: true,
-        petDrafts: [
-          { id: 'a', name: 'Tontin', species: 'guinea pig' },
-          { id: 'b', name: 'Pinpon', species: 'guinea pig' },
-        ],
-        pantryItems: [],
-        subscriptions: [],
-        spendResearch: false,
-        workTime: '',
-        cycleTracking: 'no',
-      },
-      store,
-    );
-    const pets = store.get<Array<{ name: string; species: string }>>('pets', 'pets', []);
+    commitAll(baseState({
+      hasPets: true,
+      petDrafts: [
+        { id: 'a', name: 'Tontin', species: 'guinea pig' },
+        { id: 'b', name: 'Pinpon', species: 'guinea pig' },
+      ],
+    }));
+    const pets = data.get('pets:pets') as Array<{ name: string }>;
     expect(pets).toHaveLength(2);
-    expect(pets[0].name).toBe('Tontin');
-    expect(pets[1].name).toBe('Pinpon');
+    expect(pets.map((p) => p.name)).toEqual(['Tontin', 'Pinpon']);
   });
 
   it('unnamed pet drafts are filtered out', () => {
-    commitAll(
-      {
-        name: '',
-        hasPets: true,
-        petDrafts: [
-          { id: 'a', name: '', species: 'cat' },
-          { id: 'b', name: 'Pinpon', species: 'guinea pig' },
-        ],
-        pantryItems: [],
-        subscriptions: [],
-        spendResearch: false,
-        workTime: '',
-        cycleTracking: 'no',
-      },
-      store,
-    );
-    const pets = store.get<Array<{ name: string }>>('pets', 'pets', []);
+    commitAll(baseState({
+      hasPets: true,
+      petDrafts: [
+        { id: 'a', name: '', species: 'cat' },
+        { id: 'b', name: 'Pinpon', species: 'guinea pig' },
+      ],
+    }));
+    const pets = data.get('pets:pets') as Array<{ name: string }>;
     expect(pets).toHaveLength(1);
     expect(pets[0].name).toBe('Pinpon');
   });
 
   it('pantry items land in grocery.pantry', () => {
-    commitAll(
-      {
-        name: '',
-        hasPets: null,
-        petDrafts: [],
-        pantryItems: ['eggs', 'milk', 'bread'],
-        subscriptions: [],
-        spendResearch: null,
-        workTime: '',
-        cycleTracking: '',
-      },
-      store,
-    );
-    const pantry = store.get<Array<{ name: string }>>('grocery', 'pantry', []);
+    commitAll(baseState({ pantryItems: ['eggs', 'milk', 'bread'] }));
+    const pantry = data.get('grocery:pantry') as Array<{ name: string }>;
     expect(pantry).toHaveLength(3);
     expect(pantry.map((p) => p.name)).toEqual(['eggs', 'milk', 'bread']);
   });
 
   it('subscriptions land in finance.subscriptions', () => {
-    commitAll(
-      {
-        name: '',
-        hasPets: null,
-        petDrafts: [],
-        pantryItems: [],
-        subscriptions: ['Netflix', 'Spotify'],
-        spendResearch: null,
-        workTime: '',
-        cycleTracking: '',
-      },
-      store,
-    );
-    const subs = store.get<Array<{ name: string }>>('finance', 'subscriptions', []);
+    commitAll(baseState({ subscriptions: ['Netflix', 'Spotify'] }));
+    const subs = data.get('finance:subscriptions') as Array<{ name: string }>;
     expect(subs).toHaveLength(2);
     expect(subs.map((s) => s.name)).toEqual(['Netflix', 'Spotify']);
   });
 
-  it('consent_cycle = true when cycleTracking = yes', () => {
-    commitAll(
-      {
-        name: '',
-        hasPets: null,
-        petDrafts: [],
-        pantryItems: [],
-        subscriptions: [],
-        spendResearch: null,
-        workTime: '',
-        cycleTracking: 'yes',
-      },
-      store,
-    );
-    expect(store.get('shared', 'consent_cycle', false)).toBe(true);
+  it('work_time is persisted at settings.work_time', () => {
+    commitAll(baseState({ workTime: 'late_night' }));
+    expect(data.get('shared:settings.work_time')).toBe('late_night');
   });
 
-  it('consent_cycle = false when cycleTracking = no', () => {
-    commitAll(
-      {
-        name: '',
-        hasPets: null,
-        petDrafts: [],
-        pantryItems: [],
-        subscriptions: [],
-        spendResearch: null,
-        workTime: '',
-        cycleTracking: 'no',
-      },
-      store,
-    );
-    expect(store.get('shared', 'consent_cycle', false)).toBe(false);
+  it('cycle_tracking is persisted at settings.cycle_tracking', () => {
+    commitAll(baseState({ cycleTracking: 'yes' }));
+    expect(data.get('shared:settings.cycle_tracking')).toBe('yes');
   });
 
-  it('work_time is persisted', () => {
-    commitAll(
-      {
-        name: '',
-        hasPets: null,
-        petDrafts: [],
-        pantryItems: [],
-        subscriptions: [],
-        spendResearch: null,
-        workTime: 'late_night',
-        cycleTracking: '',
-      },
-      store,
-    );
-    expect(store.get('shared', 'work_time', null)).toBe('late_night');
+  it('country falls back to INTL when blank', () => {
+    commitAll(baseState({ country: '' }));
+    expect(data.get('shared:settings.country')).toBe('INTL');
+  });
+});
+
+describe('OnboardingScreen · commitAll · consent rewrite (Sprint 6)', () => {
+  // Regression guard: the removed per-feature consent flags must NEVER
+  // be written by onboarding again. The master consent gate lives in
+  // ConsentScreen, written BEFORE onboarding ever runs.
+
+  it('does NOT write consent.cycle', () => {
+    commitAll(baseState({ cycleTracking: 'yes' }));
+    expect(data.has('shared:consent.cycle')).toBe(false);
   });
 
-  it('spend_research consent is persisted', () => {
-    commitAll(
-      {
-        name: '',
-        hasPets: null,
-        petDrafts: [],
-        pantryItems: [],
-        subscriptions: [],
-        spendResearch: true,
-        workTime: '',
-        cycleTracking: '',
-      },
-      store,
-    );
-    expect(store.get('shared', 'consent_spending_research', false)).toBe(true);
+  it('does NOT write consent.spending_research', () => {
+    commitAll(baseState({ cycleTracking: 'no' }));
+    expect(data.has('shared:consent.spending_research')).toBe(false);
+  });
+
+  it('does NOT write consent.astrology', () => {
+    commitAll(baseState());
+    expect(data.has('shared:consent.astrology')).toBe(false);
   });
 });

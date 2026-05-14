@@ -14,3 +14,9 @@ coverage/
 .idea/
 .vscode/
 *.tsbuildinfo
+
+# Supabase CLI link state
+supabase/.temp/
+
+# Stray empty leftover from CLI link
+workers/cron/supabase/

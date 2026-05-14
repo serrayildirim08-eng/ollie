@@ -5,9 +5,9 @@
  * no globals. Tests use an in-memory store + a spy emit.
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { createStore, createMemoryAdapter } from '@ollie/store';
-import { trackSession, readRetention } from './retention';
+import { trackSession, readRetention, makeRetentionBridge } from './retention';
 
 type Emission = { name: string; payload: unknown };
 
@@ -147,5 +147,103 @@ describe('retention · D7 milestone', () => {
     const names = h.emissions.map(e => e.name);
     expect(names).toContain('void:retention:d1_returned');
     expect(names).toContain('void:retention:d7_returned');
+  });
+});
+
+describe('retention · server bridge', () => {
+  it('forwards void:retention:installed to trackTable(retention_events, row)', () => {
+    const trackTable = vi.fn();
+    const inner = vi.fn();
+    const bridged = makeRetentionBridge(
+      inner,
+      { trackTable },
+      () => ({
+        user_hash: 'h1',
+        device_id: 'dev1',
+        country: 'TR',
+        locale: 'tr-TR',
+        app_version: '0.0.1-test',
+      }),
+    );
+    bridged('void:retention:installed', { installed_at: T0, source: 'fresh', ts: T0 });
+
+    expect(inner).toHaveBeenCalledWith('void:retention:installed', expect.any(Object));
+    expect(trackTable).toHaveBeenCalledTimes(1);
+    const [table, row] = trackTable.mock.calls[0];
+    expect(table).toBe('retention_events');
+    expect(row).toMatchObject({
+      event_type: 'installed',
+      user_hash: 'h1',
+      device_id: 'dev1',
+      country: 'TR',
+      locale: 'tr-TR',
+      app_version: '0.0.1-test',
+    });
+    expect(typeof row.event_at).toBe('string');
+  });
+
+  it('forwards d1_returned with hours_since_install', () => {
+    const trackTable = vi.fn();
+    const bridged = makeRetentionBridge(
+      () => undefined,
+      { trackTable },
+      () => ({ user_hash: 'h', device_id: 'd', country: 'INTL', locale: 'en', app_version: '0' }),
+    );
+    bridged('void:retention:d1_returned', { installed_at: T0, returned_at: T0 + DAY, hours: 24 });
+    expect(trackTable).toHaveBeenCalledTimes(1);
+    expect(trackTable.mock.calls[0][1]).toMatchObject({
+      event_type: 'd1_returned',
+      hours_since_install: 24,
+    });
+  });
+
+  it('drops events when user_hash is missing (pre-sign-in)', () => {
+    const trackTable = vi.fn();
+    const bridged = makeRetentionBridge(
+      () => undefined,
+      { trackTable },
+      () => ({ user_hash: '', device_id: 'd', country: 'INTL', locale: 'en', app_version: '0' }),
+    );
+    bridged('void:retention:installed', { ts: T0 });
+    expect(trackTable).not.toHaveBeenCalled();
+  });
+
+  it('drops events when context returns null', () => {
+    const trackTable = vi.fn();
+    const bridged = makeRetentionBridge(() => undefined, { trackTable }, () => null);
+    bridged('void:retention:installed', { ts: T0 });
+    expect(trackTable).not.toHaveBeenCalled();
+  });
+
+  it('does NOT forward non-retention events', () => {
+    const trackTable = vi.fn();
+    const bridged = makeRetentionBridge(
+      () => undefined,
+      { trackTable },
+      () => ({ user_hash: 'h', device_id: 'd', country: 'INTL', locale: 'en', app_version: '0' }),
+    );
+    bridged('void:crisis:detected', { text: 'something' });
+    expect(trackTable).not.toHaveBeenCalled();
+  });
+
+  it('end-to-end: trackSession emits via bridge, trackTable sees all 3 events at day 8', () => {
+    const trackTable = vi.fn();
+    const inner = vi.fn();
+    const store = createStore(createMemoryAdapter());
+    const bridged = makeRetentionBridge(
+      inner,
+      { trackTable },
+      () => ({ user_hash: 'h1', device_id: 'd1', country: 'TR', locale: 'tr', app_version: '0.0.1' }),
+    );
+
+    trackSession(store, bridged, T0);
+    trackSession(store, bridged, T0 + 8 * DAY);
+
+    const tables = trackTable.mock.calls.map(c => c[1].event_type as string);
+    // Expect: installed + session_started + session_started + d1_returned + d7_returned
+    expect(tables).toContain('installed');
+    expect(tables).toContain('session_started');
+    expect(tables).toContain('d1_returned');
+    expect(tables).toContain('d7_returned');
   });
 });

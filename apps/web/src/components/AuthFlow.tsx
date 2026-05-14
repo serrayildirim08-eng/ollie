@@ -12,6 +12,12 @@
  *
  * Wired into App.tsx at the root: unauthenticated users hit AuthFlow
  * before HomeScreen.
+ *
+ * Consent rewrite (Sprint 6): AuthFlow now just hands off via
+ * onAuthenticated() — App.tsx gates the post-auth flow on
+ * shared.consent.necessary. Fresh sign-ups have it unset (false),
+ * so they land on ConsentScreen before onboarding. Returning sign-in
+ * users with consent.necessary === true skip straight through.
  */
 
 import React, { useEffect, useRef, useState } from 'react';

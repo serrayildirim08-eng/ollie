@@ -1,66 +1,100 @@
 /**
  * ollie · cron Cloudflare Worker
  *
- * Daily scheduled job (03:00 UTC) that drives the server-side intelligence
- * layer: pattern detection, period prediction, subscription detection,
- * notification dispatch.
+ * Two schedules now:
+ *   - `0 3 * * *`  — daily intelligence layer (pattern / period / subscription
+ *                    detection + APNs notification fan-out). Stubs today.
+ *   - `*​/5 * * * *` — drain the brain-dump enrichment queue (KV → Anthropic
+ *                    Haiku 4.5 → Supabase raw_dumps + enriched_signals). See
+ *                    drain.ts.
  *
  * Privacy posture:
- *   This worker only reads payloads explicitly opted into research-stream
- *   (encrypted at-rest in Supabase). Decryption — when needed — happens
- *   inside the worker boundary using user-derived keys; never logged.
+ *   The drain handler reads ONLY PII-scrubbed text from the queue (ai-proxy
+ *   /enrich-dump applies the regex scrub before queueing). The Anthropic
+ *   system prompt forbids echoing any PII the regex missed. Decryption of
+ *   user-data payloads (for the daily intelligence layer) happens inside the
+ *   worker boundary; nothing is logged.
  *
- * NOTE: handlers are skeleton stubs. The algorithms live in
- *       packages/logic/* on the client today. When we move detection to
- *       server-side, port the relevant module here.
+ * NOTE: the daily handlers are skeleton stubs. Algorithms live in
+ *       packages/logic/* on the client today.
  */
 
-export interface Env {
+import { drainEnrichQueue, type DrainEnv } from './drain';
+
+export interface Env extends DrainEnv {
   SUPABASE_URL: string;
+  SUPABASE_SERVICE_ROLE: string;
   SUPABASE_SERVICE_ROLE_KEY: string;
+  AI_PROXY: Fetcher;
+  CACHE_KV: KVNamespace;
 
   // Service binding to the APNs Worker (configured in wrangler.toml).
   APNS_PUSH: Fetcher;
 }
 
+const DRAIN_SCHEDULE = '*/5 * * * *';
+const DAILY_SCHEDULE = '0 3 * * *';
+
 export default {
   /**
-   * Cron entrypoint — runs on the schedule defined in wrangler.toml.
-   *
-   * Each task is wrapped in `waitUntil` so a slow upstream call doesn't
-   * starve the others, and a failure in one task doesn't kill the run.
+   * Cron entrypoint — runs on the schedules defined in wrangler.toml.
+   * Branch on event.cron string so the 5-min tick doesn't trigger the
+   * heavy daily passes.
    */
-  async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
-    ctx.waitUntil(safe('pattern-detection',  () => runPatternDetection(env)));
-    ctx.waitUntil(safe('period-prediction',  () => runPeriodPrediction(env)));
-    ctx.waitUntil(safe('subscription-detect', () => runSubscriptionDetection(env)));
-    ctx.waitUntil(safe('notification-queue', () => flushNotificationQueue(env)));
+  async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+    if (event.cron === DRAIN_SCHEDULE) {
+      ctx.waitUntil(safe('enrich-drain', async () => {
+        const stats = await drainEnrichQueue(env);
+        console.log('[cron:enrich-drain]', JSON.stringify(stats));
+      }));
+      return;
+    }
+
+    // Default branch covers the daily 03:00 UTC tick. Wrap each task in
+    // waitUntil so a slow upstream call doesn't starve the others, and a
+    // failure in one task doesn't kill the run.
+    if (event.cron === DAILY_SCHEDULE || !event.cron) {
+      ctx.waitUntil(safe('pattern-detection',  () => runPatternDetection(env)));
+      ctx.waitUntil(safe('period-prediction',  () => runPeriodPrediction(env)));
+      ctx.waitUntil(safe('subscription-detect', () => runSubscriptionDetection(env)));
+      ctx.waitUntil(safe('notification-queue', () => flushNotificationQueue(env)));
+    }
   },
 
   /**
    * Manual trigger (useful for ops + local dev):
    *
-   *   curl -X POST https://<worker>/run
-   *
-   * Cloudflare also lets you trigger crons via the dashboard.
+   *   curl -X POST https://<worker>/run          # daily stubs
+   *   curl -X POST https://<worker>/drain        # drain queue once
    */
   async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-    if (req.method !== 'POST' || new URL(req.url).pathname !== '/run') {
-      return new Response(JSON.stringify({ error: 'not_found' }), {
-        status: 404,
+    const url = new URL(req.url);
+    if (req.method !== 'POST') {
+      return notFound();
+    }
+
+    if (url.pathname === '/run') {
+      ctx.waitUntil(safe('manual-run', async () => {
+        await runPatternDetection(env);
+        await runPeriodPrediction(env);
+        await runSubscriptionDetection(env);
+        await flushNotificationQueue(env);
+      }));
+      return new Response(JSON.stringify({ queued: true }), {
+        status: 202,
         headers: { 'content-type': 'application/json' },
       });
     }
-    ctx.waitUntil(safe('manual-run', async () => {
-      await runPatternDetection(env);
-      await runPeriodPrediction(env);
-      await runSubscriptionDetection(env);
-      await flushNotificationQueue(env);
-    }));
-    return new Response(JSON.stringify({ queued: true }), {
-      status: 202,
-      headers: { 'content-type': 'application/json' },
-    });
+
+    if (url.pathname === '/drain') {
+      const stats = await drainEnrichQueue(env);
+      return new Response(JSON.stringify({ ok: true, ...stats }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+
+    return notFound();
   },
 };
 
@@ -77,7 +111,7 @@ export default {
  *   - Upsert into `patterns` table.
  */
 async function runPatternDetection(_env: Env): Promise<void> {
-  // TODO: implement.
+  // intentionally empty until algorithms move server-side.
 }
 
 /**
@@ -89,7 +123,7 @@ async function runPatternDetection(_env: Env): Promise<void> {
  *       to the worker runtime (no DOM deps).
  */
 async function runPeriodPrediction(_env: Env): Promise<void> {
-  // TODO: implement.
+  // intentionally empty until algorithms move server-side.
 }
 
 /**
@@ -98,23 +132,16 @@ async function runPeriodPrediction(_env: Env): Promise<void> {
  * "did you forget about X?" digest.
  */
 async function runSubscriptionDetection(_env: Env): Promise<void> {
-  // TODO: implement.
+  // intentionally empty until algorithms move server-side.
 }
 
 /**
  * Drain pending notifications from Supabase and fan out to APNs via the
  * service binding. Service-binding call is in-cluster; no public network
  * hop.
- *
- * Currently a no-op stub. When wired:
- *   const r = await env.APNS_PUSH.fetch(new Request('https://internal/push', {
- *     method: 'POST',
- *     headers: { 'content-type': 'application/json' },
- *     body: JSON.stringify({ deviceToken, payload, userId }),
- *   }));
  */
 async function flushNotificationQueue(_env: Env): Promise<void> {
-  // TODO: implement.
+  // intentionally empty until notifications layer lands.
 }
 
 // ─── helpers ───────────────────────────────────────────────────────────────────
@@ -125,4 +152,11 @@ async function safe(label: string, fn: () => Promise<void>): Promise<void> {
   } catch (err) {
     console.error(`[cron:${label}] failed`, err);
   }
+}
+
+function notFound(): Response {
+  return new Response(JSON.stringify({ error: 'not_found' }), {
+    status: 404,
+    headers: { 'content-type': 'application/json' },
+  });
 }

@@ -13,6 +13,11 @@
  *   POST /brain-dump       — proxy to https://api.anthropic.com/v1/messages
  *   POST /v1/messages      — legacy alias (existing packages/api/anthropic.ts
  *                            still uses /v1/messages so we accept it too).
+ *   POST /enrich-dump      — receive brain-dump, PII-scrub, queue in KV for
+ *                            batch enrichment by the cron worker. NO upstream
+ *                            Anthropic call here; UX gets zero added latency.
+ *   POST /ingest-event     — receive retention/session/module/crisis/consent
+ *                            rows and INSERT directly into Supabase via REST.
  *
  * Features:
  *   - 5-minute KV cache keyed by sha256(canonicalised body).
@@ -20,10 +25,20 @@
  *   - anthropic-beta: prompt-caching-2024-07-31 is forwarded.
  */
 
-export interface Env {
+import { scrubPII } from './pii';
+import {
+  handleEnrichDump,
+  handleIngestEvent,
+  type EnrichEnv,
+  type IngestEnv,
+} from './telemetry';
+
+export interface Env extends EnrichEnv, IngestEnv {
   ANTHROPIC_API_KEY: string;
   CACHE_KV: KVNamespace;
   RATE_KV: KVNamespace;
+  SUPABASE_URL: string;
+  SUPABASE_SERVICE_ROLE: string;
 }
 
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
@@ -40,6 +55,17 @@ export default {
     if (req.method !== 'POST') {
       return json({ error: 'method_not_allowed' }, 405);
     }
+
+    // Telemetry endpoints — separate code path. They do their own validation
+    // and do NOT share the proxy's per-user rate limit (telemetry traffic is
+    // expected to be ~100x the proxy traffic per user).
+    if (url.pathname === '/enrich-dump') {
+      return handleEnrichDump(req, env);
+    }
+    if (url.pathname === '/ingest-event') {
+      return handleIngestEvent(req, env);
+    }
+
     if (url.pathname !== '/brain-dump' && url.pathname !== '/v1/messages') {
       return json({ error: 'not_found' }, 404);
     }
@@ -133,3 +159,6 @@ function json(obj: unknown, status = 200): Response {
     headers: { 'content-type': 'application/json' },
   });
 }
+
+// Re-export so tests can import the pure scrubber.
+export { scrubPII };

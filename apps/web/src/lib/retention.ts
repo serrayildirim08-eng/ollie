@@ -1,10 +1,13 @@
 /**
  * apps/web · retention telemetry
  *
- * Local-only D1 / D7 retention markers, so we can tell who came back
- * without a backend in place. Once Group C (sync) lands these same
- * events will flow up through @ollie/research-stream — the local
- * `void:retention:*` event names stay stable.
+ * D1 / D7 retention markers. Two surfaces:
+ *   1. Local `void:retention:*` event emission — the original
+ *      contract, used by tests and any in-app analytics screens.
+ *   2. Server bridge — when a research client is provided to
+ *      `makeRetentionBridge()`, the same lifecycle events also
+ *      `trackTable('retention_events', row)` so they land in the
+ *      Supabase telemetry pipeline.
  *
  * Constitutional: no engagement nudges. This module only WRITES marker
  * events; it never schedules a notification or prompts the user.
@@ -16,6 +19,7 @@
  */
 
 import type { Store } from '@ollie/store';
+import type { ResearchClient } from '@ollie/research-stream';
 
 const NS = 'shared';
 const K_INSTALLED = 'telemetry.installed_at';
@@ -106,3 +110,67 @@ export function trackSession(
 
   return readRetention(store);
 }
+
+// ─── server bridge ────────────────────────────────────────────────────────────
+
+export interface RetentionBridgeContext {
+  user_hash: string;
+  device_id: string;
+  country: string;
+  locale: string;
+  app_version: string;
+}
+
+/**
+ * Build an emit-wrapper that fans out every `void:retention:*` event to
+ * `research.trackTable('retention_events', row)` in addition to the inner
+ * emit. Pure higher-order — easy to spy in tests.
+ */
+export function makeRetentionBridge(
+  innerEmit: RetentionEmit,
+  research: Pick<ResearchClient, 'trackTable'>,
+  ctx: () => RetentionBridgeContext | null,
+): RetentionEmit {
+  return (name: string, payload: unknown) => {
+    innerEmit(name, payload);
+    if (!name.startsWith('void:retention:')) return;
+    const c = ctx();
+    if (!c) return;
+    if (!c.user_hash) return; // pre-sign-in events — drop, no anonymous rows.
+
+    const eventType = name.slice('void:retention:'.length);
+    // Whitelist only the lifecycle event types — protects against future
+    // void:retention:* events that aren't intended for the server.
+    if (
+      eventType !== 'installed' &&
+      eventType !== 'session_started' &&
+      eventType !== 'd1_returned' &&
+      eventType !== 'd7_returned' &&
+      eventType !== 'd30_returned'
+    ) {
+      return;
+    }
+
+    const p = (payload ?? {}) as Record<string, unknown>;
+    const row: Record<string, unknown> = {
+      event_type: eventType,
+      event_at: new Date(typeof p.ts === 'number' ? p.ts : Date.now()).toISOString(),
+      user_hash: c.user_hash,
+      device_id: c.device_id,
+      country: c.country,
+      locale: c.locale,
+      app_version: c.app_version,
+    };
+    if (typeof p.session_count === 'number') {
+      row.session_count = p.session_count;
+    }
+    if (typeof p.hours_since_install === 'number') {
+      row.hours_since_install = p.hours_since_install;
+    } else if (typeof p.hours === 'number') {
+      row.hours_since_install = p.hours;
+    }
+
+    research.trackTable('retention_events', row);
+  };
+}
+

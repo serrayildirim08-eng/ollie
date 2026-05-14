@@ -225,22 +225,14 @@ describe('notify · constitutional category enforcement', () => {
   });
 });
 
-describe('notify · Fix 4 astrology consent gate', () => {
-  it('drops daily-reading delivery when consent.astrology is false', async () => {
-    // Default: consent.astrology is false (never set).
-    const r = await notify({
-      title: 'today, the moon is in capricorn',
-      category: 'CONTENT_DELIVERY',
-      dedupe_key: 'daily-reading-2026-05-12',
-      extra: { feature: 'daily-reading' },
-    });
-    expect(r.delivered).toBe(false);
-    expect(r.reason).toBe('muted');
-    expect(backend.calls.length).toBe(0);
-  });
+describe('notify · per-feature consent gate removed (Sprint 6)', () => {
+  // The prior Fix-4 astrology gate (reading shared.consent.astrology
+  // before delivering daily-reading / transit-ping) was removed when
+  // the consent model collapsed to a single shared.consent.necessary
+  // gate enforced at the app shell. The notification pipeline no
+  // longer reads any per-feature consent flag.
 
-  it('delivers daily-reading when consent.astrology is true', async () => {
-    store.set('shared', 'consent.astrology', true);
+  it('delivers astrology-flavoured CONTENT_DELIVERY without any consent flag set', async () => {
     const r = await notify({
       title: 'today, the moon is in capricorn',
       category: 'CONTENT_DELIVERY',
@@ -251,8 +243,7 @@ describe('notify · Fix 4 astrology consent gate', () => {
     expect(backend.calls.length).toBe(1);
   });
 
-  it('does NOT gate non-astrology CONTENT_DELIVERY (e.g. morning digest)', async () => {
-    // consent.astrology stays false — non-astrology feature still goes through.
+  it('delivers non-astrology CONTENT_DELIVERY (e.g. morning digest)', async () => {
     const r = await notify({
       title: 'morning digest',
       category: 'CONTENT_DELIVERY',
@@ -261,16 +252,5 @@ describe('notify · Fix 4 astrology consent gate', () => {
     });
     expect(r.delivered).toBe(true);
     expect(backend.calls.length).toBe(1);
-  });
-
-  it('gates transit-ping feature too', async () => {
-    const r = await notify({
-      title: 'mars retrograde',
-      category: 'CONTENT_DELIVERY',
-      dedupe_key: 'transit-mars-retrograde',
-      extra: { feature: 'transit-ping' },
-    });
-    expect(r.delivered).toBe(false);
-    expect(r.reason).toBe('muted');
   });
 });

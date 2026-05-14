@@ -4,9 +4,15 @@
  * Sections:
  *   - Account       email · sign-out · delete-account (confirm modal)
  *   - Notifications daily budget slider 1–10 (default 4) · per-category mute toggles
- *   - Privacy       spending-research (gates /garden) · cycle opt-in ·
- *                   astrology opt-in (gates daily reading notif) · export · import
+ *   - Privacy       necessary opt-in (locked-on) · marketing cookies · export · import
  *   - About         version · privacy policy link · terms link
+ *
+ * Consent rewrite (Sprint 6): the per-feature privacy toggles
+ * (spending-research / cycle / astrology) have been replaced by the
+ * two-toggle consent model written at sign-up by ConsentScreen.
+ *   - shared.consent.necessary  — locked-ON in settings; only revocable
+ *                                 by deleting the account
+ *   - shared.consent.marketing  — bidirectional, default ON
  *
  * Voice: lowercase labels, sage active, DM Mono caps section headers.
  * Reached from HomeScreen.
@@ -17,6 +23,9 @@ import type { AuthClient } from '@ollie/auth';
 import { exportBackup, envelopeToFileBytes, defaultFilename, importBackup } from '@ollie/backup';
 import { useStoreSlice, store } from '../store';
 import { SUPPORTED_COUNTRIES } from '../lib/country';
+import { getAccount } from '../lib/account-boot';
+import { readUserHash } from '../lib/user-hash';
+import { getAppVersion } from '../lib/device';
 
 const APP_VERSION = '0.0.1';
 const PRIVACY_URL = 'https://ollie.computer/privacy';
@@ -190,6 +199,58 @@ function Toggle({
         }}
       />
     </button>
+  );
+}
+
+// ─── LockedToggle — visually ON, non-interactive, lock hint ──────────────────
+
+function LockedToggle({ ariaLabel }: { ariaLabel: string }) {
+  return (
+    <span
+      role="switch"
+      aria-checked="true"
+      aria-disabled="true"
+      aria-label={ariaLabel}
+      title="locked — to disable, delete your account"
+      style={{
+        width: '44px',
+        height: '24px',
+        borderRadius: '12px',
+        background: 'var(--accent)',
+        position: 'relative',
+        display: 'inline-block',
+        flexShrink: 0,
+        opacity: 0.85,
+      }}
+    >
+      <span
+        aria-hidden="true"
+        style={{
+          position: 'absolute',
+          top: '3px',
+          left: '22px',
+          width: '18px',
+          height: '18px',
+          borderRadius: '50%',
+          background: 'var(--bone)',
+        }}
+      />
+      <svg
+        aria-hidden="true"
+        width="10"
+        height="10"
+        viewBox="0 0 12 12"
+        style={{
+          position: 'absolute',
+          top: '7px',
+          left: '26px',
+          color: 'var(--accent)',
+        }}
+      >
+        <rect x="2.5" y="5.5" width="7" height="5" rx="1" fill="none" stroke="currentColor" strokeWidth="1" />
+        <path d="M4 5.5 V4 a2 2 0 0 1 4 0 V5.5" fill="none" stroke="currentColor" strokeWidth="1" />
+      </svg>
+    </span>
   );
 }
 
@@ -455,9 +516,31 @@ function NotificationsSection() {
 // ─── Privacy section ─────────────────────────────────────────────────────────
 
 function PrivacySection() {
-  const [spendingResearch, setSpendingResearch] = useStoreSlice<boolean>('shared', 'consent.spending_research', false);
-  const [cycleOptIn, setCycleOptIn] = useStoreSlice<boolean>('shared', 'consent.cycle', false);
-  const [astroOptIn, setAstroOptIn] = useStoreSlice<boolean>('shared', 'consent.astrology', false);
+  // Consent rewrite (Sprint 6): two toggles only.
+  //   - necessary: locked-ON. The only revocation path is delete-account.
+  //   - marketing: bidirectional, default ON (set at sign-up by ConsentScreen).
+  const [marketing, setMarketing] = useStoreSlice<boolean>('shared', 'consent.marketing', true);
+
+  function handleMarketingChange(next: boolean) {
+    setMarketing(next);
+    // Consent audit — fire-and-forget. Gated on hasConsent(); every user
+    // reaching Settings has consent.necessary=true so this always fires.
+    const account = getAccount();
+    if (!account?.research.hasConsent()) return;
+    const userHash = readUserHash();
+    if (!userHash) return;
+    account.research.trackTable('consent_audit', {
+      user_hash: userHash,
+      consent_necessary: true,
+      consent_marketing: next,
+      consented_at: new Date().toISOString(),
+      event_source: 'settings_change',
+      user_agent: typeof navigator !== 'undefined'
+        ? navigator.userAgent.slice(0, 200)
+        : '',
+      app_version: getAppVersion(),
+    });
+  }
   const [country, setCountry] = useStoreSlice<string>('shared', 'settings.country', 'INTL');
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -522,26 +605,18 @@ function PrivacySection() {
 
       <div style={styles.row}>
         <div>
-          <p style={styles.rowLabel}>spending research</p>
-          <p style={styles.rowHint}>anonymous · gates /garden access</p>
+          <p style={styles.rowLabel}>necessary opt-in</p>
+          <p style={styles.rowHint}>to disable, delete your account</p>
         </div>
-        <Toggle on={spendingResearch} onChange={setSpendingResearch} ariaLabel="spending research opt-in" />
+        <LockedToggle ariaLabel="necessary opt-in (locked on)" />
       </div>
 
       <div style={styles.row}>
         <div>
-          <p style={styles.rowLabel}>cycle tracking</p>
-          <p style={styles.rowHint}>menstrual cycle patterns surface in dashboard</p>
+          <p style={styles.rowLabel}>marketing cookies</p>
+          <p style={styles.rowHint}>change anytime</p>
         </div>
-        <Toggle on={cycleOptIn} onChange={setCycleOptIn} ariaLabel="cycle tracking opt-in" />
-      </div>
-
-      <div style={styles.row}>
-        <div>
-          <p style={styles.rowLabel}>astrology</p>
-          <p style={styles.rowHint}>gates daily reading · transit pings</p>
-        </div>
-        <Toggle on={astroOptIn} onChange={setAstroOptIn} ariaLabel="astrology opt-in" />
+        <Toggle on={marketing} onChange={handleMarketingChange} ariaLabel="marketing cookies" />
       </div>
 
       <div style={styles.row}>

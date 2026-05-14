@@ -1,9 +1,13 @@
-import React, { lazy, Suspense } from 'react';
+import React, { lazy, Suspense, useEffect, useRef } from 'react';
 import { FrostedCard } from '../components/FrostedCard';
 import { BrainDumpInput } from '../components/BrainDumpInput';
 import { ModuleHelp } from '../components/ModuleHelp';
 import { getString } from '../i18n';
-import { useStoreSlice } from '../store';
+import { useStoreSlice, store } from '../store';
+import { sessionTracker } from '../lib/session-tracker';
+import { getAccount } from '../lib/account-boot';
+import { readUserHash } from '../lib/user-hash';
+import { getAppVersion } from '../lib/device';
 
 // ─── lazy module imports ──────────────────────────────────────────────────────
 
@@ -106,12 +110,66 @@ export function ModuleScreen({
   children,
 }: ModuleScreenProps) {
   const cfg = getBgConfig(moduleId);
-  // Fix 4: consent gates for cycle + astrology entry. If consent is off
-  // (user toggled off in Settings post-onboarding), redirect to dashboard
-  // rather than render the module. The Settings toggle is the single
-  // source of truth — opt out hides + silences.
-  const [cycleConsent] = useStoreSlice<boolean>('shared', 'consent.cycle', false);
-  const [astroConsent] = useStoreSlice<boolean>('shared', 'consent.astrology', false);
+  // Consent rewrite (Sprint 6): the per-feature consent gates for
+  // cycle + astrology entry are gone. The new master gate (shared.
+  // consent.necessary) is enforced at App.tsx top level — any user
+  // reaching here has already given necessary consent.
+  // Cycle visibility is now a pure preference, driven by the cycle-
+  // tracking answer in onboarding (settings.cycle_tracking).
+  const [cycleTracking] = useStoreSlice<string | null>('shared', 'settings.cycle_tracking', null);
+
+  // Module telemetry — emits module_events open row on mount (and when
+  // moduleId changes), and a close row on unmount / moduleId change.
+  // Gated by research.hasConsent() — ConsentScreen sets necessary=true
+  // before any user can reach this component; the check is defence-in-depth.
+  const openedAtRef = useRef<number | null>(null);
+  const actionsCountRef = useRef<number>(0);
+  useEffect(() => {
+    const account = getAccount();
+    if (!account?.research.hasConsent()) return;
+    const userHash = readUserHash();
+    if (!userHash) return; // pre-sign-in — drop
+    const country = store.get<string>('shared', 'settings.country', 'INTL') ?? 'INTL';
+    const now = Date.now();
+    openedAtRef.current = now;
+    actionsCountRef.current = 0;
+    const openedAt = new Date(now).toISOString();
+    const sessionId = sessionTracker.getSessionId();
+
+    account.research.trackTable('module_events', {
+      user_hash: userHash,
+      session_id: sessionId ?? '',
+      module: moduleId,
+      opened_at: openedAt,
+      country,
+      app_version: getAppVersion(),
+    });
+
+    // Register with session tracker so modules_opened is populated on end row.
+    sessionTracker.onModuleOpened(moduleId);
+
+    return () => {
+      const closedAt = Date.now();
+      const dur = openedAtRef.current !== null
+        ? Math.round((closedAt - openedAtRef.current) / 1000)
+        : 0;
+      // Second INSERT — analytics coalesces with the open row by
+      // (session_id, module, opened_at). closed_at being non-null is
+      // the discriminator.
+      account.research.trackTable('module_events', {
+        session_id: sessionId ?? '',
+        module: moduleId,
+        closed_at: new Date(closedAt).toISOString(),
+        duration_seconds: dur,
+        actions_count: actionsCountRef.current,
+        country,
+      });
+      openedAtRef.current = null;
+    };
+  // Re-run when moduleId changes (navigate between modules without unmount).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [moduleId]);
+  const cycleAllowed = cycleTracking === 'yes';
 
   // Sleep: full-screen takeover — owns its own paper/ink layout
   if (moduleId === 'sleep') {
@@ -138,9 +196,10 @@ export function ModuleScreen({
   }
 
   // Cycle: full-screen takeover with its own ceramic header — bypass wrapper.
-  // Gated on consent.cycle (Fix 4) — opt out hides the module entirely.
+  // Visibility follows the onboarding cycle-tracking preference. If the
+  // user said "no / not anymore / postpartum", the module hides itself.
   if (moduleId === 'cycle') {
-    if (!cycleConsent) {
+    if (!cycleAllowed) {
       onNavigate('dashboard');
       return null;
     }
@@ -202,14 +261,15 @@ export function ModuleScreen({
     );
   }
 
-  // Astrology: cut from launch — only accessible with ?astrology=1 AND
-  // consent.astrology toggled on in Settings (Fix 4). Either gate failing
-  // redirects to dashboard silently.
+  // Astrology: cut from launch — only accessible with ?astrology=1.
+  // The prior consent.astrology gate is gone with the consent rewrite
+  // (Sprint 6); the URL gate alone keeps the module hidden from
+  // unsuspecting users.
   if (moduleId === 'astrology') {
     const urlGate =
       typeof window !== 'undefined' &&
       new URLSearchParams(window.location.search).get('astrology') === '1';
-    if (!urlGate || !astroConsent) {
+    if (!urlGate) {
       // Silently redirect to dashboard rather than showing a dead page.
       onNavigate('dashboard');
       return null;

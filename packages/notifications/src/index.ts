@@ -262,26 +262,11 @@ export async function notify(spec: NotificationSpec): Promise<NotificationDispat
   const fireAt = coerceScheduleAt(spec.schedule_at);
 
   if (state.store) {
-    // Fix 4: gate astrology / daily-reading deliveries on consent.astrology.
-    // The Settings toggle is the single source of truth — opt out silences
-    // the daily reading even if upstream scheduled it before opt-out.
-    const feature = (spec.extra as { feature?: string } | undefined)?.feature ?? '';
-    const isAstrologyFeature =
-      feature === 'daily-reading' || feature === 'astrology' || feature === 'transit-ping';
-    if (isAstrologyFeature) {
-      const astroConsent = state.store.get<boolean>('shared', 'consent.astrology', false);
-      if (!astroConsent) {
-        appendLog(state.store, {
-          ts: now,
-          dedupe_key: spec.dedupe_key,
-          category: spec.category,
-          title: spec.title,
-          delivered: false,
-          reason: 'muted',
-        });
-        return { delivered: false, reason: 'muted' };
-      }
-    }
+    // Consent rewrite (Sprint 6): the per-feature consent.astrology
+    // gate is gone. Astrology is cut from the launch surface (only
+    // reachable via the ?astrology=1 URL gate). Daily-reading /
+    // transit-ping features don't ship to alpha users, so no
+    // per-feature delivery gate is needed here.
 
     if (isRecentlySeen(state.store, spec.dedupe_key, now)) {
       const entry: NotificationLogEntry = {
