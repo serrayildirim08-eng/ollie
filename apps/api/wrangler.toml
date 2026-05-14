@@ -9,6 +9,18 @@
 #   APNS_AUTH_KEY    — full .p8 file contents including BEGIN/END lines
 #   REGISTER_SHARED_SECRET — bearer token clients send when registering tokens
 #
+# Account deletion endpoint (Sprint B' · GDPR / App Store erasure path):
+#
+#   SUPABASE_URL              — already set for the cron handler. The
+#                               /account/delete endpoint REQUIRES this
+#                               PLUS the service-role key (below) — without
+#                               them the route returns 503 service-unavailable.
+#   SUPABASE_SERVICE_ROLE_KEY — same secret as the cron handler. Used to
+#                               bypass RLS for cascade DELETEs and to call
+#                               the Supabase Auth admin API
+#                               (DELETE /auth/v1/admin/users/{id}).
+#                               NEVER expose to the client.
+#
 # Optional:
 #   APNS_USE_SANDBOX — set to "1" to send to api.sandbox.push.apple.com
 #                      (development builds only; default = production)
