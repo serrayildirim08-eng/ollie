@@ -15,6 +15,7 @@ import {
   deriveCycleStats,
   computePhaseForDate,
   predictNextPeriod,
+  predictOvulation,
   fertileWindow,
   findCorrelations,
 } from '@ollie/logic/cycle';
@@ -73,6 +74,11 @@ function fmtMonth(d: Date): string {
 function fmtFullDate(d: Date): string {
   return `${fmtDay(d)} ${fmtMonth(d)} ${d.getFullYear()}`;
 }
+function fmtOvulationDate(ts: number): string {
+  const d = new Date(ts);
+  return `${fmtMonth(d)} ${d.getDate()}`;
+}
+
 function fmtRange(range: [Date, Date] | null): string {
   if (!range) return '';
   const [a, b] = range;
@@ -266,12 +272,202 @@ function RecordPanel({ onSave, onCancel }: RecordPanelProps) {
   );
 }
 
+// ─── PillLogSection ───────────────────────────────────────────────────────────
+
+const DAY_MS = 86_400_000;
+const PILL_BACKDATE_LIMIT_DAYS = 3;
+
+/** Returns YYYY-MM-DD for a timestamp in local time. */
+function toDateKey(ts: number): string {
+  const d = new Date(ts);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/** Returns the start-of-day timestamp (local midnight) for a given date offset from now. */
+function startOfDayOffset(now: number, offsetDays: number): number {
+  const d = new Date(now);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime() + offsetDays * DAY_MS;
+}
+
+interface PillLogSectionProps {
+  items: CycleItem[];
+  onLogPill: (ts: number) => void;
+  now: number;
+  birthControlType: 'combined' | 'progestin-only' | 'other';
+  masked?: boolean;
+}
+
+function PillLogSection({ items, onLogPill, now, masked }: PillLogSectionProps) {
+  const pillItems = useMemo(
+    () => items.filter(i => i && i.action === 'pill'),
+    [items],
+  );
+
+  const loggedDates = useMemo(
+    () => new Set(pillItems.map(p => toDateKey(p.ts ?? 0))),
+    [pillItems],
+  );
+
+  const todayKey = toDateKey(now);
+  const todayLogged = loggedDates.has(todayKey);
+
+  // 7-day strip: today at index 6, 6 days ago at index 0
+  const stripDays = useMemo((): Array<{ key: string; ts: number; daysBack: number }> => {
+    return Array.from({ length: 7 }, (_, i) => {
+      const daysBack = 6 - i;
+      const dayStart = startOfDayOffset(now, -daysBack);
+      return { key: toDateKey(dayStart), ts: dayStart, daysBack };
+    });
+  }, [now]);
+
+  const handleDayTap = (daysBack: number, dayStart: number, alreadyLogged: boolean) => {
+    if (alreadyLogged) return;
+    if (daysBack > PILL_BACKDATE_LIMIT_DAYS) return;
+    onLogPill(dayStart + 12 * 60 * 60 * 1000);
+  };
+
+  if (masked) {
+    return (
+      <section style={{ marginBottom: 80 }} aria-label="birth control (hidden in privacy mode)">
+        <SectionLabel>{t('cycle.pill.section_title')}</SectionLabel>
+        <div style={{
+          height: 48,
+          background: C.bone,
+          borderRadius: 2,
+          filter: 'blur(6px)',
+        }} />
+      </section>
+    );
+  }
+
+  return (
+    <section style={{ marginBottom: 80 }} aria-label="birth control">
+      <SectionLabel>{t('cycle.pill.section_title')}</SectionLabel>
+
+      {/* today toggle */}
+      <button
+        type="button"
+        aria-label={t('cycle.pill.aria_today_btn')}
+        aria-pressed={todayLogged}
+        onClick={() => {
+          if (!todayLogged) onLogPill(now);
+        }}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 14,
+          background: 'transparent',
+          border: 'none',
+          padding: '0 0 32px 0',
+          cursor: todayLogged ? 'default' : 'pointer',
+          color: C.ink,
+        }}
+      >
+        <span
+          aria-hidden="true"
+          style={{
+            width: 14,
+            height: 14,
+            borderRadius: '50%',
+            background: todayLogged ? C.accent : 'transparent',
+            border: `1.5px solid ${todayLogged ? C.accent : C.sand}`,
+            flexShrink: 0,
+            transition: 'background 0.15s, border-color 0.15s',
+          }}
+        />
+        <span style={{
+          fontFamily: "'DM Mono', monospace",
+          fontSize: 12,
+          letterSpacing: '0.14em',
+          textTransform: 'lowercase',
+          color: todayLogged ? C.inkSoft : C.ink,
+        }}>
+          {todayLogged ? t('cycle.pill.today_logged') : t('cycle.pill.today_unlogged')}
+        </span>
+      </button>
+
+      {/* 7-day strip */}
+      <div
+        role="group"
+        aria-label="pill log — past 7 days"
+        style={{ display: 'flex', gap: 10, alignItems: 'flex-end' }}
+      >
+        {stripDays.map(({ key, ts, daysBack }) => {
+          const logged = loggedDates.has(key);
+          const isToday = daysBack === 0;
+          const tooOld = daysBack > PILL_BACKDATE_LIMIT_DAYS;
+          const interactive = !logged && !isToday && !tooOld;
+
+          return (
+            <button
+              key={key}
+              type="button"
+              aria-label={logged
+                ? t('cycle.pill.aria_dot_logged', key)
+                : t('cycle.pill.aria_dot_unlogged', key)}
+              aria-pressed={logged}
+              disabled={tooOld && !logged}
+              onClick={() => handleDayTap(daysBack, ts, logged)}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                padding: '4px 2px',
+                cursor: interactive ? 'pointer' : 'default',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 6,
+                opacity: tooOld && !logged ? 0.35 : 1,
+              }}
+            >
+              <span
+                aria-hidden="true"
+                style={{
+                  width: isToday ? 12 : 10,
+                  height: isToday ? 12 : 10,
+                  borderRadius: '50%',
+                  background: logged ? C.accent : 'transparent',
+                  border: `1.5px solid ${logged ? C.accent : C.sand}`,
+                  display: 'block',
+                  transition: 'background 0.12s',
+                }}
+              />
+            </button>
+          );
+        })}
+      </div>
+
+      {/* retroactive hint: show only if yesterday was missed and user has pill history */}
+      {(() => {
+        const yesterdayKey = toDateKey(startOfDayOffset(now, -1));
+        const yesterdayMissed = !loggedDates.has(yesterdayKey) && pillItems.length > 0;
+        if (!yesterdayMissed) return null;
+        return (
+          <p style={{
+            fontFamily: "'DM Mono', monospace",
+            fontSize: 11,
+            letterSpacing: '0.12em',
+            color: C.inkSoft,
+            margin: '16px 0 0 0',
+            textTransform: 'lowercase',
+          }}>
+            {t('cycle.pill.retroactive_prompt')}
+          </p>
+        );
+      })()}
+    </section>
+  );
+}
+
 // ─── SettingsPanel ────────────────────────────────────────────────────────────
 
 interface CycleSettings {
   tracking_for_fertility: boolean;
   show_dial: boolean;
   passphrase_hint: string;
+  birth_control_enabled: boolean;
+  birth_control_type: 'combined' | 'progestin-only' | 'other';
 }
 
 interface SettingsPanelProps {
@@ -340,6 +536,55 @@ function SettingsPanel({ settings, onChange, onClose }: SettingsPanelProps) {
             style={{ width: 22, height: 22, cursor: 'pointer' }}
           />
         </label>
+
+        <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: '16px 0', borderBottom: `1px solid ${C.sand}` }}>
+          <div>
+            <div style={{ font: "400 15px/1.4 'Inter Tight', sans-serif", color: C.ink }}>{t('cycle.settings.birth_control.label')}</div>
+            <div style={{ font: "400 11px/1.4 'DM Mono', monospace", color: C.inkFaint, marginTop: 4, letterSpacing: '0.04em' }}>{t('cycle.settings.birth_control.sub')}</div>
+          </div>
+          <input
+            type="checkbox"
+            checked={settings.birth_control_enabled}
+            onChange={e => onChange({ ...settings, birth_control_enabled: e.target.checked })}
+            style={{ width: 22, height: 22, cursor: 'pointer' }}
+          />
+        </label>
+
+        {settings.birth_control_enabled && (
+          <div style={{ padding: '16px 0', borderBottom: `1px solid ${C.sand}` }}>
+            <div style={{ font: "400 15px/1.4 'Inter Tight', sans-serif", color: C.ink, marginBottom: 6 }}>{t('cycle.settings.pill_type.label')}</div>
+            <div style={{ font: "400 11px/1.4 'DM Mono', monospace", color: C.inkFaint, marginBottom: 10, letterSpacing: '0.04em' }}>{t('cycle.settings.pill_type.sub')}</div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {(['combined', 'progestin-only', 'other'] as const).map(pt => {
+                const labelKey = pt === 'combined' ? 'cycle.pill.type_combined' : pt === 'progestin-only' ? 'cycle.pill.type_progestin' : 'cycle.pill.type_other';
+                const on = settings.birth_control_type === pt;
+                return (
+                  <button
+                    key={pt}
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() => onChange({ ...settings, birth_control_type: pt })}
+                    style={{
+                      background: on ? C.deep : 'transparent',
+                      border: `1px solid ${on ? C.deep : C.sand}`,
+                      color: on ? C.base : C.ink,
+                      padding: '10px 14px',
+                      fontFamily: "'DM Mono', monospace",
+                      fontSize: 11,
+                      letterSpacing: '0.12em',
+                      textTransform: 'lowercase',
+                      cursor: 'pointer',
+                      minHeight: 44,
+                      borderRadius: 0,
+                    }}
+                  >
+                    {t(labelKey)}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         <div style={{ padding: '16px 0' }}>
           <div style={{ font: "400 15px/1.4 'Inter Tight', sans-serif", color: C.ink, marginBottom: 6 }}>{t('cycle.settings.passphrase.label')}</div>
@@ -535,6 +780,8 @@ export function CycleModule({ onBack }: CycleModuleProps) {
     tracking_for_fertility: false,
     show_dial: true,
     passphrase_hint: '',
+    birth_control_enabled: false,
+    birth_control_type: 'combined',
   });
   const [lastEditedByCycle, setLastEditedByCycle] = useStoreSlice<Record<number, number>>('cycle', 'lastEditedByCycle', {});
   const [asks, setAsks] = useStoreSlice<string[]>('cycle', 'asks', []);
@@ -593,6 +840,22 @@ export function CycleModule({ onBack }: CycleModuleProps) {
   }, [stats.last_period_start, now]);
 
   const dialLength = Math.round(stats.mean_length ?? 28);
+
+  const ovulationPrediction = useMemo(
+    () => (settings.show_dial ? predictOvulation(cycles) : null),
+    [cycles, settings.show_dial],
+  );
+
+  // Day index (0-based) of predicted ovulation within the current cycle.
+  // null when prediction is absent or ovulationTs falls outside cycle range.
+  const ovulationDayIndex = useMemo(() => {
+    if (!ovulationPrediction?.ovulationTs || !stats.last_period_start) return null;
+    const idx = Math.round(
+      (ovulationPrediction.ovulationTs - stats.last_period_start) / 86_400_000,
+    );
+    if (idx < 0 || idx >= dialLength) return null;
+    return idx;
+  }, [ovulationPrediction, stats.last_period_start, dialLength]);
   const currentDayLabel = currentDay ?? 1;
   const recentCycles = cycles.filter(c => c.cycleLengthDays).slice(-5);
 
@@ -627,6 +890,14 @@ export function CycleModule({ onBack }: CycleModuleProps) {
     setRecordOpen(false);
   }, [items, setItems, lastEditedByCycle, setLastEditedByCycle, stats.last_period_start]);
 
+  // ── pill log handler ───────────────────────────────────────────────────────
+
+  const savePill = useCallback((ts: number) => {
+    const next = items.slice();
+    next.push({ ts, action: 'pill' });
+    setItems(next);
+  }, [items, setItems]);
+
   // ── adherence handlers ─────────────────────────────────────────────────────
 
   const handleAdherenceAccept = () => setAdherenceDismissed(true);
@@ -654,6 +925,7 @@ export function CycleModule({ onBack }: CycleModuleProps) {
         ['--ceramic-ink-soft' as string]: '#5C5750',
         ['--ceramic-ink-faint' as string]: '#8A8377',
         ['--ceramic-accent' as string]: '#8A4B2C',
+        ['--ceramic-ovulation' as string]: '#5A7A5A',   // sage · distinct from umber accent
         background: '#E8DED0',
         color: '#1E1E1E',
         width: '100vw',
@@ -754,24 +1026,64 @@ export function CycleModule({ onBack }: CycleModuleProps) {
           </div>
 
           {currentDay !== null && !stats.irregular_flag && (
-            <div
-              role="progressbar"
-              aria-valuenow={currentDay}
-              aria-valuemax={dialLength}
-              style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 120, padding: '0 16px' }}
-            >
-              {Array.from({ length: dialLength }).map((_, i) => (
-                <span
-                  key={i}
+            <>
+              <div
+                role="progressbar"
+                aria-valuenow={currentDay}
+                aria-valuemax={dialLength}
+                aria-label={
+                  ovulationDayIndex !== null
+                    ? t('cycle.day.aria', currentDay, cyclePhaseLabel(phaseName)) +
+                      ` · ${t('cycle.ovulation.caption', ovulationPrediction?.ovulationTs ? fmtOvulationDate(ovulationPrediction.ovulationTs) : '')}`
+                    : undefined
+                }
+                style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap', marginBottom: ovulationDayIndex !== null ? 16 : 120, padding: '0 16px' }}
+              >
+                {Array.from({ length: dialLength }).map((_, i) => {
+                  const isOvulation = i === ovulationDayIndex;
+                  return (
+                    <span
+                      key={i}
+                      aria-label={isOvulation ? 'ovulation' : undefined}
+                      style={{
+                        width: isOvulation ? 10 : 8,
+                        height: isOvulation ? 10 : 8,
+                        borderRadius: '50%',
+                        background: isOvulation
+                          ? 'var(--ceramic-ovulation)'
+                          : i < currentDay
+                            ? C.accent
+                            : 'transparent',
+                        border: isOvulation
+                          ? '1.5px solid var(--ceramic-ovulation)'
+                          : `1px solid ${i < currentDay ? C.accent : C.sand}`,
+                        flexShrink: 0,
+                        marginTop: isOvulation ? -1 : 0,
+                      }}
+                    />
+                  );
+                })}
+              </div>
+
+              {/* ovulation caption */}
+              {ovulationPrediction?.ovulationTs && (
+                <div
                   style={{
-                    width: 8, height: 8, borderRadius: '50%',
-                    background: i < currentDay ? C.accent : 'transparent',
-                    border: `1px solid ${i < currentDay ? C.accent : C.sand}`,
-                    flexShrink: 0,
+                    textAlign: 'center',
+                    fontFamily: "'DM Mono', monospace",
+                    fontSize: 11,
+                    letterSpacing: '0.14em',
+                    color: 'var(--ceramic-ovulation)',
+                    marginBottom: 120,
+                    paddingTop: 8,
                   }}
-                />
-              ))}
-            </div>
+                >
+                  {ovulationPrediction.confidence < 0.4
+                    ? t('cycle.ovulation.caption_low', fmtOvulationDate(ovulationPrediction.ovulationTs))
+                    : t('cycle.ovulation.caption', fmtOvulationDate(ovulationPrediction.ovulationTs))}
+                </div>
+              )}
+            </>
           )}
         </div>
 
@@ -908,6 +1220,18 @@ export function CycleModule({ onBack }: CycleModuleProps) {
           </button>
 
           {recordOpen && <RecordPanel onSave={saveRecord} onCancel={() => setRecordOpen(false)} />}
+
+          {/* birth control pill log */}
+          {settings.birth_control_enabled && (
+            <div style={{ marginTop: 80 }}>
+              <PillLogSection
+                items={items}
+                onLogPill={savePill}
+                now={now}
+                birthControlType={settings.birth_control_type}
+              />
+            </div>
+          )}
 
           {/* ask partner */}
           <div style={{ marginTop: 80 }}>

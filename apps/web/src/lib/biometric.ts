@@ -201,8 +201,8 @@ async function unlockViaNative(): Promise<BiometricResult> {
 
   try {
     await NativeBiometric.verifyIdentity({
-      reason: 'unlock finance privacy mode', // TODO: ES
-      title: 'unlock', // TODO: ES
+      reason: 'unlock finance privacy mode', // LOCALIZE_LATER — ES: finance.privacy.biometric_reason "desbloquear modo privado de finanzas"
+      title: 'unlock', // LOCALIZE_LATER — ES: finance.privacy.biometric_title "desbloquear"
       subtitle: '',
       description: '',
     });

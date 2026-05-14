@@ -4,7 +4,7 @@ import { useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
 import { fixMeshyMaterials } from './fixMaterials';
 
-useGLTF.preload('/assets/garden/dirt-pile.glb');
+useGLTF.preload('/models/garden/dirt-pile.glb');
 
 // Layer one big central pile + 6 smaller satellites around it inside the
 // ring. Each instance has its own faded material so the pile edges
@@ -42,7 +42,7 @@ function buildMounds(): Mound[] {
 }
 
 export function DirtPile() {
-  const { scene } = useGLTF('/assets/garden/dirt-pile.glb');
+  const { scene } = useGLTF('/models/garden/dirt-pile.glb');
   const invalidate = useThree((s) => s.invalidate);
   useEffect(() => { fixMeshyMaterials(scene); invalidate(); }, [scene, invalidate]);
 

@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { fixMeshyMaterials } from './fixMaterials';
 import { findFirstMesh } from './glbHelpers';
 
-useGLTF.preload('/assets/garden/path-stone.glb');
+useGLTF.preload('/models/garden/path-stone.glb');
 
 interface Stone {
   pos: [number, number, number];
@@ -31,7 +31,7 @@ function buildPath(): Stone[] {
 }
 
 export function Path() {
-  const { scene } = useGLTF('/assets/garden/path-stone.glb');
+  const { scene } = useGLTF('/models/garden/path-stone.glb');
   const invalidate = useThree((s) => s.invalidate);
   useEffect(() => { fixMeshyMaterials(scene); invalidate(); }, [scene, invalidate]);
 

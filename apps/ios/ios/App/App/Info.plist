@@ -49,6 +49,10 @@
 	<string>ollie uses the microphone for voice capture (brain dump). Audio is transcribed on-device; nothing is sent to a server.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>ollie transcribes your voice on-device to route brain dumps into the right module.</string>
+	<key>NSHealthShareUsageDescription</key>
+	<string>Ollie reads your steps, heart rate, and sleep data to surface patterns. Stays on your device.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>(unused; we don't write to HealthKit)</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

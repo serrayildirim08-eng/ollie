@@ -3,11 +3,16 @@ main = "src/index.ts"
 compatibility_date = "2025-09-23"
 compatibility_flags = ["nodejs_compat"]
 
-# Two schedules:
+# Schedules:
 #   - 03:00 UTC nightly  — daily intelligence layer (stubs today)
 #   - every 5 minutes    — drain the brain-dump enrichment queue
+#
+# Sunday 19:00 UTC weekly review is intentionally NOT in the crons list.
+# Server-cron path deferred; primary = client-side scheduleWeeklyReview().
+# When ready, add: "0 19 * * 0"
 [triggers]
 crons = ["0 3 * * *", "*/5 * * * *"]
+# crons = ["0 3 * * *", "*/5 * * * *", "0 19 * * 0"]  # uncomment to enable weekly-review server cron
 
 # ─── KV binding ────────────────────────────────────────────────────────────────
 # Re-use the ai-proxy CACHE_KV namespace so /enrich-dump and the drain handler

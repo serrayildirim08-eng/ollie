@@ -21,9 +21,10 @@
  *   onComplete — called after screen 7 or after Skip. Sets onboarded = true.
  */
 
-import React, { useReducer, useRef, useEffect } from 'react';
+import React, { useReducer, useRef, useEffect, useState } from 'react';
 import { Burhan3D } from '../components/Burhan3D';
 import { PlaidLinkButton } from '../components/PlaidLinkButton';
+import { HealthKitConsent } from '../components/HealthKitConsent';
 import { store } from '../store';
 import { SUPPORTED_COUNTRIES, detectCountryFromLocale } from '../lib/country';
 import { commitAll, type State } from './OnboardingScreen.commit';
@@ -646,9 +647,52 @@ function SubscriptionsScreen({
   );
 }
 
-// ─── Screen 4: Bank Link (optional · Plaid scaffolding) ─────────────────────
+// ─── Screen 4: Bank Link + (optional) HealthKit ─────────────────────────────
+//
+// HealthKit consent is rendered as a sub-step AFTER the user resolves the
+// bank link prompt — only when `VITE_HEALTHKIT_ENABLED === '1'` AND the
+// Capacitor native runtime is available (the consent component itself
+// no-ops on web). This keeps the screen index stable for tests + the
+// progress dots, and lets a single env flag toggle the entire flow
+// without renumbering.
+
+function isHealthKitOnboardingEnabled(): boolean {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const env = (import.meta as any)?.env;
+    return env?.VITE_HEALTHKIT_ENABLED === '1';
+  } catch { return false; }
+}
 
 function BankLinkScreen({ onNext }: { onNext: () => void }) {
+  // Two-phase: 'bank' → (optional 'health') → next screen.
+  const [phase, setPhase] = useState<'bank' | 'health'>('bank');
+
+  function leaveBankPhase() {
+    if (isHealthKitOnboardingEnabled()) {
+      setPhase('health');
+    } else {
+      onNext();
+    }
+  }
+
+  if (phase === 'health') {
+    return (
+      <>
+        <Headline>connect apple health?</Headline>
+        <Sub>
+          optional. ollie reads your steps, heart rate, and sleep to
+          surface patterns. stays on your device — nothing leaves your
+          phone. you can revoke in settings → privacy → health.
+        </Sub>
+        <HealthKitConsent onDone={onNext} />
+        <div style={{ marginTop: '24px' }}>
+          <PrimaryBtn label="skip for now" onClick={onNext} />
+        </div>
+      </>
+    );
+  }
+
   return (
     <>
       <Headline>connect a bank account?</Headline>
@@ -657,9 +701,9 @@ function BankLinkScreen({ onNext }: { onNext: () => void }) {
         spending patterns + subscription tracking. read-only. you can
         disconnect anytime in settings.
       </Sub>
-      <PlaidLinkButton onLinked={() => onNext()} onSkip={() => { /* user can hit next */ }} />
+      <PlaidLinkButton onLinked={leaveBankPhase} onSkip={() => { /* user can hit next */ }} />
       <div style={{ marginTop: '24px' }}>
-        <PrimaryBtn label="skip for now" onClick={onNext} />
+        <PrimaryBtn label="skip for now" onClick={leaveBankPhase} />
       </div>
     </>
   );

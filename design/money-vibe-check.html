@@ -1,0 +1,874 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>vibe-check — ollie money (v2)</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400;1,500&family=Cormorant+Garamond:ital,wght@1,400;1,500&family=Inter+Tight:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" />
+
+<style>
+  :root {
+    /* surfaces */
+    --bone:        #FAFAF7;
+    --paper:       #F4F1E8;
+    --paper-2:     #EFEBE0;
+
+    /* ink */
+    --ink:         #14140F;
+    --ink-soft:    #5A574E;
+    --ink-faint:   #9C9890;
+    --ink-ghost:   #C8C4BA;
+
+    /* accents */
+    --accent:      #2E5D43;
+    --accent-soft: rgba(46, 93, 67, 0.14);
+    --umber:       #8A4B2C;
+    --warn:        #C9974C;
+
+    /* hairlines */
+    --rule:        rgba(20, 20, 15, 0.10);
+    --rule-soft:   rgba(20, 20, 15, 0.05);
+
+    /* v2 — paper grain (SVG noise, static, never animated) */
+    --paper-grain:      url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='1.2' numOctaves='2' seed='3'/><feColorMatrix values='0 0 0 0 0.08  0 0 0 0 0.08  0 0 0 0 0.06  0 0 0 0.055 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+    --paper-grain-hero: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' seed='7'/><feColorMatrix values='0 0 0 0 0.08  0 0 0 0 0.08  0 0 0 0 0.06  0 0 0 0.085 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+
+    /* fonts */
+    --font-editor:    'EB Garamond', Georgia, serif;
+    --font-editor-it: 'Cormorant Garamond', 'EB Garamond', Georgia, serif;
+    --font-system:    'Inter Tight', system-ui, -apple-system, sans-serif;
+    --font-mono:      'JetBrains Mono', Menlo, Consolas, monospace;
+
+    /* motion */
+    --e-calm-out:  cubic-bezier(0.18, 0, 0.22, 1);
+    --e-breathe:   cubic-bezier(0.45, 0, 0.55, 1);
+    --e-lift-set:  cubic-bezier(0.42, 0, 0.18, 1);
+    --e-rule-draw: cubic-bezier(0.55, 0, 0.18, 1);
+
+    /* spacing */
+    --s-2:  8px;  --s-3: 12px;  --s-4: 16px;  --s-6: 24px;
+    --s-8: 32px;  --s-10: 40px; --s-14: 56px; --s-20: 80px; --s-30: 120px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    background: var(--bone);
+    background-image: var(--paper-grain);
+    background-repeat: repeat;
+    color: var(--ink);
+    font-family: var(--font-system);
+    font-weight: 400;
+    font-size: 16px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    min-height: 100vh;
+  }
+
+  /* simulate iPhone 15 viewport on desktop preview */
+  .device {
+    max-width: 390px;
+    margin: 0 auto;
+    min-height: 100vh;
+    position: relative;
+    padding-bottom: 140px;
+    /* paper grain stacks again at device level so the texture density is consistent on wider screens */
+    background-image: var(--paper-grain);
+  }
+
+  @media (min-width: 768px) {
+    .device {
+      max-width: 560px;
+      box-shadow: 0 0 0 1px var(--rule);
+    }
+  }
+
+  /* numeric typography is first-class */
+  .num {
+    font-variant-numeric: tabular-nums lining-nums;
+    font-feature-settings: 'tnum' 1, 'lnum' 1;
+  }
+
+  /* ── MASTHEAD with solid INK ANCHOR BLOCK ─────────────────────────────────── */
+  .masthead {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    align-items: center;
+    column-gap: 16px;
+    padding: 56px 24px 0;
+  }
+  .masthead .title {
+    font-family: var(--font-editor);
+    font-size: 28px;
+    line-height: 1;
+    letter-spacing: -0.014em;
+    color: var(--ink);
+  }
+  /* the v2 anchor block — 44×44 solid ink, sage tabular numeral inside */
+  .anchor-block {
+    width: 44px;
+    height: 44px;
+    background: var(--ink);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--accent);
+    font-family: var(--font-editor);
+    font-size: 18px;
+    line-height: 1;
+    letter-spacing: -0.020em;
+    font-variant-numeric: tabular-nums lining-nums;
+    font-feature-settings: 'tnum' 1, 'lnum' 1;
+    /* zero radius — inkwell-square */
+    border-radius: 0;
+  }
+  .mask-toggle {
+    appearance: none;
+    background: transparent;
+    border: 1px solid var(--rule);
+    color: var(--ink-soft);
+    padding: 8px 12px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    cursor: pointer;
+    height: 32px;
+  }
+
+  /* eyebrow under masthead — exactly-as-wide-as-text hairline */
+  .eyebrow-row {
+    padding: 12px 24px 0;
+  }
+  .eyebrow {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 400;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+  .eyebrow .glyph { color: var(--ink-ghost); margin-right: 6px; }
+
+  /* v2 — hand-drawn dotted rule under the masthead, draws on once */
+  .hand-rule {
+    margin: 12px 24px 0;
+    display: block;
+    width: 200px;
+    height: 4px;
+    opacity: 0.6;
+  }
+  .hand-rule line {
+    stroke: var(--ink);
+    stroke-width: 1;
+    stroke-dasharray: 2 4;
+    stroke-dashoffset: 240;
+    animation: rule-draw 800ms var(--e-rule-draw) both;
+    animation-delay: 400ms;
+  }
+  @keyframes rule-draw {
+    to { stroke-dashoffset: 0; }
+  }
+
+  /* ── HERO BAND — textured, with ‡ printer's mark and asymmetric padding ──── */
+  .hero-band {
+    margin-top: 32px;
+    padding: 64px 56px 72px 24px; /* asymmetric: 24px left, 56px right */
+    background: var(--paper-2);
+    background-image: var(--paper-grain-hero);
+    background-repeat: repeat;
+    position: relative;
+  }
+  .hero-kicker {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 400;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    margin-bottom: 14px;
+    animation: settle 800ms var(--e-calm-out) both;
+    animation-delay: 480ms;
+  }
+  .hero-numeral {
+    font-family: var(--font-editor);
+    font-weight: 400;
+    font-size: 88px;
+    line-height: 1.00;
+    letter-spacing: -0.022em;
+    color: var(--ink);
+    display: inline-block;
+    animation:
+      settle 800ms var(--e-calm-out) both,
+      hero-breathe 6s var(--e-breathe) infinite;
+    animation-delay: 560ms, 1400ms;
+  }
+  .hero-italic-line {
+    font-family: var(--font-editor);
+    font-size: 22px;
+    line-height: 1.30;
+    letter-spacing: -0.008em;
+    color: var(--ink);
+    margin-top: 18px;
+    max-width: 260px;
+    animation: settle 800ms var(--e-calm-out) both;
+    animation-delay: 720ms;
+  }
+  .hero-italic-line em {
+    font-family: var(--font-editor-it);
+    color: var(--accent);
+    font-style: italic;
+    font-weight: 500;
+  }
+  .hero-confidence {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 32px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    animation: settle 800ms var(--e-calm-out) both;
+    animation-delay: 800ms;
+  }
+  .hero-confidence .pip {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+  /* ‡ printer's mark, bottom-right of hero band */
+  .hero-band .printer-mark {
+    position: absolute;
+    right: 24px;
+    bottom: 18px;
+    font-family: var(--font-editor);
+    font-size: 14px;
+    color: var(--umber);
+    line-height: 1;
+    user-select: none;
+    animation: settle 800ms var(--e-calm-out) both;
+    animation-delay: 640ms;
+  }
+
+  /* ── SECTIONS ─────────────────────────────────────────────────────────────── */
+  section {
+    position: relative;
+    padding: 64px 24px 0;
+  }
+  .section-head {
+    font-family: var(--font-editor);
+    font-weight: 400;
+    font-size: 38px;
+    line-height: 1.10;
+    letter-spacing: -0.016em;
+    color: var(--ink);
+    margin-bottom: 20px;
+  }
+  .section-head em {
+    font-family: var(--font-editor-it);
+    color: var(--accent);
+    font-style: italic;
+    font-weight: 500;
+  }
+  /* a full-italic display heading — for goals "saving for" */
+  .section-head--italic {
+    font-family: var(--font-editor-it);
+    font-style: italic;
+  }
+  .section-head--italic em {
+    /* same italic, sage on the contracted word */
+    color: var(--accent);
+  }
+
+  /* marginalia glyphs sit OUTSIDE the column */
+  .marginalia {
+    position: absolute;
+    font-family: var(--font-editor);
+    font-size: 26px;
+    line-height: 1;
+    color: var(--ink-ghost);
+    top: 64px;
+    user-select: none;
+  }
+  .marginalia--left {
+    left: 8px;
+  }
+  .marginalia--right {
+    right: 8px;
+  }
+
+  /* ── LEDGER ROW ───────────────────────────────────────────────────────────── */
+  .ledger {
+    border-top: 1px solid var(--rule);
+  }
+  .ledger-row {
+    display: grid;
+    grid-template-columns: 12px 1fr auto auto;
+    column-gap: 14px;
+    align-items: center;
+    padding: 18px 0;
+    border-bottom: 1px solid var(--rule-soft);
+    min-height: 64px;
+    cursor: pointer;
+    transition: background 120ms var(--e-calm-out);
+  }
+  .ledger-row:hover {
+    background: rgba(20, 20, 15, 0.02);
+  }
+  .ledger-row:active {
+    transform: scale(0.99);
+  }
+  .row-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--ink-faint);
+    margin: 0 auto;
+  }
+  .row-dot.returnable { background: var(--umber); }
+  .row-dot.overdue    { background: var(--warn); }
+  .row-dot.paid       { background: var(--ink-ghost); }
+  .row-name {
+    font-family: var(--font-system);
+    font-weight: 500;
+    font-size: 17px;
+    color: var(--ink);
+  }
+  .row-eyebrow {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 400;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin-top: 4px;
+  }
+  .row-meta {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    white-space: nowrap;
+  }
+  .row-amount {
+    font-family: var(--font-system);
+    font-weight: 500;
+    font-size: 17px;
+    letter-spacing: -0.005em;
+    color: var(--ink);
+    white-space: nowrap;
+  }
+  .row-amount.paid {
+    color: var(--ink-faint);
+    text-decoration: line-through;
+    text-decoration-thickness: 1px;
+  }
+
+  /* ── NOTICED — asymmetric column-RIGHT indent ─────────────────────────────── */
+  .section--noticed {
+    /* hard 56px left indent, 24px right — wabi-sabi asymmetry */
+    padding: 64px 24px 0 56px;
+  }
+  .signal {
+    border-top: 1px solid var(--rule);
+    padding: 28px 0 0;
+    margin-bottom: 32px;
+  }
+  .signal .kicker {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--umber);
+    margin-bottom: 12px;
+  }
+  .signal .headline {
+    font-family: var(--font-editor);
+    font-size: 22px;
+    line-height: 1.25;
+    letter-spacing: -0.010em;
+    color: var(--ink);
+    margin-bottom: 10px;
+  }
+  /* crosshatch ornament between headline and body */
+  .signal .crosshatch {
+    margin: 14px 0;
+    display: block;
+    width: 28px;
+    height: 10px;
+    opacity: 0.6;
+  }
+  .signal .crosshatch line {
+    stroke: var(--ink-soft);
+    stroke-width: 1;
+  }
+  .signal .body {
+    font-family: var(--font-system);
+    font-size: 16px;
+    line-height: 1.55;
+    color: var(--ink-soft);
+    margin-bottom: 18px;
+    max-width: 34ch;
+  }
+  .signal .actions {
+    display: flex;
+    gap: 10px;
+  }
+  .ghost-btn {
+    appearance: none;
+    background: transparent;
+    border: 1px solid var(--rule);
+    color: var(--ink);
+    padding: 10px 16px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: border-color 120ms var(--e-calm-out);
+    height: 36px;
+  }
+  .ghost-btn:hover { border-color: var(--ink); }
+  .ghost-btn.dismiss { color: var(--ink-soft); }
+
+  /* ── PATTERNS — with second ink anchor block + ¶ marginalia ──────────────── */
+  .patterns-head-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+  }
+  .patterns-head-row .anchor-block-sm {
+    width: 32px;
+    height: 32px;
+    background: var(--ink);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--accent);
+    font-family: var(--font-editor);
+    font-size: 14px;
+    font-variant-numeric: tabular-nums lining-nums;
+    border-radius: 0;
+  }
+  .patterns-head-row .section-head {
+    margin-bottom: 0;
+  }
+  .pattern {
+    border-top: 1px solid var(--rule);
+    padding: 18px 0;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    transition: padding 220ms var(--e-calm-out);
+  }
+  .pattern .marker {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+  }
+  .pattern .marker .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--umber);
+    flex-shrink: 0;
+  }
+  .pattern .marker .text {
+    font-family: var(--font-system);
+    font-size: 16px;
+    color: var(--ink);
+  }
+  .pattern .marker .text .count {
+    color: var(--ink-faint);
+    margin-left: 4px;
+  }
+  .pattern .chev {
+    color: var(--ink-faint);
+    font-family: var(--font-mono);
+    font-size: 14px;
+    transition: transform 220ms var(--e-calm-out);
+  }
+  .pattern.open .chev { transform: rotate(90deg); }
+  .pattern-detail {
+    display: none;
+    padding: 14px 0 22px 18px;
+    font-family: var(--font-system);
+    font-size: 16px;
+    line-height: 1.55;
+    color: var(--ink-soft);
+    max-width: 34ch;
+    border-bottom: 1px solid var(--rule-soft);
+  }
+  .pattern.open + .pattern-detail { display: block; }
+
+  /* ── GOALS — dotted underline under the remaining amount ──────────────────── */
+  .goal-tile {
+    border-top: 1px solid var(--rule);
+    border-bottom: 1px solid var(--rule);
+    padding: 22px 0;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: baseline;
+    column-gap: 16px;
+  }
+  .goal-name {
+    font-family: var(--font-editor);
+    font-size: 22px;
+    color: var(--ink);
+  }
+  .goal-eta {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin-top: 4px;
+  }
+  .goal-amount {
+    font-family: var(--font-system);
+    font-weight: 500;
+    font-size: 22px;
+    color: var(--ink);
+    position: relative;
+    padding-bottom: 6px;
+  }
+  .goal-amount .dotted-under {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 4px;
+    display: block;
+  }
+  .goal-amount .dotted-under line {
+    stroke: var(--ink-faint);
+    stroke-width: 1;
+    stroke-dasharray: 1.5 3;
+  }
+
+  /* ── ADHD TAX — off-axis 88px from left ───────────────────────────────────── */
+  .adhd-tax {
+    padding: 112px 24px 24px 88px;
+    font-family: var(--font-system);
+    font-size: 13px;
+    line-height: 1.45;
+    letter-spacing: 0.005em;
+    color: var(--umber);
+  }
+
+  /* ── FOOTER CTA ───────────────────────────────────────────────────────────── */
+  .cta-footer {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 16px 24px 32px;
+    background: linear-gradient(to top, var(--bone) 60%, rgba(250, 250, 247, 0));
+    z-index: 100;
+  }
+  .device-cta-wrap {
+    max-width: 390px;
+    margin: 0 auto;
+  }
+  @media (min-width: 768px) {
+    .device-cta-wrap { max-width: 560px; }
+  }
+  .cta-primary {
+    appearance: none;
+    display: block;
+    width: 100%;
+    background: transparent;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    font-family: var(--font-system);
+    font-weight: 500;
+    font-size: 14px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    padding: 18px 24px;
+    min-height: 56px;
+    cursor: pointer;
+    transition: box-shadow 220ms var(--e-calm-out), color 220ms var(--e-calm-out);
+    animation: glow-pulse 3600ms var(--e-breathe) infinite;
+  }
+  .cta-primary:hover {
+    color: var(--ink);
+    box-shadow: 0 0 0 4px var(--accent-soft);
+  }
+  .cta-primary:active { transform: scale(0.98); }
+
+  /* keyframes */
+  @keyframes settle {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes hero-breathe {
+    0%, 100% { transform: scale(1); }
+    50%      { transform: scale(1.004); }
+  }
+  @keyframes glow-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 var(--accent-soft); }
+    50%      { box-shadow: 0 0 0 8px var(--accent-soft); }
+  }
+
+  /* reduced motion */
+  @media (prefers-reduced-motion: reduce) {
+    .hero-numeral,
+    .hero-italic-line,
+    .hero-kicker,
+    .hero-confidence,
+    .hero-band .printer-mark,
+    .cta-primary {
+      animation: none !important;
+    }
+    .hand-rule line {
+      stroke-dashoffset: 0 !important;
+      animation: none !important;
+    }
+    * { transition-duration: 0.01ms !important; }
+  }
+
+  /* masked state demo */
+  .masked .row-amount,
+  .masked .hero-numeral,
+  .masked .goal-amount {
+    filter: blur(8px);
+    transition: filter 320ms var(--e-calm-out);
+  }
+</style>
+</head>
+
+<body>
+
+<div class="device" id="device">
+
+  <!-- ────────────── MASTHEAD: "money" + sage week-20 ink block + hide button ────────────── -->
+  <header class="masthead">
+    <div class="title">money</div>
+    <div class="anchor-block num" aria-label="week 20">20</div>
+    <button class="mask-toggle" onclick="document.getElementById('device').classList.toggle('masked')">hide</button>
+  </header>
+
+  <!-- eyebrow under the masthead -->
+  <div class="eyebrow-row">
+    <span class="eyebrow"><span class="glyph">§</span>this week · 14 may</span>
+  </div>
+
+  <!-- v2 hand-drawn dotted rule (draws on once) -->
+  <svg class="hand-rule" viewBox="0 0 200 4" preserveAspectRatio="none" aria-hidden="true">
+    <line x1="0" y1="2" x2="200" y2="2" />
+  </svg>
+
+  <!-- ────────────── HERO BAND with paper grain + ‡ printer's mark ────────────── -->
+  <section class="hero-band">
+    <div class="hero-kicker">safe to spend</div>
+    <div class="hero-numeral num">$347</div>
+    <div class="hero-italic-line">safe to <em>spend</em> this week.</div>
+    <div class="hero-confidence">
+      <span class="pip"></span>
+      <span>high confidence · 4 weeks of data</span>
+    </div>
+    <span class="printer-mark" aria-hidden="true">‡</span>
+  </section>
+
+  <!-- ────────────── LEDGER (with § marginalia outside column-left) ────────────── -->
+  <section>
+    <span class="marginalia marginalia--left" aria-hidden="true">§</span>
+    <h2 class="section-head">the ledger</h2>
+    <div class="ledger">
+
+      <div class="ledger-row">
+        <span class="row-dot"></span>
+        <div>
+          <div class="row-name">blue bottle</div>
+          <div class="row-eyebrow">coffee</div>
+        </div>
+        <div class="row-meta">2h ago</div>
+        <div class="row-amount num">$6.50</div>
+      </div>
+
+      <div class="ledger-row">
+        <span class="row-dot returnable"></span>
+        <div>
+          <div class="row-name">aesop hwyl candle</div>
+          <div class="row-eyebrow">home · returnable until 21 may</div>
+        </div>
+        <div class="row-meta">yesterday</div>
+        <div class="row-amount num">$67.00</div>
+      </div>
+
+      <div class="ledger-row">
+        <span class="row-dot paid"></span>
+        <div>
+          <div class="row-name">rent</div>
+          <div class="row-eyebrow">housing · paid 01 may</div>
+        </div>
+        <div class="row-meta">paid</div>
+        <div class="row-amount num paid">$1,400</div>
+      </div>
+
+      <div class="ledger-row">
+        <span class="row-dot"></span>
+        <div>
+          <div class="row-name">muji notebook + pens</div>
+          <div class="row-eyebrow">supplies</div>
+        </div>
+        <div class="row-meta">14 may</div>
+        <div class="row-amount num">$22.30</div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ────────────── BILLS — italic-word display heading ────────────── -->
+  <section>
+    <h2 class="section-head">next <em>14</em> days</h2>
+    <div class="ledger">
+      <div class="ledger-row">
+        <span class="row-dot"></span>
+        <div>
+          <div class="row-name">electricity</div>
+          <div class="row-eyebrow">utilities</div>
+        </div>
+        <div class="row-meta">due in 4d</div>
+        <div class="row-amount num">$94</div>
+      </div>
+      <div class="ledger-row">
+        <span class="row-dot overdue"></span>
+        <div>
+          <div class="row-name">car insurance</div>
+          <div class="row-eyebrow">transport</div>
+        </div>
+        <div class="row-meta">2d late</div>
+        <div class="row-amount num">$162</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ────────────── NOTICED — asymmetric column-RIGHT indent + crosshatch ornament ────────────── -->
+  <section class="section--noticed">
+    <h2 class="section-head">noticed</h2>
+
+    <div class="signal">
+      <div class="kicker">· stale subscription</div>
+      <div class="headline">netflix hasn't been touched in 47 days.</div>
+      <svg class="crosshatch" viewBox="0 0 28 10" aria-hidden="true">
+        <line x1="0" y1="10" x2="10" y2="0" />
+        <line x1="8" y1="10" x2="18" y2="0" />
+        <line x1="16" y1="10" x2="26" y2="0" />
+      </svg>
+      <div class="body">still $15.49 a month. last opened mar 28. not pushing — just naming it.</div>
+      <div class="actions">
+        <button class="ghost-btn">mark for cancel</button>
+        <button class="ghost-btn dismiss">noted</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ────────────── PATTERNS — second ink anchor block + ¶ marginalia ────────────── -->
+  <section>
+    <span class="marginalia marginalia--right" aria-hidden="true">¶</span>
+    <div class="patterns-head-row">
+      <h2 class="section-head">patterns</h2>
+      <span class="anchor-block-sm num" aria-label="6 named patterns">6</span>
+    </div>
+
+    <div class="pattern" onclick="this.classList.toggle('open')">
+      <div class="marker">
+        <span class="dot"></span>
+        <span class="text">doom-buying<span class="count"> · 6 late-night events this season</span></span>
+      </div>
+      <span class="chev">›</span>
+    </div>
+    <div class="pattern-detail">
+      six sephora visits between 11pm and 2am since february. average basket $58. you've returned two of them. naming, not prescribing.
+    </div>
+
+    <div class="pattern" onclick="this.classList.toggle('open')">
+      <div class="marker">
+        <span class="dot"></span>
+        <span class="text">research paralysis<span class="count"> · 4 sessions, no purchase</span></span>
+      </div>
+      <span class="chev">›</span>
+    </div>
+    <div class="pattern-detail">
+      four wirecutter dives on noise-cancelling headphones since march. no purchase. one of those days you probably needed the headphones, not the research.
+    </div>
+  </section>
+
+  <!-- ────────────── GOALS — full italic display heading + dotted underline ────────────── -->
+  <section>
+    <h2 class="section-head section-head--italic">saving <em>for</em></h2>
+
+    <div class="goal-tile">
+      <div>
+        <div class="goal-name">portland trip</div>
+        <div class="goal-eta">approx 3 mo at this pace</div>
+      </div>
+      <div class="goal-amount num">
+        $420 left
+        <svg class="dotted-under" viewBox="0 0 100 4" preserveAspectRatio="none" aria-hidden="true">
+          <line x1="0" y1="2" x2="100" y2="2" />
+        </svg>
+      </div>
+    </div>
+
+    <div class="goal-tile" style="border-top:none;">
+      <div>
+        <div class="goal-name">replacement laptop</div>
+        <div class="goal-eta">approx 9 mo at this pace</div>
+      </div>
+      <div class="goal-amount num">
+        $1,180 left
+        <svg class="dotted-under" viewBox="0 0 120 4" preserveAspectRatio="none" aria-hidden="true">
+          <line x1="0" y1="2" x2="120" y2="2" />
+        </svg>
+      </div>
+    </div>
+  </section>
+
+  <!-- ────────────── ADHD TAX — sits 88px from left, wabi-sabi off-axis ────────────── -->
+  <div class="adhd-tax">season total: $124. logged, not judged.</div>
+
+</div>
+
+<!-- ────────────── FOOTER CTA ────────────── -->
+<div class="cta-footer">
+  <div class="device-cta-wrap">
+    <button class="cta-primary">log expense</button>
+  </div>
+</div>
+
+<script>
+  // demo: cycle hero number every 8s to feel the count-up + breathe
+  const heroEl = document.querySelector('.hero-numeral');
+  const values = ['$347', '$329', '$362', '$298'];
+  let i = 0;
+  setInterval(() => {
+    if (document.hidden) return;
+    i = (i + 1) % values.length;
+    heroEl.style.opacity = '0';
+    setTimeout(() => {
+      heroEl.textContent = values[i];
+      heroEl.style.transition = 'opacity 600ms cubic-bezier(0.42, 0, 0.18, 1)';
+      heroEl.style.opacity = '1';
+    }, 280);
+  }, 8000);
+</script>
+
+</body>
+</html>

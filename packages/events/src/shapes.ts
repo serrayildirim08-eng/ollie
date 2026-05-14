@@ -35,6 +35,7 @@ export const SHAPES: Record<string, ShapeSpec> = {
   'pets:care_logged':          { pet_id: 'string', task: 'string', source: 'string', occurred_at: 'number' },
   'void:reminder:scheduled':   { id: 'string', fireAt: 'number', message: 'string', module: 'string', source: 'string' },
   'void:crisis:detected':      { text: 'string', matchedLine: 'string', ts: 'number' },
+  'research:row_written':      { row_id: 'string', table: 'string', text: 'string', locale: 'string', ts: 'number' },
 
   // Sprint 3 / D1 burhan
   'burhan:element_added':      { id: 'string', type: 'string', source_module: 'string', source_event_id: 'string', ts: 'number' },
@@ -57,6 +58,61 @@ export const SHAPES: Record<string, ShapeSpec> = {
   // Sprint 6 · impulse pause flow (FinanceModule)
   'finance:impulse_pause_started':  { id: 'string', amount: 'number', merchant: 'string', category: 'string', ts: 'number', expires_at: 'number' },
   'finance:impulse_pause_resolved': { id: 'string', amount: 'number', merchant: 'string', outcome: 'string', ts: 'number' },
+
+  // habits completion → garden
+  'habits:completed': { habitId: 'string', category: 'string', habitName: 'string', ts: 'number' },
+
+  // consent (B2B pivot 2026-05-14) — every persist via setConsent() fires this.
+  'consent:set': {
+    necessary: 'boolean',
+    marketing: 'boolean',
+    research_optin: 'boolean',
+    source: 'string',
+    ts: 'number',
+  },
+
+  // body weekly review
+  'body:weekly_review': { ts: 'number', weekStartTs: 'number', weekEndTs: 'number', copy: 'string', summary: 'object' },
+
+  // sleep · wind-down checklist (feature 12)
+  'sleep:wind_down_started':   { ts: 'number' },
+  'sleep:wind_down_completed': { ts: 'number', durationMs: 'number', itemsCompleted: 'number' },
+  'sleep:wind_down_skipped':   { ts: 'number', itemsCompleted: 'number' },
+
+  // body notifications · 11 push events (Sprint body-v2 wiring)
+  'cycle:period_approaching':    { predictedTs: 'number', daysUntil: 'number', ts: 'number' },
+  'cycle:period_imminent':       { predictedTs: 'number', ts: 'number' },
+  'cycle:period_late':           { predictedTs: 'number', daysLate: 'number', ts: 'number' },
+  'cycle:luteal_starting':       { lutealStartTs: 'number', daysUntil: 'number', ts: 'number' },
+  'cycle:ovulation_imminent':    { ovulationTs: 'number', ts: 'number' },
+  'cycle:pill_missed':           { missedDate: 'string', ts: 'number' },
+  'sleep:wind_down_window':      { bedtimeTs: 'number', ts: 'number' },
+  'sleep:debt_accumulated':      { debtHours: 'number', targetHours: 'number', idealBedtimeHHMM: 'string', ts: 'number' },
+  'body:supplement_due':         { supplementId: 'string', supplementName: 'string', reminderHHMM: 'string', ts: 'number' },
+  'body:posture_nudge':          { hourBucket: 'number', ts: 'number' },
+  'habits:morning_check':        { 'firstHabitName?': 'string', totalCount: 'number', ts: 'number' },
+
+  // body · caffeine→sleep correlator (Drake 2013, 6h half-life). threshold
+  // may be null when correlation magnitude < 0.3; declared optional here
+  // so the validator accepts null without dropping the emit.
+  'pattern:caffeine_sleep_detected': {
+    correlation: 'number',
+    'threshold?': 'object',
+    sampleSize: 'number',
+    copy: 'string',
+    ts: 'number',
+  },
+
+  // body-correlation registry — emitted from the daily registry pass for
+  // any correlator whose copy is non-empty. correlation_name is a stable
+  // enum from @ollie/logic/body/correlations.
+  'pattern:detected': {
+    correlation_name: 'string',
+    correlation: 'number',
+    sample_size: 'number',
+    copy: 'string',
+    ts: 'number',
+  },
 };
 
 export type ValidationResult = { ok: true } | { ok: false; reason: string };

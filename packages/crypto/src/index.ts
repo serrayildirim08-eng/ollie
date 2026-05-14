@@ -1,17 +1,19 @@
 /**
- * @ollie/crypto · AES-GCM-256 + PBKDF2 zero-knowledge primitives
+ * @ollie/crypto · AES-GCM-256 + PBKDF2 passphrase-derived primitives
  *
  * Sprint 2 · C1. Ports the legacy `window.VOID.backup` crypto path
  * out of void-app.html into a testable package. Used by:
- *   - @ollie/sync     — encrypted per-module sync via Supabase
+ *   - @ollie/sync     — encrypted per-module sync via Supabase (opt-out path)
  *   - @ollie/backup   — encrypted .json export/import
  *   - @ollie/auth     — passphrase → derived key chain
  *
- * Constitutional rule (Decision · zero-knowledge):
- *   the server NEVER sees raw user data. all encryption happens on
- *   the device. the passphrase is derived into a CryptoKey that
- *   lives only in memory — losing the passphrase means losing the
- *   data, by design.
+ * NOTE (Sprint B' pivot 2026-05-14): the original posture was that the
+ * server never sees raw user data, full stop. That default was abandoned
+ * for the opt-in anonymized data-collection model (see `@ollie/consent`
+ * + `@ollie/pii-scrub` + `research_corpus`). This crypto package is
+ * retained for: (a) the auth passphrase derivation that still keeps the
+ * LOGIN passphrase off-server, (b) encrypted backup export/import, and
+ * (c) the future opt-out sync path if a B2B customer demands it.
  *
  * Parameters (locked):
  *   PBKDF2:  SHA-256, 100_000 iterations, 16-byte random salt

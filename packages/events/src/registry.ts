@@ -42,6 +42,12 @@ export const REGISTRY: Registry = {
   'void:cycle:symptom_logged':     { payload: '{ ts: number, tags: string[], moduleContext: string }' },
   'void:cycle:asks_changed':       { payload: '{ asks: string[], ts: number }' },
 
+  // ─── research pipeline (Sprint B' 2026-05-14) ───────────────────
+  // Emitted by upstream module orchestrators when a scrubbable row is
+  // written. Research orchestrator buffers + flushes through scrub → /label.
+  // Consent check is on the orchestrator side; emitters do not gate.
+  'research:row_written':          { payload: '{ row_id: string, table: "brain_dump_log" | "finance_records" | "body_records" | "home_records" | "work_records", text: string, locale: "en" | "es" | "tr", sector_hint?: string, ts: number }' },
+
   // ─── pets ───────────────────────────────────────────────────────
   'pets:pet_added':                { payload: '{ pet_id: string, name: string, species: string }' },
   'pets:pet_archived':             { payload: '{ pet_id: string }' },
@@ -65,6 +71,14 @@ export const REGISTRY: Registry = {
   'void:reminder:cancelled':       { payload: '{ id: string }' },
   'void:toast':                    { payload: '{ message: string, module: string }' },
 
+  // ─── consent (B2B pivot 2026-05-14) ─────────────────────────────
+  // Fires every time consent state is persisted via @ollie/consent
+  // setConsent(). Carries the new shape so downstream subscribers
+  // (research-stream, sessionTracker, orchestrator) can react without
+  // re-reading the store. source distinguishes onboarding vs reprompt vs
+  // settings-change paths.
+  'consent:set':                   { payload: '{ necessary: true, marketing: boolean, research_optin: boolean, source: "onboarding"|"settings"|"reprompt", ts: number }' },
+
   // ─── consumption (B2B panel) ────────────────────────────────────
   'consumption:brand:detected':    { payload: '{ id: string, brand_key: string, category_l1: string, category_l2?: string, confidence: number, source: "braindump"|"finance"|"grocery"|"direct", raw_module: string, ts: number }' },
   'consumption:brand:confirmed':   { payload: '{ id: string, brand_key: string, confirmed_by: "user" }' },
@@ -81,6 +95,13 @@ export const REGISTRY: Registry = {
   'journal:entries_added':         { payload: '{ dump_ts: number, count: number, extractor: string }' },
   'sleep:record_updated':          { payload: '{ night_of: string, is_partial: boolean }' },
 
+  // ─── sleep · wind-down checklist (feature 12 / AUDIT_body_v2 hyp #6) ────
+  // Sequential 6-item bedtime ritual; started fires on first tap of the night,
+  // completed when the final item is checked, skipped if dismissed mid-flow.
+  'sleep:wind_down_started':       { payload: '{ ts: number }' },
+  'sleep:wind_down_completed':     { payload: '{ ts: number, durationMs: number, itemsCompleted: number }' },
+  'sleep:wind_down_skipped':       { payload: '{ ts: number, itemsCompleted: number }' },
+
   // ─── episodes ───────────────────────────────────────────────────
   'void:episode:opened':           { payload: '{ id: string, label: string, kind: string, started_at: number }' },
   'void:episode:closed':           { payload: '{ id: string, ended_at: number, duration_days: number }' },
@@ -92,9 +113,12 @@ export const REGISTRY: Registry = {
   'work:pattern_detected':         { payload: '{ pattern: string, confidence: string, sample_n: number, ts: number }' },
   'body:pattern_detected':         { payload: '{ pattern: string, confidence: string, sample_n: number, ts: number }' },
   'sleep:pattern_detected':        { payload: '{ pattern: string, confidence: string, sample_n: number, ts: number }' },
+  'pattern:caffeine_sleep_detected': { payload: '{ correlation: number, threshold: { hours: number, minutes: number } | null, sampleSize: number, copy: string, ts: number }' },
+  'pattern:detected':              { payload: '{ correlation_name: string, correlation: number, sample_size: number, copy: string, ts: number }' },
   'astrology:transit_change':      { payload: '{ aspect: string, planet1: string, planet2: string, ts: number }' },
 
   // ─── habits ─────────────────────────────────────────────────────
+  'habits:completed':                  { payload: '{ habitId: string, category: "health"|"mental"|"home"|"work"|"self_care", habitName: string, ts: number }' },
   'habits:pattern_detected':           { payload: '{ pattern: string, confidence: string, sample_n: number, ts: number }' },
   'habits:externalization_detected':   { payload: '{ confidence: string, sample_n: number, ts: number }' },
   'habits:luteal_collapse_detected':   { payload: '{ drop_pct: number, ts: number }' },
@@ -130,6 +154,11 @@ export const REGISTRY: Registry = {
   'goals:anti_goal_in_dump':           { payload: '{ excerpt: string, ts: number }' },
   'goals:interference':                { payload: '{ conflict_count: number, ts: number }' },
   'goals:experiment_candidate':        { payload: '{ goal_id: string, weeks_stuck: number, ts: number }' },
+  // ─── audit 2026-05-14 · goal → habit cross-dispatch ─────────────
+  // UI fires this when the user taps "convert to habit" on a goal
+  // detail card. habits orchestrator listens + appends a new Habit
+  // into shared.habits_v2.
+  'goals:convert_to_habit':            { payload: '{ goal_id: string, habit_title: string, cadence: "daily"|"weekly"|"weekdays"|"custom", ts: number }' },
 
   // ─── admin ──────────────────────────────────────────────────────
   'admin:open_loop_missing':           { payload: '{ dump_id: string, ts: number }' },
@@ -248,6 +277,22 @@ export const REGISTRY: Registry = {
   // (declared earlier in this registry).
   'finance:impulse_pause_started':     { payload: '{ id: string, amount: number, merchant: string, category: string, ts: number, expires_at: number }' },
   'finance:impulse_pause_resolved':    { payload: '{ id: string, amount: number, merchant: string, outcome: "purchased" | "skipped", ts: number }' },
+
+  // ─── body weekly review (Sunday 19:00 local) ────────────────────────────
+  'body:weekly_review': { payload: '{ ts: number, weekStartTs: number, weekEndTs: number, copy: string, summary: { habitsCompleted: number, habitsTotal: number, mostSkippedWeekday: string|null, sleepAvgHours: number|null, sleepNightsLogged: number, cyclePhaseAtEnd: string|null, supplementAdherencePct: number|null, waterAvgCups: number|null, isSparse: boolean } }' },
+
+  // ─── body notifications · 11 push events (Sprint body-v2 wiring) ────────
+  'cycle:period_approaching':    { payload: '{ predictedTs: number, daysUntil: number, ts: number }' },
+  'cycle:period_imminent':       { payload: '{ predictedTs: number, ts: number }' },
+  'cycle:period_late':           { payload: '{ predictedTs: number, daysLate: number, ts: number }' },
+  'cycle:luteal_starting':       { payload: '{ lutealStartTs: number, daysUntil: number, ts: number }' },
+  'cycle:ovulation_imminent':    { payload: '{ ovulationTs: number, ts: number }' },
+  'cycle:pill_missed':           { payload: '{ missedDate: string, ts: number }' },
+  'sleep:wind_down_window':      { payload: '{ bedtimeTs: number, ts: number }' },
+  'sleep:debt_accumulated':      { payload: '{ debtHours: number, targetHours: number, idealBedtimeHHMM: string, ts: number }' },
+  'body:supplement_due':         { payload: '{ supplementId: string, supplementName: string, reminderHHMM: string, ts: number }' },
+  'body:posture_nudge':          { payload: '{ hourBucket: number, ts: number }' },
+  'habits:morning_check':        { payload: '{ firstHabitName: string|null, totalCount: number, ts: number }' },
 
   // ─── retention telemetry (local-only until backend Group C ships) ────────
   // Local-first: backend may pick these up via research-stream later.
