@@ -1,0 +1,91 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+
+<BaseLayout
+  title="about — ollie"
+  description="ollie is built by people with adhd, for people with adhd. private by design, opt-in research, no analytics."
+>
+  <article class="prose about">
+    <p class="meta">about</p>
+
+    <h1>made by people who needed it.</h1>
+
+    <p>
+      ollie started because the existing tools did not fit. calendar apps assume
+      you remember to open them. habit trackers assume you forgot once. budget
+      apps assume the problem is math. journals assume you have the energy to
+      type a paragraph at the end of a day that already broke you.
+    </p>
+
+    <p>
+      adhd is not a productivity bug. it is a different operating system. ollie
+      is the tool you would have built for yourself if you had the time, which
+      you do not, because you have adhd.
+    </p>
+
+    <hr />
+
+    <h2>private by design</h2>
+
+    <p>
+      your data lives on your device. it is encrypted with a passphrase only
+      you know. if you sync across devices, the encryption happens before the
+      data leaves your device. ollie's server sees ciphertext for your module
+      content, and your email in plaintext so you can sign in.
+    </p>
+
+    <p>
+      ollie does not run advertising. ollie does not sell data. ollie does not
+      load analytics scripts on this site or in the app outside of the
+      bare-minimum crash diagnostics required to ship fixes.
+    </p>
+
+    <h2>opt-in research</h2>
+
+    <p>
+      ollie is building an adhd research corpus. the corpus is built from
+      anonymized, pii-scrubbed text contributions — and only if you opt in.
+      the default is off. opting in is reversible going forward; past
+      contributions, having no identifier linking them to you, stay in the
+      corpus.
+    </p>
+
+    <p>
+      this is the trade ollie offers in plain sentences: contribute to the
+      research that benefits the next adhd brain who installs the app, or do
+      not. neither answer changes what the app does for you.
+    </p>
+
+    <h2>what ollie is not</h2>
+
+    <p>
+      ollie is not a medical device. ollie is not a psychiatrist. ollie is not
+      a financial advisor. ollie is not a crisis service. ollie is a tool for
+      tracking your own life, with patterns surfaced where they help, and
+      friction removed where the existing tools added it.
+    </p>
+
+    <hr />
+
+    <h2>where ollie is going</h2>
+
+    <p>
+      ollie is in private beta. the iphone build is the first home. desktop
+      follows. the modules — finance, cycle, body, habits, goals, work,
+      grocery, pets, journal, admin, brain dump — ship one at a time, polished
+      before they leave the lab.
+    </p>
+
+    <p>
+      if you want in: <a href="mailto:support@ollie.app?subject=waitlist">support@ollie.app</a>.
+      one line, your device, what part of life is breaking. we read every one.
+    </p>
+  </article>
+</BaseLayout>
+
+<style>
+  .about h2 {
+    margin-top: 2.5rem;
+  }
+</style>
