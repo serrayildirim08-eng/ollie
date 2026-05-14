@@ -1,6 +1,6 @@
 import { Suspense } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { Environment } from '@react-three/drei';
+import { Environment, Stats } from '@react-three/drei';
 import * as THREE from 'three';
 import { Camera } from './Camera';
 import { Lighting } from './Lighting';
@@ -21,13 +21,15 @@ export interface GardenCanvasProps {
 }
 
 export default function GardenCanvas({ paused, raining }: GardenCanvasProps) {
+  const showStats = import.meta.env.DEV && new URLSearchParams(window.location.search).has('stats');
   return (
     <Canvas
       dpr={[1, 1.25]}
-      frameloop={paused ? 'never' : raining ? 'always' : 'demand'}
+      frameloop={paused ? 'never' : raining || showStats ? 'always' : 'demand'}
       gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping }}
       style={{ width: '100%', height: '100%', display: 'block', background: '#f5f4f0' }}
     >
+      {showStats && <Stats />}
       <Camera />
       <Lighting />
       <Suspense fallback={null}>
