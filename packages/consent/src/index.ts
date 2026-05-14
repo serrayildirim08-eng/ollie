@@ -1,7 +1,7 @@
 /**
  * @ollie/consent — single source of truth for user consent state.
  *
- * Pivot 2026-05-14: zero-knowledge dogma abandoned; consent state is the
+ * Pivot 2026-05-14: server-blind dogma abandoned; consent state is the
  * load-bearing piece that gates every research-data path. Every write/upload
  * path imports `hasResearchConsent` from here.
  *
