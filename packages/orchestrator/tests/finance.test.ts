@@ -707,3 +707,113 @@ describe('finance orchestrator — push notification subscribers', () => {
     expect(spec.title).toContain('confirm or flag');
   });
 });
+
+// ─── finance:tax_setaside_due tests ───────────────────────────────────────────
+
+// Wall-clock pinned to the 1st of June 2026 at noon UTC so the monthly-gate
+// in recomputeDerived fires.
+const JUNE_1_2026 = new Date('2026-06-01T12:00:00Z').getTime();
+
+describe('finance orchestrator — tax set-aside', () => {
+  let store: ReturnType<typeof createStore>;
+  let orch: ReturnType<typeof createFinanceOrchestrator>;
+  let scheduledCalls: Array<{ spec: NotificationSpec; fireAt: number }>;
+  let scheduleNotification: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    store = createStore(createMemoryAdapter());
+    scheduledCalls = [];
+    scheduleNotification = vi.fn((spec: NotificationSpec, fireAt: number) => {
+      scheduledCalls.push({ spec, fireAt });
+    });
+  });
+
+  afterEach(() => {
+    orch.teardown();
+    _clearAllHandlers();
+    vi.clearAllMocks();
+  });
+
+  function makeOrch(nowFn: () => number = () => JUNE_1_2026) {
+    orch = createFinanceOrchestrator(store, { now: nowFn, scheduleNotification });
+  }
+
+  it('emits finance:tax_setaside_due once on the 1st when selfEmployed is true', () => {
+    store.set('finance', 'taxProfile', { selfEmployed: true });
+    const emitted: unknown[] = [];
+    const unsub = on('finance:tax_setaside_due', (p) => { emitted.push(p); });
+    makeOrch();
+    orch.init();
+    unsub();
+    expect(emitted).toHaveLength(1);
+    const p = emitted[0] as { amount: number; month_start: number; ts: number };
+    expect(typeof p.amount).toBe('number');
+    expect(p.amount).toBeGreaterThanOrEqual(0);
+    expect(p.month_start).toBe(Date.UTC(2026, 4, 1)); // May 2026
+    expect(p.ts).toBe(JUNE_1_2026);
+  });
+
+  it('deduplicates on second recompute in the same month', () => {
+    store.set('finance', 'taxProfile', { selfEmployed: true });
+    const emitted: unknown[] = [];
+    const unsub = on('finance:tax_setaside_due', (p) => { emitted.push(p); });
+    makeOrch();
+    orch.init();
+    // Manually call recomputeDerived again — same month, should not re-emit.
+    orch.recomputeDerived();
+    unsub();
+    expect(emitted).toHaveLength(1);
+  });
+
+  it('does not emit when selfEmployed is false', () => {
+    store.set('finance', 'taxProfile', { selfEmployed: false });
+    const emitted: unknown[] = [];
+    const unsub = on('finance:tax_setaside_due', (p) => { emitted.push(p); });
+    makeOrch();
+    orch.init();
+    unsub();
+    expect(emitted).toHaveLength(0);
+  });
+
+  it('does not emit when taxProfile is absent', () => {
+    // No taxProfile set — defaults to null, isSelfEmployed = false.
+    const emitted: unknown[] = [];
+    const unsub = on('finance:tax_setaside_due', (p) => { emitted.push(p); });
+    makeOrch();
+    orch.init();
+    unsub();
+    expect(emitted).toHaveLength(0);
+  });
+
+  it('subscriber calls scheduleNotification with correct payload shape', () => {
+    store.set('finance', 'taxProfile', { selfEmployed: true });
+    makeOrch();
+    orch.init();
+
+    // scheduleNotification is called once during init (via recomputeDerived -> emit -> subscriber)
+    expect(scheduleNotification).toHaveBeenCalledOnce();
+    const [spec, fireAt] = scheduleNotification.mock.calls[0] as [NotificationSpec, number];
+    expect(spec.category).toBe('PATTERN_ALERT');
+    expect(spec.dedupe_key).toBe('finance:tax-setaside:2026-05');
+    expect(spec.action_url).toBe('/finance');
+    expect(spec.title).toContain('tax set-aside');
+    expect(spec.title).toContain('May');
+    // no exclamation marks in push copy
+    expect(spec.title).not.toContain('!');
+    // fires immediately (NOW)
+    expect(fireAt).toBe(JUNE_1_2026);
+  });
+
+  it('copy literal passes banned-phrase scanner', () => {
+    // The exact push copy — verified against the scanner rules in banned-phrases.cjs.
+    // No cheerleading, no engagement, no streak language, no exclamation.
+    const { scanForBanned } = require('../../../tools/banned-phrases.cjs') as {
+      scanForBanned: (text: string, scope: string[]) => Array<{ id: string; why: string; source: string }>;
+    };
+    const title = 'tax set-aside · $500 for May. monthly nudge, not a deadline.';
+    const globalHits = scanForBanned(title, []);
+    const pushHits = scanForBanned(title, ['push']);
+    expect(globalHits).toHaveLength(0);
+    expect(pushHits).toHaveLength(0);
+  });
+});

@@ -64,7 +64,10 @@ import {
   detectADHDTaxFromTxn,
   detectDuplicatePurchases,
   detectADHDTaxFromBraindump,
+  monthlySetAsideReminder,
+  FINANCE_TAX_SETASIDE_DUE_EVENT,
 } from '@ollie/logic/finance';
+import type { TaxCalculator } from '@ollie/logic/finance';
 import type {
   DetectedSubscriptionCard,
   ADHDTaxRunningTotal as D3ADHDTaxRunningTotal,
@@ -849,6 +852,64 @@ export function createFinanceOrchestrator(
         console.error('[orchestrator/finance] ADHD tax detection failed', err);
       }
 
+      // ── finance:tax_setaside_due · monthly set-aside nudge on the 1st ──
+      // Gate: user must have opted in to self-employment tracking
+      // (finance.taxProfile.selfEmployed === true). If taxProfile is absent
+      // the flag is treated as false — no emission.
+      // TODO: once the onboarding UI writes finance.taxProfile, remove the
+      // defensive fallback and surface the flag-name in the settings type.
+      try {
+        const today = new Date(now);
+        const dayOfMonth = today.getUTCDate();
+        if (dayOfMonth === 1) {
+          // TODO: read from finance.taxProfile once that UI path ships
+          const taxProfile = store.get<{ selfEmployed?: boolean } | null>('finance', 'taxProfile', null) ?? null;
+          const isSelfEmployed = taxProfile?.selfEmployed === true;
+          if (isSelfEmployed) {
+            const monthKey = `${today.getUTCFullYear()}-${String(today.getUTCMonth() + 1).padStart(2, '0')}`;
+            const emittedMonths = new Set(store.get<string[]>('finance', '_taxSetAsideEmittedMonths', []) ?? []);
+            if (!emittedMonths.has(monthKey)) {
+              // Use the previous calendar month's income for the estimate.
+              const prevMonthStart = Date.UTC(
+                today.getUTCMonth() === 0 ? today.getUTCFullYear() - 1 : today.getUTCFullYear(),
+                today.getUTCMonth() === 0 ? 11 : today.getUTCMonth() - 1,
+                1,
+              );
+              const prevMonthEnd = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1);
+              const incomeRecs = records.filter(
+                (r) =>
+                  r?.direction === 'in' &&
+                  r.event_date &&
+                  new Date(r.event_date + 'T12:00:00').getTime() >= prevMonthStart &&
+                  new Date(r.event_date + 'T12:00:00').getTime() < prevMonthEnd,
+              );
+              const thisMonthIncome = incomeRecs.reduce((s, r) => s + (r.amount ?? 0), 0);
+              // Default to US calculator; taxProfile.calculator overrides when present.
+              const calculator: TaxCalculator = taxProfile != null && 'calculator' in taxProfile
+                ? (taxProfile as unknown as { calculator: TaxCalculator }).calculator
+                : { kind: 'us' };
+              const reminder = monthlySetAsideReminder(thisMonthIncome, calculator);
+              // Derive suggested_pct from amount + income to satisfy the payload type.
+              const suggestedPct = thisMonthIncome > 0
+                ? Number((reminder.amount / thisMonthIncome).toFixed(2))
+                : 0;
+              try {
+                events.emit(FINANCE_TAX_SETASIDE_DUE_EVENT, {
+                  amount: reminder.amount,
+                  month_start: prevMonthStart,
+                  suggested_pct: suggestedPct,
+                  message: reminder.message,
+                  ts: now,
+                });
+              } catch { /* non-fatal */ }
+              store.set('finance', '_taxSetAsideEmittedMonths', [...emittedMonths, monthKey]);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('[orchestrator/finance] tax_setaside_due emit failed', err);
+      }
+
       setKey('lastRecomputeAt', now);
     } catch (err) {
       console.error('[orchestrator/finance] recomputeDerived failed:', err);
@@ -1208,6 +1269,38 @@ export function createFinanceOrchestrator(
               action_url: '/finance',
             },
             fireAt,
+          );
+        } catch { /* non-fatal */ }
+      }));
+
+      // finance:tax_setaside_due → immediate nudge on the 1st of each month
+      // Deadpan, factual. No urgency. Deduped by month_key at emit site.
+      // TODO: ES
+      unsubs.push(events.on(FINANCE_TAX_SETASIDE_DUE_EVENT, (raw) => {
+        try {
+          const p = (raw ?? {}) as {
+            amount?: number;
+            month_start?: number;
+            message?: string;
+          };
+          if (typeof p.amount !== 'number' || typeof p.month_start !== 'number') return;
+          const monthKey = new Date(p.month_start).toISOString().slice(0, 7); // YYYY-MM
+          const monthName = new Date(p.month_start).toLocaleString('en-US', {
+            month: 'long',
+            timeZone: 'UTC',
+          });
+          const amountStr = p.amount.toLocaleString('en-US', {
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 2,
+          });
+          scheduleNotification(
+            {
+              title: `tax set-aside · $${amountStr} for ${monthName}. monthly nudge, not a deadline.`,
+              category: 'PATTERN_ALERT',
+              dedupe_key: `finance:tax-setaside:${monthKey}`,
+              action_url: '/finance',
+            },
+            getNow(),
           );
         } catch { /* non-fatal */ }
       }));
