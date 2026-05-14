@@ -17,7 +17,9 @@
     "@ollie/store": "workspace:*",
     "@ollie/events": "workspace:*",
     "@ollie/logic": "workspace:*",
-    "@ollie/notifications": "workspace:*"
+    "@ollie/notifications": "workspace:*",
+    "@ollie/consent": "workspace:*",
+    "@ollie/pii-scrub": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.6.0",

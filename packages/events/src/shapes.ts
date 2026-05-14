@@ -35,6 +35,7 @@ export const SHAPES: Record<string, ShapeSpec> = {
   'pets:care_logged':          { pet_id: 'string', task: 'string', source: 'string', occurred_at: 'number' },
   'void:reminder:scheduled':   { id: 'string', fireAt: 'number', message: 'string', module: 'string', source: 'string' },
   'void:crisis:detected':      { text: 'string', matchedLine: 'string', ts: 'number' },
+  'research:row_written':      { row_id: 'string', table: 'string', text: 'string', locale: 'string', ts: 'number' },
 
   // Sprint 3 / D1 burhan
   'burhan:element_added':      { id: 'string', type: 'string', source_module: 'string', source_event_id: 'string', ts: 'number' },

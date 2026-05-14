@@ -26,6 +26,7 @@ import { createWorkOrchestrator } from './work';
 import { createGoalsOrchestrator } from './goals';
 import { createBurhanOrchestrator } from './burhan';
 import { createMedicationOrchestrator } from './medication';
+import { createResearchOrchestrator } from './research';
 
 export type { Orchestrator } from './types';
 export { createCycleOrchestrator } from './cycle';
@@ -42,6 +43,18 @@ export { createWorkOrchestrator } from './work';
 export { createGoalsOrchestrator } from './goals';
 export { createBurhanOrchestrator } from './burhan';
 export { createMedicationOrchestrator } from './medication';
+export {
+  createResearchOrchestrator,
+  runResearchPipeline,
+  RESEARCH_INTAKE_EVENT,
+  SCRUBBABLE_TABLES,
+} from './research';
+export type {
+  LabelClient,
+  ResearchOrchestratorOptions,
+  ScrubbableTable,
+  ScrubbableWrite,
+} from './research';
 export {
   computeWeeklyReview,
   emitWeeklyReview,
@@ -61,6 +74,8 @@ export type {
   RunBodyCorrelationPassOpts,
   ScheduleBodyCorrelationPassOpts,
 } from './body-correlations';
+export { routeBrainDump, dispatchAction } from './braindump-dispatch';
+export type { RouteBrainDumpResult } from './braindump-dispatch';
 
 export interface RootOrchestrator extends Orchestrator {
   cycle: ReturnType<typeof createCycleOrchestrator>;
