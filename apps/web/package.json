@@ -17,6 +17,7 @@
     "@ollie/api": "workspace:*",
     "@ollie/auth": "workspace:*",
     "@ollie/backup": "workspace:*",
+    "@ollie/consent": "workspace:*",
     "@ollie/crypto": "workspace:*",
     "@ollie/events": "workspace:*",
     "@ollie/logic": "workspace:*",

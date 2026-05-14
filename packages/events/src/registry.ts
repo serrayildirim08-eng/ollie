@@ -65,6 +65,14 @@ export const REGISTRY: Registry = {
   'void:reminder:cancelled':       { payload: '{ id: string }' },
   'void:toast':                    { payload: '{ message: string, module: string }' },
 
+  // ─── consent (B2B pivot 2026-05-14) ─────────────────────────────
+  // Fires every time consent state is persisted via @ollie/consent
+  // setConsent(). Carries the new shape so downstream subscribers
+  // (research-stream, sessionTracker, orchestrator) can react without
+  // re-reading the store. source distinguishes onboarding vs reprompt vs
+  // settings-change paths.
+  'consent:set':                   { payload: '{ necessary: true, marketing: boolean, research_optin: boolean, source: "onboarding"|"settings"|"reprompt", ts: number }' },
+
   // ─── consumption (B2B panel) ────────────────────────────────────
   'consumption:brand:detected':    { payload: '{ id: string, brand_key: string, category_l1: string, category_l2?: string, confidence: number, source: "braindump"|"finance"|"grocery"|"direct", raw_module: string, ts: number }' },
   'consumption:brand:confirmed':   { payload: '{ id: string, brand_key: string, confirmed_by: "user" }' },
