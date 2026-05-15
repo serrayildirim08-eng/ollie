@@ -29,6 +29,7 @@ import { sessionTracker } from './lib/session-tracker';
 import { readUserHash } from './lib/user-hash';
 import { getDeviceId, getAppVersion } from './lib/device';
 import { createConsentSync } from './lib/consent-sync';
+import { Day30Prompt } from './components/Day30Prompt';
 
 // ─── lazy page imports ────────────────────────────────────────────────────────
 
@@ -620,6 +621,10 @@ function AppInner() {
       {/* ToastHost + ChipFlyHost are top-level so chips/toasts work on every screen */}
       <ToastHost />
       <ChipFlyHost />
+      {/* Day30Prompt — fires once at ≥30d. Non-blocking, self-dismissing.
+          Only rendered after onboarding is complete (this return block is
+          only reached when onboarded === true). */}
+      <Day30Prompt />
       {/* MicButton — push-to-talk, hidden when onboarding.
           Shows "heard · …" so user can tell a transcription miss from
           a routing miss before the apply pipeline runs. */}
