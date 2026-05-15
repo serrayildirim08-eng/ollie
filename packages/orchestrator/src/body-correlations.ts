@@ -192,6 +192,8 @@ export interface PatternDetectedSubscriberOpts {
   scheduleNotification: (spec: NotificationSpec, fireAt: number) => void;
   /** Optional clock override (tests). Default Date.now. */
   now?: () => number;
+  /** Locale resolver for notification copy. Defaults to 'en'. */
+  getLocale?: () => 'en' | 'es' | 'tr';
 }
 
 /**
@@ -216,6 +218,7 @@ export function initPatternDetectedSubscriber(
 ): Unsubscribe {
   const { scheduleNotification } = opts;
   const getNow = opts.now ?? (() => Date.now());
+  const getLocale = opts.getLocale ?? (() => 'en' as const);
 
   return events.on('pattern:detected', (raw: unknown) => {
     try {
@@ -234,10 +237,11 @@ export function initPatternDetectedSubscriber(
       const now = typeof p.ts === 'number' ? p.ts : getNow();
       const weekKey = isoWeekKey(now);
 
+      const title = getLocale() === 'es' ? 'algo notado' : 'noticed something';
       scheduleNotification(
         {
-          title: 'noticed something', // LOCALIZE_LATER — ES: body.patterns.noticed_something "algo notado"
-          body: p.copy, // LOCALIZE_LATER — ES copy from correlation registry (body.patterns.* keys)
+          title,
+          body: p.copy,
           category: 'PATTERN_ALERT',
           dedupe_key: `pattern:${p.correlation_name}:${weekKey}`,
           aggregation_group: `pattern:detected:${weekKey}`,

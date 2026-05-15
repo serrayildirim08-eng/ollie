@@ -607,5 +607,19 @@
       "today": "today",
       "yesterday": "yesterday"
     }
+  },
+
+  "settings": {
+    "health": {
+      "section_header": "health",
+      "birth_control_label": "track birth control",
+      "birth_control_hint": "shows daily pill check + missed-dose notification"
+    },
+    "finance": {
+      "section_header": "finance",
+      "self_employed_label": "self-employed",
+      "self_employed_hint": "enables monthly tax set-aside reminders",
+      "tax_jurisdiction_label": "tax jurisdiction"
+    }
   }
 }

@@ -608,5 +608,19 @@
       "today": "hoy",
       "yesterday": "ayer"
     }
+  },
+
+  "settings": {
+    "health": {
+      "section_header": "salud",
+      "birth_control_label": "registrar anticonceptivos",
+      "birth_control_hint": "activa el check diario de pastilla + notificación de dosis olvidada"
+    },
+    "finance": {
+      "section_header": "finanzas",
+      "self_employed_label": "trabajo independiente",
+      "self_employed_hint": "activa los recordatorios mensuales de reserva fiscal",
+      "tax_jurisdiction_label": "jurisdicción fiscal"
+    }
   }
 }
