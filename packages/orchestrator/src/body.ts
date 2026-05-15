@@ -14,9 +14,14 @@
  *   body.supplements       → schedule recompute
  *   body.episodes          → schedule recompute
  *   shared.actionLog       → schedule recompute (dump undo path)
- *   cycle.cycles           → schedule recompute (phase coupling)
- *   sleep.records          → schedule recompute (sleep debt lag)
+ *   cycle.cycles           → schedule recompute (phase coupling + signals)
+ *   sleep.records          → schedule recompute (sleep debt lag + signals)
+ *   work.focus_log         → schedule recompute (cross-module signals)
  *   void:braindump:submitted event → schedule recompute (body items only, v≥2 guard)
+ *
+ * Derived keys written (namespace: "shared"):
+ *   signals                BodySignal[] — body-owned cross-module signals
+ *   signalsLastComputedAt  timestamp of most recent signal recompute
  *
  * Events emitted (body-v2 wiring):
  *   body:hydration_drop_detected   from existing water-drop heuristic
@@ -33,9 +38,10 @@ import type { Store } from '@ollie/store';
 import type { Unsubscribe } from '@ollie/events';
 import * as events from '@ollie/events';
 import type { NotificationSpec } from '@ollie/notifications';
-import { detectPatterns } from '@ollie/logic/body';
-import type { AnyBodyPattern, CyclePhaseRange, SleepRecord, WaterEntry, SupplementLogEntry } from '@ollie/logic/body';
+import { detectPatterns, normalizeEpisode, isWellFormedEpisode } from '@ollie/logic/body';
+import type { AnyBodyPattern, CyclePhaseRange, SleepRecord, WaterEntry, SupplementLogEntry, Episode } from '@ollie/logic/body';
 import { computePhaseForDate } from '@ollie/logic/cycle';
+import { runBodySignalsPass } from './body-signals';
 import type { Orchestrator } from './types';
 
 const DEBOUNCE_MS = 500;
@@ -108,6 +114,28 @@ export function createBodyOrchestrator(
   // For each supplement, fires body:supplement_due when now is inside the
   // 60-min window after reminder_hhmm AND the supp has not been checked
   // off today. Deduped per supplement per UTC day.
+  //
+  // "checked off today" is resolved from BOTH stores so the reminder is
+  // never wrong regardless of which write path the UI uses:
+  //   - body.supp_checks  → Record<dateKey, Record<suppId, boolean>>  (UI source of truth)
+  //   - supplement.checked_dates → string[]                          (legacy / alt)
+  // The UI's BodyModule writes supp_checks; checked_dates is kept as a
+  // fallback so older data and external writers still suppress the nudge.
+  function isCheckedToday(
+    suppId: string,
+    todayKey: string,
+    suppCheckedDates: string[] | undefined,
+  ): boolean {
+    if (Array.isArray(suppCheckedDates) && suppCheckedDates.includes(todayKey)) {
+      return true;
+    }
+    const suppChecks = store.get<Record<string, Record<string, boolean>>>(
+      'body', 'supp_checks', {},
+    ) ?? {};
+    const today = suppChecks && typeof suppChecks === 'object' ? suppChecks[todayKey] : undefined;
+    return !!(today && today[suppId] === true);
+  }
+
   function emitSupplementDue(): void {
     const now = getNow();
     const todayKey = new Date(now).toISOString().slice(0, 10);
@@ -122,8 +150,7 @@ export function createBodyOrchestrator(
       const dedupKey = `${s.id}:${todayKey}`;
       if (emitted.has(dedupKey)) continue;
 
-      const checked = Array.isArray(s.checked_dates) ? s.checked_dates : [];
-      if (checked.includes(todayKey)) continue;
+      if (isCheckedToday(s.id, todayKey, s.checked_dates)) continue;
 
       const hhmm = typeof s.reminder_hhmm === 'string' && /^\d{2}:\d{2}$/.test(s.reminder_hhmm)
         ? s.reminder_hhmm
@@ -174,9 +201,37 @@ export function createBodyOrchestrator(
     store.set('body', '_postureNudgeEmittedBuckets', [...emitted, bucketKey]);
   }
 
+  // ── episode normalization ───────────────────────────────────────────────
+  // Brain-dump routing writes episode-shaped objects that are missing
+  // required Episode fields (no started_at / severity_log / label / kind).
+  // Before anything reads body.episodes we run normalizeEpisode over the
+  // array and, IFF at least one entry was malformed, write the cleaned
+  // array back. Already-well-formed arrays are left untouched so this
+  // does not loop against its own body.episodes subscription.
+  function normalizeEpisodes(now: number): Episode[] {
+    const raw = store.get<unknown[]>('body', 'episodes', []) ?? [];
+    if (!Array.isArray(raw) || raw.length === 0) return [];
+
+    let anyMalformed = false;
+    const normalized = raw.map((e) => {
+      if (isWellFormedEpisode(e)) return e as Episode;
+      anyMalformed = true;
+      return normalizeEpisode(e, { now });
+    });
+
+    if (anyMalformed) {
+      store.set('body', 'episodes', normalized);
+    }
+    return normalized;
+  }
+
   function recomputePatterns(): void {
     try {
       const now = getNow();
+
+      // Heal any malformed (brain-dump-created) episodes first so the
+      // ActiveEpisodeCard and episode pattern detectors see valid shapes.
+      normalizeEpisodes(now);
 
       const actionLog = store.get<Array<{ ts: number; rawText?: string; undone?: boolean }>>('shared', 'actionLog', []) ?? [];
       const waterLog = store.get<WaterEntry[]>('body', 'water_log', []) ?? [];
@@ -235,6 +290,10 @@ export function createBodyOrchestrator(
         }
       }
 
+      // Cross-module signals (sleep↔work, cycle↔work) → shared.signals.
+      // Body owns these because it already has cycle + sleep wiring.
+      try { runBodySignalsPass(store, { now }); } catch { /* non-fatal */ }
+
       // body-v2 notification emissions
       try { emitSupplementDue(); } catch { /* non-fatal */ }
       try { emitPostureNudge(); } catch { /* non-fatal */ }
@@ -258,6 +317,7 @@ export function createBodyOrchestrator(
     unsubs.push(store.subscribeKey('shared', 'actionLog', schedule));
     unsubs.push(store.subscribeKey('cycle', 'cycles', schedule));
     unsubs.push(store.subscribeKey('sleep', 'records', schedule));
+    unsubs.push(store.subscribeKey('work', 'focus_log', schedule));
 
     unsubs.push(
       events.on('void:braindump:submitted', (payload: unknown) => {

@@ -10,6 +10,7 @@ export * from './regexes';
 export * from './math';
 export * from './patterns';
 export * from './episodes';
+export * from './signals';
 export * from './pacing';
 export * from './treatments';
 export * from './caffeine-sleep';

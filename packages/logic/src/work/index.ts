@@ -38,3 +38,14 @@ export {
   detectRSDPattern,             // W14
 } from './phase3';
 export { detectPatterns } from './patterns';
+
+// Phase 3 — pomodoro break tracking (feature 2)
+export {
+  computePomodoroBreakState,
+  DEFAULT_BLOCKS_PER_LONG_BREAK,
+  COMPLETION_RATIO,
+} from './pomodoro';
+export type {
+  PomodoroBreakState,
+  PomodoroBreakOptions,
+} from './pomodoro';

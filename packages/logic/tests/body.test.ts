@@ -27,6 +27,9 @@ import {
   envelopeCopy,
   // episodes
   openEpisode,
+  startEpisode,
+  normalizeEpisode,
+  isWellFormedEpisode,
   logSeverity,
   logMed,
   logNote,
@@ -36,6 +39,10 @@ import {
   detectDurationDistribution,
   detectMedicationAdherence,
   generateDoctorSummary,
+  // signals
+  detectSleepDebtFocusQuality,
+  detectCyclePhaseEnergy,
+  detectBodySignals,
   // pacing
   detectBreachSession,
   newBreachEpisode,
@@ -483,5 +490,223 @@ describe('envelopeCopy', () => {
   it('returns empty string for null/undefined', () => {
     expect(envelopeCopy(null, false)).toBe('');
     expect(envelopeCopy(undefined, true)).toBe('');
+  });
+});
+
+// ─── startEpisode ─────────────────────────────────────────────────────────────
+
+describe('startEpisode', () => {
+  it('appends a valid open episode to the array', () => {
+    const next = startEpisode([], 'migraine', 'acute', { now: NOW });
+    expect(next).toHaveLength(1);
+    expect(next[0].label).toBe('migraine');
+    expect(next[0].started_at).toBe(NOW);
+    expect(next[0].ended_at).toBeUndefined();
+    expect(isWellFormedEpisode(next[0])).toBe(true);
+  });
+
+  it('does not mutate the input array', () => {
+    const existing = [openEpisode('old', 'acute', { now: NOW - 10 * DAY })];
+    const next = startEpisode(existing, 'new', 'mental', { now: NOW });
+    expect(existing).toHaveLength(1);
+    expect(next).toHaveLength(2);
+  });
+
+  it('tolerates null/undefined episodes input', () => {
+    expect(startEpisode(null, 'x', 'acute', { now: NOW })).toHaveLength(1);
+    expect(startEpisode(undefined, 'x', 'acute', { now: NOW })).toHaveLength(1);
+  });
+});
+
+// ─── normalizeEpisode / isWellFormedEpisode ──────────────────────────────────
+
+describe('normalizeEpisode', () => {
+  it('backfills a brain-dump-shaped {id,text,ts} object', () => {
+    // This is exactly what braindump-dispatch currently writes.
+    const raw = { id: 'bd_1', text: 'bad migraine all day', ts: NOW };
+    const ep = normalizeEpisode(raw, { now: NOW });
+    expect(ep.id).toBe('bd_1');
+    expect(ep.started_at).toBe(NOW);
+    expect(ep.label).toBe('bad migraine all day');
+    expect(ep.kind).toBe('acute');
+    expect(Array.isArray(ep.severity_log)).toBe(true);
+    expect(Array.isArray(ep.meds)).toBe(true);
+    expect(Array.isArray(ep.notes)).toBe(true);
+    expect(Array.isArray(ep.symptoms)).toBe(true);
+    expect(Array.isArray(ep.tags)).toBe(true);
+    expect(isWellFormedEpisode(ep)).toBe(true);
+  });
+
+  it('truncates an over-long text into a label and keeps full text as a note', () => {
+    const long = 'x'.repeat(120);
+    const ep = normalizeEpisode({ id: 'a', text: long, ts: NOW }, { now: NOW });
+    expect(ep.label.length).toBeLessThanOrEqual(60);
+    expect(ep.label.endsWith('…')).toBe(true);
+    expect(ep.notes[0]).toBe(long);
+  });
+
+  it('synthesizes id and started_at when both absent', () => {
+    const ep = normalizeEpisode({ label: 'flare' }, { now: NOW });
+    expect(ep.id).toMatch(/^ep_/);
+    expect(ep.started_at).toBe(NOW);
+  });
+
+  it('preserves a valid Episode unchanged in shape', () => {
+    const valid = openEpisode('grip', 'chronic', { now: NOW });
+    const ep = normalizeEpisode(valid, { now: NOW });
+    expect(ep.id).toBe(valid.id);
+    expect(ep.label).toBe('grip');
+    expect(ep.kind).toBe('chronic');
+    expect(ep.started_at).toBe(NOW);
+  });
+
+  it('recovers started_at from opened_at then ts', () => {
+    expect(normalizeEpisode({ opened_at: NOW }, { now: 0 }).started_at).toBe(NOW);
+    expect(normalizeEpisode({ ts: NOW }, { now: 0 }).started_at).toBe(NOW);
+  });
+
+  it('keeps ended_at only when finite', () => {
+    expect(normalizeEpisode({ ts: NOW, ended_at: NOW + DAY }).ended_at).toBe(NOW + DAY);
+    expect(normalizeEpisode({ ts: NOW, ended_at: 'bad' }).ended_at).toBeUndefined();
+  });
+
+  it('handles non-object garbage without throwing', () => {
+    expect(() => normalizeEpisode(null, { now: NOW })).not.toThrow();
+    expect(() => normalizeEpisode(42, { now: NOW })).not.toThrow();
+    expect(normalizeEpisode(null, { now: NOW }).label).toBe('episode');
+  });
+});
+
+describe('isWellFormedEpisode', () => {
+  it('true for openEpisode output', () => {
+    expect(isWellFormedEpisode(openEpisode('x', 'acute', { now: NOW }))).toBe(true);
+  });
+  it('false for a brain-dump {id,text,ts} stub', () => {
+    expect(isWellFormedEpisode({ id: 'a', text: 'migraine', ts: NOW })).toBe(false);
+  });
+  it('false for null / non-object', () => {
+    expect(isWellFormedEpisode(null)).toBe(false);
+    expect(isWellFormedEpisode('nope')).toBe(false);
+  });
+});
+
+// ─── cross-module signals ─────────────────────────────────────────────────────
+
+describe('detectSleepDebtFocusQuality', () => {
+  // Build a fixture: 14 days. On even days the night before was short (300m),
+  // odd days were rested (450m). Focus sessions complete fully when rested,
+  // run ~50% when sleep-debted.
+  function makeFixture(now: number) {
+    const sleepNights: Array<{ night_of: string; tst_min: number }> = [];
+    const focusSessions: Array<{ ts: number; duration_min: number; duration_ms: number }> = [];
+    const dKey = (ts: number) => {
+      const d = new Date(ts);
+      const p = (n: number) => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+    };
+    for (let d = 14; d >= 1; d--) {
+      const dayTs = now - d * DAY + 13 * HOUR; // 1pm session
+      const prevNightTs = dayTs - DAY;
+      const short = d % 2 === 0;
+      sleepNights.push({ night_of: dKey(prevNightTs), tst_min: short ? 300 : 450 });
+      // two focus sessions per day, 45-min planned
+      for (let k = 0; k < 2; k++) {
+        focusSessions.push({
+          ts: dayTs + k * HOUR,
+          duration_min: 45,
+          duration_ms: short ? 45 * 60_000 * 0.5 : 45 * 60_000,
+        });
+      }
+    }
+    return { sleepNights, focusSessions };
+  }
+
+  it('surfaces when focus completion drops after short nights', () => {
+    const { sleepNights, focusSessions } = makeFixture(NOW);
+    const sig = detectSleepDebtFocusQuality({ now: NOW, sleepNights, focusSessions });
+    expect(sig).not.toBeNull();
+    expect(sig?.id).toBe('sleep_debt_focus_quality');
+    expect(sig?.modules).toEqual(['sleep', 'work']);
+    expect(sig?.modules.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('returns null with too few sessions per side', () => {
+    const sig = detectSleepDebtFocusQuality({
+      now: NOW,
+      sleepNights: [{ night_of: '2026-05-01', tst_min: 300 }],
+      focusSessions: [{ ts: NOW - DAY, duration_min: 45, duration_ms: 1000 }],
+    });
+    expect(sig).toBeNull();
+  });
+
+  it('returns null when there is no gap (focus quality unaffected)', () => {
+    const { sleepNights } = makeFixture(NOW);
+    // all sessions complete fully regardless of sleep
+    const focusSessions: Array<{ ts: number; duration_min: number; duration_ms: number }> = [];
+    for (let d = 14; d >= 1; d--) {
+      const dayTs = NOW - d * DAY + 13 * HOUR;
+      for (let k = 0; k < 2; k++) {
+        focusSessions.push({ ts: dayTs + k * HOUR, duration_min: 45, duration_ms: 45 * 60_000 });
+      }
+    }
+    expect(detectSleepDebtFocusQuality({ now: NOW, sleepNights, focusSessions })).toBeNull();
+  });
+});
+
+describe('detectCyclePhaseEnergy', () => {
+  it('surfaces a luteal-phase focus drop vs follicular', () => {
+    // follicular: days -20..-11 ; luteal: days -8..-1
+    const cyclePhases = [
+      { ts: NOW - 21 * DAY, phase: 'follicular' },
+      { ts: NOW - 10 * DAY, phase: 'luteal' },
+    ];
+    const focusSessions: Array<{ ts: number; duration_min: number; duration_ms: number }> = [];
+    // follicular: 4h/day across 5 days
+    for (let d = 20; d >= 16; d--) {
+      focusSessions.push({ ts: NOW - d * DAY + 12 * HOUR, duration_min: 240, duration_ms: 4 * 3600_000 });
+    }
+    // luteal: 1.5h/day across 5 days
+    for (let d = 8; d >= 4; d--) {
+      focusSessions.push({ ts: NOW - d * DAY + 12 * HOUR, duration_min: 90, duration_ms: 1.5 * 3600_000 });
+    }
+    const sig = detectCyclePhaseEnergy({ now: NOW, cyclePhases, focusSessions });
+    expect(sig).not.toBeNull();
+    expect(sig?.id).toBe('cycle_phase_energy');
+    expect(sig?.modules).toEqual(['cycle', 'work']);
+  });
+
+  it('returns null with fewer than 3 active days per phase', () => {
+    const cyclePhases = [
+      { ts: NOW - 21 * DAY, phase: 'follicular' },
+      { ts: NOW - 10 * DAY, phase: 'luteal' },
+    ];
+    const focusSessions = [
+      { ts: NOW - 18 * DAY, duration_min: 240, duration_ms: 4 * 3600_000 },
+      { ts: NOW - 6 * DAY, duration_min: 90, duration_ms: 1.5 * 3600_000 },
+    ];
+    expect(detectCyclePhaseEnergy({ now: NOW, cyclePhases, focusSessions })).toBeNull();
+  });
+});
+
+describe('detectBodySignals', () => {
+  it('returns [] when no detector fires', () => {
+    expect(detectBodySignals({ now: NOW })).toEqual([]);
+  });
+
+  it('every returned signal bridges ≥2 modules', () => {
+    const cyclePhases = [
+      { ts: NOW - 21 * DAY, phase: 'follicular' },
+      { ts: NOW - 10 * DAY, phase: 'luteal' },
+    ];
+    const focusSessions: Array<{ ts: number; duration_min: number; duration_ms: number }> = [];
+    for (let d = 20; d >= 16; d--) {
+      focusSessions.push({ ts: NOW - d * DAY + 12 * HOUR, duration_min: 240, duration_ms: 4 * 3600_000 });
+    }
+    for (let d = 8; d >= 4; d--) {
+      focusSessions.push({ ts: NOW - d * DAY + 12 * HOUR, duration_min: 90, duration_ms: 1.5 * 3600_000 });
+    }
+    const out = detectBodySignals({ now: NOW, cyclePhases, focusSessions });
+    expect(out.length).toBeGreaterThan(0);
+    for (const s of out) expect(s.modules.length).toBeGreaterThanOrEqual(2);
   });
 });
