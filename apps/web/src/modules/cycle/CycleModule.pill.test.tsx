@@ -81,6 +81,8 @@ function seedStore(overrides: {
     birth_control_enabled: overrides.birth_control_enabled ?? false,
     birth_control_type: overrides.birth_control_type ?? 'combined',
   });
+  // birth_control_enabled is now authoritative at shared.settings.birth_control_enabled
+  s.__data.set('shared:settings.birth_control_enabled', overrides.birth_control_enabled ?? false);
   s.__data.set('cycle:lastEditedByCycle', {});
   s.__data.set('cycle:asks', []);
 }
