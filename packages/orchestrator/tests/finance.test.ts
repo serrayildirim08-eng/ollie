@@ -285,6 +285,62 @@ describe('finance orchestrator', () => {
   });
 });
 
+// ─── own-form slice subscription tests (Faz 2 fix, 2026-05-15) ────────────────
+// The module's in-app forms write finance.bills / .subscriptions /
+// .transactions / .goals / .adhd_tax directly. Each write must trigger a
+// debounced recomputeDerived so anomaly/pattern/savings cards stay fresh.
+
+describe('finance orchestrator — own-form slice subscriptions', () => {
+  let store: ReturnType<typeof createStore>;
+  let orch: ReturnType<typeof createFinanceOrchestrator>;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    store = createStore(createMemoryAdapter());
+    orch = createFinanceOrchestrator(store, { now: () => NOW });
+  });
+
+  afterEach(() => {
+    orch.teardown();
+    vi.useRealTimers();
+    _clearAllHandlers();
+  });
+
+  for (const slice of ['bills', 'subscriptions', 'transactions', 'goals', 'adhd_tax'] as const) {
+    it(`finance.${slice} write triggers a debounced recompute`, () => {
+      store.set('finance', 'records', [] as FinanceRecord[]);
+      orch.init();
+      // init() ran a synchronous cold-start recompute. Capture that baseline,
+      // then clear it so we can prove the form write produces a NEW recompute.
+      expect(store.get<number>('finance', 'lastRecomputeAt', 0)).toBe(NOW);
+      store.set('finance', 'lastRecomputeAt', 0);
+
+      // Simulate an in-app form appending a row to its own slice.
+      store.update<Array<{ id: string; text: string; ts: number }>>(
+        'finance',
+        slice,
+        (cur) => [...(cur ?? []), { id: `f-${slice}`, text: 'x', ts: NOW }],
+      );
+
+      // Debounced — nothing yet before the 500ms timer fires.
+      expect(store.get<number>('finance', 'lastRecomputeAt', 0)).toBe(0);
+      vi.advanceTimersByTime(500);
+      expect(store.get<number>('finance', 'lastRecomputeAt', 0)).toBe(NOW);
+    });
+  }
+
+  it('teardown stops own-form slice recomputes', () => {
+    store.set('finance', 'records', [] as FinanceRecord[]);
+    orch.init();
+    orch.teardown();
+    store.set('finance', 'lastRecomputeAt', 0);
+
+    store.update<Array<{ id: string }>>('finance', 'bills', (cur) => [...(cur ?? []), { id: 'b1' }]);
+    vi.advanceTimersByTime(500);
+    expect(store.get<number>('finance', 'lastRecomputeAt', 0)).toBe(0);
+  });
+});
+
 // ─── push notification wiring tests ───────────────────────────────────────────
 
 describe('finance orchestrator — push notification subscribers', () => {
