@@ -133,8 +133,12 @@ export function createOrchestrator(
   const habitsOrch = createHabitsOrchestrator(store, {
     scheduleNotification: opts.scheduleNotification,
   });
-  const workOrch = createWorkOrchestrator(store);
-  const goalsOrch = createGoalsOrchestrator(store);
+  const workOrch = createWorkOrchestrator(store, {
+    scheduleNotification: opts.scheduleNotification,
+  });
+  const goalsOrch = createGoalsOrchestrator(store, {
+    scheduleNotification: opts.scheduleNotification,
+  });
   const burhanOrch = createBurhanOrchestrator(store);
   const medicationOrch = createMedicationOrchestrator(store);
 
