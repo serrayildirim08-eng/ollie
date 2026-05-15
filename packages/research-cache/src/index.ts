@@ -104,6 +104,18 @@ export function _resetResearchCache(): void {
 }
 
 /**
+ * Evict the cached pattern stats for a single sector. Called by the research
+ * orchestrator's `onCorpusAppended` hook after a new corpus row lands, so the
+ * next `getSectorPatterns(sector)` recomputes instead of serving a stale 1h
+ * snapshot. No-op for non-sector strings (e.g. an unrecognised hint) and for
+ * sectors with no cache entry. Cheap + idempotent.
+ */
+export function invalidateSector(sector: string): void {
+  if (!isSector(sector)) return;
+  patternCache.delete(sector);
+}
+
+/**
  * Get aggregated pattern stats for a sector. Cached for 1h. Returns
  * patterns with count >= SECTOR_PATTERN_FLOOR (10). Below floor returns
  * [] — we don't expose sparse data as insights.

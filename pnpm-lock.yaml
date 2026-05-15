@@ -100,6 +100,9 @@ importers:
       '@ollie/plaid':
         specifier: workspace:*
         version: link:../../packages/plaid
+      '@ollie/research-cache':
+        specifier: workspace:*
+        version: link:../../packages/research-cache
       '@ollie/research-stream':
         specifier: workspace:*
         version: link:../../packages/research-stream
