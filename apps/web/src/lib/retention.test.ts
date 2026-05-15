@@ -150,6 +150,65 @@ describe('retention · D7 milestone', () => {
   });
 });
 
+describe('retention · D30 milestone', () => {
+  let h: ReturnType<typeof makeHarness>;
+  beforeEach(() => { h = makeHarness(); });
+
+  it('fires d30_returned at ≥30d after install', () => {
+    trackSession(h.store, h.emit, T0);
+    trackSession(h.store, h.emit, T0 + 30 * DAY + HOUR);
+    expect(h.emissions.map(e => e.name)).toContain('void:retention:d30_returned');
+  });
+
+  it('does NOT fire d30_returned before day 30', () => {
+    trackSession(h.store, h.emit, T0);
+    trackSession(h.store, h.emit, T0 + 29 * DAY + 23 * HOUR);
+    expect(h.emissions.map(e => e.name)).not.toContain('void:retention:d30_returned');
+  });
+
+  it('fires d30_returned exactly once', () => {
+    trackSession(h.store, h.emit, T0);
+    trackSession(h.store, h.emit, T0 + 30 * DAY + HOUR);
+    trackSession(h.store, h.emit, T0 + 31 * DAY);
+    trackSession(h.store, h.emit, T0 + 45 * DAY);
+    const d30s = h.emissions.filter(e => e.name === 'void:retention:d30_returned');
+    expect(d30s).toHaveLength(1);
+  });
+
+  it('persists d30Fired to the store', () => {
+    trackSession(h.store, h.emit, T0);
+    trackSession(h.store, h.emit, T0 + 30 * DAY + HOUR);
+    expect(readRetention(h.store).d30Fired).toBe(true);
+  });
+
+  it('d30_returned payload records installed_at, returned_at, days elapsed', () => {
+    trackSession(h.store, h.emit, T0);
+    trackSession(h.store, h.emit, T0 + 30 * DAY + 2 * HOUR);
+    const d30 = h.emissions.find(e => e.name === 'void:retention:d30_returned');
+    expect(d30?.payload).toMatchObject({
+      installed_at: T0,
+      returned_at: T0 + 30 * DAY + 2 * HOUR,
+    });
+    const p = d30?.payload as { days: number };
+    expect(p.days).toBeGreaterThanOrEqual(30);
+  });
+
+  it('fresh install snapshot has d30Fired === false', () => {
+    trackSession(h.store, h.emit, T0);
+    expect(readRetention(h.store).d30Fired).toBe(false);
+  });
+
+  it('a launch at day 31 fires d1, d7, and d30 all once each', () => {
+    trackSession(h.store, h.emit, T0);
+    h.emissions.length = 0;
+    trackSession(h.store, h.emit, T0 + 31 * DAY);
+    const names = h.emissions.map(e => e.name);
+    expect(names).toContain('void:retention:d1_returned');
+    expect(names).toContain('void:retention:d7_returned');
+    expect(names).toContain('void:retention:d30_returned');
+  });
+});
+
 describe('retention · server bridge', () => {
   it('forwards void:retention:installed to trackTable(retention_events, row)', () => {
     const trackTable = vi.fn();
