@@ -6,7 +6,13 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createStore, createMemoryAdapter } from '@ollie/store';
 import { _clearAllHandlers, on } from '@ollie/events';
 import { createPetsOrchestrator } from '../src/pets';
-import type { Pet, CareLogEntry, CareGap } from '@ollie/logic/pets';
+import type {
+  Pet,
+  CareLogEntry,
+  CareGap,
+  Observation,
+  AnyPattern,
+} from '@ollie/logic/pets';
 
 // Fixed wall-clock: 2026-05-09T12:00:00Z
 const NOW = new Date('2026-05-09T12:00:00Z').getTime();
@@ -137,5 +143,117 @@ describe('pets orchestrator', () => {
     unsub();
 
     expect(emitted.some((e) => e.pet_id === 'tontin' && e.task === 'hay_refill')).toBe(true);
+  });
+
+  // ── İş 1: health flags fed from pets.observations ───────────────────────
+
+  it('raises a health_flag record when observations carry a signal on 3+ days', () => {
+    store.set('pets', 'pets', [TONTIN] as Pet[]);
+    store.set('pets', 'care_log', [] as CareLogEntry[]);
+    // guinea_pig "not_eating" signal across 3 distinct calendar days.
+    store.set('pets', 'observations', [
+      { id: 'o1', pet_id: 'tontin', kind: 'symptom', text: 'tontin is not eating', tags: [], occurred_at: NOW - 3 * 86_400_000 },
+      { id: 'o2', pet_id: 'tontin', kind: 'symptom', text: 'still not eating', tags: [], occurred_at: NOW - 2 * 86_400_000 },
+      { id: 'o3', pet_id: 'tontin', kind: 'symptom', text: "won't eat anything", tags: [], occurred_at: NOW - 1 * 86_400_000 },
+    ] as Observation[]);
+
+    orch.init();
+
+    const flags = store.get<Array<{ pet_id: string; flag: string; status: string }>>(
+      'pets', 'health_flags', [],
+    );
+    const notEating = flags!.find((f) => f.pet_id === 'tontin' && f.flag === 'not_eating');
+    expect(notEating).toBeDefined();
+    expect(notEating!.status).toBe('pending');
+  });
+
+  it('leaves health_flags empty when observations are empty (panel-empty bug guard)', () => {
+    store.set('pets', 'pets', [TONTIN] as Pet[]);
+    store.set('pets', 'observations', [] as Observation[]);
+
+    orch.init();
+
+    const flags = store.get<unknown[]>('pets', 'health_flags', []);
+    expect(flags).toHaveLength(0);
+  });
+
+  it('recomputes health_flags when pets.observations changes after init', () => {
+    store.set('pets', 'pets', [TONTIN] as Pet[]);
+    store.set('pets', 'observations', [] as Observation[]);
+
+    orch.init();
+    expect(store.get<unknown[]>('pets', 'health_flags', [])).toHaveLength(0);
+
+    store.set('pets', 'observations', [
+      { id: 'o1', pet_id: 'tontin', kind: 'symptom', text: 'hunched', tags: [], occurred_at: NOW - 3 * 86_400_000 },
+      { id: 'o2', pet_id: 'tontin', kind: 'symptom', text: 'hunched still', tags: [], occurred_at: NOW - 2 * 86_400_000 },
+      { id: 'o3', pet_id: 'tontin', kind: 'symptom', text: 'hunched again', tags: [], occurred_at: NOW - 1 * 86_400_000 },
+    ] as Observation[]);
+
+    const flags = store.get<Array<{ flag: string }>>('pets', 'health_flags', []);
+    expect(flags!.some((f) => f.flag === 'hunched')).toBe(true);
+  });
+
+  // ── İş 2: behavioral pattern detection wired to pets.patterns ────────────
+
+  it('writes pets.patterns + patternsLastComputedAt on init', () => {
+    store.set('pets', 'pets', [TONTIN] as Pet[]);
+    store.set('pets', 'care_log', [] as CareLogEntry[]);
+
+    orch.init();
+
+    const patterns = store.get<AnyPattern[]>('pets', 'patterns', undefined as unknown as AnyPattern[]);
+    expect(Array.isArray(patterns)).toBe(true);
+    expect(store.get<number>('pets', 'patternsLastComputedAt', 0)).toBe(NOW);
+  });
+
+  it('detects a care-activation-barrier pattern from a stale care_log', () => {
+    store.set('pets', 'pets', [TONTIN] as Pet[]);
+    // hay_refill last done 10 days ago → cadence_days 2 → many missed cycles.
+    store.set('pets', 'care_log', [
+      { pet_id: 'tontin', task: 'hay_refill', occurred_at: NOW - 10 * 86_400_000 },
+    ] as CareLogEntry[]);
+
+    orch.init();
+
+    const patterns = store.get<AnyPattern[]>('pets', 'patterns', []);
+    expect(patterns!.some((p) => p.pattern === 'care-activation-barrier')).toBe(true);
+  });
+
+  it('writes an empty patterns array when consent is off', () => {
+    const noConsent = createPetsOrchestrator(store, {
+      now: () => NOW,
+      getConsent: () => false,
+    });
+    store.set('pets', 'pets', [TONTIN] as Pet[]);
+    store.set('pets', 'care_log', [
+      { pet_id: 'tontin', task: 'hay_refill', occurred_at: NOW - 10 * 86_400_000 },
+    ] as CareLogEntry[]);
+
+    noConsent.init();
+
+    expect(store.get<AnyPattern[]>('pets', 'patterns', [])).toHaveLength(0);
+    noConsent.teardown();
+  });
+
+  it('recomputes patterns when care_log changes after init', () => {
+    store.set('pets', 'pets', [TONTIN] as Pet[]);
+    store.set('pets', 'care_log', [] as CareLogEntry[]);
+
+    orch.init();
+    // Fresh state → no activation-barrier pattern.
+    expect(
+      store.get<AnyPattern[]>('pets', 'patterns', [])!
+        .some((p) => p.pattern === 'care-activation-barrier'),
+    ).toBe(false);
+
+    store.set('pets', 'care_log', [
+      { pet_id: 'tontin', task: 'hay_refill', occurred_at: NOW - 10 * 86_400_000 },
+    ] as CareLogEntry[]);
+
+    expect(
+      store.get<AnyPattern[]>('pets', 'patterns', [])!
+        .some((p) => p.pattern === 'care-activation-barrier'),
+    ).toBe(true);
   });
 });

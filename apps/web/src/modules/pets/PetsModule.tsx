@@ -57,7 +57,11 @@ export function PetsModule() {
   // ── Store slices — all hooks at the top ──────────────────────────────────
   const [pets, setPets] = useStoreSlice<StoredPet[]>('pets', 'pets', []);
   const [careLog, setCareLog] = useStoreSlice<StoredCareLogEntry[]>('pets', 'care_log', []);
-  const [observations] = useStoreSlice<Observation[]>('pets', 'observations', []);
+  const [observations, setObservations] = useStoreSlice<Observation[]>(
+    'pets',
+    'observations',
+    [],
+  );
   const [careGaps, setCareGaps] = useStoreSlice<CareGap[]>('pets', 'care_gaps', []);
   const [healthFlags, setHealthFlags] = useStoreSlice<StoredHealthFlag[]>(
     'pets',
@@ -167,6 +171,13 @@ export function PetsModule() {
       Date.now(),
     );
     setCareGaps(freshGaps);
+  }
+
+  function recordObservation(observation: Observation) {
+    // Append to pets.observations. The pets orchestrator subscribes to this
+    // key and recomputes pets.health_flags — symptom text entered here is
+    // what feeds the health-flag detector.
+    setObservations([...observations, observation]);
   }
 
   function archivePet(petId: string) {
@@ -392,6 +403,7 @@ export function PetsModule() {
                   onLogManual={logManual}
                   onArchive={archivePet}
                   onReviewFlag={reviewFlag}
+                  onRecordObservation={recordObservation}
                   dailyForecast={dailyForecast}
                   milestones={milestones}
                   vocabShown={vocabShown}
