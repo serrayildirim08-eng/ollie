@@ -60,6 +60,134 @@ export function openEpisode(
   };
 }
 
+/**
+ * Canonical "start an episode" entry point.
+ *
+ * Takes the current `body.episodes` array and returns a NEW array with the
+ * freshly-opened episode appended. This is the primary path the Body module's
+ * "log an episode" flow uses — UI never mutates the array by hand.
+ *
+ * Pure: no store / DOM. `now` is injected via opts.
+ */
+export function startEpisode(
+  episodes: Episode[] | null | undefined,
+  label: string,
+  kind: EpisodeKind | string,
+  opts?: OpenEpisodeOpts,
+): Episode[] {
+  const list = Array.isArray(episodes) ? episodes : [];
+  const ep = openEpisode(label, kind, opts);
+  return list.concat([ep]);
+}
+
+/**
+ * Defensive normalizer. Brain-dump routing (and legacy data) may write
+ * episode-shaped objects that are missing required fields — e.g.
+ * `{ id, text, ts }` with no `started_at` / `severity_log` / `label` / `kind`.
+ *
+ * `normalizeEpisode` backfills every required field so downstream helpers
+ * (activeEpisode / elapsedDays / summarizeEpisode / generateDoctorSummary)
+ * and the UI never see a malformed Episode. It is idempotent: a valid
+ * Episode is returned unchanged in shape.
+ *
+ * Field recovery rules:
+ *   - started_at  ← started_at | opened_at | ts | now
+ *   - label       ← label | text (truncated) | 'episode'
+ *   - kind        ← kind | 'acute'
+ *   - arrays      ← coerced to [] when missing/non-array
+ *   - ended_at    ← preserved iff a finite number, else undefined (still open)
+ */
+export function normalizeEpisode(
+  raw: unknown,
+  opts?: { now?: number },
+): Episode {
+  const now = typeof opts?.now === 'number' ? opts.now : Date.now();
+  const o = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+
+  const num = (v: unknown): number | undefined =>
+    typeof v === 'number' && isFinite(v) ? v : undefined;
+  const arr = <T>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
+
+  const startedAt =
+    num(o.started_at) ?? num(o.opened_at) ?? num(o.ts) ?? now;
+
+  let label = '';
+  if (typeof o.label === 'string' && o.label.trim()) {
+    label = o.label.trim();
+  } else if (typeof o.text === 'string' && o.text.trim()) {
+    // Brain-dump entries store free text under `text`. Use a short slice
+    // as the label so the card has something human-readable.
+    const t = o.text.trim();
+    label = t.length > 60 ? t.slice(0, 57) + '…' : t;
+  } else {
+    label = 'episode';
+  }
+
+  const kind: EpisodeKind | string =
+    typeof o.kind === 'string' && o.kind ? o.kind : 'acute';
+
+  const id =
+    typeof o.id === 'string' && o.id ? o.id : newEpisodeId(startedAt);
+
+  const severityLog = arr<SeverityEntry>(o.severity_log).filter(
+    (e) => e && typeof e.ts === 'number' && typeof e.severity === 'number',
+  );
+  const meds = arr<MedEntry>(o.meds).filter(
+    (m) => m && typeof m.ts === 'number' && typeof m.name === 'string',
+  );
+  const notes = arr<unknown>(o.notes)
+    .filter((n) => typeof n === 'string')
+    .map((n) => n as string);
+  const symptoms = arr<unknown>(o.symptoms)
+    .filter((s) => typeof s === 'string')
+    .map((s) => s as string);
+  const tags = arr<unknown>(o.tags)
+    .filter((t) => typeof t === 'string')
+    .map((t) => t as string);
+
+  // A free-text brain-dump entry IS the first note if it isn't the label.
+  if (typeof o.text === 'string' && o.text.trim() && o.text.trim() !== label) {
+    notes.unshift(o.text.trim());
+  }
+
+  const ep: Episode = {
+    id,
+    started_at: startedAt,
+    label,
+    kind,
+    symptoms,
+    meds,
+    severity_log: severityLog,
+    notes,
+    tags,
+  };
+  const endedAt = num(o.ended_at);
+  if (endedAt != null) ep.ended_at = endedAt;
+  if (typeof o.source === 'string') ep.source = o.source;
+  return ep;
+}
+
+/**
+ * Returns `true` when `raw` is already a structurally-valid Episode —
+ * i.e. `normalizeEpisode` would not have to backfill anything load-bearing.
+ * Used by the orchestrator to skip rewriting already-clean arrays.
+ */
+export function isWellFormedEpisode(raw: unknown): boolean {
+  if (!raw || typeof raw !== 'object') return false;
+  const o = raw as Record<string, unknown>;
+  return (
+    typeof o.id === 'string' && o.id.length > 0 &&
+    typeof o.started_at === 'number' && isFinite(o.started_at) &&
+    typeof o.label === 'string' &&
+    typeof o.kind === 'string' &&
+    Array.isArray(o.severity_log) &&
+    Array.isArray(o.meds) &&
+    Array.isArray(o.notes) &&
+    Array.isArray(o.symptoms) &&
+    Array.isArray(o.tags)
+  );
+}
+
 export function logSeverity(
   episode: Episode,
   severity: number,
