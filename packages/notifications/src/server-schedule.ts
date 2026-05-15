@@ -18,12 +18,20 @@
  */
 
 import type { OllieAPI } from '@ollie/api';
-import type { NotificationSpec } from './types';
+import type { NotificationBudget, NotificationSpec } from './types';
+import { DEFAULT_BUDGET, isMuted } from './budget';
 
 export interface ServerScheduleDeps {
   api: OllieAPI;
   authJwt: string;
   userId: string;
+  /**
+   * The user's notification budget, read from encrypted client state.
+   * Stamped onto the job row so the cron worker — which CANNOT decrypt
+   * the budget itself — can still enforce the daily cap + per-category
+   * mute when it delivers. Optional: omitted → worker uses defaults.
+   */
+  budget?: NotificationBudget;
 }
 
 export async function scheduleServerJob(
@@ -40,6 +48,11 @@ export async function scheduleServerJob(
     spec.extra && (spec.extra as { feature?: string }).feature === 'med-nudge' ? 'med_nudge' :
     'reminder_fire';
 
+  // Worker-readable budget snapshot. The worker cannot decrypt the user's
+  // budget, so we stamp the daily cap + this category's mute state onto
+  // the row. The cron drain reads these to enforce cap + mute server-side.
+  const budget = deps.budget ?? DEFAULT_BUDGET;
+
   const row = {
     user_id: deps.userId,
     fire_at: new Date(fireAt).toISOString(),
@@ -51,6 +64,9 @@ export async function scheduleServerJob(
       extra: spec.extra,
     },
     dedupe_key: spec.dedupe_key,
+    daily_cap: budget.daily_cap,
+    notification_category: spec.category,
+    category_muted: isMuted(budget, spec.category),
   };
 
   const r = await deps.api.supabase.rest.upsert<Array<{ id: string }>>(

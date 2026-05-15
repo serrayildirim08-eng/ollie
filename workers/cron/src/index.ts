@@ -1,27 +1,30 @@
 /**
  * ollie · cron Cloudflare Worker
  *
- * Two schedules now:
+ * Three schedules now:
  *   - `0 3 * * *`  — daily intelligence layer (pattern / period / subscription
- *                    detection + APNs notification fan-out). Stubs today.
+ *                    detection). Stubs today.
  *   - `*​/5 * * * *` — drain the brain-dump enrichment queue (KV → Anthropic
  *                    Haiku 4.5 → Supabase raw_dumps + enriched_signals). See
- *                    drain.ts.
+ *                    drain.ts. ALSO drains the notification delivery queue
+ *                    (scheduled_jobs → APNs). See flush-notifications.ts.
  *
  * Privacy posture:
- *   The drain handler reads ONLY PII-scrubbed text from the queue (ai-proxy
- *   /enrich-dump applies the regex scrub before queueing). The Anthropic
- *   system prompt forbids echoing any PII the regex missed. Decryption of
- *   user-data payloads (for the daily intelligence layer) happens inside the
- *   worker boundary; nothing is logged.
+ *   The enrich-drain handler reads ONLY PII-scrubbed text from the queue.
+ *   The notification drain reads prepared notification COPY (title/body) —
+ *   never decrypts user source data. Decryption of user-data payloads (for
+ *   the daily intelligence layer) happens inside the worker boundary;
+ *   nothing is logged.
  *
  * NOTE: the daily handlers are skeleton stubs. Algorithms live in
- *       packages/logic/* on the client today.
+ *       packages/logic/* on the client today. flushNotificationQueue is
+ *       NOT a stub — it is the live server-side notification delivery path.
  */
 
 import { drainEnrichQueue, type DrainEnv } from './drain';
+import { flushNotificationQueue, type FlushEnv } from './flush-notifications';
 
-export interface Env extends DrainEnv {
+export interface Env extends DrainEnv, FlushEnv {
   SUPABASE_URL: string;
   SUPABASE_SERVICE_ROLE: string;
   SUPABASE_SERVICE_ROLE_KEY: string;
@@ -56,9 +59,16 @@ export default {
    */
   async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
     if (event.cron === DRAIN_SCHEDULE) {
+      // 5-min tick: drain BOTH queues. Brain-dump enrichment AND
+      // notification delivery. They are independent — wrap each so one
+      // failing doesn't starve the other.
       ctx.waitUntil(safe('enrich-drain', async () => {
         const stats = await drainEnrichQueue(env);
         console.log('[cron:enrich-drain]', JSON.stringify(stats));
+      }));
+      ctx.waitUntil(safe('notification-drain', async () => {
+        const stats = await flushNotificationQueue(env);
+        console.log('[cron:notification-drain]', JSON.stringify(stats));
       }));
       return;
     }
@@ -70,7 +80,6 @@ export default {
       ctx.waitUntil(safe('pattern-detection',  () => runPatternDetection(env)));
       ctx.waitUntil(safe('period-prediction',  () => runPeriodPrediction(env)));
       ctx.waitUntil(safe('subscription-detect', () => runSubscriptionDetection(env)));
-      ctx.waitUntil(safe('notification-queue', () => flushNotificationQueue(env)));
       // Body-correlation registry pass — same 03:00 UTC trigger. Stub
       // until per-user encrypted data access is wired. Primary path =
       // client-side scheduleBodyCorrelationPass().
@@ -102,10 +111,20 @@ export default {
         await runPatternDetection(env);
         await runPeriodPrediction(env);
         await runSubscriptionDetection(env);
-        await flushNotificationQueue(env);
       }));
       return new Response(JSON.stringify({ queued: true }), {
         status: 202,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+
+    // Manual trigger for the notification delivery drain — runs it once
+    // synchronously and returns the stats (useful for ops + local dev):
+    //   curl -X POST https://<worker>/flush-notifications
+    if (url.pathname === '/flush-notifications') {
+      const stats = await flushNotificationQueue(env);
+      return new Response(JSON.stringify({ ok: true, ...stats }), {
+        status: 200,
         headers: { 'content-type': 'application/json' },
       });
     }
@@ -177,15 +196,6 @@ async function runPeriodPrediction(_env: Env): Promise<void> {
  */
 async function runSubscriptionDetection(_env: Env): Promise<void> {
   // intentionally empty until algorithms move server-side.
-}
-
-/**
- * Drain pending notifications from Supabase and fan out to APNs via the
- * service binding. Service-binding call is in-cluster; no public network
- * hop.
- */
-async function flushNotificationQueue(_env: Env): Promise<void> {
-  // intentionally empty until notifications layer lands.
 }
 
 /**

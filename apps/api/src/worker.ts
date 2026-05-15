@@ -315,7 +315,50 @@ async function handleRegister(req: Request, env: Env): Promise<Response> {
       registered_at: Date.now(),
     }),
   );
+
+  // ALSO mirror the token into the Postgres `push_tokens` table so the
+  // cron worker's notification drain (workers/cron · flushNotificationQueue)
+  // can JOIN it on user_id. KV is not joinable from that worker. Best
+  // effort — a Postgres failure must not fail registration (the legacy
+  // KV-based apps/api cron path still works off the KV write above).
+  if (body.user_id) {
+    await mirrorTokenToPostgres(env, body).catch((err) => {
+      console.error('[register] push_tokens mirror failed', err);
+    });
+  }
+
   return Response.json({ ok: true });
+}
+
+/**
+ * Upsert one device-token row into Postgres `push_tokens`. The unique
+ * index on `device_token` makes this an idempotent rebind: re-registering
+ * the same token (token rotation, app reinstall under a new account)
+ * updates user_id + platform + bumps updated_at.
+ *
+ * Requires SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY. If either is missing
+ * the mirror is skipped (the worker stays functional for KV-only flows).
+ */
+async function mirrorTokenToPostgres(env: Env, body: RegisterBody): Promise<void> {
+  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) return;
+  const url = `${env.SUPABASE_URL}/rest/v1/push_tokens?on_conflict=device_token`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+      authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+      'content-type': 'application/json',
+      prefer: 'resolution=merge-duplicates,return=minimal',
+    },
+    body: JSON.stringify({
+      user_id: body.user_id,
+      device_token: body.token,
+      platform: body.platform,
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(`push_tokens upsert http ${res.status}`);
+  }
 }
 
 // ──────────────────────────────────────────────────────────────────────────
