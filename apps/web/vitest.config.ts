@@ -1,24 +1,28 @@
 import { defineConfig } from 'vitest/config';
 import path from 'path';
 
+// Workspace packages are resolved to their TS source so vitest can transform
+// them. The bare-package aliases use exact-match regexes (/^@ollie\/x$/) so
+// that subpath imports (e.g. @ollie/logic/pets, @ollie/store/react) fall
+// through to each package's own `exports` map instead of being swallowed by a
+// greedy prefix alias.
+const pkg = (name: string, rel: string) => ({
+  find: new RegExp(`^${name}$`),
+  replacement: path.resolve(__dirname, rel),
+});
+
 export default defineConfig({
   resolve: {
     alias: [
-      // Subpath aliases must come before the bare-package alias.
-      { find: '@ollie/logic/finance', replacement: path.resolve(__dirname, '../../packages/logic/src/finance/index.ts') },
-      { find: '@ollie/logic/dissection', replacement: path.resolve(__dirname, '../../packages/logic/src/dissection/index.ts') },
-      { find: '@ollie/logic/cycle', replacement: path.resolve(__dirname, '../../packages/logic/src/cycle/index.ts') },
-      { find: '@ollie/logic/grocery', replacement: path.resolve(__dirname, '../../packages/logic/src/grocery/index.ts') },
-      { find: '@ollie/logic/body', replacement: path.resolve(__dirname, '../../packages/logic/src/body/index.ts') },
-      // Resolve workspace packages to their source so vitest can transform them.
-      { find: '@ollie/store', replacement: path.resolve(__dirname, '../../packages/store/src/index.ts') },
-      { find: '@ollie/logic', replacement: path.resolve(__dirname, '../../packages/logic/src/index.ts') },
-      { find: '@ollie/events', replacement: path.resolve(__dirname, '../../packages/events/src/index.ts') },
-      { find: '@ollie/orchestrator', replacement: path.resolve(__dirname, '../../packages/orchestrator/src/index.ts') },
-      { find: '@ollie/research-stream', replacement: path.resolve(__dirname, '../../packages/research-stream/src/index.ts') },
+      pkg('@ollie/store', '../../packages/store/src/index.ts'),
+      pkg('@ollie/logic', '../../packages/logic/src/index.ts'),
+      pkg('@ollie/events', '../../packages/events/src/index.ts'),
+      pkg('@ollie/orchestrator', '../../packages/orchestrator/src/index.ts'),
+      pkg('@ollie/research-stream', '../../packages/research-stream/src/index.ts'),
     ],
   },
   test: {
     environment: 'jsdom',
+    setupFiles: ['./vitest.setup.ts'],
   },
 });

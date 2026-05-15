@@ -34,6 +34,7 @@
  */
 
 import type { NotificationSpec } from '@ollie/notifications';
+import { handleAccountDelete } from './account-delete';
 
 export interface Env {
   APNS_KEY_ID: string;
@@ -62,6 +63,9 @@ export default {
     }
     if (req.method === 'POST' && url.pathname === '/send') {
       return handleSend(req, env);
+    }
+    if (req.method === 'POST' && url.pathname === '/account/delete') {
+      return handleAccountDelete(req, env);
     }
     if (url.pathname === '/health') {
       return new Response('ok', { status: 200 });

@@ -38,6 +38,12 @@ interface ViteEnv {
   VITE_RESEARCH_ENDPOINT?: string;
   VITE_AI_WORKER_URL?: string;
   VITE_USER_HASH_SALT?: string;
+  /**
+   * Base URL of the api worker that hosts `POST /account/delete`.
+   * Example: https://ollie-notifications.workers.dev
+   * When unset, deleteAccount() returns code='no-endpoint'.
+   */
+  VITE_API_WORKER_URL?: string;
 }
 
 const env: ViteEnv = (import.meta as unknown as { env?: ViteEnv }).env ?? {};
@@ -70,7 +76,10 @@ export function bootAccount(): AccountBootHandles {
     supabaseAnonKey: env.VITE_SUPABASE_ANON_KEY,
   });
 
-  const auth = createAuthClient({ store, api });
+  const accountDeleteUrl = env.VITE_API_WORKER_URL
+    ? `${env.VITE_API_WORKER_URL.replace(/\/$/, '')}/account/delete`
+    : undefined;
+  const auth = createAuthClient({ store, api, accountDeleteUrl });
 
   const research = createResearchStream({
     store,

@@ -21,15 +21,34 @@ import {
   runMigrations,
 } from '@ollie/store';
 import { useStoreSlice as baseUseStoreSlice } from '@ollie/store/react';
+// BirthData used in disabled astrology orchestrator block below (ASTROLOGY_ENABLED = false).
 import type { BirthData } from '@ollie/logic/astrology';
 import { createOrchestrator, initPatternDetectedSubscriber } from '@ollie/orchestrator';
 import { scheduleServerJob } from '@ollie/notifications/server-schedule';
 import { getAccount } from './lib/account-boot';
+import { bootEncryption, hasSessionPassphrase } from './lib/encryption-boot';
 
 runMigrations(browserAdapter);
 
 export const store = createStore(browserAdapter);
 installCrossTabSync(store, browserAdapter);
+
+// Audit task 10: AES-GCM-256 encrypted snapshot for work + goals modules.
+// Fire-and-forget: orchestrators read lazily so the brief delay between
+// store init and snapshot restore is safe.
+//
+// 2026-05-14: passphrase prompt moved into SettingsScreen. We only call
+// bootEncryption() at startup when the user has previously set a
+// passphrase in this session (cached in sessionStorage). Otherwise the
+// store stays plaintext until the user opens Settings → encryption →
+// set passphrase, which calls setSessionPassphrase() to invoke
+// bootEncryption() with the freshly-saved value. This preserves the
+// graceful-plaintext audit pattern without a blocking window.prompt.
+if (hasSessionPassphrase()) {
+  void bootEncryption(store, {
+    promptForPassphrase: () => Promise.resolve(null),
+  });
+}
 
 export function useStoreSlice<T>(
   mod: string,
@@ -39,71 +58,74 @@ export function useStoreSlice<T>(
   return baseUseStoreSlice<T>(store, mod, key, defaultValue);
 }
 
-// ─── Astrology orchestrator (deferred) ───────────────────────────────────────
-// Only loads astronomy-engine + @ollie/logic/astrology when the user has
-// birth data stored, or when they add it for the first time.
+// ─── Astrology orchestrator (disabled) ───────────────────────────────────────
+// Deferred to backlog per audits/DECISIONS_2026-05-14.md Decision 2.
+// Set ASTROLOGY_ENABLED = true to reactivate when the module ships.
+const ASTROLOGY_ENABLED = false; // deferred to backlog per audits/DECISIONS_2026-05-14.md
 
-async function bootAstrology(): Promise<void> {
-  const [{ computeNatalChart, currentTransits }, { astronomyAPI }] =
-    await Promise.all([
-      import('@ollie/logic/astrology'),
-      import('./lib/astronomy'),
-    ]);
+if (ASTROLOGY_ENABLED) {
+  async function bootAstrology(): Promise<void> {
+    const [{ computeNatalChart, currentTransits }, { astronomyAPI }] =
+      await Promise.all([
+        import('@ollie/logic/astrology'),
+        import('./lib/astronomy'),
+      ]);
 
-  function recomputeChart(birth: BirthData | null | undefined): void {
-    if (!birth?.date) {
-      store.set('astrology', 'chart', null);
-      return;
-    }
-    try {
-      const chart = computeNatalChart(birth, astronomyAPI);
-      store.set('astrology', 'chart', chart);
-    } catch (err) {
-      console.warn('[astrology orchestrator] computeNatalChart failed:', err);
-      store.set('astrology', 'chart', null);
-    }
-  }
-
-  function recomputeTransits(): void {
-    try {
-      const snapshot = currentTransits(new Date(), astronomyAPI);
-      store.set('astrology', 'currentTransits', snapshot);
-    } catch (err) {
-      console.warn('[astrology orchestrator] currentTransits failed:', err);
-    }
-  }
-
-  // Run once for the existing birth data that triggered the boot.
-  recomputeChart(store.get<BirthData | null>('astrology', 'birth', null));
-  recomputeTransits();
-
-  // Subscribe to future birth changes.
-  store.subscribeKey<BirthData | null>('astrology', 'birth', recomputeChart);
-
-  // Daily transit tick (every 24 h).
-  const TRANSIT_INTERVAL_MS = 24 * 60 * 60 * 1000;
-  setInterval(() => {
-    recomputeTransits();
-    recomputeChart(store.get<BirthData | null>('astrology', 'birth', null));
-  }, TRANSIT_INTERVAL_MS);
-}
-
-// Boot if birth data already exists on load; otherwise wait for it to appear.
-const hasBirthOnLoad = Boolean(store.get<BirthData | null>('astrology', 'birth', null)?.date);
-if (hasBirthOnLoad) {
-  void bootAstrology();
-} else {
-  // One-shot subscription: boot as soon as birth data is set, then unsub.
-  const unsubBirth = store.subscribeKey<BirthData | null>(
-    'astrology',
-    'birth',
-    (birth) => {
-      if (birth?.date) {
-        unsubBirth();
-        void bootAstrology();
+    function recomputeChart(birth: BirthData | null | undefined): void {
+      if (!birth?.date) {
+        store.set('astrology', 'chart', null);
+        return;
       }
-    },
-  );
+      try {
+        const chart = computeNatalChart(birth, astronomyAPI);
+        store.set('astrology', 'chart', chart);
+      } catch (err) {
+        console.warn('[astrology orchestrator] computeNatalChart failed:', err);
+        store.set('astrology', 'chart', null);
+      }
+    }
+
+    function recomputeTransits(): void {
+      try {
+        const snapshot = currentTransits(new Date(), astronomyAPI);
+        store.set('astrology', 'currentTransits', snapshot);
+      } catch (err) {
+        console.warn('[astrology orchestrator] currentTransits failed:', err);
+      }
+    }
+
+    // Run once for the existing birth data that triggered the boot.
+    recomputeChart(store.get<BirthData | null>('astrology', 'birth', null));
+    recomputeTransits();
+
+    // Subscribe to future birth changes.
+    store.subscribeKey<BirthData | null>('astrology', 'birth', recomputeChart);
+
+    // Daily transit tick (every 24 h).
+    const TRANSIT_INTERVAL_MS = 24 * 60 * 60 * 1000;
+    setInterval(() => {
+      recomputeTransits();
+      recomputeChart(store.get<BirthData | null>('astrology', 'birth', null));
+    }, TRANSIT_INTERVAL_MS);
+  }
+
+  // Boot if birth data already exists on load; otherwise wait for it to appear.
+  const hasBirthOnLoad = Boolean(store.get<BirthData | null>('astrology', 'birth', null)?.date);
+  if (hasBirthOnLoad) {
+    void bootAstrology();
+  } else {
+    // One-shot subscription: boot as soon as birth data is set, then unsub.
+    const unsubBirth = store.subscribeKey<BirthData | null>(
+      'astrology',
+      'birth',
+      (birth) => {
+        if (birth?.date) {
+          unsubBirth();
+          void bootAstrology();
+        }
+      },
+    );
+  }
 }
 
 // ─── Root orchestrator boot ───────────────────────────────────────────────────

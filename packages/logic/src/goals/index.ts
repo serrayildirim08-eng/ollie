@@ -49,3 +49,14 @@ export {
   detectGoalInterference,    // G12
   detectExperimentCandidate, // G16
 } from './phase3';
+
+// Velocity — audit task 15 (2026-05-14)
+export {
+  detectGoalVelocityByCategory,
+  computeVelocityByCategory,
+} from './velocity';
+export type {
+  VelocityCategoryStat,
+  VelocityPatternSignal,
+  VelocityOpts,
+} from './velocity';

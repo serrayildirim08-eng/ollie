@@ -14,6 +14,8 @@
  * Web / desktop ignore this — only Capacitor native fires `appUrlOpen`.
  */
 
+import { captureInviteFromDeeplink } from './invite';
+
 interface CapApp {
   addListener: (event: string, cb: (data: { url: string }) => void) => Promise<{ remove: () => void }>;
 }
@@ -40,6 +42,13 @@ export function handleUrl(url: string): void {
   if (!url || typeof url !== 'string') return;
   if (!url.startsWith('ollie://')) return;
   const path = url.slice('ollie://'.length).split('?')[0];
+
+  // Task 22 — `ollie://invite/<code>` captures the pending invite code
+  // so the next ConsentStep render pre-fills the input.
+  if (path.startsWith('invite/') || path === 'invite') {
+    captureInviteFromDeeplink(url);
+    return;
+  }
 
   if (path === 'capture') {
     // MicButton listens for this and calls start().

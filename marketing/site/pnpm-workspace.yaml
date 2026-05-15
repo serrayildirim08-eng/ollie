@@ -1,0 +1,4 @@
+verifyDepsBeforeRun: false
+ignoredBuiltDependencies:
+  - esbuild
+  - sharp

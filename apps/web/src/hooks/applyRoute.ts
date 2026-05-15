@@ -134,7 +134,57 @@ export function applyRoute(route: Action, store: Store): void {
     return;
   }
 
-  // All remaining modules: dump, sleep, work, habits, goals, admin, pets, health, reminders
+  if (module === 'work') {
+    const lower = data.toLowerCase();
+    // meeting → work.meetings (Meeting type expects start_at + end_at;
+    // brain-dump only supplies a title, so we store a placeholder
+    // half-hour window at "now" and let UI/parser refine later).
+    if (/\bmeeting\b/i.test(lower) || /toplant[ıi]/i.test(lower)) {
+      store.update<Array<{ id: string; title: string; start_at: number; end_at: number }>>(
+        'work',
+        'meetings',
+        (cur) => [
+          ...(cur ?? []),
+          { id: newId(), title: data, start_at: ts, end_at: ts + 30 * 60_000 },
+        ],
+      );
+      return;
+    }
+    // deadline → work.tasks with a placeholder due flag (UI surfaces
+    // these in the task list; deeper deadline parsing lives in router).
+    if (/\bdeadline\b/i.test(lower)) {
+      store.update<Array<{ id: string; title: string; created_at: number }>>(
+        'work',
+        'tasks',
+        (cur) => [...(cur ?? []), { id: newId(), title: data, created_at: ts }],
+      );
+      return;
+    }
+    // default work → task list (audit task 1: brain-dump must populate
+    // task list, not a generic items array).
+    store.update<Array<{ id: string; title: string; created_at: number }>>(
+      'work',
+      'tasks',
+      (cur) => [...(cur ?? []), { id: newId(), title: data, created_at: ts }],
+    );
+    return;
+  }
+
+  if (module === 'goals') {
+    // goals → goals.items so existing G1–G16 detectors see them. Shape
+    // mirrors StoredGoal: id + title + created_at + status active.
+    store.update<Array<{ id: string; title: string; created_at: number; status: string }>>(
+      'goals',
+      'items',
+      (cur) => [
+        ...(cur ?? []),
+        { id: newId(), title: data, created_at: ts, status: 'active' },
+      ],
+    );
+    return;
+  }
+
+  // All remaining modules: dump, sleep, habits, admin, pets, health, reminders
   store.update<Array<{ id: string; text: string; ts: number }>>(
     module,
     'items',

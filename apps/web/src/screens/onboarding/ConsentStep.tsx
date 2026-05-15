@@ -35,6 +35,9 @@ import {
   type ConsentState,
 } from '@ollie/consent';
 import { emit as emitEvent } from '@ollie/events';
+import { getAccount } from '../../lib/account-boot';
+import { readUserHash } from '../../lib/user-hash';
+import { getAppVersion } from '../../lib/device';
 
 export type ConsentStepSource = 'onboarding' | 'reprompt';
 
@@ -295,6 +298,39 @@ export function ConsentStep({
         source,
         ts: Date.now(),
       });
+
+      // Legal trail — write a consent_audit row to Supabase via the
+      // research-stream → ai-proxy /ingest-event pipeline. Two firing
+      // paths: 'signup' for fresh onboarding, 'settings_change' for the
+      // pre-pivot re-prompt. Mirrors SettingsScreen.PrivacySection.
+      //
+      // Gated on the canonical consent state we JUST wrote (research
+      // -stream reads shared.consent.necessary). For a 'signup' source
+      // the user is still null-research at the moment of write — emit
+      // unconditionally; the worker rejects if research_optin is false
+      // is handled downstream. Per Serra's B' brief we ONLY emit when
+      // research_optin === true at the moment of consent. Otherwise no
+      // research telemetry should leave the device.
+      try {
+        const account = getAccount();
+        const userHash = readUserHash();
+        if (account && userHash && research) {
+          account.research.trackTable('consent_audit', {
+            user_hash: userHash,
+            consent_necessary: true,
+            consent_marketing: initial?.marketing ?? false,
+            consented_at: new Date().toISOString(),
+            event_source: source === 'reprompt' ? 'settings_change' : 'signup',
+            user_agent: typeof navigator !== 'undefined'
+              ? navigator.userAgent.slice(0, 200)
+              : '',
+            app_version: getAppVersion(),
+          });
+        }
+      } catch {
+        /* best-effort — never block the continue path */
+      }
+
       onContinue();
     } catch {
       // setConsent should never throw — local store write is sync,

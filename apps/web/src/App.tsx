@@ -28,6 +28,7 @@ import { bootAccount } from './lib/account-boot';
 import { sessionTracker } from './lib/session-tracker';
 import { readUserHash } from './lib/user-hash';
 import { getDeviceId, getAppVersion } from './lib/device';
+import { createConsentSync } from './lib/consent-sync';
 
 // ─── lazy page imports ────────────────────────────────────────────────────────
 
@@ -162,7 +163,12 @@ function AppInner() {
   // research_optin: null so the UI re-prompts.
   const consentBootedRef = React.useRef(false);
   if (!consentBootedRef.current) {
-    configureConsent({ store });
+    // Sprint B'' Item 4: the `sync` arg is the durable Supabase sink. Without
+    // it, @ollie/consent only writes through to the local store and the
+    // consent_audit row never lands. The sink reads VITE_AI_WORKER_URL at
+    // call-time, so pre-auth writes (no user_hash yet) silently no-op and
+    // production writes flow through ai-proxy /ingest-event → Supabase.
+    configureConsent({ store, sync: createConsentSync() });
     consentBootedRef.current = true;
   }
   const consentPersisted = store.get<ConsentState | null>('consent', 'state', null);
