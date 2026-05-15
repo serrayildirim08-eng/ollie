@@ -655,6 +655,244 @@ const d3BtnStyle: React.CSSProperties = {
   borderRadius: 12,
 };
 
+// ─── SavingsLedger · "set aside" book ─────────────────────────────────────
+// A plain ledger of money the user deliberately tucked away ("set aside $X").
+// Distinct from SavingsCard (which derives savings from cancelled subs) and
+// from savings *goals* (target-driven). This is just a running record + log.
+// Backend writes finance.savingsLedger; the UI can also append manually.
+// Voice: factual, no praise, no streak. "set aside" — passive, never "you".
+
+export interface SavingsLedgerEntry {
+  id: string;
+  amount: number;
+  /** ms epoch */
+  ts: number;
+  /** optional free-text note: where it went / why */
+  note?: string | null;
+  /** 'manual' = typed here; anything else = surfaced by detection */
+  source?: string;
+}
+
+/** Sum of all ledger amounts. Tolerates malformed entries. */
+export function savingsLedgerTotal(entries: SavingsLedgerEntry[] | null | undefined): number {
+  if (!Array.isArray(entries)) return 0;
+  let sum = 0;
+  for (const e of entries) {
+    if (e && typeof e.amount === 'number' && isFinite(e.amount) && e.amount > 0) {
+      sum += e.amount;
+    }
+  }
+  return sum;
+}
+
+/** Newest-first, malformed entries dropped. */
+export function sortedLedgerEntries(
+  entries: SavingsLedgerEntry[] | null | undefined,
+): SavingsLedgerEntry[] {
+  if (!Array.isArray(entries)) return [];
+  return entries
+    .filter((e): e is SavingsLedgerEntry =>
+      Boolean(e) && typeof e.amount === 'number' && isFinite(e.amount) && e.amount > 0 && typeof e.ts === 'number')
+    .sort((a, b) => b.ts - a.ts);
+}
+
+function SavingsLedger() {
+  const [ledger, setLedger] = useStoreSlice<SavingsLedgerEntry[]>('finance', 'savingsLedger', []);
+  const [amount, setAmount] = useState('');
+  const [note, setNote] = useState('');
+  const [open, setOpen] = useState(false);
+
+  const entries = useMemo(() => sortedLedgerEntries(ledger), [ledger]);
+  const total = useMemo(() => savingsLedgerTotal(ledger), [ledger]);
+
+  function addEntry() {
+    const amt = Number.parseFloat(amount);
+    if (!isFinite(amt) || amt <= 0) return;
+    const entry: SavingsLedgerEntry = {
+      id: mkId('sl'),
+      amount: Math.round(amt * 100) / 100,
+      ts: Date.now(),
+      note: note.trim().slice(0, 120) || null,
+      source: 'manual',
+    };
+    setLedger([...(ledger ?? []), entry]);
+    setAmount('');
+    setNote('');
+    setOpen(false);
+  }
+
+  function removeEntry(id: string) {
+    setLedger((ledger ?? []).filter((e) => e.id !== id));
+  }
+
+  return (
+    <section style={{ marginBottom: 48 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 10, borderBottom: `1px solid ${T.border}` }}>
+        <div style={labelStyle}>
+          set aside{total > 0 ? ` · $${fmtMoney(total)}` : ''}
+        </div>
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          style={addBtn}
+          aria-expanded={open}
+        >
+          {open ? '× close' : '+ log'}
+        </button>
+      </div>
+
+      {open && (
+        <div style={{ display: 'flex', gap: 8, padding: '16px 0', flexWrap: 'wrap' }}>
+          <input
+            placeholder="$"
+            type="number"
+            min="0"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            aria-label="amount set aside"
+            style={{ ...inputStyle, width: 90 }}
+          />
+          <input
+            placeholder="note · optional"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            aria-label="set aside note"
+            style={{ ...inputStyle, flex: '2 1 200px' }}
+          />
+          <button type="button" onClick={addEntry} style={addBtn}>save</button>
+        </div>
+      )}
+
+      {entries.length === 0 && !open && (
+        <div style={{ padding: '18px 0', fontFamily: "'DM Sans', sans-serif", fontSize: 13, color: T.muted, fontStyle: 'italic' }}>
+          nothing set aside yet.
+        </div>
+      )}
+
+      {entries.slice(0, 30).map((entry) => (
+        <div key={entry.id} style={rowStyle}>
+          <div>
+            <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 14, color: T.text }}>
+              ${fmtMoney(entry.amount)}
+            </div>
+            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: T.muted, letterSpacing: '0.12em', marginTop: 4 }}>
+              {entry.note ? `${entry.note} · ` : ''}
+              {new Date(entry.ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }).toLowerCase()}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => removeEntry(entry.id)}
+            aria-label="remove ledger entry"
+            style={removeBtn}
+          >
+            ×
+          </button>
+        </div>
+      ))}
+    </section>
+  );
+}
+
+// ─── ADHDTaxCandidateChip · gentle, sparse confirmation ───────────────────
+// Backend emits finance:adhd_tax_candidate_detected and writes
+// finance.adhdTaxCandidates. We surface ONE chip at a time, asking softly
+// whether a charge was an inattention spend. "yes" → appends to the
+// finance.adhd_tax list. Constitutional restraint: never every purchase,
+// never shame. high-confidence auto_add candidates are filtered out — those
+// the orchestrator already booked, so we'd double-ask.
+
+export interface ADHDTaxCandidateSlice {
+  id: string;
+  record_id: string | null;
+  category: 'late_fee' | 'replacement' | 'duplicate' | 'unknown';
+  confidence: 'low' | 'medium' | 'high';
+  amount: number | null;
+  matched_phrase: string;
+  copy: string;
+  auto_add: boolean;
+  ts: number;
+}
+
+/**
+ * Pick at most ONE candidate to surface: not dismissed, not confirmed,
+ * not auto_add (already booked by orchestrator), newest first. Sparse by
+ * construction — one chip, not a feed.
+ */
+export function pickADHDTaxChip(
+  candidates: ADHDTaxCandidateSlice[] | null | undefined,
+  dismissed: Record<string, number> | null | undefined,
+  confirmed: Record<string, number> | null | undefined,
+): ADHDTaxCandidateSlice | null {
+  if (!Array.isArray(candidates)) return null;
+  const d = dismissed ?? {};
+  const c = confirmed ?? {};
+  const open = candidates
+    .filter((x): x is ADHDTaxCandidateSlice => Boolean(x) && typeof x.id === 'string')
+    .filter((x) => !x.auto_add && !d[x.id] && !c[x.id])
+    .sort((a, b) => (b.ts ?? 0) - (a.ts ?? 0));
+  return open[0] ?? null;
+}
+
+function ADHDTaxCandidateChip() {
+  const [candidates] = useStoreSlice<ADHDTaxCandidateSlice[]>('finance', 'adhdTaxCandidates', []);
+  const [dismissed, setDismissed] = useStoreSlice<Record<string, number>>(
+    'finance', '_adhdTaxCandidateDismissed', {},
+  );
+  const [confirmed, setConfirmed] = useStoreSlice<Record<string, number>>(
+    'finance', '_adhdTaxCandidateConfirmed', {},
+  );
+  const [tax, setTax] = useStoreSlice<StoredTax[]>('finance', 'adhd_tax', []);
+
+  const chip = useMemo(
+    () => pickADHDTaxChip(candidates, dismissed, confirmed),
+    [candidates, dismissed, confirmed],
+  );
+
+  if (!chip) return null;
+
+  function dismiss(c: ADHDTaxCandidateSlice) {
+    setDismissed({ ...(dismissed ?? {}), [c.id]: Date.now() });
+  }
+
+  function confirm(c: ADHDTaxCandidateSlice) {
+    const entry: StoredTax = {
+      id: mkId('t'),
+      text: (c.copy || c.matched_phrase || 'inattention spend').slice(0, 120),
+      amount: c.amount ?? 0,
+      ts: Date.now(),
+    };
+    setTax([...(tax ?? []), entry]);
+    setConfirmed({ ...(confirmed ?? {}), [c.id]: Date.now() });
+  }
+
+  return (
+    <section style={{ marginBottom: 48 }}>
+      <div style={{ paddingBottom: 10, borderBottom: `1px solid ${T.border}`, ...labelStyle }}>
+        worth a look
+      </div>
+      <div style={{ padding: '18px 20px', background: T.paper, borderBottom: `1px solid ${T.border}`, display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 14, color: T.text, lineHeight: 1.5 }}>
+          {chip.copy}
+          {chip.amount != null ? ` — $${fmtMoney(chip.amount)}` : ''}. was this one a distracted spend?
+        </span>
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={() => confirm(chip)}
+            style={{ ...d3BtnStyle, color: T.text, borderColor: T.border }}
+          >
+            yes — log it
+          </button>
+          <button type="button" onClick={() => dismiss(chip)} style={d3BtnStyle}>
+            no
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 // ─── FinanceNoticed ───────────────────────────────────────────────────────────
 
 function FinanceNoticed() {
@@ -2037,6 +2275,9 @@ export function FinanceModule() {
           })}
         </section>
 
+        {/* ADHD-tax candidate chip — gentle, sparse, one at a time */}
+        <ADHDTaxCandidateChip />
+
         {/* ADHD tax */}
         <section style={{ marginBottom: 48 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 10, borderBottom: `1px solid ${T.border}` }}>
@@ -2141,6 +2382,9 @@ export function FinanceModule() {
 
         {/* F1 savings tracker (quiet card, passive voice) */}
         <SavingsCard />
+
+        {/* "set aside" ledger — plain record of money tucked away */}
+        <SavingsLedger />
 
         {/* E5 protective chain surface — sleep deprivation, cycle, etc. */}
         <ProtectiveCards />

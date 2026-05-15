@@ -24,7 +24,6 @@
  *     this component renders null. Opt-in is the default.
  *
  * Events:
- *   - sleep:wind_down_started   on first item tap of the night
  *   - sleep:wind_down_completed when the final item is checked
  *   - sleep:wind_down_skipped   when the user dismisses the card mid-flow
  *
@@ -280,17 +279,8 @@ export function WindDownChecklist({ nowFn }: WindDownChecklistProps): React.Reac
     if (state.finished || allDone) return;
     if (index !== cursor) return; // only the next item is tappable
 
-    const wasFirst = state.completed.length === 0;
     const tappedAt = Date.now();
     const startedAt = state.startedAt ?? tappedAt;
-
-    if (wasFirst) {
-      try {
-        events.emit('sleep:wind_down_started', { ts: startedAt });
-      } catch {
-        // emit failures are non-fatal in the UI layer
-      }
-    }
 
     // Emit the per-step row the friction detector feeds on. The sleep
     // orchestrator subscribes to sleep:wind_down_step and appends it to

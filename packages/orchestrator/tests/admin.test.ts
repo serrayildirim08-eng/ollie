@@ -4,10 +4,10 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createStore, createMemoryAdapter } from '@ollie/store';
-import { _clearAllHandlers, on } from '@ollie/events';
+import { _clearAllHandlers, on, emit } from '@ollie/events';
 import { createAdminOrchestrator } from '../src/admin';
 import type { AdminTask, DumpEntry } from '@ollie/logic/admin';
-import type { AdminPattern } from '../src/admin';
+import type { AdminPattern, PhoneTaskItem } from '../src/admin';
 
 // Fixed wall-clock: 2026-05-09T12:00:00Z
 const NOW = new Date('2026-05-09T12:00:00Z').getTime();
@@ -171,6 +171,28 @@ describe('admin orchestrator', () => {
     expect(emitted.length).toBeGreaterThan(0);
     expect(emitted[0].task_id).toBe('t4');
     expect(emitted[0].days_since_done).toBe(7);
+  });
+
+  it('appends an admin:phone_task_detected signal to admin.phoneTasks', () => {
+    store.set('admin', 'tasks', [] as AdminTask[]);
+    orch.init();
+
+    emit('admin:phone_task_detected', { verb: 'call', ts: NOW });
+
+    const cluster = store.get<PhoneTaskItem[]>('admin', 'phoneTasks', []) ?? [];
+    expect(cluster).toHaveLength(1);
+    expect(cluster[0].verb).toBe('call');
+    expect(cluster[0].id).toBe(`call:${NOW}`);
+  });
+
+  it('phoneTasks cluster is idempotent on a repeated verb+ts', () => {
+    store.set('admin', 'tasks', [] as AdminTask[]);
+    orch.init();
+
+    emit('admin:phone_task_detected', { verb: 'call', ts: NOW });
+    emit('admin:phone_task_detected', { verb: 'call', ts: NOW });
+
+    expect(store.get('admin', 'phoneTasks', [])).toHaveLength(1);
   });
 
   it('teardown stops subscriptions and prevents recompute', () => {
