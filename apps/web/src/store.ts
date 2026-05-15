@@ -129,12 +129,13 @@ if (ASTROLOGY_ENABLED) {
 }
 
 // ─── Root orchestrator boot ───────────────────────────────────────────────────
-// Starts cycle, pets, body, grocery, sleep, finance, patterns.
-// Astrology runs via the inline orchestrator above; createOrchestrator does not
-// duplicate it. habits / work / goals / admin / dump are UI-only (no sub-orchestrator files).
+// Starts cycle, pets, body, grocery, sleep, finance, patterns, habits, work,
+// goals, admin, dump, burhan, medication. Astrology runs via the inline
+// orchestrator above; createOrchestrator does not duplicate it.
 //
 // scheduleNotification is injected here so APNs server-side jobs fire for all
-// 11 body + finance subscribers. The wrapper reads getAccount() lazily — deps
+// notification subscribers — body, finance, habits, and the work/goals cue
+// subsystem (scanCues). The wrapper reads getAccount() lazily — deps
 // (api, authJwt, userId) are only available after bootAccount() runs, which
 // happens in main.tsx just before first render. Calls before auth is ready are
 // a no-op because scheduleServerJob short-circuits on missing deps.

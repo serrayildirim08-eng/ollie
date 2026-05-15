@@ -1,85 +1,83 @@
-# Ollie — Full App Audit Summary (2026-05-14, REFRESHED)
+# Ollie — Full App Audit Summary (updated 2026-05-15, post-merge)
 
 > **Note for Serra:** Documents path TCC-sandboxed. This master + 13 area audits live in repo at `audits/AUDIT_*.md`.
 
-Refreshed synthesis across all 13 area audits, capturing state drift from parallel session pushes (B2B telemetry, garden package, consent rewrite, store.ts astrology orchestrator) + sprint follow-up items A-G.
+Post-merge update. Sprints from 2026-05-14/15 are now merged to `main` via PRs #8 (audit + decisions), #9 (cycle pill settings), #10 (consolidated: legal pages + account deletion + Sprint B'' + garden). `main` typecheck is clean (web + orchestrator). Open: PR #11 (garden Draco assets).
 
 ---
 
-## Side-by-side completion (13 areas)
+## Side-by-side completion (13 areas) — post-merge
 
-| # | Area | Status | % WIRED | Critical blockers |
+| # | Area | Status | % WIRED | Remaining |
 |---|---|---|---|---|
 | 1 | Money / Finance | ✅ shipped | ~95% | Plaid prod approval (BLOCKED-EXTERNAL ~2 wks) |
 | 2 | Body (cycle/sleep/body/habits) | ✅ shipped | ~90% | HealthKit Apple Dev approval (BLOCKED-EXTERNAL) |
-| 3 | Crisis layer | ✅ shipped | 95% | `strings.tr.json` missing (1-day fix) |
-| 4 | Home screen | ✅ shipped | 95% | Overcast→sky flag one-liner (still open) |
-| 5 | Onboarding | ✅ shipped | 100% (8 screens) | day-30 prompt not implemented (TBD if needed) |
-| 6 | Auth (passphrase Pattern A) | ✅ Pattern A FIXED | 75% | **Account deletion local-only (orphans server row)**; Apple Sign-In NOT STARTED (blocker IF other social logins) |
-| 7 | Notifications | ⚠️ 85% live | ~85% | `flushNotificationQueue` cron stub (P1, ~150 LOC); `/register-token` schema TBD |
-| 8 | Settings | ⚠️ partial | ~33% (4/12) | birth_control_enabled + taxProfile module-local; subscription/voice/HealthKit/language all NOT STARTED |
-| 9 | Garden / Burhan 3D | ⚠️ broken build | ~70% | **CRITICAL: 7 asset paths 404 post-188a602**; @ollie/garden index.ts missing; stage thresholds divergent (Burhan: 15/61/181/541 vs canonical 1/7/30/90/365) |
-| 10 | Capacitor iOS shell | ⚠️ approval-gated | ~75% | TestFlight pipeline NOT STARTED; push entitlement gated; HealthKit pod install pending |
-| 11 | Voice ("Hey Ollie") | ⚠️ scaffolded | ~30% | **Wake word doesn't exist** — push-to-talk only; iOS Capacitor plugin not installed; multilingual EN-only |
-| 12 | Astrology | ⚠️ inaccessible | 0% public (URL gate `?astrology=1` only) | NEW: inline orchestrator in store.ts wires recompute reactively; no `/horoscope` endpoint, no event emit |
-| 13 | Marketing site (ollie.app) | ❌ NOT STARTED | 0% | **Privacy policy + terms + support URLs missing — App Store HARD BLOCKER**; B2B pivot requires updated policy content |
+| 3 | Crisis layer | ✅ shipped | 95% | `strings.tr.json` — N/A: EN+ES only, no Turkish (locked product decision) |
+| 4 | Home screen | ✅ shipped | 95% | Overcast→sky flag one-liner (minor) |
+| 5 | Onboarding | ✅ shipped | 100% | day-30 prompt now SHIPPED (PR #10) |
+| 6 | Auth (passphrase Pattern A) | ✅ shipped | ~85% | Account deletion server-cascade SHIPPED (PR #10); Apple Sign-In deferred (passphrase-only beta per DECISIONS memo) |
+| 7 | Notifications | ✅ shipped | ~90% | `flushNotificationQueue` cron SHIPPED (PR #10); Serra ops: apply migration + secrets + retire duplicate `apps/api/runCron` |
+| 8 | Settings | ⚠️ partial | ~50% | birth_control + taxProfile toggles SHIPPED (PR #9/#10); subscription/voice/language still NOT STARTED |
+| 9 | Garden / Burhan 3D | ✅ shipped | ~90% | Asset paths fixed + @ollie/garden index.ts + thresholds unified (PR #10); Draco compression in PR #11 (awaiting merge) |
+| 10 | Capacitor iOS shell | ⚠️ approval-gated | ~75% | TestFlight pipeline NOT STARTED; push + HealthKit entitlements gated on Apple Dev |
+| 11 | Voice ("Hey Ollie") | ⚠️ scaffolded | ~30% | Wake word doesn't exist (push-to-talk only); iOS Capacitor speech plugin not installed; multilingual EN-only |
+| 12 | Astrology | 🗄️ deferred | N/A | Deferred to backlog (PR #10) — code in `astrology-deferred/`, URL gate removed, orchestrator disabled |
+| 13 | Marketing site (ollie.app) | ⚠️ scaffolded | ~60% | privacy/terms/support pages written + Astro site scaffolded (PR #10); Serra: fill 6 TBDs + Vercel deploy + DNS |
 
-**Average completion: ~65%.**
-
----
-
-## Top 10 cross-cutting blockers
-
-1. **Privacy policy + terms + support URLs don't exist** — App Store HARD reject. Code refs `ollie.computer/{privacy,terms}`, pages missing. Domain itself unclear (`ollie.app` vs `ollie.computer`). 5.5 hrs to fix.
-2. **Garden asset paths 404 post-188a602** — 7 core assets (daisies/ground/dirt-pile/fence/tree-ring/signboard/path-stone) deleted from `/public/assets/garden/` but code still references them. Production build will fail.
-3. **Apple Developer approval pending** — gates APNs production, push entitlement, HealthKit, TestFlight, IAP. ~2 weeks external.
-4. **Account deletion is client-only** — wipes localStorage, server row orphaned. App Store privacy review concern. Needs server endpoint (~half day).
-5. **flushNotificationQueue cron worker is STUB** — server-side scheduling doesn't work. Client-side does. Memo recommends Option D+E (9-14 dev-days).
-6. **Voice wake word doesn't exist** — "Hey Ollie" branding requires either dropping the claim or installing Porcupine/picovoice + detection logic.
-7. **Stage threshold divergence in garden** — Burhan.tsx code (15/61/181/541) vs `@ollie/garden` canonical (1/7/30/90/365). Pick one before launch.
-8. **Marketing site entirely NOT STARTED** — no landing, no FAQ, no waitlist, no "Made by ADHD people" narrative. B2B pivot requires updated privacy/terms content.
-9. **TestFlight pipeline NOT STARTED** — no signing identity, no provisioning profile, no export config.
-10. **Settings module-local toggles** — birth_control_enabled in CycleModule, taxProfile.selfEmployed store-only; subscription/voice/HealthKit-status/language/quiet-hours all NOT STARTED.
+**Average completion: ~80% (post-merge).**
 
 ---
 
-## Beta readiness — critical path
+## Resolved since previous audit (merged 2026-05-14/15)
 
-**Overall: ~55% feature-complete + ~30% launch-infra-complete.**
+- ✅ Privacy/terms/support pages written + Astro marketing site scaffolded (PR #10) — Serra: fill 6 TBDs + Vercel deploy
+- ✅ Garden asset paths fixed; @ollie/garden index.ts created; stage thresholds unified (PR #10); Draco compression in PR #11
+- ✅ Server-side account deletion endpoint — 7-table cascade (PR #10)
+- ✅ flushNotificationQueue cron drain implemented — banned-phrase + budget + APNs (PR #10)
+- ✅ Astrology deferred to backlog — URL gate removed, orchestrator disabled (PR #10)
+- ✅ Day-30 retention prompt shipped (PR #10)
+- ✅ Settings: birth_control + taxProfile.selfEmployed toggles surfaced (PR #9/#10)
+- ✅ Auth Pattern A fix confirmed merged; account deletion server-cascade resolves the local-only gap
 
-### Phase 1 — App Store unblocking (1 week, no Apple Dev required)
-1. Write + deploy privacy policy (updated for B2B pivot: research corpus, PII scrub, Claude labeling), terms, support pages
-2. Pick domain (`ollie.app` recommended); register if needed; update SettingsScreen.tsx URLs
-3. Decide auth posture: passphrase-only (no Apple Sign-In needed) OR add Apple Sign-In + Google
-4. Wire server-side account deletion (cascade across encrypted state, plaid_items, finance_records, profiles)
-5. **Fix garden asset paths** (vite copy hook OR import update) — production build blocker
-6. Pick one garden stage threshold + align spec + code
+## Remaining blockers (post-merge)
 
-### Phase 2 — Awaiting Apple Dev approval (parallel work, 1-2 weeks)
-7. Stand up minimal marketing site (Astro or no-code) — homepage + waitlist + ADHD-first narrative
-8. Symptom log + impulse pause manual UI verification (Serra-only browser walk)
-9. ES `strings.tr.json` for Turkish speakers (crisis hotline framing)
-10. Settings UI: lift birth_control_enabled + taxProfile.selfEmployed + HealthKit status (3 toggles)
-11. Decide astrology posture (ship with Claude horoscope OR defer; cut URL gate either way)
-12. Implement `flushNotificationQueue()` cron worker (per memo Option D + E)
-13. Create `@ollie/garden/src/index.ts` + wire Burhan.tsx to use canonical thresholds
+1. **Apple Developer approval pending** — gates APNs production, push entitlement, HealthKit, TestFlight, IAP. ~2 weeks external.
+2. **Plaid production approval pending** — ~2 weeks external.
+3. **Marketing deploy** — pages + Astro site exist; Serra must fill 6 TBDs (legal entity, governing law, postal address, partner names, issue tracker, community link), create Vercel project, point `ollie.app` DNS.
+4. **Notification cron ops** — apply migration `20260515000001`, set worker secrets, retire duplicate `apps/api/runCron` drain (escalated decision).
+5. **Voice wake word doesn't exist** — "Hey Ollie" is push-to-talk only; needs Porcupine/picovoice OR drop the wake-word claim. iOS speech plugin not installed.
+6. **TestFlight pipeline NOT STARTED** — no signing identity, provisioning profile, export config.
+7. **PR #11 (garden Draco) awaiting merge.**
+8. **Settings gaps** — subscription management (Stripe/IAP), voice settings, language selector, quiet hours still NOT STARTED.
+9. **Manual UI verification** — symptom log + impulse pause + day-30 prompt never browser-tested (Serra-only walk).
+10. **Capacitor entitlements** — push + HealthKit capability toggles gated on Apple Dev approval.
+
+---
+
+## Beta readiness — critical path (updated)
+
+**Overall: ~80% feature-complete + ~45% launch-infra-complete.**
+
+### Phase 1 — App Store unblocking (this week, no Apple Dev required)
+1. Merge PR #11 (garden Draco assets)
+2. Fill 6 TBDs in `marketing/privacy.md` + `marketing/terms.md`
+3. Vercel project for `marketing/site` + `ollie.app` DNS
+4. Notification cron ops: apply migration, worker secrets, retire duplicate `apps/api/runCron`
+5. Sign off `DECISIONS_2026-05-14.md` (auth passphrase-only + astrology defer)
+6. Manual UI verification walk (symptom log, impulse pause, day-30, settings toggles)
+
+### Phase 2 — Awaiting Apple Dev approval (parallel, 1-2 weeks)
+7. Voice: decide wake-word posture (drop claim OR Porcupine); install iOS speech plugin
+8. Settings: subscription display, voice settings, language selector, quiet hours
+9. ES localization sweep for remaining `// LOCALIZE_LATER` flags (in progress)
 
 ### Phase 3 — Apple Dev approval lands (mechanical)
-14. Plaid production cutover (`packages/plaid/PRODUCTION_CHECKLIST.md`)
-15. HealthKit prod cutover (`packages/capacitor-healthkit/PRODUCTION_CHECKLIST.md`)
-16. APNs prod cutover (.p8 key + entitlement + TestFlight)
-17. TestFlight signing + export config + first build submission
+10. Plaid production cutover (`packages/plaid/PRODUCTION_CHECKLIST.md`)
+11. HealthKit prod cutover (`packages/capacitor-healthkit/PRODUCTION_CHECKLIST.md`)
+12. APNs prod cutover (.p8 key + entitlement)
+13. TestFlight signing + export config + first build submission
 
-### Phase 4 — Optional polish (post-beta)
-- Apple Sign-In if added
-- Voice wake-word (Porcupine + iOS Speech plugin)
-- Astrology Claude horoscope endpoint
-- Subscription management (Stripe + Apple IAP)
-- Multi-device auth pairing flow (currently backup import only)
-- ES localization for remaining `// LOCALIZE_LATER` flags
-- Day-30 retention prompt UI
-
-**Realistic beta launch: 3-4 weeks (Phase 1+2 = 2 wks, Phase 3 mechanical = ≤1 wk after Apple approval).**
+**Realistic beta launch: 2-3 weeks (Phase 1 ~1 wk, Phase 2 parallel, Phase 3 mechanical ≤1 wk after Apple approval).**
 
 ---
 

@@ -42,6 +42,7 @@ import {
   detectAntiGoalInDump,
   detectGoalInterference,
   detectExperimentCandidate,
+  detectGoalVelocityByCategory,
 } from '@ollie/logic/goals';
 import type {
   Goal,
@@ -51,9 +52,25 @@ import type {
   GoalsHistory,
   DumpHistory,
 } from '@ollie/logic/goals';
+import type { NotificationSpec } from '@ollie/notifications';
 import type { Orchestrator } from './types';
 
 const DEBOUNCE_MS = 500;
+const DAY = 86_400_000;
+
+/** Minimum top/bottom velocity ratio before the gap cue fires. */
+export const VELOCITY_GAP_THRESHOLD = 2;
+
+/**
+ * Audit-locked goal notification copy. Lowercase, factual. The
+ * `weekly_check_in` string uses a typographic apostrophe (’) — keep
+ * it byte-for-byte.
+ */
+export const GOALS_NOTIFICATION_COPY = {
+  weekly_check_in: 'goal check-in. it’s been 7 days.',
+  velocity_gap: (top: string, bottom: string, mult: number): string =>
+    `${top} goals finish ${mult}x faster than ${bottom}. flagging.`,
+} as const;
 
 // Normalize signal key to a stable string for dedup.
 function signalKey(p: unknown): string {
@@ -68,19 +85,49 @@ function flatten<T>(r: T | T[] | null): T[] {
   return [r];
 }
 
+/** ISO-8601 week key, e.g. "2026-W20", for week-scoped dedupe. */
+function isoWeekKey(ts: number): string {
+  const d = new Date(ts);
+  // Shift to UTC midnight, then to the Thursday of this ISO week.
+  const target = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+  const dayNum = (target.getUTCDay() + 6) % 7; // Mon=0 … Sun=6
+  target.setUTCDate(target.getUTCDate() - dayNum + 3);
+  const firstThursday = new Date(Date.UTC(target.getUTCFullYear(), 0, 4));
+  const firstDayNum = (firstThursday.getUTCDay() + 6) % 7;
+  firstThursday.setUTCDate(firstThursday.getUTCDate() - firstDayNum + 3);
+  const week = 1 + Math.round((target.getTime() - firstThursday.getTime()) / (7 * DAY));
+  return `${target.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
+}
+
+/** UTC calendar-day key (YYYY-MM-DD) for day-scoped dedupe. */
+function utcDayKey(ts: number): string {
+  return new Date(ts).toISOString().slice(0, 10);
+}
+
+export interface GoalsOrchestratorOptions {
+  /** Injected for tests; defaults to Date.now */
+  now?: () => number;
+  /** Pattern-detection consent gate; defaults to true. */
+  getConsent?: () => boolean;
+  /** APNs / local push scheduler; no-op when omitted. */
+  scheduleNotification?: (spec: NotificationSpec, fireAt: number) => void;
+}
+
 export function createGoalsOrchestrator(
   store: Store,
-  {
-    now: nowFn,
-    getConsent,
-  }: { now?: () => number; getConsent?: () => boolean } = {},
-): Orchestrator & { recomputePatterns(): void } {
-  const getNow = nowFn ?? (() => Date.now());
-  const consentFn = getConsent ?? (() => true);
+  opts: GoalsOrchestratorOptions = {},
+): Orchestrator & { recomputePatterns(): void; scanCues(): void } {
+  const getNow = opts.now ?? (() => Date.now());
+  const consentFn = opts.getConsent ?? (() => true);
+  const scheduleNotification = opts.scheduleNotification ?? null;
 
   let initialized = false;
   const unsubs: Unsubscribe[] = [];
   let timer: ReturnType<typeof setTimeout> | null = null;
+  let cueTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /** Module-instance dedupe — one dispatch per logical cue. */
+  const firedCues = new Set<string>();
 
   function recomputePatterns(): void {
     try {
@@ -165,9 +212,114 @@ export function createGoalsOrchestrator(
     }
   }
 
+  // ── notification cues ───────────────────────────────────────────────
+  // scanCues() inspects goal review/deadline/dormancy state plus the
+  // per-category velocity gap, dispatching through scheduleNotification.
+  // Each detector is gated by a dedupe key held in `firedCues`.
+  function fire(spec: NotificationSpec): void {
+    if (!scheduleNotification) return;
+    if (firedCues.has(spec.dedupe_key)) return;
+    firedCues.add(spec.dedupe_key);
+    try {
+      scheduleNotification(spec, getNow());
+    } catch { /* non-fatal */ }
+  }
+
+  function scanCues(): void {
+    if (!scheduleNotification) return;
+    try {
+      const now = getNow();
+      const consent = consentFn();
+      const goals = store.get<Goal[]>('goals', 'items', []) ?? [];
+
+      // #8 weekly_check_in — Sundays only (UTC, deterministic). Fires when
+      // at least one active goal was last reviewed >7 days ago.
+      if (new Date(now).getUTCDay() === 0) {
+        const stale = goals.some(
+          (g) =>
+            g &&
+            g.status === 'active' &&
+            typeof g.last_review_ts === 'number' &&
+            now - g.last_review_ts > 7 * DAY,
+        );
+        if (stale) {
+          fire({
+            title: GOALS_NOTIFICATION_COPY.weekly_check_in,
+            category: 'CONTENT_DELIVERY',
+            dedupe_key: `goals:weekly_check_in:${utcDayKey(now)}`,
+            action_url: '/goals',
+          });
+        }
+      }
+
+      // #9 deadline_30d — active goal with a target date ~30 days out.
+      for (const g of goals) {
+        if (!g || g.status !== 'active') continue;
+        if (typeof g.target_date_ts !== 'number') continue;
+        const delta = g.target_date_ts - now;
+        if (delta >= 28 * DAY && delta <= 32 * DAY) {
+          const progress = typeof g.progress === 'number' ? g.progress : 0;
+          const title = g.title ?? g.label ?? '';
+          fire({
+            title: `goal ${title} target date in 30 days. progress: ${progress}%.`,
+            category: 'REMINDER',
+            dedupe_key: `goals:deadline_30d:${g.id}`,
+            action_url: '/goals',
+          });
+        }
+      }
+
+      // #10 paused_14d — goal paused 14+ days ago.
+      for (const g of goals) {
+        if (!g || g.status !== 'paused') continue;
+        if (typeof g.paused_at !== 'number') continue;
+        if (now - g.paused_at >= 14 * DAY) {
+          const title = g.title ?? g.label ?? '';
+          fire({
+            title: `you paused goal ${title} for 14 days. still relevant?`,
+            category: 'REMINDER',
+            dedupe_key: `goals:paused_14d:${g.id}`,
+            action_url: '/goals',
+          });
+        }
+      }
+
+      // velocity gap — per-category completion velocity, top/bottom ratio.
+      const velocity = detectGoalVelocityByCategory({ goals, now }, { consent, now });
+      if (velocity && velocity.length > 0) {
+        const top = velocity[0];
+        const gap = top.velocity_gap;
+        if (
+          typeof gap === 'number' &&
+          gap >= VELOCITY_GAP_THRESHOLD &&
+          top.top_category &&
+          top.bottom_category
+        ) {
+          fire({
+            title: GOALS_NOTIFICATION_COPY.velocity_gap(
+              top.top_category,
+              top.bottom_category,
+              Math.round(gap),
+            ),
+            category: 'PATTERN_ALERT',
+            dedupe_key: `goals:velocity_${top.top_category}_${top.bottom_category}_${isoWeekKey(now)}`,
+            action_url: '/goals',
+          });
+        }
+      }
+    } catch (e) {
+      console.error('[orchestrator/goals] scanCues failed:', e);
+    }
+  }
+
   function schedule(): void {
     if (timer) clearTimeout(timer);
     timer = setTimeout(() => { timer = null; recomputePatterns(); }, DEBOUNCE_MS);
+  }
+
+  function scheduleCueScan(): void {
+    if (cueTimer) clearTimeout(cueTimer);
+    cueTimer = setTimeout(() => { cueTimer = null; scanCues(); }, DEBOUNCE_MS);
   }
 
   function init(): void {
@@ -179,6 +331,9 @@ export function createGoalsOrchestrator(
     unsubs.push(store.subscribeKey('goals', 'reviews', schedule));
     unsubs.push(store.subscribeKey('goals', 'dumps', schedule));
     unsubs.push(store.subscribeKey('shared', 'actionLog', schedule));
+
+    // Cue scan re-runs when goal items change.
+    unsubs.push(store.subscribeKey('goals', 'items', scheduleCueScan));
 
     unsubs.push(
       events.on('void:braindump:submitted', (payload: unknown) => {
@@ -197,15 +352,18 @@ export function createGoalsOrchestrator(
       }),
     );
 
-    // Cold start — populate patterns immediately.
+    // Cold start — populate patterns + scan cues immediately.
     schedule();
+    scheduleCueScan();
   }
 
   function teardown(): void {
     unsubs.splice(0).forEach((fn) => fn());
     if (timer) { clearTimeout(timer); timer = null; }
+    if (cueTimer) { clearTimeout(cueTimer); cueTimer = null; }
+    firedCues.clear();
     initialized = false;
   }
 
-  return { init, teardown, recomputePatterns };
+  return { init, teardown, recomputePatterns, scanCues };
 }
