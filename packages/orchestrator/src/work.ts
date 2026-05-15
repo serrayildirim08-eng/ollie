@@ -28,20 +28,82 @@ import type { Store } from '@ollie/store';
 import type { Unsubscribe } from '@ollie/events';
 import * as events from '@ollie/events';
 import { detectPatterns } from '@ollie/logic/work';
-import type { AnyWorkPattern, WorkState } from '@ollie/logic/work';
+import type {
+  AnyWorkPattern,
+  WorkState,
+  Meeting,
+  ScheduledFocusBlock,
+  FocusLogEntry,
+} from '@ollie/logic/work';
+import type { NotificationSpec } from '@ollie/notifications';
 import type { Orchestrator } from './types';
 
 const DEBOUNCE_MS = 500;
+const MIN = 60_000;
+
+/**
+ * Audit-locked work notification copy. Lowercase, factual, no streak
+ * guilt — see CLAUDE.md "Notification Scope". `session_90_warn` uses a
+ * typographic apostrophe (’) on purpose; keep it byte-for-byte.
+ */
+export const WORK_NOTIFICATION_COPY = {
+  upcoming_block: 'focus block in 15 min. or skip. either.',
+  session_end: '25 min done. 5 min stretch.',
+  session_90_warn: '90-min block ends in 5. wind down what you’re on.',
+  meeting_30m: 'meeting in 30 min. take a breath.',
+  four_blocks_today: 'you’ve had 4 focus blocks today. body says rest.',
+} as const;
+
+export interface WorkOrchestratorOptions {
+  /** Injected for tests; defaults to Date.now */
+  now?: () => number;
+  /** APNs / local push scheduler; no-op when omitted. */
+  scheduleNotification?: (spec: NotificationSpec, fireAt: number) => void;
+}
+
+/** 12-hour clock label, no leading zero, e.g. "10am" / "3pm". */
+function hourLabel(ts: number): string {
+  const d = new Date(ts);
+  const h24 = d.getHours();
+  const period = h24 < 12 ? 'am' : 'pm';
+  let h = h24 % 12;
+  if (h === 0) h = 12;
+  return `${h}${period}`;
+}
+
+/** "today" / "tomorrow" relative to `now`, local-date compared. */
+function dayWord(ts: number, now: number): string {
+  const a = new Date(ts);
+  const b = new Date(now);
+  const aKey = `${a.getFullYear()}-${a.getMonth()}-${a.getDate()}`;
+  const bKey = `${b.getFullYear()}-${b.getMonth()}-${b.getDate()}`;
+  if (aKey === bKey) return 'today';
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tKey = `${tomorrow.getFullYear()}-${tomorrow.getMonth()}-${tomorrow.getDate()}`;
+  return aKey === tKey ? 'tomorrow' : 'today';
+}
+
+/** Local calendar-day key (YYYY-M-D) for dedupe scoping. */
+function localDayKey(ts: number): string {
+  const d = new Date(ts);
+  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+}
 
 export function createWorkOrchestrator(
   store: Store,
-  { now: nowFn }: { now?: () => number } = {},
-): Orchestrator & { recomputePatterns(): void } {
-  const getNow = nowFn ?? (() => Date.now());
+  opts: WorkOrchestratorOptions = {},
+): Orchestrator & { recomputePatterns(): void; scanCues(): void } {
+  const getNow = opts.now ?? (() => Date.now());
+  const scheduleNotification = opts.scheduleNotification ?? null;
 
   let initialized = false;
   const unsubs: Unsubscribe[] = [];
   let timer: ReturnType<typeof setTimeout> | null = null;
+  let cueTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /** Module-instance dedupe — one dispatch per logical cue. */
+  const firedCues = new Set<string>();
 
   function recomputePatterns(): void {
     try {
@@ -123,9 +185,128 @@ export function createWorkOrchestrator(
     }
   }
 
+  // ── notification cues ───────────────────────────────────────────────
+  // scanCues() inspects upcoming/just-finished work events and dispatches
+  // through scheduleNotification. Each detector is gated by a dedupe key
+  // held in `firedCues` so repeated scans never double-fire.
+  function fire(spec: NotificationSpec): void {
+    if (!scheduleNotification) return;
+    if (firedCues.has(spec.dedupe_key)) return;
+    firedCues.add(spec.dedupe_key);
+    try {
+      scheduleNotification(spec, getNow());
+    } catch { /* non-fatal */ }
+  }
+
+  function scanCues(): void {
+    if (!scheduleNotification) return;
+    try {
+      const now = getNow();
+
+      // #5 meeting_30m — meeting starting in ~30 min (28–32 window).
+      const meetings = store.get<Meeting[]>('work', 'meetings', []) ?? [];
+      for (const m of meetings) {
+        if (!m || typeof m.start_at !== 'number') continue;
+        const id = m.id ?? `${m.start_at}`;
+        const delta = m.start_at - now;
+        if (delta >= 28 * MIN && delta <= 32 * MIN) {
+          fire({
+            title: WORK_NOTIFICATION_COPY.meeting_30m,
+            category: 'REMINDER',
+            dedupe_key: `work:meeting_30m:${id}`,
+            action_url: '/work',
+          });
+        }
+      }
+
+      // #1 upcoming_block (≤20 min) + #4 deep_work_tomorrow (20–90 min).
+      const blocks = store.get<ScheduledFocusBlock[]>('work', 'scheduled_blocks', []) ?? [];
+      for (const b of blocks) {
+        if (!b || typeof b.start_at !== 'number') continue;
+        if (b.cancelled_at) continue;
+        const delta = b.start_at - now;
+        if (delta > 0 && delta <= 20 * MIN) {
+          fire({
+            title: WORK_NOTIFICATION_COPY.upcoming_block,
+            category: 'REMINDER',
+            dedupe_key: `work:focus_block_upcoming:${b.id}`,
+            action_url: '/work',
+          });
+        } else if (delta > 20 * MIN && delta <= 90 * MIN) {
+          fire({
+            title: `deep work ${dayWord(b.start_at, now)} ${hourLabel(b.start_at)}. heads up.`,
+            category: 'REMINDER',
+            dedupe_key: `work:deep_work_tomorrow:${b.id}`,
+            action_url: '/work',
+          });
+        }
+      }
+
+      // focus_log → #2 session_end, #3 session_90_warn, #7 four_blocks_today.
+      const focusLog = store.get<FocusLogEntry[]>('work', 'focus_log', []) ?? [];
+      let todayCount = 0;
+      for (const e of focusLog) {
+        if (!e || typeof e.ts !== 'number') continue;
+        if (localDayKey(e.ts) === localDayKey(now)) todayCount += 1;
+
+        const sinceStart = now - e.ts;
+
+        if (e.duration_min === 90) {
+          // #3 — 90-min running session, 5 min before the 90-min mark.
+          if (sinceStart >= 85 * MIN && sinceStart < 90 * MIN) {
+            fire({
+              title: WORK_NOTIFICATION_COPY.session_90_warn,
+              category: 'REMINDER',
+              dedupe_key: `work:session_90_warn:${e.ts}`,
+              action_url: '/work',
+            });
+          }
+          // 90-min session only counts as "ended" once it has actually run 90 min.
+          if (sinceStart >= 90 * MIN && sinceStart <= 93 * MIN) {
+            fire({
+              title: WORK_NOTIFICATION_COPY.session_end,
+              category: 'CONTENT_DELIVERY',
+              dedupe_key: `work:session_end:${e.ts}`,
+              action_url: '/work',
+            });
+          }
+        } else {
+          // #2 — non-90 session that just ended (within last ~3 min).
+          const endTime = e.ts + e.duration_min * MIN;
+          const sinceEnd = now - endTime;
+          if (sinceEnd >= 0 && sinceEnd <= 3 * MIN) {
+            fire({
+              title: WORK_NOTIFICATION_COPY.session_end,
+              category: 'CONTENT_DELIVERY',
+              dedupe_key: `work:session_end:${e.ts}`,
+              action_url: '/work',
+            });
+          }
+        }
+      }
+
+      // #7 — four+ focus blocks logged today.
+      if (todayCount >= 4) {
+        fire({
+          title: WORK_NOTIFICATION_COPY.four_blocks_today,
+          category: 'PATTERN_ALERT',
+          dedupe_key: `work:four_blocks_today:${localDayKey(now)}`,
+          action_url: '/work',
+        });
+      }
+    } catch (e) {
+      console.error('[orchestrator/work] scanCues failed:', e);
+    }
+  }
+
   function schedule(): void {
     if (timer) clearTimeout(timer);
     timer = setTimeout(() => { timer = null; recomputePatterns(); }, DEBOUNCE_MS);
+  }
+
+  function scheduleCueScan(): void {
+    if (cueTimer) clearTimeout(cueTimer);
+    cueTimer = setTimeout(() => { cueTimer = null; scanCues(); }, DEBOUNCE_MS);
   }
 
   function init(): void {
@@ -145,6 +326,11 @@ export function createWorkOrchestrator(
     unsubs.push(store.subscribeKey('work', 'rsd_anchor_log', schedule));
     unsubs.push(store.subscribeKey('sleep', 'records', schedule));
 
+    // Cue scan re-runs when the cue source keys change.
+    unsubs.push(store.subscribeKey('work', 'meetings', scheduleCueScan));
+    unsubs.push(store.subscribeKey('work', 'scheduled_blocks', scheduleCueScan));
+    unsubs.push(store.subscribeKey('work', 'focus_log', scheduleCueScan));
+
     unsubs.push(
       events.on('void:braindump:submitted', (payload: unknown) => {
         try {
@@ -162,15 +348,18 @@ export function createWorkOrchestrator(
       }),
     );
 
-    // Cold start — populate patterns immediately.
+    // Cold start — populate patterns + scan cues immediately.
     schedule();
+    scheduleCueScan();
   }
 
   function teardown(): void {
     unsubs.splice(0).forEach((fn) => fn());
     if (timer) { clearTimeout(timer); timer = null; }
+    if (cueTimer) { clearTimeout(cueTimer); cueTimer = null; }
+    firedCues.clear();
     initialized = false;
   }
 
-  return { init, teardown, recomputePatterns };
+  return { init, teardown, recomputePatterns, scanCues };
 }
