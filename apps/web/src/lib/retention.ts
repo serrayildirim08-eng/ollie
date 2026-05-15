@@ -27,6 +27,7 @@ const K_SESSION_COUNT = 'telemetry.session_count';
 const K_FIRST_RETURN = 'telemetry.first_return_at';
 const K_D1_FIRED = 'telemetry.d1_fired';
 const K_D7_FIRED = 'telemetry.d7_fired';
+const K_D30_FIRED = 'telemetry.d30_fired';
 const K_LAST_SESSION = 'telemetry.last_session_at';
 
 const HOUR = 3_600_000;
@@ -41,6 +42,7 @@ export interface RetentionSnapshot {
   firstReturnAt: number | null;
   d1Fired: boolean;
   d7Fired: boolean;
+  d30Fired: boolean;
 }
 
 function round1(n: number): number {
@@ -55,6 +57,7 @@ export function readRetention(store: Store): RetentionSnapshot {
     firstReturnAt: store.get<number | null>(NS, K_FIRST_RETURN, null),
     d1Fired: store.get<boolean>(NS, K_D1_FIRED, false),
     d7Fired: store.get<boolean>(NS, K_D7_FIRED, false),
+    d30Fired: store.get<boolean>(NS, K_D30_FIRED, false),
   };
 }
 
@@ -102,6 +105,16 @@ export function trackSession(
   if (!d7Fired && !isFresh && sinceInstall >= 7 * DAY) {
     store.set(NS, K_D7_FIRED, true);
     emit('void:retention:d7_returned', {
+      installed_at: installedAt,
+      returned_at: now,
+      days: round1(sinceInstall / DAY),
+    });
+  }
+
+  const d30Fired = store.get<boolean>(NS, K_D30_FIRED, false);
+  if (!d30Fired && !isFresh && sinceInstall >= 30 * DAY) {
+    store.set(NS, K_D30_FIRED, true);
+    emit('void:retention:d30_returned', {
       installed_at: installedAt,
       returned_at: now,
       days: round1(sinceInstall / DAY),
