@@ -10,19 +10,68 @@
  * goals.items[] with proper schema, so the existing W-* and G-*
  * pattern detectors actually see the data.
  *
+ * Sprint B'' (2026-05-14): each row write now emits
+ * `research:row_written` so the opt-in research orchestrator can pick
+ * it up, scrub, and ship to /label. Emit happens unconditionally;
+ * consent gating lives in research.ts. Table mapping:
+ *   body                                  → body_records
+ *   work                                  → work_records
+ *   astrology + explicit dump module      → brain_dump_log
+ *   default fallthrough (admin/sleep/habits/pets/grocery/…)
+ *                                         → home_records
+ * cycle + goals have structured slices without scrubbable free text so
+ * they're NOT emitted. finance has its own orchestrator emit path.
+ *
  * The store-write semantics intentionally mirror
  * apps/web/src/hooks/applyRoute.ts; if you change one, update both.
  */
 
 import type { Store } from '@ollie/store';
+import * as events from '@ollie/events';
 import { extract } from '@ollie/logic/dissection';
 import type { Action, Route } from '@ollie/logic/dissection';
+
+/**
+ * Locale token for the scrubber. Mirrors @ollie/pii-scrub `Locale`. We
+ * re-type here instead of importing so this package doesn't gain a
+ * pii-scrub dependency just for one type token.
+ */
+export type DispatchLocale = 'en' | 'es' | 'tr';
+
+export interface DispatchOptions {
+  /** Resolver for the active locale at emit time. Defaults to 'en'. */
+  getLocale?: () => DispatchLocale;
+}
 
 function newId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
   }
   return `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+}
+
+/**
+ * Emit `research:row_written` for a scrubbable upstream module write.
+ * Wrapped so a single broken downstream subscriber never blocks the
+ * dispatcher's row-write fast path.
+ */
+function emitResearchRow(
+  table: 'brain_dump_log' | 'body_records' | 'work_records' | 'home_records',
+  rowId: string,
+  text: string,
+  ts: number,
+  locale: DispatchLocale,
+): void {
+  if (!text || text.length === 0) return;
+  try {
+    events.emit('research:row_written', {
+      row_id: rowId,
+      table,
+      text,
+      locale,
+      ts,
+    });
+  } catch { /* never throw from the dispatcher */ }
 }
 
 export interface RouteBrainDumpResult {
@@ -40,11 +89,13 @@ export interface RouteBrainDumpResult {
  * @param text   raw user input
  * @param store  app store (apps/web or memory adapter in tests)
  * @param now    injected clock for tests; defaults to Date.now()
+ * @param opts   dispatch options (e.g. getLocale resolver)
  */
 export function routeBrainDump(
   text: string,
   store: Store,
   now: number = Date.now(),
+  opts: DispatchOptions = {},
 ): RouteBrainDumpResult {
   const route: Route = extract(text);
 
@@ -55,7 +106,7 @@ export function routeBrainDump(
   const modulesHit = new Set<string>();
   for (const action of route) {
     modulesHit.add(action.module);
-    dispatchAction(action, store, now);
+    dispatchAction(action, store, now, opts);
   }
 
   return {
@@ -70,29 +121,39 @@ export function dispatchAction(
   action: Action,
   store: Store,
   now: number = Date.now(),
+  opts: DispatchOptions = {},
 ): void {
   const { module, action: kind, data } = action;
   const ts = now;
+  const getLocale = opts.getLocale ?? ((): DispatchLocale => 'en');
 
   // ── grocery ──────────────────────────────────────────────────────────
+  // Sprint B'' (2026-05-14): grocery rolls up into the home_records
+  // corpus table server-side; emit accordingly.
   if (module === 'grocery' && kind === 'add') {
+    const id = newId();
     store.update<Array<{ id: string; name: string; ts: number; checked: boolean }>>(
       'grocery',
       'items',
-      (cur) => [...(cur ?? []), { id: newId(), name: data, ts, checked: false }],
+      (cur) => [...(cur ?? []), { id, name: data, ts, checked: false }],
     );
+    emitResearchRow('home_records', id, data, ts, getLocale());
     return;
   }
   if (module === 'grocery' && kind === 'log') {
+    const id = newId();
     store.update<Array<{ id: string; name: string; ts: number; boughtTs: number }>>(
       'grocery',
       'pantry',
-      (cur) => [...(cur ?? []), { id: newId(), name: data, ts, boughtTs: ts }],
+      (cur) => [...(cur ?? []), { id, name: data, ts, boughtTs: ts }],
     );
+    emitResearchRow('home_records', id, data, ts, getLocale());
     return;
   }
 
   // ── cycle ────────────────────────────────────────────────────────────
+  // cycle is structured (action enum + text). No scrubbable note field
+  // — corpus spec doesn't include a cycle_records table. Skip emit.
   if (module === 'cycle') {
     store.update<Array<{ ts: number; action: string; text: string }>>(
       'cycle',
@@ -108,24 +169,30 @@ export function dispatchAction(
     // Turkish "ı" breaks \b word boundaries; use a tolerant lookbehind-free
     // check that catches "meeting" + Turkish "toplantı"/"toplanti" anywhere.
     if (/\bmeeting\b/i.test(lower) || /toplant[ıi]/i.test(lower)) {
+      const id = newId();
       store.update<
         Array<{ id: string; title: string; start_at: number; end_at: number }>
       >('work', 'meetings', (cur) => [
         ...(cur ?? []),
-        { id: newId(), title: data, start_at: ts, end_at: ts + 30 * 60_000 },
+        { id, title: data, start_at: ts, end_at: ts + 30 * 60_000 },
       ]);
+      emitResearchRow('work_records', id, data, ts, getLocale());
       return;
     }
     // deadline / project / focus / generic task → tasks
+    const id = newId();
     store.update<Array<{ id: string; title: string; created_at: number }>>(
       'work',
       'tasks',
-      (cur) => [...(cur ?? []), { id: newId(), title: data, created_at: ts }],
+      (cur) => [...(cur ?? []), { id, title: data, created_at: ts }],
     );
+    emitResearchRow('work_records', id, data, ts, getLocale());
     return;
   }
 
   // ── goals ───────────────────────────────────────────────────────────
+  // goals.items is title + status; corpus spec doesn't define a
+  // goals_records table. Skip emit.
   if (module === 'goals') {
     store.update<
       Array<{ id: string; title: string; created_at: number; status: string }>
@@ -139,6 +206,7 @@ export function dispatchAction(
   // ── body ────────────────────────────────────────────────────────────
   if (module === 'body') {
     const lower = data.toLowerCase();
+    // water_log has no scrubbable text field — skip emit.
     if (/glass|water|içtim|drank|drunk|hydrat/i.test(lower)) {
       store.update<Array<{ ts: number }>>(
         'body',
@@ -148,35 +216,51 @@ export function dispatchAction(
       return;
     }
     if (/vitamin|supplement|d3|magnesium|omega|zinc|iron|b12|probiotic|tablet|capsule/i.test(lower)) {
+      const id = newId();
       store.update<Array<{ id: string; text: string; ts: number }>>(
         'body',
         'supplements',
-        (cur) => [...(cur ?? []), { id: newId(), text: data, ts }],
+        (cur) => [...(cur ?? []), { id, text: data, ts }],
       );
+      emitResearchRow('body_records', id, data, ts, getLocale());
       return;
     }
+    const id = newId();
     store.update<Array<{ id: string; text: string; ts: number }>>(
       'body',
       'items',
-      (cur) => [...(cur ?? []), { id: newId(), text: data, ts }],
+      (cur) => [...(cur ?? []), { id, text: data, ts }],
     );
+    emitResearchRow('body_records', id, data, ts, getLocale());
     return;
   }
 
   // ── astrology → dump ────────────────────────────────────────────────
+  // Astrology has no surface of its own; lands in the dump.items
+  // bucket, which the corpus spec treats as brain_dump_log content.
   if (module === 'astrology') {
+    const id = newId();
     store.update<Array<{ id: string; text: string; ts: number }>>(
       'dump',
       'items',
-      (cur) => [...(cur ?? []), { id: newId(), text: data, ts }],
+      (cur) => [...(cur ?? []), { id, text: data, ts }],
     );
+    emitResearchRow('brain_dump_log', id, data, ts, getLocale());
     return;
   }
 
-  // ── default: <module>.items generic shape
+  // ── default: <module>.items generic shape ────────────────────────────
+  // dump → brain_dump_log; admin/sleep/habits/pets/health/reminders/…
+  // → home_records.
+  const id = newId();
   store.update<Array<{ id: string; text: string; ts: number }>>(
     module,
     'items',
-    (cur) => [...(cur ?? []), { id: newId(), text: data, ts }],
+    (cur) => [...(cur ?? []), { id, text: data, ts }],
   );
+  if (module === 'dump') {
+    emitResearchRow('brain_dump_log', id, data, ts, getLocale());
+  } else {
+    emitResearchRow('home_records', id, data, ts, getLocale());
+  }
 }
