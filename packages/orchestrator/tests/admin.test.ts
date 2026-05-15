@@ -52,6 +52,45 @@ describe('admin orchestrator', () => {
     expect(patterns!.some((p) => p.signal === 'admin_stale_ball')).toBe(true);
   });
 
+  it('stamps a canonical hyphenated pattern id derived from signal', () => {
+    const tasks: AdminTask[] = [
+      {
+        id: 't1',
+        label: 'send contract',
+        ball_state: 'THEIRS',
+        last_transition_at: NOW - 20 * DAY_MS,
+      },
+    ];
+    store.set('admin', 'tasks', tasks);
+    orch.init();
+
+    const patterns = store.get<AdminPattern[]>('admin', 'patterns', []) ?? [];
+    const stale = patterns.find((p) => p.signal === 'admin_stale_ball');
+    expect(stale).toBeDefined();
+    // UI keys dismiss state on `pattern`, not `signal`.
+    expect(stale!.pattern).toBe('stale-ball');
+    // Every pattern object carries a non-empty pattern id.
+    expect(patterns.every((p) => typeof p.pattern === 'string' && p.pattern.length > 0)).toBe(true);
+  });
+
+  it('gives distinct stale-ball notices distinct pattern identities', () => {
+    // Two stale tasks → two notices that must NOT collapse to one dismiss key.
+    const tasks: AdminTask[] = [
+      { id: 'ta', label: 'send A', ball_state: 'THEIRS', last_transition_at: NOW - 20 * DAY_MS },
+      { id: 'tb', label: 'send B', ball_state: 'THEIRS', last_transition_at: NOW - 25 * DAY_MS },
+    ];
+    store.set('admin', 'tasks', tasks);
+    orch.init();
+
+    const patterns = store.get<AdminPattern[]>('admin', 'patterns', []) ?? [];
+    const stale = patterns.filter((p) => p.signal === 'admin_stale_ball');
+    expect(stale).toHaveLength(2);
+    // Same pattern label, distinct discriminator → distinct dismiss keys.
+    expect(stale[0].pattern).toBe('stale-ball');
+    expect(stale[1].pattern).toBe('stale-ball');
+    expect(stale[0].task_id).not.toBe(stale[1].task_id);
+  });
+
   it('emits admin:stale_ball for a new stale-ball pattern', () => {
     const emitted: Array<{ task_id: string; kind: string }> = [];
     const unsub = on('admin:stale_ball', (p) => {
@@ -80,6 +119,7 @@ describe('admin orchestrator', () => {
     const existing: AdminPattern[] = [
       {
         signal: 'admin_stale_ball',
+        pattern: 'stale-ball',
         task_id: 't3',
         kind: 'stale_theirs',
         days_overdue: 20,
