@@ -14,9 +14,9 @@ Post-merge update. Sprints from 2026-05-14/15 are now merged to `main` via PRs #
 | 2 | Body (cycle/sleep/body/habits) | ✅ shipped | ~90% | HealthKit Apple Dev approval (BLOCKED-EXTERNAL) |
 | 3 | Crisis layer | ✅ shipped | 95% | `strings.tr.json` — N/A: EN+ES only, no Turkish (locked product decision) |
 | 4 | Home screen | ✅ shipped | 95% | Overcast→sky flag one-liner (minor) |
-| 5 | Onboarding | ✅ shipped | 100% | day-30 prompt now SHIPPED (PR #10) |
+| 5 | Onboarding | ✅ shipped | 100% | day-30 prompt — recovered (was stranded on closed PR #6; this recovery PR) |
 | 6 | Auth (passphrase Pattern A) | ✅ shipped | ~85% | Account deletion server-cascade SHIPPED (PR #10); Apple Sign-In deferred (passphrase-only beta per DECISIONS memo) |
-| 7 | Notifications | ✅ shipped | ~90% | `flushNotificationQueue` cron SHIPPED (PR #10); Serra ops: apply migration + secrets + retire duplicate `apps/api/runCron` |
+| 7 | Notifications | ✅ shipped | ~90% | `flushNotificationQueue` cron — recovered (was stranded on closed PR #6; this recovery PR); Serra ops: apply migration + secrets + retire duplicate `apps/api/runCron` |
 | 8 | Settings | ⚠️ partial | ~50% | birth_control + taxProfile toggles SHIPPED (PR #9/#10); subscription/voice/language still NOT STARTED |
 | 9 | Garden / Burhan 3D | ✅ shipped | ~90% | Asset paths fixed + @ollie/garden index.ts + thresholds unified (PR #10); Draco compression in PR #11 (awaiting merge) |
 | 10 | Capacitor iOS shell | ⚠️ approval-gated | ~75% | TestFlight pipeline NOT STARTED; push + HealthKit entitlements gated on Apple Dev |
@@ -33,9 +33,9 @@ Post-merge update. Sprints from 2026-05-14/15 are now merged to `main` via PRs #
 - ✅ Privacy/terms/support pages written + Astro marketing site scaffolded (PR #10) — Serra: fill 6 TBDs + Vercel deploy
 - ✅ Garden asset paths fixed; @ollie/garden index.ts created; stage thresholds unified (PR #10); Draco compression in PR #11
 - ✅ Server-side account deletion endpoint — 7-table cascade (PR #10)
-- ✅ flushNotificationQueue cron drain implemented — banned-phrase + budget + APNs (PR #10)
+- ⚠️ flushNotificationQueue cron drain — implemented, but was STRANDED on closed PR #6 (never reached main via #10); recovered in this PR
 - ✅ Astrology deferred to backlog — URL gate removed, orchestrator disabled (PR #10)
-- ✅ Day-30 retention prompt shipped (PR #10)
+- ⚠️ Day-30 retention prompt — implemented, but was STRANDED on closed PR #6; recovered in this PR
 - ✅ Settings: birth_control + taxProfile.selfEmployed toggles surfaced (PR #9/#10)
 - ✅ Auth Pattern A fix confirmed merged; account deletion server-cascade resolves the local-only gap
 
