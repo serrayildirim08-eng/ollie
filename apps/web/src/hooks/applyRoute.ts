@@ -1,193 +1,37 @@
 /**
- * applyRoute — pure store-write function, dependency-injected.
+ * applyRoute — thin shim over the canonical brain-dump dispatch core.
  *
- * No top-level side-effects. Takes a store explicitly so it is
- * testable without the browser adapter.
+ * Görev 2 (2026-05-15): the routing + store-write logic used to be
+ * duplicated here and in @ollie/orchestrator/braindump-dispatch.ts, and
+ * the two copies had drifted (this file had finance sub-classification;
+ * the orchestrator copy had research:row_written emit + dump handling).
+ *
+ * They are now ONE. `@ollie/orchestrator`'s `dispatchAction` is the
+ * single canonical core — it carries BOTH the finance sub-slice
+ * classification AND the research:row_written emit. This file is kept
+ * only so existing callers (useApplyBrainDump + its tests) keep their
+ * `applyRoute(route, store)` import unchanged; it just delegates.
+ *
+ * No top-level side-effects — the store is dependency-injected so this
+ * stays testable without the browser adapter.
  */
 
 import type { Action } from '@ollie/logic/dissection';
 import type { Store } from '@ollie/store';
-import { parseFinanceDump } from '@ollie/logic/finance';
+import { dispatchAction, type DispatchLocale } from '@ollie/orchestrator';
 
-function newId(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
-  }
-  return `${Date.now()}_${Math.random().toString(36).slice(2)}`;
-}
-
-// Sub-slice keywords not covered by parseFinanceDump (subscription / bill / savings).
-// parseFinanceDump already handles is_adhd_tax and direction=in/out.
-const SUBSCRIPTION_RE = /\b(subscription|subscri(?:be|bed)|monthly\s+plan|annual\s+plan|canva|spotify|netflix|apple\s+one|notion|figma|slack)\b/i;
-const BILL_RE = /\b(rent|electric(?:ity)?|gas\s+bill|internet\s+bill|phone\s+bill|every\s+(?:month|week|year|quarter)|monthly|weekly|yearly|quarterly|recurring)\b/i;
-const SAVINGS_RE = /\b(save|saving|savings|put\s+aside|set\s+aside|goal|toward|for\s+(?:a\s+)?\w+\s+(?:fund|goal))\b/i;
-
-/** Classify a finance text into a store sub-slice key. */
-function classifyFinanceSlice(
-  text: string,
-  now: number,
-): 'records' | 'bills' | 'subscriptions' | 'goals' | 'adhd_tax' | 'transactions' {
-  const parsed = parseFinanceDump(text, now);
-  const rec = parsed.record;
-
-  if (rec?.is_adhd_tax) return 'adhd_tax';
-
-  const lower = text.toLowerCase();
-
-  if (SAVINGS_RE.test(lower)) return 'goals';
-
-  // Check subscription before bill — "canva monthly $20" is a subscription
-  if (SUBSCRIPTION_RE.test(lower)) return 'subscriptions';
-
-  if (BILL_RE.test(lower)) return 'bills';
-
-  // One-off income or expense
-  if (rec && (rec.direction === 'in' || rec.direction === 'out')) return 'records';
-
-  return 'transactions';
-}
-
-export function applyRoute(route: Action, store: Store): void {
-  const ts = Date.now();
-  const { module, action, data } = route;
-
-  if (module === 'grocery' && action === 'add') {
-    store.update<Array<{ id: string; name: string; ts: number; checked: boolean }>>(
-      'grocery',
-      'items',
-      (cur) => [...(cur ?? []), { id: newId(), name: data, ts, checked: false }],
-    );
-    return;
-  }
-
-  if (module === 'grocery' && action === 'log') {
-    // 'bought' intent from dissection — route to pantry
-    store.update<Array<{ id: string; name: string; ts: number; boughtTs: number }>>(
-      'grocery',
-      'pantry',
-      (cur) => [...(cur ?? []), { id: newId(), name: data, ts, boughtTs: ts }],
-    );
-    return;
-  }
-
-  if (module === 'cycle') {
-    store.update<Array<{ ts: number; action: string; text: string }>>(
-      'cycle',
-      'items',
-      (cur) => [...(cur ?? []), { ts, action, text: data }],
-    );
-    return;
-  }
-
-  if (module === 'finance') {
-    const slice = classifyFinanceSlice(data, ts);
-    store.update<Array<{ id: string; text: string; ts: number }>>(
-      'finance',
-      slice,
-      (cur) => [...(cur ?? []), { id: newId(), text: data, ts }],
-    );
-    return;
-  }
-
-  if (module === 'body') {
-    const lower = data.toLowerCase();
-    if (/glass|water|içtim|drank|drunk|hydrat/i.test(lower)) {
-      store.update<Array<{ ts: number }>>(
-        'body',
-        'water_log',
-        (cur) => [...(cur ?? []), { ts }],
-      );
-      return;
-    }
-    if (/vitamin|supplement|d3|magnesium|omega|zinc|iron|b12|probiotic|tablet|capsule/i.test(lower)) {
-      store.update<Array<{ id: string; text: string; ts: number }>>(
-        'body',
-        'supplements',
-        (cur) => [...(cur ?? []), { id: newId(), text: data, ts }],
-      );
-      return;
-    }
-    if (/migraine|migren|episode|severe|crash|flare/i.test(lower)) {
-      store.update<Array<{ id: string; text: string; ts: number }>>(
-        'body',
-        'episodes',
-        (cur) => [...(cur ?? []), { id: newId(), text: data, ts }],
-      );
-      return;
-    }
-    // Fallthrough to body.items
-    store.update<Array<{ id: string; text: string; ts: number }>>(
-      'body',
-      'items',
-      (cur) => [...(cur ?? []), { id: newId(), text: data, ts }],
-    );
-    return;
-  }
-
-  if (module === 'astrology') {
-    // Astrology has no log — route to dump instead.
-    store.update<Array<{ id: string; text: string; ts: number }>>(
-      'dump',
-      'items',
-      (cur) => [...(cur ?? []), { id: newId(), text: data, ts }],
-    );
-    return;
-  }
-
-  if (module === 'work') {
-    const lower = data.toLowerCase();
-    // meeting → work.meetings (Meeting type expects start_at + end_at;
-    // brain-dump only supplies a title, so we store a placeholder
-    // half-hour window at "now" and let UI/parser refine later).
-    if (/\bmeeting\b/i.test(lower) || /toplant[ıi]/i.test(lower)) {
-      store.update<Array<{ id: string; title: string; start_at: number; end_at: number }>>(
-        'work',
-        'meetings',
-        (cur) => [
-          ...(cur ?? []),
-          { id: newId(), title: data, start_at: ts, end_at: ts + 30 * 60_000 },
-        ],
-      );
-      return;
-    }
-    // deadline → work.tasks with a placeholder due flag (UI surfaces
-    // these in the task list; deeper deadline parsing lives in router).
-    if (/\bdeadline\b/i.test(lower)) {
-      store.update<Array<{ id: string; title: string; created_at: number }>>(
-        'work',
-        'tasks',
-        (cur) => [...(cur ?? []), { id: newId(), title: data, created_at: ts }],
-      );
-      return;
-    }
-    // default work → task list (audit task 1: brain-dump must populate
-    // task list, not a generic items array).
-    store.update<Array<{ id: string; title: string; created_at: number }>>(
-      'work',
-      'tasks',
-      (cur) => [...(cur ?? []), { id: newId(), title: data, created_at: ts }],
-    );
-    return;
-  }
-
-  if (module === 'goals') {
-    // goals → goals.items so existing G1–G16 detectors see them. Shape
-    // mirrors StoredGoal: id + title + created_at + status active.
-    store.update<Array<{ id: string; title: string; created_at: number; status: string }>>(
-      'goals',
-      'items',
-      (cur) => [
-        ...(cur ?? []),
-        { id: newId(), title: data, created_at: ts, status: 'active' },
-      ],
-    );
-    return;
-  }
-
-  // All remaining modules: dump, sleep, habits, admin, pets, health, reminders
-  store.update<Array<{ id: string; text: string; ts: number }>>(
-    module,
-    'items',
-    (cur) => [...(cur ?? []), { id: newId(), text: data, ts }],
-  );
+/**
+ * Apply a single routed Action to the store via the canonical dispatcher.
+ *
+ * @param route    the routed action produced by dissection.extract()
+ * @param store    the app store (or a memory adapter in tests)
+ * @param getLocale optional locale resolver — drives the locale tag on the
+ *                  emitted research:row_written event. Defaults to 'en'.
+ */
+export function applyRoute(
+  route: Action,
+  store: Store,
+  getLocale?: () => DispatchLocale,
+): void {
+  dispatchAction(route, store, Date.now(), getLocale ? { getLocale } : {});
 }

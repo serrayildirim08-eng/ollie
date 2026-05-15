@@ -91,6 +91,9 @@ beforeEach(async () => {
   store = createStore(createMemoryAdapter());
   // Both gates ON by default for the encrypted-sync path.
   store.set('shared', 'settings.sync', { enabled: true });
+  // Görev 1: writes the LEGACY key on purpose — exercises the
+  // legacy-fallback bridge in hasNecessaryConsent() so a returning
+  // pre-consolidation install is proven to keep syncing.
   store.set('shared', 'consent.necessary', true);
   key = await deriveKey('correct-horse-battery-staple-finance', randomSalt());
 });

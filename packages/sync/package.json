@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@ollie/api": "workspace:*",
+    "@ollie/consent": "workspace:*",
     "@ollie/crypto": "workspace:*",
     "@ollie/events": "workspace:*",
     "@ollie/store": "workspace:*"

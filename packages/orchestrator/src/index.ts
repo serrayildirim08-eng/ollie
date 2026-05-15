@@ -74,8 +74,15 @@ export type {
   RunBodyCorrelationPassOpts,
   ScheduleBodyCorrelationPassOpts,
 } from './body-correlations';
+export { runBodySignalsPass } from './body-signals';
+export type { RunBodySignalsOpts } from './body-signals';
 export { routeBrainDump, dispatchAction } from './braindump-dispatch';
-export type { RouteBrainDumpResult } from './braindump-dispatch';
+export type {
+  RouteBrainDumpResult,
+  DispatchLocale,
+  DispatchOptions,
+  FinanceSlice,
+} from './braindump-dispatch';
 
 export interface RootOrchestrator extends Orchestrator {
   cycle: ReturnType<typeof createCycleOrchestrator>;

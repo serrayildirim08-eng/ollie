@@ -63,6 +63,35 @@ describe('research-stream · consent gate', () => {
     expect(r._inspect().queueDepth).toBe(0);
     expect(r._inspect().deviceId).toBeNull();
   });
+
+  it('Görev 1: hasConsent() reads the canonical @ollie/consent necessary flag', () => {
+    const api = makeFakeApi(() => ({ ok: true }));
+    const r = createResearchStream({ store, api, endpointUrl: 'https://research/api/events' });
+    // No canonical row, no legacy key → master gate is OFF.
+    expect(r.hasConsent()).toBe(false);
+    // Write the canonical consent.state row directly with necessary on.
+    store.set('consent', 'state', {
+      necessary: true,
+      marketing: false,
+      research_optin: false,
+      set_at: Date.now(),
+      v: 1,
+    });
+    expect(r.hasConsent()).toBe(true);
+  });
+
+  it('Görev 1: withdrawConsent() does NOT flip the canonical necessary flag', () => {
+    const api = makeFakeApi(() => ({ ok: true }));
+    const r = createResearchStream({ store, api, endpointUrl: 'https://research/api/events' });
+    r.grantConsent(); // writes canonical necessary=true
+    r.withdrawConsent();
+    // research-stream stops contributing (hasConsent false via local
+    // opt-out flag) but the master `necessary` row is untouched — the app
+    // still boots; account deletion is the only `necessary` revocation path.
+    const canonical = store.get<{ necessary?: boolean } | null>('consent', 'state', null);
+    expect(canonical?.necessary).toBe(true);
+    expect(r.hasConsent()).toBe(false);
+  });
 });
 
 describe('research-stream · capture', () => {
