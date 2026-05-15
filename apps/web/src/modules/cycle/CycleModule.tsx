@@ -790,6 +790,7 @@ export function CycleModule({ onBack }: CycleModuleProps) {
     'settings.birth_control_enabled',
     false,
   );
+  // Perform migration once: if old cycle-local flag is true and shared is false, lift it.
   useEffect(() => {
     if (settings.birth_control_enabled && !sharedBirthControl) {
       setSharedBirthControl(true);
@@ -1284,7 +1285,7 @@ export function CycleModule({ onBack }: CycleModuleProps) {
         <SettingsPanel
           settings={{ ...settings, birth_control_enabled: sharedBirthControl }}
           onChange={next => {
-            // birth_control_enabled authoritative in shared.settings; keep in sync
+            // birth_control_enabled is authoritative in shared.settings; keep cycle.settings in sync
             if (next.birth_control_enabled !== sharedBirthControl) {
               setSharedBirthControl(next.birth_control_enabled);
             }
