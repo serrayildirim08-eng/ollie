@@ -7,7 +7,6 @@
  *   - research toggle defaults OFF, is reversible
  *   - "what gets sent" expands the three-line detail list
  *   - on continue, setConsent() is called with the final state
- *   - on continue, consent:set event fires with the same state
  *
  * Renders via react-dom into jsdom — same pattern as ConsentScreen.test.tsx.
  */
@@ -30,7 +29,6 @@ import { createRoot, type Root } from 'react-dom/client';
 // vi.hoisted() lets us co-locate the spies with the mocks they back.
 const mocks = vi.hoisted(() => ({
   setConsentSpy: vi.fn().mockResolvedValue(undefined),
-  emitSpy: vi.fn(),
   trackTableSpy: vi.fn(),
 }));
 
@@ -47,10 +45,6 @@ vi.mock('@ollie/consent', () => ({
   CONSENT_STORE_MODULE: 'consent',
   CONSENT_STORE_KEY: 'state',
   CONSENT_PIVOT_TS: Date.UTC(2026, 4, 14),
-}));
-
-vi.mock('@ollie/events', () => ({
-  emit: mocks.emitSpy,
 }));
 
 // account-boot pulls in store.ts (which fails to resolve @ollie/store/react
@@ -72,7 +66,7 @@ vi.mock('../../lib/device', () => ({
   getAppVersion: () => '0.0.1-test',
 }));
 
-const { setConsentSpy, emitSpy, trackTableSpy } = mocks;
+const { setConsentSpy, trackTableSpy } = mocks;
 
 import { ConsentStep } from './ConsentStep';
 
@@ -126,7 +120,6 @@ async function flushMicrotasks(): Promise<void> {
 
 beforeEach(() => {
   setConsentSpy.mockClear();
-  emitSpy.mockClear();
   trackTableSpy.mockClear();
   container = document.createElement('div');
   document.body.appendChild(container);
@@ -232,28 +225,6 @@ describe('ConsentStep · continue persistence', () => {
     });
   });
 
-  it('emits consent:set with the same shape on continue', async () => {
-    mount({ source: 'onboarding' });
-    click(getToggle('research'));
-    click(getContinue());
-    await flushMicrotasks();
-    await flushMicrotasks();
-    expect(emitSpy).toHaveBeenCalledTimes(1);
-    expect(emitSpy.mock.calls[0][0]).toBe('consent:set');
-    const payload = emitSpy.mock.calls[0][1] as Record<string, unknown>;
-    expect(payload.necessary).toBe(true);
-    expect(payload.research_optin).toBe(true);
-    expect(payload.source).toBe('onboarding');
-    expect(typeof payload.ts).toBe('number');
-  });
-
-  it('emits consent:set with source: "reprompt" for pre-pivot users', async () => {
-    mount({ source: 'reprompt' });
-    click(getContinue());
-    await flushMicrotasks();
-    await flushMicrotasks();
-    expect(emitSpy.mock.calls[0][1]).toMatchObject({ source: 'reprompt' });
-  });
 });
 
 describe('ConsentStep · consent_audit telemetry', () => {

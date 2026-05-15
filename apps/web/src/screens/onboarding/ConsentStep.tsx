@@ -24,9 +24,8 @@
  *   - no banned phrases ("great job", "you should", "miss", "streak")
  *   - feels closer to Kinfolk colophon than cookie banner
  *
- * @ollie/consent owns the persistence. setConsent() emits `consent:set`
- * downstream — this component fires the event after the store write so
- * subscribers (research-stream, sessionTracker) see the new state.
+ * @ollie/consent owns the persistence. Consent state is read back from
+ * `@ollie/consent` `consent.state` directly — no app event is fired.
  */
 
 import React, { useState } from 'react';
@@ -34,7 +33,6 @@ import {
   setConsent,
   type ConsentState,
 } from '@ollie/consent';
-import { emit as emitEvent } from '@ollie/events';
 import { getAccount } from '../../lib/account-boot';
 import { readUserHash } from '../../lib/user-hash';
 import { getAppVersion } from '../../lib/device';
@@ -287,16 +285,6 @@ export function ConsentStep({
         necessary: true,
         marketing: initial?.marketing ?? false,
         research_optin: research,
-      });
-      // Fire the canonical app event so research-stream, session
-      // tracker, and any future subscribers pick up the new state
-      // without re-reading the store.
-      emitEvent('consent:set', {
-        necessary: true as const,
-        marketing: initial?.marketing ?? false,
-        research_optin: research,
-        source,
-        ts: Date.now(),
       });
 
       // Legal trail — write a consent_audit row to Supabase via the

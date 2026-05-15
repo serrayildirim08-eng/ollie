@@ -39,7 +39,7 @@ import type { Unsubscribe } from '@ollie/events';
 import * as events from '@ollie/events';
 import type { NotificationSpec } from '@ollie/notifications';
 import * as cycle from '@ollie/logic/cycle';
-import type { CycleItem, CycleRecord, HealthFlag } from '@ollie/logic/cycle';
+import type { CycleItem, CycleRecord } from '@ollie/logic/cycle';
 import type { Orchestrator } from './types';
 
 const CORRELATION_TAGS = ['cramps', 'bloating', 'headache', 'fatigue', 'mood swings'] as const;
@@ -239,10 +239,6 @@ export function createCycleOrchestrator(
       (i) => i && (i.action === 'symptom' || i.action === 'log'),
     );
     const prevCycles = store.get<CycleRecord[]>('cycle', 'cycles', []);
-    const prevFlags = store.get<HealthFlag[]>('cycle', 'healthFlags', []);
-    const prevPrediction = store.get<ReturnType<typeof cycle.predictNextPeriod> | null>(
-      'cycle', 'prediction', null,
-    );
 
     const prevHighTs = store.get<number>('cycle', '_periodLoggedHighTs', 0) ?? 0;
     let highTs = prevHighTs;
@@ -292,28 +288,6 @@ export function createCycleOrchestrator(
 
     try { emitPredictionEvents(prediction, items); } catch { /* non-fatal */ }
     try { emitPillMissed(items); } catch { /* non-fatal */ }
-
-    if (prediction.nextTs && (!prevPrediction || prevPrediction.nextTs !== prediction.nextTs)) {
-      events.emit('void:prediction:updated', {
-        nextPeriodTs: prediction.nextTs,
-        confidence: prediction.confidence,
-        explanation: prediction.explanation,
-      });
-    }
-
-    const prevFlagKeys = new Set(prevFlags.map((f) => f.id));
-    for (const f of healthFlags) {
-      if (!prevFlagKeys.has(f.id)) {
-        const severityMapped =
-          f.severity === 'medium' ? 'watch' : ('info' as 'info' | 'watch' | 'discuss');
-        events.emit('void:flag:raised', {
-          key: f.id,
-          severity: severityMapped,
-          title: f.observation,
-          evidence: f.sources ?? [],
-        });
-      }
-    }
 
     if (cycles.length > prevCycles.length) {
       store.set('cycle', 'cycleCount', cycles.length);
