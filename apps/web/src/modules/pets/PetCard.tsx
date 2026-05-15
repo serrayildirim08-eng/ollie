@@ -18,6 +18,7 @@ import type {
 import { SourcesLink } from '../../components/SourcesLink';
 import { PetPortrait } from './PetPortrait';
 import { PetCareStrip } from './PetCareStrip';
+import { PetObservationEntry } from './PetObservationEntry';
 
 // ─── local helpers ────────────────────────────────────────────────────────────
 
@@ -61,6 +62,7 @@ interface PetCardProps {
   onLogManual: (petId: string, task: string) => void;
   onArchive: (petId: string) => void;
   onReviewFlag: (flagId: string) => void;
+  onRecordObservation: (observation: Observation) => void;
   dailyForecast?: Record<string, string>;
   milestones?: Milestone[];
   vocabShown?: Record<string, string[]>;
@@ -84,6 +86,7 @@ export function PetCard({
   onLogManual,
   onArchive,
   onReviewFlag,
+  onRecordObservation,
   dailyForecast,
   milestones = [],
   vocabShown = {},
@@ -533,6 +536,8 @@ export function PetCard({
       <div
         style={{
           display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'center',
           gap: 8,
           paddingTop: 16,
           borderTop: '1px solid var(--rule)',
@@ -556,6 +561,12 @@ export function PetCard({
         >
           {manualOpen ? 'close' : 'log care manually'}
         </button>
+        <span style={{ color: 'var(--ink-faint)', alignSelf: 'center' }}>·</span>
+        <PetObservationEntry
+          petId={pet.id}
+          speciesProfile={speciesProfile}
+          onRecord={onRecordObservation}
+        />
         <span style={{ color: 'var(--ink-faint)', alignSelf: 'center' }}>·</span>
         <button
           type="button"
