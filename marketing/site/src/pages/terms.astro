@@ -1,0 +1,13 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { Content as TermsContent } from '../../../terms.md';
+---
+
+<BaseLayout
+  title="terms — ollie"
+  description="ollie's terms of service. account, content ownership, research participation, warranty, liability, deletion."
+>
+  <article class="prose">
+    <TermsContent />
+  </article>
+</BaseLayout>

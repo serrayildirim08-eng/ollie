@@ -23,6 +23,14 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { passphraseStrength } from '@ollie/crypto';
 import type { AuthClient } from '@ollie/auth';
+import {
+  validateInvite,
+  claimInvite,
+  readPendingInviteCode,
+  clearPendingInviteCode,
+  isBetaInviteRequired,
+} from '../lib/invite';
+import { deriveUserHash } from '../lib/user-hash';
 
 type Mode = 'fork' | 'signup' | 'signin' | 'forgot';
 
@@ -364,19 +372,45 @@ function SignUpScreen({
   const [ack, setAck] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  // Task 22 — invite gate. Pre-fills from sessionStorage when a deep
+  // link landed the user here (handled in main.tsx and the Capacitor
+  // deep-link handler). BETA_INVITE_REQUIRED = true blocks sign-up
+  // without a valid code.
+  const inviteRequired = isBetaInviteRequired();
+  const [inviteCode, setInviteCode] = useState<string>(() => readPendingInviteCode() ?? '');
   const emailRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { emailRef.current?.focus(); }, []);
 
-  const strength = passphraseStrength(pass);
   const passLongEnough = pass.length >= 16;
   const passMatches = pass.length > 0 && pass === confirm;
-  const canSubmit = !!email && passLongEnough && passMatches && ack && !submitting;
+  const inviteFilled = !inviteRequired || inviteCode.trim().length > 0;
+  const canSubmit =
+    !!email && passLongEnough && passMatches && ack && inviteFilled && !submitting;
 
   async function submit() {
     if (!canSubmit) return;
     setSubmitting(true);
     setError('');
+
+    // Step 1 — validate invite (only when required). On failure, block
+    // with dry copy and do NOT call auth.signUp.
+    if (inviteRequired) {
+      const trimmed = inviteCode.trim();
+      const v = await validateInvite(trimmed);
+      if (!v.ok) {
+        setError(v.message);
+        setSubmitting(false);
+        return;
+      }
+      if (v.valid === false) {
+        setError('code expired or already used. ask your friend for a new one.');
+        setSubmitting(false);
+        return;
+      }
+    }
+
+    // Step 2 — sign-up.
     try {
       const r = await auth.signUp({
         email: email.trim(),
@@ -384,16 +418,35 @@ function SignUpScreen({
         passphraseConfirm: confirm,
         acknowledged_unrecoverable: ack,
       });
-      if (r.ok) {
-        onAuthenticated();
-      } else {
+      if (!r.ok) {
         setError(r.message || 'sign-up failed');
+        setSubmitting(false);
+        return;
       }
     } catch (e) {
       setError((e as Error).message || 'something went wrong');
-    } finally {
       setSubmitting(false);
+      return;
     }
+
+    // Step 3 — claim invite. Fire-and-forget for UX, but log the
+    // failure so a backend miss is visible. Auth is already complete;
+    // a claim miss does NOT block the user from entering the app.
+    if (inviteRequired && inviteCode.trim().length > 0) {
+      try {
+        const hash = await deriveUserHash(email.trim());
+        const claim = await claimInvite(inviteCode.trim(), hash);
+        if (claim.ok && claim.success) {
+          clearPendingInviteCode();
+        } else if (!claim.ok) {
+          console.warn('[invite] claim failed:', claim.message);
+        }
+      } catch (err) {
+        console.warn('[invite] claim threw:', err);
+      }
+    }
+
+    onAuthenticated();
   }
 
   return (
@@ -409,6 +462,20 @@ function SignUpScreen({
         onSubmit={(e) => { e.preventDefault(); void submit(); }}
         noValidate
       >
+        {inviteRequired && (
+          <>
+            <Label htmlFor="invite">invite code</Label>
+            <Field
+              id="invite"
+              type="text"
+              value={inviteCode}
+              onChange={setInviteCode}
+              autoComplete="off"
+              ariaLabel="invite code"
+            />
+          </>
+        )}
+
         <Label htmlFor="email">email</Label>
         <Field
           id="email"

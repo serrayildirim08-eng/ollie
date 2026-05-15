@@ -15,7 +15,7 @@ we wrote this in plain sentences. if anything is unclear, write to support@ollie
 - ollie collects crash reports and session replays so the app stays usable. you cannot turn this off and still use the app.
 - ollie collects anonymized text contributions for research **only if you opt in**. the default is off.
 - if you opt in and later change your mind, future contributions stop. past contributions are already anonymized and remain in the research corpus.
-- you can export your data, delete your account, or write to support@ollie.app at any time.
+- you can export your data, delete your account (server cascade — every row tied to your account is erased), or write to support@ollie.app at any time.
 
 ---
 
@@ -106,6 +106,17 @@ note: this is **not** a zero-knowledge system. ollie's server operators have tec
 
 if you opt in, anonymized text contributions are stored in a separate `research_corpus` table. these rows are not tied to your account email. they carry a random pseudonym so duplicate contributions can be deduplicated, but they cannot be linked back to you by ollie.
 
+### deletion (server cascade)
+
+when you trigger "delete account" from settings, ollie's deletion worker runs a cascade in this order, using a server-side service-role credential that never leaves ollie's infrastructure:
+
+1. it verifies your session token against supabase auth (so a forged token cannot delete anyone's account)
+2. it deletes every row tied to your user id from: `encrypted_state`, `finance_records`, `plaid_inbox`, `plaid_items`, `scheduled_jobs`, `profiles`
+3. it deletes your row from `auth.users` — this invalidates your session
+4. it returns a per-table row-count receipt so the in-app confirmation surfaces what was erased
+
+if the cascade fails partway through, no auth-user row is deleted and you can retry safely from settings (the cascade is idempotent). only the anonymized `research_corpus` rows you contributed (if you opted in) remain; they carry no identifier linking them to you.
+
 ---
 
 ## consent model
@@ -162,8 +173,8 @@ regardless of where you live, you can:
 - **export** an encrypted .json backup of your local data from settings → export backup
 - **import** the same backup on any device
 - **toggle research opt-in** from settings at any time
-- **delete your account**: this wipes the local data on the device you delete from. the server-encrypted row remains orphaned (no service endpoint deletes it yet; this is on the roadmap and tracked publicly)
-- **request manual data deletion** by emailing support@ollie.app
+- **delete your account**: this triggers a server-side cascade that erases every row tied to your account across ollie's database (module blobs, finance records, plaid linkages, scheduled jobs, profile metadata) and then deletes your auth user row. the device you delete from also has every local module key wiped. anonymized research contributions, if you opted in, remain in the research corpus — they carry no identifier linking them back to you and cannot be retroactively scrubbed (see "research corpus" above)
+- **request manual data deletion** by emailing support@ollie.app — useful if the in-app flow fails or you want a written confirmation
 
 ### gdpr (eu / uk users)
 

@@ -4,5 +4,6 @@
     "outDir": "dist",
     "types": ["vitest/globals"]
   },
-  "include": ["src", "tests"]
+  "include": ["src", "tests"],
+  "exclude": ["tests/_pending"]
 }

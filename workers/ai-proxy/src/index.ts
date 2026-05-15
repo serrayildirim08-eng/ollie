@@ -33,13 +33,21 @@ import {
   type IngestEnv,
 } from './telemetry';
 import { handleLabel, type LabelEnv } from './label';
+import {
+  handleGenerateInvite,
+  handleValidateInvite,
+  handleClaimInvite,
+  type InvitesEnv,
+} from './invites';
 
-export interface Env extends EnrichEnv, IngestEnv, LabelEnv {
+export interface Env extends EnrichEnv, IngestEnv, LabelEnv, InvitesEnv {
   ANTHROPIC_API_KEY: string;
   CACHE_KV: KVNamespace;
   RATE_KV: KVNamespace;
   SUPABASE_URL: string;
   SUPABASE_SERVICE_ROLE: string;
+  SUPABASE_ANON_KEY: string;
+  INVITE_BASE_URL?: string;
 }
 
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
@@ -68,6 +76,15 @@ export default {
     }
     if (url.pathname === '/label') {
       return handleLabel(req, env);
+    }
+    if (url.pathname === '/generate-invite') {
+      return handleGenerateInvite(req, env);
+    }
+    if (url.pathname === '/validate-invite') {
+      return handleValidateInvite(req, env);
+    }
+    if (url.pathname === '/claim-invite') {
+      return handleClaimInvite(req, env);
     }
 
     if (url.pathname !== '/brain-dump' && url.pathname !== '/v1/messages') {

@@ -30,8 +30,15 @@ export interface WorkSession {
 
 export interface Meeting {
   id?: string | null;
+  title?: string;
   start_at: number;
   end_at: number;
+  /** Convenience copy of (end_at - start_at)/60_000; set by UI on create. */
+  duration_min?: number;
+  /** Free-form attendee names. Optional. */
+  attendees?: string[];
+  /** When set, suppresses re-emission of the 30-min-prior cue. */
+  reminder_30m_fired_at?: number;
 }
 
 export interface RecurringMeeting {
@@ -49,6 +56,43 @@ export interface WorkTask {
   completed_at?: number | null;
   first_session_at?: number | null;
   first_micro_step?: string;
+  /** Optional link to work.projects[].id for time-tracking + freelance billing. */
+  project_id?: string;
+}
+
+// ─── Projects ─────────────────────────────────────────────────────────
+// Maya freelance v1 ICP need: project/client organization + hours billed
+// rollup. Stored under work.projects.
+
+export interface Project {
+  id: string;
+  name: string;
+  /** Optional hex color (#RRGGBB) for UI swatch. */
+  color?: string;
+  created_at: number;
+  /** Rolled-up minutes attributed to this project from focus_log. */
+  hours_billed_to_date?: number;
+  /** Soft-archive flag. UI hides archived from active picker. */
+  archived_at?: number | null;
+}
+
+// ─── Focus log ────────────────────────────────────────────────────────
+// One entry per completed focus session. Written by WorkModule timer.
+// duration_min is locked to one of the four supported modes.
+
+export type FocusDurationMin = 15 | 25 | 45 | 90;
+
+export interface FocusLogEntry {
+  /** ISO ms epoch of session start. */
+  ts: number;
+  /** Mode at start time (15/25/45/90). Mirrors button label. */
+  duration_min: FocusDurationMin;
+  /** Actual elapsed time in ms — may be < duration_min*60_000 if stopped early. */
+  duration_ms: number;
+  /** Optional link to work.projects[].id for freelance billing rollup. */
+  project_id?: string;
+  /** Optional task link. */
+  task_id?: string;
 }
 
 // ─── Deadline ─────────────────────────────────────────────────────────
@@ -115,6 +159,8 @@ export interface WorkState {
   meetings?: Meeting[];
   recurring_meetings?: RecurringMeeting[];
   tasks?: WorkTask[];
+  projects?: Project[];
+  focus_log?: FocusLogEntry[];
   shutdown_log?: ShutdownLogEntry[];
   triage_days?: TriageDay[];
   estimation_log?: EstimationLogEntry[];
@@ -125,6 +171,29 @@ export interface WorkState {
   notification_tax_log?: NotificationTaxEntry[];
   multitask_log?: MultitaskEntry[];
   rsd_anchor_log?: RsdAnchorEntry[];
+  /** Booked future focus blocks (for "deep work tomorrow 10am" cues). */
+  scheduled_blocks?: ScheduledFocusBlock[];
+}
+
+// ─── Scheduled focus blocks ───────────────────────────────────────────
+// Booked deep-work sessions in the future. Cue fires 1h prior.
+
+export interface ScheduledFocusBlock {
+  id: string;
+  /** Planned start (ms epoch). */
+  start_at: number;
+  /** Mode locked at booking time. */
+  duration_min: FocusDurationMin;
+  /** Optional project link. */
+  project_id?: string;
+  /** Optional human label, e.g. "Deep work — Q3 deck". */
+  label?: string;
+  /** Set when the 1h-prior reminder has been emitted; suppresses re-fire. */
+  reminder_1h_fired_at?: number;
+  /** Booking timestamp (ms epoch). Optional — back-compat with pre-UI rows. */
+  created_at?: number;
+  /** Soft-cancel stamp (ms epoch). When set, block is hidden + cues skip it. */
+  cancelled_at?: number;
 }
 
 // ─── Habits cross-module ──────────────────────────────────────────────

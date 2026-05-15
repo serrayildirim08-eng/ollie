@@ -18,14 +18,26 @@
  * Reached from HomeScreen.
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import type { AuthClient } from '@ollie/auth';
 import { exportBackup, envelopeToFileBytes, defaultFilename, importBackup } from '@ollie/backup';
+import {
+  getConsent,
+  setConsent,
+  type ConsentState,
+} from '@ollie/consent';
+import { emit as emitEvent } from '@ollie/events';
 import { useStoreSlice, store } from '../store';
 import { SUPPORTED_COUNTRIES } from '../lib/country';
 import { getAccount } from '../lib/account-boot';
 import { readUserHash } from '../lib/user-hash';
 import { getAppVersion } from '../lib/device';
+import {
+  hasSessionPassphrase,
+  setSessionPassphrase,
+  clearSessionPassphrase,
+} from '../lib/encryption-boot';
+import { generateInvite, type InviteRecord } from '../lib/invite';
 
 const APP_VERSION = '0.0.1';
 const PRIVACY_URL = 'https://ollie.app/privacy';
@@ -378,6 +390,8 @@ function AccountSection({
 }) {
   const session = auth?.state().session ?? null;
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   async function handleSignOut() {
     if (!auth) return;
@@ -385,29 +399,41 @@ function AccountSection({
     onSignedOut();
   }
 
-  function handleDeleteAccount() {
-    // Local-first delete: clear all modules from localStorage. The
-    // Supabase row is left orphaned (no server delete endpoint in
-    // current API surface) — that's documented and acceptable for
-    // alpha. Future: add api.deleteUser().
-    //
-    // Store keys live under `void.state.<mod>.v<N>` (see
-    // packages/store/src/store.ts:21). Match that prefix so the wipe
-    // hits the real data, not a phantom `ollie:` namespace.
+  async function handleDeleteAccount() {
+    if (!auth) return;
+    // Server-cascade deletion (Sprint B'). The auth client posts the
+    // user's JWT + confirm token to `/account/delete`, which cascades
+    // every user-scoped table via service-role and then deletes the
+    // auth.users row last. The client only wipes local data AFTER the
+    // server reports success — if the server fails the user keeps
+    // their local data and can retry without losing access.
+    setDeleting(true);
+    setDeleteError(null);
     try {
-      if (typeof localStorage !== 'undefined') {
-        const keys: string[] = [];
-        for (let i = 0; i < localStorage.length; i++) {
-          const k = localStorage.key(i);
-          if (k && k.startsWith('void.state.')) keys.push(k);
-        }
-        for (const k of keys) localStorage.removeItem(k);
+      const r = await auth.deleteAccount();
+      if (!r.ok) {
+        const msg =
+          r.code === 'no-endpoint'
+            ? 'account deletion is not enabled in this build'
+            : r.code === 'unauthorized'
+            ? 'session expired — sign in again and retry'
+            : r.code === 'network'
+            ? 'network error — check your connection and retry'
+            : r.code === 'cascade-failed' || r.code === 'auth-delete-failed'
+            ? 'partial deletion — please retry'
+            : r.message;
+        setDeleteError(msg);
+        setDeleting(false);
+        return;
       }
-    } catch { /* non-fatal */ }
-    setConfirmDelete(false);
-    onSignedOut();
-    // Hard reload to drop in-memory state.
-    if (typeof window !== 'undefined') window.location.reload();
+      setConfirmDelete(false);
+      setDeleting(false);
+      onSignedOut();
+      if (typeof window !== 'undefined') window.location.reload();
+    } catch (err) {
+      setDeleteError('deletion failed: ' + (err as Error).message);
+      setDeleting(false);
+    }
   }
 
   return (
@@ -434,20 +460,34 @@ function AccountSection({
       <div style={styles.row}>
         <div>
           <p style={styles.rowLabel}>delete account</p>
-          <p style={styles.rowHint}>removes local data · encrypted server row stays orphaned</p>
+          <p style={styles.rowHint}>erases local data and every server row · final</p>
         </div>
-        <button type="button" onClick={() => setConfirmDelete(true)} style={styles.destructive}>
+        <button
+          type="button"
+          onClick={() => setConfirmDelete(true)}
+          style={styles.destructive}
+          disabled={!auth || !session}
+        >
           delete
         </button>
       </div>
 
+      {deleteError && (
+        <p
+          role="alert"
+          style={{ ...styles.rowHint, color: 'var(--umber)', marginTop: '8px' }}
+        >
+          {deleteError}
+        </p>
+      )}
+
       <ConfirmModal
         open={confirmDelete}
         title="delete account?"
-        body="this wipes ollie's local data from this device. the encrypted server row stays but is unreadable without your passphrase. there is no undo."
-        confirmLabel="delete"
-        onConfirm={handleDeleteAccount}
-        onCancel={() => setConfirmDelete(false)}
+        body="this erases ollie's data on this device AND every row tied to your account on ollie's server. anonymized research contributions you opted into stay in the corpus. there is no undo."
+        confirmLabel={deleting ? 'deleting…' : 'delete'}
+        onConfirm={() => { if (!deleting) void handleDeleteAccount(); }}
+        onCancel={() => { if (!deleting) setConfirmDelete(false); }}
       />
     </section>
   );
@@ -510,6 +550,136 @@ function NotificationsSection() {
           </div>
         );
       })}
+    </section>
+  );
+}
+
+// ─── Health section ───────────────────────────────────────────────────────────
+//
+// Surfaces shared.settings.birth_control_enabled — lifted from CycleModule.
+// Gates the pill log section and daily pill check notification.
+// LOCALIZE_LATER — ES copy needed.
+
+export function HealthSection() {
+  const [birthControl, setBirthControl] = useStoreSlice<boolean>(
+    'shared',
+    'settings.birth_control_enabled',
+    false,
+  );
+
+  return (
+    <section style={styles.section} aria-label="health">
+      <h2 style={styles.sectionHeader}>health</h2>
+
+      <div style={styles.row}>
+        <div>
+          <p style={styles.rowLabel}>track birth control</p>
+          {/* LOCALIZE_LATER */}
+          <p style={styles.rowHint}>shows daily pill check + missed-dose notification</p>
+        </div>
+        <Toggle
+          on={birthControl}
+          onChange={setBirthControl}
+          ariaLabel="track birth control"
+        />
+      </div>
+    </section>
+  );
+}
+
+// ─── Finance section ──────────────────────────────────────────────────────────
+//
+// Surfaces finance.taxProfile.selfEmployed — previously store-only.
+// When enabled, monthly tax set-aside reminders fire on the 1st.
+// Sub-radio selects jurisdiction: us / uk / eu (writes finance.taxProfile.calculator.kind).
+// LOCALIZE_LATER — ES copy needed.
+
+type TaxJurisdiction = 'us' | 'uk' | 'eu';
+
+interface TaxProfile {
+  selfEmployed: boolean;
+  calculator?: { kind: TaxJurisdiction };
+}
+
+const TAX_JURISDICTIONS: { id: TaxJurisdiction; label: string }[] = [
+  { id: 'us', label: 'us' },
+  { id: 'uk', label: 'uk' },
+  { id: 'eu', label: 'eu' },
+];
+
+export function FinanceSection() {
+  const [taxProfile, setTaxProfile] = useStoreSlice<TaxProfile>(
+    'finance',
+    'taxProfile',
+    { selfEmployed: false },
+  );
+  const selfEmployed = taxProfile?.selfEmployed ?? false;
+  const jurisdiction: TaxJurisdiction = taxProfile?.calculator?.kind ?? 'us';
+
+  function handleSelfEmployedChange(next: boolean) {
+    setTaxProfile({ ...taxProfile, selfEmployed: next });
+  }
+
+  function handleJurisdictionChange(next: TaxJurisdiction) {
+    setTaxProfile({ ...taxProfile, calculator: { kind: next } });
+  }
+
+  return (
+    <section style={styles.section} aria-label="finance settings">
+      <h2 style={styles.sectionHeader}>finance</h2>
+
+      <div style={styles.row}>
+        <div>
+          <p style={styles.rowLabel}>self-employed</p>
+          {/* LOCALIZE_LATER */}
+          <p style={styles.rowHint}>enables monthly tax set-aside reminders</p>
+        </div>
+        <Toggle
+          on={selfEmployed}
+          onChange={handleSelfEmployedChange}
+          ariaLabel="self-employed"
+        />
+      </div>
+
+      {selfEmployed && (
+        <div style={{ ...styles.row, flexDirection: 'column', alignItems: 'flex-start', gap: '10px' }}>
+          <p style={styles.rowLabel}>tax jurisdiction</p>
+          {/* LOCALIZE_LATER */}
+          <div
+            role="radiogroup"
+            aria-label="tax jurisdiction"
+            style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}
+          >
+            {TAX_JURISDICTIONS.map((j) => {
+              const active = jurisdiction === j.id;
+              return (
+                <button
+                  key={j.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={active}
+                  onClick={() => handleJurisdictionChange(j.id)}
+                  style={{
+                    padding: '6px 16px',
+                    border: `1px solid ${active ? 'var(--accent)' : 'var(--rule)'}`,
+                    borderRadius: '20px',
+                    background: active ? 'var(--accent)' : 'transparent',
+                    color: active ? 'var(--bone)' : 'var(--ink-soft)',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 'var(--t-caption)',
+                    letterSpacing: 'var(--ls-caps)',
+                    textTransform: 'uppercase',
+                    cursor: 'pointer',
+                    transition: 'background 150ms ease, color 150ms ease',
+                  }}
+                >
+                  {j.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </section>
   );
 }
@@ -707,6 +877,614 @@ function PrivacySection() {
   );
 }
 
+// ─── Encryption section ──────────────────────────────────────────────────────
+//
+// Wires the AES-GCM-256 snapshot path (work + goals) to a Settings-provided
+// passphrase. The store.ts boot reads sessionStorage at launch; if missing,
+// modules stay plaintext until the user saves a passphrase here. Saving
+// re-invokes bootEncryption() so the encrypted snapshot is restored into the
+// live store before the next render. Clearing requires a reload to drop the
+// decrypted plaintext mirror — we warn the user before reload.
+//
+// Voice: dry editorial, no shame; sage accent on save. Min 8 chars. The
+// confirm input prevents a typo'd passphrase from locking the user out.
+
+function EncryptionSection() {
+  const [open, setOpen] = useState(false);
+  const [pass, setPass] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [err, setErr] = useState('');
+  const [saving, setSaving] = useState(false);
+  // Force a re-render after save/clear without subscribing to anything —
+  // sessionStorage isn't reactive, so we read at render time + bump a tick
+  // to refresh the status row.
+  const [, setTick] = useState(0);
+  const encrypted = hasSessionPassphrase();
+
+  async function handleSave() {
+    setErr('');
+    if (pass.length < 8) {
+      setErr('passphrase must be 8+ characters');
+      return;
+    }
+    if (pass !== confirm) {
+      setErr('confirm does not match');
+      return;
+    }
+    setSaving(true);
+    try {
+      await setSessionPassphrase(store, pass);
+      setPass('');
+      setConfirm('');
+      setOpen(false);
+      setTick((t) => t + 1);
+    } catch (e) {
+      setErr('save failed: ' + (e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function handleClear() {
+    const ok = typeof window !== 'undefined'
+      ? window.confirm(
+          'clear passphrase? work + goals data on disk will stay encrypted but ollie won\'t decrypt them this session. the app will reload.',
+        )
+      : true;
+    if (!ok) return;
+    clearSessionPassphrase();
+    if (typeof window !== 'undefined') window.location.reload();
+  }
+
+  return (
+    <section style={styles.section} aria-label="encryption">
+      <h2 style={styles.sectionHeader}>encryption</h2>
+
+      <div style={styles.row}>
+        <div>
+          <p style={styles.rowLabel}>status</p>
+          <p style={styles.rowHint}>
+            {encrypted
+              ? 'work + goals snapshots encrypted at rest with your passphrase'
+              : 'work + goals stored as plaintext on this device'}
+          </p>
+        </div>
+        <span
+          style={{
+            ...styles.rowValue,
+            color: encrypted ? 'var(--accent)' : 'var(--ink-faint)',
+          }}
+        >
+          {encrypted ? 'encrypted' : 'plaintext'}
+        </span>
+      </div>
+
+      <div style={styles.row}>
+        <div>
+          <p style={styles.rowLabel}>{encrypted ? 'change passphrase' : 'set passphrase'}</p>
+          <p style={styles.rowHint}>aes-gcm 256 · derived via pbkdf2 100k iterations</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => { setOpen((o) => !o); setErr(''); }}
+          style={styles.linkBtn}
+        >
+          {open ? 'cancel' : (encrypted ? 'change' : 'set')}
+        </button>
+      </div>
+
+      {open && (
+        <div
+          style={{
+            padding: '20px 0 4px',
+            display: 'grid',
+            gap: '12px',
+          }}
+        >
+          <label style={{ display: 'grid', gap: '6px' }}>
+            <span style={styles.rowHint}>passphrase · 8+ chars</span>
+            <input
+              type="password"
+              value={pass}
+              onChange={(e) => setPass(e.target.value)}
+              autoComplete="new-password"
+              aria-label="encryption passphrase"
+              style={{
+                padding: '10px 12px',
+                background: 'var(--bone)',
+                border: '1px solid var(--rule)',
+                borderRadius: '6px',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 'var(--t-body)',
+                color: 'var(--ink)',
+                outline: 'none',
+              }}
+            />
+          </label>
+          <label style={{ display: 'grid', gap: '6px' }}>
+            <span style={styles.rowHint}>confirm</span>
+            <input
+              type="password"
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+              autoComplete="new-password"
+              aria-label="confirm passphrase"
+              onKeyDown={(e) => { if (e.key === 'Enter') void handleSave(); }}
+              style={{
+                padding: '10px 12px',
+                background: 'var(--bone)',
+                border: '1px solid var(--rule)',
+                borderRadius: '6px',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 'var(--t-body)',
+                color: 'var(--ink)',
+                outline: 'none',
+              }}
+            />
+          </label>
+          {err && (
+            <p style={{ ...styles.rowHint, color: 'var(--umber)' }}>{err}</p>
+          )}
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button
+              type="button"
+              onClick={() => void handleSave()}
+              disabled={saving || !pass || !confirm}
+              style={{
+                padding: '10px 20px',
+                background: saving || !pass || !confirm ? 'transparent' : 'var(--accent)',
+                color: saving || !pass || !confirm ? 'var(--ink-faint)' : 'var(--bone)',
+                border: `1px solid ${saving || !pass || !confirm ? 'var(--rule)' : 'var(--accent)'}`,
+                borderRadius: '20px',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 'var(--t-caption)',
+                letterSpacing: 'var(--ls-caps)',
+                textTransform: 'uppercase',
+                cursor: saving || !pass || !confirm ? 'default' : 'pointer',
+              }}
+            >
+              {saving ? 'saving…' : 'save'}
+            </button>
+          </div>
+          <p style={{ ...styles.rowHint, marginTop: '4px', lineHeight: 1.5 }}>
+            ollie can&apos;t recover this. write it down somewhere safe. losing the
+            passphrase means losing the work + goals data on this device.
+          </p>
+        </div>
+      )}
+
+      {encrypted && !open && (
+        <div style={styles.row}>
+          <div>
+            <p style={styles.rowLabel}>clear passphrase</p>
+            <p style={styles.rowHint}>app reloads · data stays encrypted on disk</p>
+          </div>
+          <button type="button" onClick={handleClear} style={styles.destructive}>
+            clear
+          </button>
+        </div>
+      )}
+    </section>
+  );
+}
+
+// ─── Invite section (Task 21) ────────────────────────────────────────────────
+//
+// "INVITE A FRIEND" — generate up to 5 invite codes per week. Codes ride
+// a 13-char `olli-xxxx-yyyy` shape from the worker. Persists the latest
+// active code locally so the lawyer-style copy ("max 5 invites this week.
+// resets sunday.") survives a reload.
+//
+// Voice: lowercase, dry, no exclamation, no "great job". Frosted sage
+// accent on the active code, soft hairline rule between rows.
+
+interface InviteCacheEntry extends InviteRecord {
+  generated_at: number;
+  week_start: number;
+}
+
+interface InviteCache {
+  active?: InviteCacheEntry | null;
+  week_count: number;
+  week_start: number;
+}
+
+const WEEK_MS = 7 * 86_400_000;
+const WEEKLY_INVITE_CAP = 5;
+
+function startOfIsoWeek(now: number): number {
+  // Sunday → Saturday rollover (matches "resets sunday" copy).
+  const d = new Date(now);
+  const day = d.getDay(); // 0=sun
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() - day);
+  return d.getTime();
+}
+
+function freshCache(now: number): InviteCache {
+  return { active: null, week_count: 0, week_start: startOfIsoWeek(now) };
+}
+
+function InviteSection() {
+  const [cache, setCache] = useStoreSlice<InviteCache>(
+    'shared',
+    'invite.cache',
+    freshCache(Date.now()),
+  );
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [flash, setFlash] = useState<string | null>(null);
+
+  // Roll over the week when sunday flips.
+  useEffect(() => {
+    const todayStart = startOfIsoWeek(Date.now());
+    if (cache.week_start !== todayStart) {
+      setCache({ active: null, week_count: 0, week_start: todayStart });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Expire the active code once `expires_at` has passed.
+  useEffect(() => {
+    const active = cache.active;
+    if (!active) return;
+    if (active.expires_at && active.expires_at < Date.now()) {
+      setCache({ ...cache, active: null });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cache.active?.code]);
+
+  function showFlash(msg: string): void {
+    setFlash(msg);
+    setTimeout(() => setFlash((prev) => (prev === msg ? null : prev)), 2400);
+  }
+
+  async function handleGenerate(): Promise<void> {
+    if (busy) return;
+    if (cache.week_count >= WEEKLY_INVITE_CAP) {
+      setError('max 5 invites this week. resets sunday.');
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    const r = await generateInvite();
+    setBusy(false);
+    if (!r.ok) {
+      setError(r.message);
+      return;
+    }
+    const entry: InviteCacheEntry = {
+      code: r.code,
+      share_url: r.share_url,
+      expires_at: r.expires_at,
+      remaining: r.remaining,
+      generated_at: Date.now(),
+      week_start: cache.week_start,
+    };
+    setCache({
+      active: entry,
+      // Trust the server's `remaining` (cap minus used) when present;
+      // otherwise increment locally.
+      week_count:
+        typeof r.remaining === 'number'
+          ? Math.max(0, WEEKLY_INVITE_CAP - r.remaining)
+          : cache.week_count + 1,
+      week_start: cache.week_start,
+    });
+  }
+
+  async function handleCopy(active: InviteCacheEntry): Promise<void> {
+    try {
+      // Try native share first — Safari iOS + Chrome Android.
+      const nav = typeof navigator !== 'undefined' ? navigator : null;
+      if (nav && typeof nav.share === 'function') {
+        try {
+          await nav.share({
+            title: 'ollie',
+            text: 'try ollie',
+            url: active.share_url,
+          });
+          showFlash('shared');
+          return;
+        } catch {
+          // User cancelled the share sheet — fall through to clipboard.
+        }
+      }
+      if (nav?.clipboard?.writeText) {
+        await nav.clipboard.writeText(active.share_url);
+        showFlash('copied to clipboard');
+      } else {
+        showFlash('copy unsupported · long-press the code');
+      }
+    } catch {
+      showFlash('copy failed');
+    }
+  }
+
+  const active = cache.active ?? null;
+  const remaining = Math.max(0, WEEKLY_INVITE_CAP - cache.week_count);
+  const atCap = cache.week_count >= WEEKLY_INVITE_CAP;
+
+  return (
+    <section style={styles.section} aria-label="invite a friend">
+      <h2 style={styles.sectionHeader}>invite a friend</h2>
+
+      <div style={styles.row}>
+        <div>
+          <p style={styles.rowLabel}>{cache.week_count} / {WEEKLY_INVITE_CAP} invites this week</p>
+          <p style={styles.rowHint}>
+            {atCap
+              ? 'max 5 invites this week. resets sunday.'
+              : `${remaining} remaining · resets sunday`}
+          </p>
+        </div>
+      </div>
+
+      {active ? (
+        <>
+          <div style={{ ...styles.row, alignItems: 'flex-start' }}>
+            <div style={{ flex: 1 }}>
+              <p style={styles.rowLabel}>active code</p>
+              <p
+                style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 'var(--t-h3)',
+                  letterSpacing: 'var(--ls-caps)',
+                  textTransform: 'uppercase',
+                  color: 'var(--accent)',
+                  margin: '6px 0 0',
+                }}
+              >
+                {active.code}
+              </p>
+              <p style={styles.rowHint}>{active.share_url}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void handleCopy(active)}
+              style={styles.linkBtn}
+              aria-label="copy invite link"
+            >
+              copy link
+            </button>
+          </div>
+          <div style={styles.row}>
+            <div>
+              <p style={styles.rowLabel}>new code</p>
+              <p style={styles.rowHint}>generate replaces the active code</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void handleGenerate()}
+              style={styles.linkBtn}
+              disabled={busy || atCap}
+            >
+              {busy ? '…' : 'generate'}
+            </button>
+          </div>
+        </>
+      ) : (
+        <div style={styles.row}>
+          <div>
+            <p style={styles.rowLabel}>generate invite</p>
+            <p style={styles.rowHint}>13-char code · expires in 7 days</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void handleGenerate()}
+            style={styles.linkBtn}
+            disabled={busy || atCap}
+            aria-label="generate invite code"
+          >
+            {busy ? '…' : 'generate'}
+          </button>
+        </div>
+      )}
+
+      {flash && (
+        <p
+          role="status"
+          style={{
+            ...styles.rowHint,
+            color: 'var(--accent)',
+            marginTop: 8,
+          }}
+        >
+          {flash}
+        </p>
+      )}
+      {error && (
+        <p
+          role="alert"
+          style={{ ...styles.rowHint, color: 'var(--umber)', marginTop: 8 }}
+        >
+          {error}
+        </p>
+      )}
+
+      <p
+        style={{
+          ...styles.rowHint,
+          marginTop: 20,
+          lineHeight: 1.55,
+          maxWidth: 520,
+          color: 'var(--ink-faint)',
+        }}
+      >
+        ollie is in private beta. invites carry your touch.
+      </p>
+    </section>
+  );
+}
+
+// ─── Research data section (Sprint B'' · 2026-05-14) ────────────────────────
+//
+// The in-app off-switch + on-switch for the research opt-in flag set at
+// onboarding by ConsentStep. Round-trips through @ollie/consent so the
+// in-memory cache, local store, and durable Supabase audit row (via the
+// configureConsent({ sync }) sink wired in App.tsx) all agree.
+//
+// Banned-phrase clean: no "miss", "streak", "great job", "you should".
+// Voice mirrors ConsentStep — lowercase, dry, no exclamation marks.
+//
+// Inline confirmation (NOT a modal) appears below the toggle for one
+// render after a flip so the user gets a quiet ack without losing
+// scroll position.
+//
+// Exported so SettingsScreen.research.test.tsx can mount this section
+// in isolation — importing the full SettingsScreen would pull
+// '@ollie/store/react' transitively, which vitest can't resolve in this
+// workspace shape. Same trick OnboardingScreen uses for sub-screen tests.
+
+export interface ResearchSectionProps {
+  /** Stable user id — used as the key into the consent store. Local-dev
+   *  builds with no Supabase session pass 'local-dev' so the toggle still
+   *  round-trips through the consent package. */
+  userId: string;
+}
+
+export function ResearchSection({ userId }: ResearchSectionProps) {
+  // Three-state mirror of ConsentState.research_optin (true | false | null).
+  // null means we haven't hydrated yet — guard the toggle so the user can't
+  // flip a stale default to true and overwrite a real opt-out.
+  const [optin, setOptin] = useState<boolean | null>(null);
+  // The most recent flip direction drives the inline confirmation line.
+  // 'just-on'  → showing the on-ack
+  // 'just-off' → showing the off-ack
+  // null       → no recent change, hide the line.
+  const [flipDirection, setFlipDirection] = useState<
+    'just-on' | 'just-off' | null
+  >(null);
+  const [saving, setSaving] = useState<boolean>(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const state: ConsentState = await getConsent(userId);
+        if (cancelled) return;
+        // Treat null (never-prompted sentinel) as off in the UI; the
+        // App-level router would normally pull a never-prompted user
+        // back into ConsentStep before they ever reach settings, but if
+        // it doesn't, default-deny is the right read.
+        setOptin(state.research_optin === true);
+      } catch {
+        if (!cancelled) setOptin(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [userId]);
+
+  async function handleToggle(next: boolean) {
+    if (saving) return;
+    // Lock the previous value while we await the round-trip. Visual
+    // state is the optimistic value; rollback on throw.
+    const prev = optin;
+    setOptin(next);
+    setSaving(true);
+    try {
+      await setConsent(userId, { research_optin: next });
+      // Read the canonical state back so we surface what was persisted,
+      // not what the user clicked — the package coerces necessary, and
+      // future fields may apply server defaults.
+      const after = await getConsent(userId);
+      emitEvent('consent:set', {
+        necessary: true as const,
+        marketing: after.marketing,
+        research_optin: after.research_optin === true,
+        source: 'settings',
+        ts: Date.now(),
+      });
+      setFlipDirection(next ? 'just-on' : 'just-off');
+    } catch {
+      // setConsent should never reject in practice — local write is sync.
+      // Rollback to the prior visual state if it does.
+      setOptin(prev);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const checked = optin === true;
+  const hydrated = optin !== null;
+
+  return (
+    <section style={styles.section} aria-label="research data">
+      <h2 style={styles.sectionHeader}>research data</h2>
+
+      <div style={{ ...styles.row, alignItems: 'flex-start' }}>
+        <div style={{ flex: 1, paddingRight: '16px' }}>
+          <p style={styles.rowLabel}>research opt-in</p>
+          <p
+            style={{
+              ...styles.rowHint,
+              textTransform: 'none',
+              letterSpacing: 'normal',
+              fontFamily: 'var(--font-system)',
+              fontSize: 'var(--t-caption)',
+              color: 'var(--ink-soft)',
+              lineHeight: 'var(--lh-caption)',
+              maxWidth: 520,
+              marginTop: '6px',
+            }}
+          >
+            your anonymized text helps us find adhd patterns. off-switch any
+            time. existing data stays unless you delete via support.
+          </p>
+        </div>
+        <Toggle
+          on={checked}
+          onChange={(v) => { if (hydrated) void handleToggle(v); }}
+          ariaLabel="research opt-in"
+        />
+      </div>
+
+      {flipDirection === 'just-on' && (
+        <p
+          role="status"
+          aria-live="polite"
+          data-testid="research-confirm"
+          style={{
+            ...styles.rowHint,
+            textTransform: 'none',
+            letterSpacing: 'normal',
+            fontFamily: 'var(--font-system)',
+            fontSize: 'var(--t-caption)',
+            color: 'var(--ink-soft)',
+            lineHeight: 'var(--lh-caption)',
+            marginTop: '12px',
+            maxWidth: 520,
+          }}
+        >
+          on. anonymized text helps train ollie. cmd-Z this anytime.
+        </p>
+      )}
+
+      {flipDirection === 'just-off' && (
+        <p
+          role="status"
+          aria-live="polite"
+          data-testid="research-confirm"
+          style={{
+            ...styles.rowHint,
+            textTransform: 'none',
+            letterSpacing: 'normal',
+            fontFamily: 'var(--font-system)',
+            fontSize: 'var(--t-caption)',
+            color: 'var(--ink-soft)',
+            lineHeight: 'var(--lh-caption)',
+            marginTop: '12px',
+            maxWidth: 520,
+          }}
+        >
+          off. no new text gets labeled. previously sent data stays — email
+          support to delete.
+        </p>
+      )}
+    </section>
+  );
+}
+
 // ─── About section ───────────────────────────────────────────────────────────
 
 function AboutSection() {
@@ -761,6 +1539,11 @@ function AboutSection() {
 // ─── Root ────────────────────────────────────────────────────────────────────
 
 export function SettingsScreen({ auth, onBack, onSignedOut }: SettingsScreenProps) {
+  // Stable user id for @ollie/consent. Mirrors the derivation in App.tsx
+  // (Sprint B' router): pre-auth / local-dev builds fall back to
+  // 'local-dev' so the toggle still round-trips through the package
+  // even when Supabase is unwired.
+  const userId = auth?.state().session?.user_id ?? 'local-dev';
   return (
     <main style={styles.page}>
       <div style={styles.wrap}>
@@ -773,8 +1556,13 @@ export function SettingsScreen({ auth, onBack, onSignedOut }: SettingsScreenProp
         <h1 style={styles.title}>settings.</h1>
 
         <AccountSection auth={auth} onSignedOut={onSignedOut} />
+        <InviteSection />
         <NotificationsSection />
+        <HealthSection />
+        <FinanceSection />
         <PrivacySection />
+        <ResearchSection userId={userId} />
+        <EncryptionSection />
         <AboutSection />
       </div>
     </main>
