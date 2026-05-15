@@ -471,5 +471,19 @@
       "disclosure_full": "Ollie audits your subscriptions by comparing two things you already share with it: how often you're charged, and how often you write about them. Nothing leaves your device for this. We cannot see what you do inside Netflix — only that Netflix shows up in your charge history and not in your words.",
       "domain_apple": "Settings"
     }
+  },
+
+  "settings": {
+    "health": {
+      "section_header": "Health",
+      "birth_control_label": "Track Birth Control",
+      "birth_control_hint": "Shows a daily pill check reminder and a notification when a dose is missed."
+    },
+    "finance": {
+      "section_header": "Finance",
+      "self_employed_label": "Self-Employed",
+      "self_employed_hint": "Enables a monthly reminder to set aside money for taxes.",
+      "tax_jurisdiction_label": "Tax Jurisdiction"
+    }
   }
 }

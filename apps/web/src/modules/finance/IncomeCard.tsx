@@ -14,8 +14,7 @@
  * suite can import it without dragging the whole module's store-singleton
  * import graph through the test environment.
  *
- * i18n: strings.en/es.json finance.income.* — LOCALIZE_LATER (wire locale injection
- * when FinanceModule passes locale prop; keys are ready in i18n files).
+ * i18n: strings.en/es.json finance.income.*
  */
 
 import React, { useMemo } from 'react';
@@ -28,6 +27,8 @@ import type {
   ClassifyPayFrequencyResult,
   MonthlyVolatilityResult,
 } from '@ollie/logic/finance';
+import { useStoreSlice } from '../../store';
+import { getString, type Locale } from '../../i18n';
 
 // ─── palette tokens (matches FinanceModule.tsx top — keep in sync) ──────────
 
@@ -78,6 +79,10 @@ export interface IncomeCardProps {
 }
 
 export function IncomeCard({ records, now, masked, $fmt }: IncomeCardProps) {
+  const [sharedSettings] = useStoreSlice<{ locale?: string }>('shared', 'settings', {});
+  const localeRaw = sharedSettings?.locale ?? 'en';
+  const locale: Locale = localeRaw === 'es' ? 'es' : 'en';
+
   const freq: ClassifyPayFrequencyResult = useMemo(
     () => classifyPayFrequencyDetailed(records ?? []),
     [records],
@@ -100,7 +105,9 @@ export function IncomeCard({ records, now, masked, $fmt }: IncomeCardProps) {
   // contrast against — otherwise the percentage is mathematically null.
   const haveDelta = vol.threeMonthAvg > 0;
   const isVariable = haveDelta && delta.magnitude > 20;
-  const title = isVariable ? 'income · variable' : 'income';
+  const title = isVariable
+    ? getString(locale, 'finance.income.title_variable')
+    : getString(locale, 'finance.income.title');
 
   // Frequency badge — drop the badge entirely when 'random' has no signal
   // (n_events < 3); the subtitle carries the irregular framing instead.
@@ -109,13 +116,11 @@ export function IncomeCard({ records, now, masked, $fmt }: IncomeCardProps) {
     showFreqBadge && freq.frequency !== 'random' && freq.confidence !== 'high';
 
   // Subtitle: one editorial line, optional.
-  // LOCALIZE_LATER — ES keys: finance.income.subtitle_irregular / finance.income.subtitle_variable
-  // ES: "irregular · el patrón aparece alrededor del mes 3." / "variable · habitual en ingresos ${freq.frequency}."
   let subtitle: string | null = null;
   if (freq.frequency === 'random' && freq.evidence.n_events >= 3) {
-    subtitle = 'irregular · pattern emerges around month 3.';
+    subtitle = getString(locale, 'finance.income.subtitle_irregular');
   } else if (isVariable && freq.frequency !== 'random') {
-    subtitle = `variable · typical for ${freq.frequency} income.`;
+    subtitle = getString(locale, 'finance.income.subtitle_variable').replace('${0}', freq.frequency);
   }
 
   const deltaColor = delta.positive ? INCOME_DELTA_POS : INCOME_DELTA_NEG;
@@ -187,8 +192,7 @@ export function IncomeCard({ records, now, masked, $fmt }: IncomeCardProps) {
               color: T.muted,
             }}
           >
-            {/* LOCALIZE_LATER — ES: finance.income.this_month "este mes" */}
-            this month
+            {getString(locale, 'finance.income.this_month')}
           </span>
           <span
             style={{
@@ -213,8 +217,7 @@ export function IncomeCard({ records, now, masked, $fmt }: IncomeCardProps) {
               color: T.muted,
             }}
           >
-            {/* LOCALIZE_LATER — ES: finance.income.average_3mo "promedio · 3 meses" */}
-            average · 3 mo
+            {getString(locale, 'finance.income.average_3mo')}
           </span>
           <span
             style={{
@@ -240,8 +243,7 @@ export function IncomeCard({ records, now, masked, $fmt }: IncomeCardProps) {
                 color: T.muted,
               }}
             >
-              {/* LOCALIZE_LATER — ES: finance.income.delta "variación" */}
-              delta
+              {getString(locale, 'finance.income.delta')}
             </span>
             <span
               data-testid="income-delta"

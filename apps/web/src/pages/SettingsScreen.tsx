@@ -19,6 +19,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
+import { getString, type Locale } from '../i18n';
 import type { AuthClient } from '@ollie/auth';
 import { exportBackup, envelopeToFileBytes, defaultFilename, importBackup } from '@ollie/backup';
 import {
@@ -558,7 +559,6 @@ function NotificationsSection() {
 //
 // Surfaces shared.settings.birth_control_enabled — lifted from CycleModule.
 // Gates the pill log section and daily pill check notification.
-// LOCALIZE_LATER — ES copy needed.
 
 export function HealthSection() {
   const [birthControl, setBirthControl] = useStoreSlice<boolean>(
@@ -566,21 +566,22 @@ export function HealthSection() {
     'settings.birth_control_enabled',
     false,
   );
+  const [sharedSettings] = useStoreSlice<{ locale?: string }>('shared', 'settings', {});
+  const locale: Locale = sharedSettings?.locale === 'es' ? 'es' : 'en';
 
   return (
-    <section style={styles.section} aria-label="health">
-      <h2 style={styles.sectionHeader}>health</h2>
+    <section style={styles.section} aria-label={getString(locale, 'settings.health.section_header')}>
+      <h2 style={styles.sectionHeader}>{getString(locale, 'settings.health.section_header')}</h2>
 
       <div style={styles.row}>
         <div>
-          <p style={styles.rowLabel}>track birth control</p>
-          {/* LOCALIZE_LATER */}
-          <p style={styles.rowHint}>shows daily pill check + missed-dose notification</p>
+          <p style={styles.rowLabel}>{getString(locale, 'settings.health.birth_control_label')}</p>
+          <p style={styles.rowHint}>{getString(locale, 'settings.health.birth_control_hint')}</p>
         </div>
         <Toggle
           on={birthControl}
           onChange={setBirthControl}
-          ariaLabel="track birth control"
+          ariaLabel={getString(locale, 'settings.health.birth_control_label')}
         />
       </div>
     </section>
@@ -592,7 +593,6 @@ export function HealthSection() {
 // Surfaces finance.taxProfile.selfEmployed — previously store-only.
 // When enabled, monthly tax set-aside reminders fire on the 1st.
 // Sub-radio selects jurisdiction: us / uk / eu (writes finance.taxProfile.calculator.kind).
-// LOCALIZE_LATER — ES copy needed.
 
 type TaxJurisdiction = 'us' | 'uk' | 'eu';
 
@@ -613,6 +613,9 @@ export function FinanceSection() {
     'taxProfile',
     { selfEmployed: false },
   );
+  const [sharedSettings] = useStoreSlice<{ locale?: string }>('shared', 'settings', {});
+  const locale: Locale = sharedSettings?.locale === 'es' ? 'es' : 'en';
+
   const selfEmployed = taxProfile?.selfEmployed ?? false;
   const jurisdiction: TaxJurisdiction = taxProfile?.calculator?.kind ?? 'us';
 
@@ -625,26 +628,24 @@ export function FinanceSection() {
   }
 
   return (
-    <section style={styles.section} aria-label="finance settings">
-      <h2 style={styles.sectionHeader}>finance</h2>
+    <section style={styles.section} aria-label={getString(locale, 'settings.finance.section_header')}>
+      <h2 style={styles.sectionHeader}>{getString(locale, 'settings.finance.section_header')}</h2>
 
       <div style={styles.row}>
         <div>
-          <p style={styles.rowLabel}>self-employed</p>
-          {/* LOCALIZE_LATER */}
-          <p style={styles.rowHint}>enables monthly tax set-aside reminders</p>
+          <p style={styles.rowLabel}>{getString(locale, 'settings.finance.self_employed_label')}</p>
+          <p style={styles.rowHint}>{getString(locale, 'settings.finance.self_employed_hint')}</p>
         </div>
         <Toggle
           on={selfEmployed}
           onChange={handleSelfEmployedChange}
-          ariaLabel="self-employed"
+          ariaLabel={getString(locale, 'settings.finance.self_employed_label')}
         />
       </div>
 
       {selfEmployed && (
         <div style={{ ...styles.row, flexDirection: 'column', alignItems: 'flex-start', gap: '10px' }}>
-          <p style={styles.rowLabel}>tax jurisdiction</p>
-          {/* LOCALIZE_LATER */}
+          <p style={styles.rowLabel}>{getString(locale, 'settings.finance.tax_jurisdiction_label')}</p>
           <div
             role="radiogroup"
             aria-label="tax jurisdiction"
