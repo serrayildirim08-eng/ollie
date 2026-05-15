@@ -16,6 +16,7 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { unlock as biometricUnlock, isBiometricSupported } from '../../lib/biometric';
+import { useStoreSlice } from '../../store';
 
 // Window of unmasked viewing after a successful unlock. 5 min · short enough
 // to matter, long enough that the user isn't prompted between rows.
@@ -103,6 +104,9 @@ export function PrivacyToggle({ state, onChange, onToast, unlockImpl }: Props): 
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState<number>(() => Date.now());
 
+  const [sharedSettings] = useStoreSlice<{ locale?: string }>('shared', 'settings', {});
+  const locale = sharedSettings?.locale === 'es' ? 'es' as const : 'en' as const;
+
   // re-render once per minute so the auto-relock UI updates without a full
   // module re-render.
   useEffect(() => {
@@ -124,7 +128,7 @@ export function PrivacyToggle({ state, onChange, onToast, unlockImpl }: Props): 
     setBusy(true);
     try {
       const impl = unlockImpl ?? biometricUnlock;
-      const result = await impl();
+      const result = await impl(locale);
       if (result.ok) {
         // While the module is unlocked we keep `enabled: true` so the next
         // 5-minute window expiry re-applies the mask without a re-toggle.

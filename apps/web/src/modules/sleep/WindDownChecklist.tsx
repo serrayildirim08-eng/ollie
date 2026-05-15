@@ -39,6 +39,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useStoreSlice } from '../../store';
 import * as events from '@ollie/events';
+import { getString, type Locale } from '../../i18n';
 
 // ─── palette (mirrors SleepModule C tokens) ──────────────────────────────────
 
@@ -119,21 +120,22 @@ interface WindDownItem {
   hint?: string;
 }
 
-// LOCALIZE_LATER — ES translations in strings.es.json body.wind_down.*
-// EN: keys body.wind_down.phone_away etc; ES: "celular lejos" etc.
-const ALL_ITEMS: WindDownItem[] = [
-  { id: 'phone_away',     label: 'phone away' },
-  { id: 'drink_water',    label: 'drink water' },
-  { id: 'supplement',     label: 'supplement' },
-  { id: 'lights_low',     label: 'lights low' },
-  { id: 'breath_journal', label: 'breath / journal', hint: '2 min' },
-  { id: 'into_bed',       label: 'into bed' },
-];
+function buildItems(locale: Locale): WindDownItem[] {
+  return [
+    { id: 'phone_away',     label: getString(locale, 'body.wind_down.phone_away') },
+    { id: 'drink_water',    label: getString(locale, 'body.wind_down.drink_water') },
+    { id: 'supplement',     label: getString(locale, 'body.wind_down.supplement') },
+    { id: 'lights_low',     label: getString(locale, 'body.wind_down.lights_low') },
+    { id: 'breath_journal', label: getString(locale, 'body.wind_down.breath_journal'), hint: getString(locale, 'body.wind_down.breath_journal_hint') },
+    { id: 'into_bed',       label: getString(locale, 'body.wind_down.into_bed') },
+  ];
+}
 
 /** Returns the ordered list of items active tonight (supplement may be skipped). */
-export function itemsForTonight(hasSupplements: boolean): WindDownItem[] {
-  if (hasSupplements) return ALL_ITEMS;
-  return ALL_ITEMS.filter((i) => i.id !== 'supplement');
+export function itemsForTonight(hasSupplements: boolean, locale: Locale = 'en'): WindDownItem[] {
+  const items = buildItems(locale);
+  if (hasSupplements) return items;
+  return items.filter((i) => i.id !== 'supplement');
 }
 
 // ─── persisted state ─────────────────────────────────────────────────────────
@@ -194,6 +196,11 @@ export function WindDownChecklist({ nowFn }: WindDownChecklistProps): React.Reac
     null,
   );
 
+  // ── locale ───────────────────────────────────────────────────────────────
+  const [sharedSettings] = useStoreSlice<{ locale?: string }>('shared', 'settings', {});
+  const localeRaw = sharedSettings?.locale ?? 'en';
+  const locale: Locale = localeRaw === 'es' ? 'es' : 'en';
+
   // ── supplements ─────────────────────────────────────────────────────────
   const [supps] = useStoreSlice<BodySupplement[]>('body', 'supplements', []);
   const hasSupplements = Array.isArray(supps) && supps.length > 0;
@@ -220,7 +227,7 @@ export function WindDownChecklist({ nowFn }: WindDownChecklistProps): React.Reac
   void tick;
 
   // ── derived: today's items + cursor ─────────────────────────────────────
-  const items = useMemo(() => itemsForTonight(hasSupplements), [hasSupplements]);
+  const items = useMemo(() => itemsForTonight(hasSupplements, locale), [hasSupplements, locale]);
 
   const todayKey = useMemo(() => dayKey(getNow()), [getNow, tick]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -333,8 +340,7 @@ export function WindDownChecklist({ nowFn }: WindDownChecklistProps): React.Reac
           fontWeight: 400,
         }}
       >
-        {/* LOCALIZE_LATER — ES: body.wind_down.done "que descanses." */}
-        rest well.
+        {getString(locale, 'body.wind_down.done')}
       </div>
     );
   }
@@ -342,7 +348,7 @@ export function WindDownChecklist({ nowFn }: WindDownChecklistProps): React.Reac
   // ── render: active checklist ─────────────────────────────────────────────
   return (
     <section
-      aria-label="wind-down checklist"
+      aria-label={getString(locale, 'body.wind_down.aria_section')}
       style={{
         background: `linear-gradient(180deg, ${C.cream} 0%, ${C.sky} 100%)`,
         border: `1px solid ${C.rule}`,
@@ -371,13 +377,12 @@ export function WindDownChecklist({ nowFn }: WindDownChecklistProps): React.Reac
             color: C.inkSoft,
           }}
         >
-          {/* LOCALIZE_LATER — ES: body.wind_down.subtitle "rutina nocturna · ${0} pasos" */}
-          wind-down · {items.length} steps
+          {getString(locale, 'body.wind_down.subtitle').replace('${0}', String(items.length))}
         </span>
         <button
           type="button"
           onClick={handleDismiss}
-          aria-label="dismiss wind-down checklist for tonight"
+          aria-label={getString(locale, 'body.wind_down.aria_dismiss')}
           style={{
             background: 'none',
             border: 'none',
@@ -391,8 +396,7 @@ export function WindDownChecklist({ nowFn }: WindDownChecklistProps): React.Reac
             padding: '4px 0',
           }}
         >
-          {/* LOCALIZE_LATER — ES: body.wind_down.dismiss "esta noche no" */}
-          not tonight
+          {getString(locale, 'body.wind_down.dismiss')}
         </button>
       </div>
 
@@ -433,10 +437,10 @@ export function WindDownChecklist({ nowFn }: WindDownChecklistProps): React.Reac
                 disabled={!isNext}
                 aria-label={
                   isDone
-                    ? `${item.label} (done)`
+                    ? getString(locale, 'body.wind_down.aria_done').replace('${0}', item.label)
                     : isNext
-                    ? `mark ${item.label} done`
-                    : `${item.label} (locked)`
+                    ? getString(locale, 'body.wind_down.aria_mark_done').replace('${0}', item.label)
+                    : getString(locale, 'body.wind_down.aria_locked').replace('${0}', item.label)
                 }
                 aria-pressed={isDone}
                 aria-disabled={!isNext}
