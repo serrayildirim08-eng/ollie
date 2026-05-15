@@ -243,6 +243,54 @@ export function createHabitsOrchestrator(
       }),
     );
 
+    // ── goals → habit cross-dispatch ────────────────────────────────────
+    // UI fires goals:convert_to_habit when the user taps "convert to habit"
+    // on a goal card. Append a new Habit into shared.habits_v2 and stamp
+    // the source goal with converted_to_habit_at. Empty title = no-op.
+    unsubs.push(events.on('goals:convert_to_habit', (raw) => {
+      try {
+        const p = (raw ?? {}) as {
+          goal_id?: string;
+          habit_title?: string;
+          cadence?: string;
+          ts?: number;
+        };
+        const title = typeof p.habit_title === 'string' ? p.habit_title.trim() : '';
+        if (!title) return; // no-op on empty title
+
+        const ts = typeof p.ts === 'number' ? p.ts : getNow();
+
+        const habits = store.get<Array<Habit & { source_goal_id?: string; cadence?: string }>>(
+          'shared', 'habits_v2', [],
+        ) ?? [];
+        const newHabit: Habit & { source_goal_id?: string; cadence?: string } = {
+          id: `habit_${ts}_${Math.random().toString(36).slice(2, 8)}`,
+          name: title,
+          created_at: ts,
+          completions: [],
+          source_goal_id: p.goal_id,
+          cadence: typeof p.cadence === 'string' ? p.cadence : undefined,
+        };
+        store.set('shared', 'habits_v2', [...habits, newHabit]);
+
+        // Stamp the originating goal so it won't be re-converted.
+        if (p.goal_id) {
+          const goals = store.get<Array<{ id?: string; converted_to_habit_at?: number }>>(
+            'goals', 'items', [],
+          ) ?? [];
+          let changed = false;
+          const next = goals.map((g) => {
+            if (g && g.id === p.goal_id) {
+              changed = true;
+              return { ...g, converted_to_habit_at: ts };
+            }
+            return g;
+          });
+          if (changed) store.set('goals', 'items', next);
+        }
+      } catch { /* non-fatal */ }
+    }));
+
     // ── APNs push subscriber (body-v2 wiring) ───────────────────────────
     // habits:morning_check → "{N} things today. one of them is {first}."
     if (scheduleNotification) {
