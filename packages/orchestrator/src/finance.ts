@@ -1193,7 +1193,6 @@ export function createFinanceOrchestrator(
       }));
 
       // finance:subscription_stale → push next morning (~16h) once per pattern
-      // LOCALIZE_LATER — ES: finance.push.subscription_stale "${0} — sin abrir en ${1} días. sigues pagando${2}."
       unsubs.push(events.on('finance:subscription_stale', (raw) => {
         try {
           const p = (raw ?? {}) as {
@@ -1208,9 +1207,12 @@ export function createFinanceOrchestrator(
           const amount = typeof p.amount === 'number' ? p.amount : null;
           const amountStr = amount != null && amount > 0 ? ` $${amount.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}` : '';
           const fireAt = getNow() + 16 * 60 * 60 * 1000;
+          const title = getLocale() === 'es'
+            ? `${merchant} — sin abrir en ${days} días. sigues pagando${amountStr}.`
+            : `${merchant} — not opened in ${days} days. still paying${amountStr}.`;
           scheduleNotification(
             {
-              title: `${merchant} — not opened in ${days} days. still paying${amountStr}.`,
+              title,
               category: 'PATTERN_ALERT',
               dedupe_key: `finance:subscription_stale:${p.pattern_id}`,
               action_url: '/finance/subscriptions',
@@ -1221,7 +1223,6 @@ export function createFinanceOrchestrator(
       }));
 
       // finance:savings_milestone → immediate push (milestone is the moment)
-      // LOCALIZE_LATER — ES: finance.push.savings_milestone "${0}: ${1} de ${2}. creciendo en silencio."
       unsubs.push(events.on('finance:savings_milestone', (raw) => {
         try {
           const p = (raw ?? {}) as {
@@ -1236,9 +1237,12 @@ export function createFinanceOrchestrator(
           const name = p.goal_name ?? p.goal_id;
           const currentStr = p.current.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
           const targetStr = p.target.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+          const title = getLocale() === 'es'
+            ? `${name}: $${currentStr} de $${targetStr}. creciendo en silencio.`
+            : `${name}: $${currentStr} of $${targetStr}. quietly growing.`;
           scheduleNotification(
             {
-              title: `${name}: $${currentStr} of $${targetStr}. quietly growing.`,
+              title,
               category: 'PATTERN_ALERT',
               dedupe_key: `finance:savings_milestone:${p.goal_id}:${p.milestone_pct}`,
               action_url: '/finance/goals',
@@ -1250,7 +1254,6 @@ export function createFinanceOrchestrator(
 
       // finance:impulse_pause_summary → monthly digest, fires same day (1st of month)
       // aggregation_group coalesces multiple emits within the digest window.
-      // LOCALIZE_LATER — ES: finance.push.impulse_pause_summary_one/many
       unsubs.push(events.on('finance:impulse_pause_summary', (raw) => {
         try {
           const p = (raw ?? {}) as { count?: number; total?: number };
@@ -1258,9 +1261,14 @@ export function createFinanceOrchestrator(
           const total = typeof p.total === 'number' ? p.total : 0;
           const totalStr = total.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
           const digestKey = new Date(getNow()).toISOString().slice(0, 7); // YYYY-MM
+          const title = getLocale() === 'es'
+            ? (p.count === 1
+                ? `1 compra impulsiva pausada este mes. ahorro aprox. $${totalStr}.`
+                : `${p.count} compras impulsivas pausadas este mes. ahorro aprox. $${totalStr}.`)
+            : `${p.count} impulse buy${p.count === 1 ? '' : 's'} paused this month. saved approx $${totalStr}.`;
           scheduleNotification(
             {
-              title: `${p.count} impulse buy${p.count === 1 ? '' : 's'} paused this month. saved approx $${totalStr}.`,
+              title,
               category: 'PATTERN_ALERT',
               dedupe_key: `finance:impulse_pause_digest:${digestKey}`,
               aggregation_group: 'finance:impulse_pause_digest',
@@ -1272,7 +1280,6 @@ export function createFinanceOrchestrator(
       }));
 
       // finance:anomaly_detected → push within 1h (already per-day deduped at emit site)
-      // LOCALIZE_LATER — ES: finance.push.anomaly_detected "este cargo de ${0} parece inusual. ¿confirmar o marcar?"
       unsubs.push(events.on('finance:anomaly_detected', (raw) => {
         try {
           const p = (raw ?? {}) as {
@@ -1284,9 +1291,12 @@ export function createFinanceOrchestrator(
           if (!p.anomaly_id || typeof p.amount !== 'number') return;
           const amountStr = p.amount.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
           const fireAt = getNow() + 60 * 60 * 1000; // ~1h from now
+          const title = getLocale() === 'es'
+            ? `este cargo de $${amountStr} parece inusual. ¿confirmar o marcar?`
+            : `this $${amountStr} charge looks unusual. confirm or flag?`;
           scheduleNotification(
             {
-              title: `this $${amountStr} charge looks unusual. confirm or flag?`,
+              title,
               category: 'PATTERN_ALERT',
               dedupe_key: `finance:anomaly_detected:${p.anomaly_id}`,
               action_url: '/finance',
@@ -1298,7 +1308,6 @@ export function createFinanceOrchestrator(
 
       // finance:tax_setaside_due → immediate nudge on the 1st of each month
       // Deadpan, factual. No urgency. Deduped by month_key at emit site.
-      // LOCALIZE_LATER — ES: finance.push.tax_setaside "reserva fiscal · ${0} para ${1}. aviso mensual, no es una fecha límite."
       unsubs.push(events.on(FINANCE_TAX_SETASIDE_DUE_EVENT, (raw) => {
         try {
           const p = (raw ?? {}) as {
@@ -1308,7 +1317,8 @@ export function createFinanceOrchestrator(
           };
           if (typeof p.amount !== 'number' || typeof p.month_start !== 'number') return;
           const monthKey = new Date(p.month_start).toISOString().slice(0, 7); // YYYY-MM
-          const monthName = new Date(p.month_start).toLocaleString('en-US', {
+          const isEs = getLocale() === 'es';
+          const monthName = new Date(p.month_start).toLocaleString(isEs ? 'es-MX' : 'en-US', {
             month: 'long',
             timeZone: 'UTC',
           });
@@ -1316,9 +1326,12 @@ export function createFinanceOrchestrator(
             minimumFractionDigits: 0,
             maximumFractionDigits: 2,
           });
+          const title = isEs
+            ? `reserva fiscal · $${amountStr} para ${monthName}. aviso mensual, no es una fecha límite.`
+            : `tax set-aside · $${amountStr} for ${monthName}. monthly nudge, not a deadline.`;
           scheduleNotification(
             {
-              title: `tax set-aside · $${amountStr} for ${monthName}. monthly nudge, not a deadline.`,
+              title,
               category: 'PATTERN_ALERT',
               dedupe_key: `finance:tax-setaside:${monthKey}`,
               action_url: '/finance',

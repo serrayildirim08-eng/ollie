@@ -176,7 +176,7 @@ export async function unlockViaWebAuthn(): Promise<BiometricResult> {
 
 // ─── Capacitor native path ─────────────────────────────────────────────────
 
-async function unlockViaNative(): Promise<BiometricResult> {
+async function unlockViaNative(locale: 'en' | 'es' = 'en'): Promise<BiometricResult> {
   // Dynamic import so the web bundle doesn't choke when the dep is absent.
   let NativeBiometric: { isAvailable: () => Promise<{ isAvailable: boolean }>; verifyIdentity: (opts: Record<string, unknown>) => Promise<void> };
   try {
@@ -200,9 +200,14 @@ async function unlockViaNative(): Promise<BiometricResult> {
   }
 
   try {
+    const biometricStrings = {
+      en: { reason: 'unlock finance privacy mode', title: 'unlock' },
+      es: { reason: 'desbloquear modo privado de finanzas', title: 'desbloquear' },
+    };
+    const { reason, title } = biometricStrings[locale] ?? biometricStrings.en;
     await NativeBiometric.verifyIdentity({
-      reason: 'unlock finance privacy mode', // LOCALIZE_LATER — ES: finance.privacy.biometric_reason "desbloquear modo privado de finanzas"
-      title: 'unlock', // LOCALIZE_LATER — ES: finance.privacy.biometric_title "desbloquear"
+      reason,
+      title,
       subtitle: '',
       description: '',
     });
@@ -229,7 +234,7 @@ async function unlockViaNative(): Promise<BiometricResult> {
  * when running inside a Capacitor native shell, and falls back to WebAuthn
  * everywhere else (web, SSR, Node test environments).
  */
-export async function unlock(): Promise<BiometricResult> {
+export async function unlock(locale: 'en' | 'es' = 'en'): Promise<BiometricResult> {
   // Dev bypass — Vite exposes `import.meta.env.DEV`. Lets test fixtures and
   // local development skip the prompt; production builds (`vite build`) get
   // the real path.
@@ -242,7 +247,7 @@ export async function unlock(): Promise<BiometricResult> {
   } catch { /* no import.meta — fall through */ }
 
   if (isCapacitorNative()) {
-    return unlockViaNative();
+    return unlockViaNative(locale);
   }
   return unlockViaWebAuthn();
 }
