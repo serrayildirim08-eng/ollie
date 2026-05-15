@@ -267,10 +267,6 @@ export function createSleepOrchestrator(
       : [...records, merged].sort((a, b) => (a.night_of ?? '').localeCompare(b.night_of ?? ''));
     setRecords(nextRecords);
 
-    try {
-      events.emit('sleep:record_updated', { night_of: merged.night_of, is_partial: merged.is_partial });
-    } catch { /* non-fatal */ }
-
     return { ok: true, night_of: merged.night_of };
   }
 

@@ -131,6 +131,9 @@ let telemetryUnsubs: Array<() => void> = [];
  *   voice:capture_started / _transcribed / _cancelled → voice-input
  *     adoption + failure rate. capture_cancelled.reason is a UX
  *     diagnostic ('no-speech' vs. an error code).
+ *   grocery:interest_capture_detected         → ADHD interest-hijack
+ *     signal for B2B research. Metadata only (category, count,
+ *     window_days) — no free-text, path-A invariant holds.
  */
 function attachTelemetryBridge(research: ResearchClient): void {
   if (telemetryUnsubs.length > 0) return; // idempotent
@@ -155,6 +158,7 @@ function attachTelemetryBridge(research: ResearchClient): void {
   bridge('voice:capture_started', 'voice.capture.started');
   bridge('voice:capture_transcribed', 'voice.capture.transcribed');
   bridge('voice:capture_cancelled', 'voice.capture.cancelled');
+  bridge('grocery:interest_capture_detected', 'grocery.interest_capture.detected');
 }
 
 /**

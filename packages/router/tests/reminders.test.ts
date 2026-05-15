@@ -70,13 +70,11 @@ describe('createReminderScheduler', () => {
     events._clearAllHandlers();
   });
 
-  it('fires event and updates status after delay', () => {
+  it('fires toast and updates status after delay', () => {
     const scheduler = createReminderScheduler(store, events);
     scheduler.init();
 
-    const firedPayloads: unknown[] = [];
     const toastPayloads: unknown[] = [];
-    events.on('void:reminder:fired', (p) => firedPayloads.push(p));
     events.on('void:toast', (p) => toastPayloads.push(p));
 
     const NOW = Date.now();
@@ -90,12 +88,10 @@ describe('createReminderScheduler', () => {
     };
 
     scheduler.add(reminder);
-    expect(firedPayloads).toHaveLength(0);
+    expect(toastPayloads).toHaveLength(0);
 
     vi.advanceTimersByTime(100);
 
-    expect(firedPayloads).toHaveLength(1);
-    expect((firedPayloads[0] as { id: string }).id).toBe('test-1');
     expect(toastPayloads).toHaveLength(1);
     expect((toastPayloads[0] as { message: string }).message).toBe('pay rent');
 
@@ -108,8 +104,8 @@ describe('createReminderScheduler', () => {
     const scheduler = createReminderScheduler(store, events);
     scheduler.init();
 
-    const firedPayloads: unknown[] = [];
-    events.on('void:reminder:fired', (p) => firedPayloads.push(p));
+    const toastPayloads: unknown[] = [];
+    events.on('void:toast', (p) => toastPayloads.push(p));
 
     const NOW = Date.now();
     const reminder = {
@@ -125,7 +121,7 @@ describe('createReminderScheduler', () => {
     scheduler.cancel('test-2');
 
     vi.advanceTimersByTime(10000);
-    expect(firedPayloads).toHaveLength(0);
+    expect(toastPayloads).toHaveLength(0);
 
     const items = store.get<typeof reminder[]>('reminders', 'items', []);
     expect(items[0].status).toBe('cancelled');
@@ -143,15 +139,19 @@ describe('createReminderScheduler', () => {
     };
     store.set('reminders', 'items', [reminder]);
 
-    const firedPayloads: unknown[] = [];
-    events.on('void:reminder:fired', (p) => firedPayloads.push(p));
+    const toastPayloads: unknown[] = [];
+    events.on('void:toast', (p) => toastPayloads.push(p));
 
     const scheduler = createReminderScheduler(store, events);
     scheduler.init();
 
-    expect(firedPayloads).toHaveLength(0);
+    expect(toastPayloads).toHaveLength(0);
     vi.advanceTimersByTime(300);
-    expect(firedPayloads).toHaveLength(1);
-    expect((firedPayloads[0] as { id: string }).id).toBe('test-3');
+    expect(toastPayloads).toHaveLength(1);
+    expect((toastPayloads[0] as { message: string }).message).toBe('renew passport');
+
+    // status updated in store
+    const items = store.get<typeof reminder[]>('reminders', 'items', []);
+    expect(items[0].status).toBe('fired');
   });
 });

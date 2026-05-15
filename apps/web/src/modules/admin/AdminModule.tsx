@@ -220,6 +220,24 @@ const EMPTY_DRAFT = {
   duration_min: '',
 };
 
+// ─── phone-task cluster ──────────────────────────────────────────────────────
+// Tasks tagged `phone_assist` (set when accepting a detected phone task, or
+// when a deferred task is routed "phone") are grouped into one "calls to
+// make" cluster. Pure selector — open, non-closed phone tasks only, oldest
+// first so the longest-waiting call surfaces at the top.
+
+export function selectPhoneTasks(items: AdminItemRow[] | null | undefined): AdminItemRow[] {
+  if (!Array.isArray(items)) return [];
+  return items
+    .filter((it): it is AdminItemRow => {
+      if (!it || it.phone_assist !== true) return false;
+      if (!it.title && !it.label) return false;
+      const st = it.state ?? (it.status === 'done' ? 'closed' : 'active');
+      return st !== 'closed';
+    })
+    .sort((a, b) => (a.ts ?? 0) - (b.ts ?? 0));
+}
+
 // ─── AdminReflected · Sprint 5 · F5 ──────────────────────────────────────────
 // Reads `admin.reflected` written by the cross-module router when, e.g.,
 // `finance:reminder_set` fires. Surfaces reminders forwarded from other
@@ -1003,6 +1021,9 @@ export function AdminModule({ onBack }: AdminModuleProps) {
     return it._daysLeft != null && it._daysLeft <= 14 && st !== 'closed';
   }), [withDaysLeft]);
 
+  // Phone-task cluster — open `phone_assist` tasks grouped together.
+  const phoneTasks = useMemo(() => selectPhoneTasks(items), [items]);
+
   // ── counts for filter tabs ────────────────────────────────────────────────
   const activeCount = useMemo(() =>
     (items ?? []).filter((it) => {
@@ -1203,6 +1224,61 @@ export function AdminModule({ onBack }: AdminModuleProps) {
               <button type="button" onClick={() => setPhoneTask(null)} style={btnGhost}>skip</button>
             </div>
           </div>
+        )}
+
+        {/* ── phone-task cluster ─────────────────────────────────────────── */}
+        {phoneTasks.length > 0 && (
+          <section style={{ marginBottom: 32, padding: '20px 22px', background: PAPER, border: `1px solid ${HAIRLINE}`, borderRadius: 2 }}>
+            <div style={{ ...LABEL, paddingBottom: 14, fontSize: 9 }}>
+              calls to make <span style={{ color: FAINT, marginLeft: 6 }}>{phoneTasks.length}</span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              {phoneTasks.map((it, i) => (
+                <div
+                  key={it.id}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'baseline',
+                    gap: 16,
+                    padding: '12px 0',
+                    borderTop: i === 0 ? 'none' : `1px solid ${HAIRLINE}`,
+                  }}
+                >
+                  <div style={{
+                    fontFamily: "'Inter Tight',sans-serif",
+                    fontSize: 15,
+                    fontWeight: 600,
+                    color: INK,
+                    letterSpacing: '-0.01em',
+                    lineHeight: 1.3,
+                  }}>
+                    {it.title ?? it.label}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => markDone(it.id)}
+                    style={{
+                      minHeight: 44,
+                      padding: '8px 12px',
+                      background: 'transparent',
+                      border: `1px solid ${HAIRLINE_HI}`,
+                      color: MUTED,
+                      fontFamily: "'DM Mono',monospace",
+                      fontSize: 9,
+                      letterSpacing: '0.2em',
+                      textTransform: 'uppercase',
+                      cursor: 'pointer',
+                      borderRadius: 2,
+                      flexShrink: 0,
+                    }}
+                  >
+                    called
+                  </button>
+                </div>
+              ))}
+            </div>
+          </section>
         )}
 
         {/* ── add form ──────────────────────────────────────────────────── */}

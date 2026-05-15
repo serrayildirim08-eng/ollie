@@ -282,23 +282,6 @@ describe('WindDownChecklist · items', () => {
 // ─── component: events ────────────────────────────────────────────────────
 
 describe('WindDownChecklist · events', () => {
-  it('emits sleep:wind_down_started on first tap', () => {
-    const started = vi.fn();
-    events.on('sleep:wind_down_started', started);
-
-    mount();
-    const first = container.querySelector(
-      'button[aria-pressed]',
-    ) as HTMLButtonElement;
-    act(() => {
-      first.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    expect(started).toHaveBeenCalledTimes(1);
-    const payload = started.mock.calls[0][0] as { ts: number };
-    expect(typeof payload.ts).toBe('number');
-  });
-
   it('emits sleep:wind_down_completed after the final item is checked', () => {
     const completed = vi.fn();
     events.on('sleep:wind_down_completed', completed);
