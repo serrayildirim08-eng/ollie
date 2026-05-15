@@ -56,7 +56,7 @@ import type {
 import type { Orchestrator } from './types';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type AdminPattern = { signal: string; ts: number } & Record<string, any>;
+export type AdminPattern = { signal: string; pattern: string; ts: number } & Record<string, any>;
 
 export interface AdminOrchestratorOptions {
   /** Injected for tests; defaults to Date.now */
@@ -90,24 +90,49 @@ export function createAdminOrchestrator(
     };
   }
 
-  // ── pattern dedup ─────────────────────────────────────────────────────────
+  // ── pattern identity ──────────────────────────────────────────────────────
 
   /**
-   * Returns a stable key for a signal object so we can dedup against the
-   * existing patterns slice without object identity.
+   * Canonical, UI-facing pattern id derived from a detector's `signal` field.
+   * Detectors tag with snake_case `admin_*` signals; the admin UI keys on a
+   * hyphenated `pattern` field with the `admin_` prefix stripped
+   * (e.g. `admin_stale_ball` → `stale-ball`). We derive `pattern` here so the
+   * patterns slice carries one stable identity per notice — the UI dismiss
+   * logic depends on it.
+   */
+  function patternFromSignal(signal: string): string {
+    return signal.replace(/^admin_/, '').replace(/_/g, '-');
+  }
+
+  /**
+   * Returns a stable key for a pattern object so we can dedup against the
+   * existing patterns slice without object identity. Keyed on the canonical
+   * `pattern` id plus a per-notice discriminator (task/dump id) so distinct
+   * notices never collapse into one key.
    */
   function signalKey(s: AdminPattern): string {
-    const base = s['signal'] as string;
+    const base = (s['pattern'] as string | undefined)
+      ?? patternFromSignal((s['signal'] as string | undefined) ?? '');
     if (typeof s['task_id'] === 'string') return `${base}:${s['task_id']}`;
     if (typeof s['dump_id'] === 'string') return `${base}:${s['dump_id']}`;
+    if (typeof s['rule_id'] === 'string') return `${base}:${s['rule_id']}`;
+    if (typeof s['category'] === 'string') return `${base}:${s['category']}`;
     return base;
   }
 
-  /** Safely coerce any signal object to AdminPattern via unknown. */
+  /**
+   * Safely coerce any detector signal object to AdminPattern via unknown.
+   * Always stamps a canonical `pattern` id derived from `signal`, and a `ts`
+   * when one is missing. `signal` is preserved for registry/event parity.
+   */
   function toPattern(s: unknown, extraTs?: number): AdminPattern {
-    const obj = s as Record<string, unknown>;
+    const obj = { ...(s as Record<string, unknown>) };
+    const signal = typeof obj['signal'] === 'string' ? (obj['signal'] as string) : '';
+    if (typeof obj['pattern'] !== 'string') {
+      obj['pattern'] = patternFromSignal(signal);
+    }
     if (extraTs !== undefined && typeof obj['ts'] !== 'number') {
-      return { ...obj, ts: extraTs } as AdminPattern;
+      obj['ts'] = extraTs;
     }
     return obj as AdminPattern;
   }
