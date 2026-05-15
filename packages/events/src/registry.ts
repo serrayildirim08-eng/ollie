@@ -54,7 +54,7 @@ export const REGISTRY: Registry = {
   'pets:care_logged':              { payload: '{ pet_id: string, task: string, source: string, occurred_at: number }' },
   'pets:observation_logged':      { payload: '{ pet_id: string, text: string, tags: string[] }' },
   'pets:care_gap_detected':        { payload: '{ pet_id: string, task: string, severity: string, days_since: number }' },
-  'pets:health_flag_raised':       { payload: '{ pet_id: string, flag: string, run_length: number, source_url: string }' },
+  'pets:health_flag_raised':       { payload: '{ pet_id: string, pet_name: string, flag: string, run_length: number, source_url: string }' },
   'pets:health_flag_reviewed':     { payload: '{ pet_id: string, flag_id: string, status: string }' },
   'pets:guilt_copy_generated':     { payload: '{ pet_id: string, task: string, level: string, text: string }' },
   'pets:milestone_detected':       { payload: '{ pet_id: string, tag: string, first_seen_at: number }' },

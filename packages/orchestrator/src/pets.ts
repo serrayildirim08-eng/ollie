@@ -29,6 +29,7 @@
 import type { Store } from '@ollie/store';
 import type { Unsubscribe } from '@ollie/events';
 import * as events from '@ollie/events';
+import type { NotificationSpec } from '@ollie/notifications';
 import {
   computeCareGaps,
   detectHealthFlags,
@@ -54,6 +55,12 @@ export interface PetsOrchestratorOptions {
   now?: () => number;
   /** Behavioral-pattern consent gate; defaults to true. */
   getConsent?: () => boolean;
+  /**
+   * APNs push scheduler — injected by the app boot layer. Omit in tests
+   * and contexts without APNs. When omitted the health-flag push
+   * subscriber is not attached (care gaps + flags still render in-app).
+   */
+  scheduleNotification?: (spec: NotificationSpec, fireAt: number) => void;
 }
 
 export function createPetsOrchestrator(
@@ -62,6 +69,7 @@ export function createPetsOrchestrator(
 ): Orchestrator {
   const nowFn = opts.now ?? (() => Date.now());
   const consentFn = opts.getConsent ?? (() => true);
+  const scheduleNotification = opts.scheduleNotification ?? null;
   let initialized = false;
   const unsubs: Unsubscribe[] = [];
 
@@ -211,6 +219,7 @@ export function createPetsOrchestrator(
 
         events.emit('pets:health_flag_raised', {
           pet_id: pet.id,
+          pet_name: pet.name,
           flag: d.flag,
           run_length: d.run_length,
           source_url: d.source_url,
@@ -291,6 +300,39 @@ export function createPetsOrchestrator(
     unsubs.push(store.subscribeKey('pets', 'miss_log', () => recomputePatterns()));
     unsubs.push(store.subscribeKey('pets', 'projection_log', () => recomputePatterns()));
     unsubs.push(store.subscribeKey('pets', 'micro_steps', () => recomputePatterns()));
+
+    // pets:health_flag_raised → REMINDER push. A welfare flag is a
+    // functional "look at this" — health-relevant, not a pattern digest,
+    // so REMINDER (not PATTERN_ALERT). recomputeHealthFlags() only emits
+    // on the FIRST detection of a flag (prevKeys guard) so this can't
+    // re-fire; dedupe_key adds a second guard against the budget layer.
+    if (scheduleNotification) {
+      unsubs.push(events.on('pets:health_flag_raised', (raw: unknown) => {
+        try {
+          const p = (raw ?? {}) as {
+            pet_id?: string;
+            pet_name?: string;
+            flag?: string;
+            run_length?: number;
+          };
+          if (typeof p.pet_id !== 'string' || typeof p.flag !== 'string') return;
+          const now = nowFn();
+          const who = typeof p.pet_name === 'string' && p.pet_name.trim().length > 0
+            ? p.pet_name.trim()
+            : 'your pet';
+          const flagLabel = p.flag.replace(/_/g, ' ');
+          scheduleNotification(
+            {
+              title: `${who} — ${flagLabel} worth a look.`,
+              category: 'REMINDER',
+              dedupe_key: `pets:health_flag:${p.pet_id}:${p.flag}`,
+              action_url: '/pets',
+            },
+            now,
+          );
+        } catch { /* non-fatal */ }
+      }));
+    }
 
     recompute();
   }
