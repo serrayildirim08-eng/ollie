@@ -10,9 +10,13 @@
  * Consent rewrite (Sprint 6): the per-feature privacy toggles
  * (spending-research / cycle / astrology) have been replaced by the
  * two-toggle consent model written at sign-up by ConsentScreen.
- *   - shared.consent.necessary  — locked-ON in settings; only revocable
- *                                 by deleting the account
- *   - shared.consent.marketing  — bidirectional, default ON
+ *   - necessary  — locked-ON in settings; only revocable by deleting the
+ *                  account
+ *   - marketing  — bidirectional, default ON
+ *
+ * Görev 1 (2026-05-15): both flags persist to the canonical @ollie/consent
+ * `consent.state` row. The marketing toggle below reads/writes that row,
+ * not the legacy `shared.consent.marketing` key.
  *
  * Voice: lowercase labels, sage active, DM Mono caps section headers.
  * Reached from HomeScreen.
@@ -23,8 +27,11 @@ import { getString, type Locale } from '../i18n';
 import type { AuthClient } from '@ollie/auth';
 import { exportBackup, envelopeToFileBytes, defaultFilename, importBackup } from '@ollie/backup';
 import {
+  CONSENT_STORE_KEY,
+  CONSENT_STORE_MODULE,
   getConsent,
   setConsent,
+  setMarketingConsentSync,
   type ConsentState,
 } from '@ollie/consent';
 import { emit as emitEvent } from '@ollie/events';
@@ -691,12 +698,25 @@ function PrivacySection() {
   // Consent rewrite (Sprint 6): two toggles only.
   //   - necessary: locked-ON. The only revocation path is delete-account.
   //   - marketing: bidirectional, default ON (set at sign-up by ConsentScreen).
-  const [marketing, setMarketing] = useStoreSlice<boolean>('shared', 'consent.marketing', true);
+  //
+  // Görev 1 (2026-05-15): the marketing flag lives on the canonical
+  // @ollie/consent `consent.state` row. We subscribe to that row reactively
+  // and derive `marketing` from it; the toggle writes back through
+  // setMarketingConsentSync so App.tsx + every other reader stay in sync.
+  const [consentRow] = useStoreSlice<ConsentState | null>(
+    CONSENT_STORE_MODULE,
+    CONSENT_STORE_KEY,
+    null,
+  );
+  const marketing = consentRow?.marketing ?? true;
 
   function handleMarketingChange(next: boolean) {
-    setMarketing(next);
+    // Canonical write — round-trips through @ollie/consent and the
+    // configured Supabase sync sink. The useStoreSlice subscription above
+    // re-renders this section when the consent.state row changes.
+    setMarketingConsentSync(store, next);
     // Consent audit — fire-and-forget. Gated on hasConsent(); every user
-    // reaching Settings has consent.necessary=true so this always fires.
+    // reaching Settings has necessary=true so this always fires.
     const account = getAccount();
     if (!account?.research.hasConsent()) return;
     const userHash = readUserHash();

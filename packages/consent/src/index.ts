@@ -101,6 +101,163 @@ export function defaultConsent(now: number = Date.now()): ConsentState {
   };
 }
 
+// ─── legacy-key bridge (Görev 1 · 2026-05-15) ─────────────────────────────────
+//
+// Before this consolidation two parallel systems existed:
+//   System A — raw `shared.consent.necessary` + `shared.consent.marketing`
+//              keys, written by ConsentScreen, read by App.tsx's boot gate.
+//   System B — the `consent.state` canonical row owned by this package.
+//
+// `consent.state` is now the single source of truth. The helpers below
+// read it synchronously (App.tsx boot gate, research-stream, sync, the
+// Plaid + HealthKit defense-in-depth gates are all synchronous) and lazily
+// SEED it from the legacy System-A keys the first time a returning user is
+// read, so an existing `necessary: true` is never lost during the cutover.
+
+/** Legacy System-A store coordinates (pre-consolidation). */
+const LEGACY_NECESSARY_MODULE = 'shared';
+const LEGACY_NECESSARY_KEY = 'consent.necessary';
+const LEGACY_MARKETING_MODULE = 'shared';
+const LEGACY_MARKETING_KEY = 'consent.marketing';
+
+/**
+ * Read the canonical consent row directly from a store, synchronously.
+ *
+ * Resolution order:
+ *   1. canonical `consent.state` row, if present (with pre-pivot migration);
+ *   2. else, if a legacy `shared.consent.necessary` exists, build a
+ *      ConsentState from the legacy keys and SEED `consent.state` so future
+ *      reads are canonical (one-way migration, conservative);
+ *   3. else, the "needs re-prompt" sentinel (necessary true, research null).
+ *
+ * Conservative by design: `research_optin` is never inferred from legacy
+ * data — System A never carried a research flag, so a migrated user always
+ * lands on `null` (re-prompt) and the app asks before any data leaves.
+ */
+export function getConsentSync(store: ConsentStoreAdapter): ConsentState {
+  const persisted = store.get<ConsentState | null>(
+    CONSENT_STORE_MODULE,
+    CONSENT_STORE_KEY,
+    null,
+  );
+
+  if (persisted) {
+    // Pre-pivot migration mirrors getConsent(): force re-prompt for users
+    // whose state predates the pivot and never explicitly chose research.
+    if (persisted.set_at > 0 && persisted.set_at < CONSENT_PIVOT_TS) {
+      return { ...persisted, research_optin: null };
+    }
+    return persisted;
+  }
+
+  // No canonical row — check the legacy System-A keys.
+  const legacyNecessary = store.get<boolean>(
+    LEGACY_NECESSARY_MODULE,
+    LEGACY_NECESSARY_KEY,
+    false,
+  );
+
+  if (legacyNecessary) {
+    // Returning System-A user. Seed a canonical row from the legacy keys.
+    // research_optin stays null on purpose → ConsentStep re-prompts.
+    const legacyMarketing = Boolean(
+      store.get<boolean>(LEGACY_MARKETING_MODULE, LEGACY_MARKETING_KEY, false),
+    );
+    const seeded: ConsentState = {
+      necessary: true,
+      marketing: legacyMarketing,
+      research_optin: null,
+      // set_at: pre-pivot epoch so any later read still treats this as a
+      // legacy user until research is explicitly chosen.
+      set_at: CONSENT_PIVOT_TS - 1,
+      v: 1,
+    };
+    store.set<ConsentState>(CONSENT_STORE_MODULE, CONSENT_STORE_KEY, seeded);
+    return seeded;
+  }
+
+  // Brand-new install — nothing persisted anywhere.
+  return {
+    necessary: true,
+    marketing: false,
+    research_optin: null,
+    set_at: 0,
+    v: 1,
+  };
+}
+
+/**
+ * Synchronous read of the `necessary` consent flag.
+ *
+ * This is the master app-boot gate. `necessary` is structurally `true` on
+ * every persisted ConsentState (the type forbids `false`); a fresh install
+ * with NOTHING persisted reads `false` so App.tsx still shows ConsentScreen.
+ */
+export function hasNecessaryConsent(store: ConsentStoreAdapter): boolean {
+  const persisted = store.get<ConsentState | null>(
+    CONSENT_STORE_MODULE,
+    CONSENT_STORE_KEY,
+    null,
+  );
+  if (persisted) return persisted.necessary === true;
+  // No canonical row — fall back to the legacy key so a returning System-A
+  // user is not bounced back to the consent screen mid-cutover.
+  return Boolean(
+    store.get<boolean>(LEGACY_NECESSARY_MODULE, LEGACY_NECESSARY_KEY, false),
+  );
+}
+
+/** Synchronous read of the `marketing` consent flag. Default-deny: a brand
+ *  new install with nothing persisted reads `false`. */
+export function hasMarketingConsent(store: ConsentStoreAdapter): boolean {
+  return getConsentSync(store).marketing === true;
+}
+
+/**
+ * Persist the `necessary` flag to the canonical row, synchronously.
+ *
+ * `necessary` is one-way: once true it cannot be set false (the ConsentState
+ * type forbids it). This is the writer ConsentScreen calls when the user
+ * flips the master gate on. Also mirrors into the in-memory cache (if a user
+ * is configured) so a subsequent async getConsent() agrees, and triggers the
+ * durable Supabase sync for the audit trail.
+ */
+export function setNecessaryConsentSync(
+  store: ConsentStoreAdapter,
+  userId: string = '_local',
+): void {
+  const current = getConsentSync(store);
+  const next: ConsentState = {
+    necessary: true,
+    marketing: current.marketing,
+    research_optin: current.research_optin,
+    set_at: Date.now(),
+    v: 1,
+  };
+  store.set<ConsentState>(CONSENT_STORE_MODULE, CONSENT_STORE_KEY, next);
+  cache.set(userId, next);
+  void syncRef(next, userId).catch(() => { /* best-effort audit */ });
+}
+
+/** Persist the `marketing` flag to the canonical row, synchronously. */
+export function setMarketingConsentSync(
+  store: ConsentStoreAdapter,
+  value: boolean,
+  userId: string = '_local',
+): void {
+  const current = getConsentSync(store);
+  const next: ConsentState = {
+    necessary: true,
+    marketing: value,
+    research_optin: current.research_optin,
+    set_at: Date.now(),
+    v: 1,
+  };
+  store.set<ConsentState>(CONSENT_STORE_MODULE, CONSENT_STORE_KEY, next);
+  cache.set(userId, next);
+  void syncRef(next, userId).catch(() => { /* best-effort audit */ });
+}
+
 /**
  * Read consent for a user. Reads the in-memory cache first, then the local
  * store, then returns a "needs re-prompt" sentinel state (`research_optin: null`)

@@ -12,9 +12,9 @@
  *     a calm "not available on this device" line and the user moves on.
  *
  * Consent gate: same defense-in-depth as PlaidLinkButton. Even though
- * the master consent (`shared.consent.necessary`) is enforced at app
- * entry, we double-check here so an accidental render somewhere else
- * also respects the gate.
+ * the master consent (canonical `@ollie/consent` necessary flag) is
+ * enforced at app entry, we double-check here so an accidental render
+ * somewhere else also respects the gate.
  *
  * Persisted state (after the user finishes the auth sheet):
  *   shared.healthkit.connected_at   number | null   (unix ms when granted)
@@ -35,6 +35,7 @@ import {
   requestPermissions,
   type HealthKitAuthStatus,
 } from '@ollie/capacitor-healthkit';
+import { hasNecessaryConsent } from '@ollie/consent';
 import { store } from '../store';
 
 interface ViteEnv {
@@ -53,8 +54,8 @@ export function HealthKitConsent({ onDone }: HealthKitConsentProps): JSX.Element
   const [phase, setPhase] = useState<Phase>('idle');
   const [status, setStatus] = useState<HealthKitAuthStatus | null>(null);
 
-  // Defense-in-depth consent gate.
-  const consentGiven = Boolean(store.get<boolean>('shared', 'consent.necessary', false));
+  // Defense-in-depth consent gate. Reads the canonical @ollie/consent state.
+  const consentGiven = hasNecessaryConsent(store);
   if (!consentGiven) return null;
 
   // Env flag — hide the CTA in environments that don't ship HealthKit.

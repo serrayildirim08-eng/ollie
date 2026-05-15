@@ -163,32 +163,57 @@ describe('ConsentScreen · marketing toggle is bidirectional', () => {
 });
 
 describe('ConsentScreen · store writes', () => {
-  it('writes consent.marketing on each toggle change', () => {
+  // Görev 1 (2026-05-15): ConsentScreen now persists to the canonical
+  // @ollie/consent `consent.state` row (module 'consent', key 'state')
+  // via setMarketingConsentSync / setNecessaryConsentSync — NOT the legacy
+  // raw `shared.consent.*` keys.
+
+  /** Latest payload written to the canonical consent.state row. */
+  function lastConsentRow(): { necessary?: boolean; marketing?: boolean } | undefined {
+    const calls = (store.set as unknown as { mock: { calls: unknown[][] } }).mock.calls;
+    for (let i = calls.length - 1; i >= 0; i--) {
+      const [mod, key, value] = calls[i];
+      if (mod === 'consent' && key === 'state') {
+        return value as { necessary?: boolean; marketing?: boolean };
+      }
+    }
+    return undefined;
+  }
+
+  it('writes the canonical consent row with the new marketing value on toggle', () => {
     mount();
     click(getToggle('marketing cookies'));
-    expect(store.set).toHaveBeenCalledWith('shared', 'consent.marketing', false);
+    expect(store.set).toHaveBeenCalledWith(
+      'consent',
+      'state',
+      expect.objectContaining({ marketing: false, necessary: true }),
+    );
     click(getToggle('marketing cookies'));
-    expect(store.set).toHaveBeenCalledWith('shared', 'consent.marketing', true);
+    expect(lastConsentRow()).toMatchObject({ marketing: true, necessary: true });
   });
 
-  it('writes consent.necessary=true on the one-way flip', () => {
+  it('writes the canonical consent row with necessary=true on the one-way flip', () => {
     mount();
     click(getToggle('necessary opt-in'));
-    expect(store.set).toHaveBeenCalledWith('shared', 'consent.necessary', true);
+    expect(store.set).toHaveBeenCalledWith(
+      'consent',
+      'state',
+      expect.objectContaining({ necessary: true }),
+    );
   });
 
-  it('on continue, persists both consent.necessary=true and consent.marketing', () => {
+  it('on continue, persists both necessary=true and marketing to consent.state', () => {
     mount();
     // Turn marketing OFF so we can verify the value is written through.
     click(getToggle('marketing cookies'));
     click(getToggle('necessary opt-in'));
     click(getContinue());
 
-    expect(store.set).toHaveBeenCalledWith('shared', 'consent.necessary', true);
-    expect(store.set).toHaveBeenCalledWith('shared', 'consent.marketing', false);
+    // Final canonical row carries both decisions.
+    expect(lastConsentRow()).toMatchObject({ necessary: true, marketing: false });
   });
 
-  it('does NOT write consent.necessary on a no-op click while locked', () => {
+  it('does NOT write the consent row on a no-op click while locked', () => {
     mount();
     click(getToggle('necessary opt-in'));
     const callsAfterFirst = (store.set as unknown as { mock: { calls: unknown[] } }).mock.calls.length;

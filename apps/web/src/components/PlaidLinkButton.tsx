@@ -44,6 +44,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { usePlaidLink } from 'react-plaid-link';
 import type { PlaidLinkOnSuccessMetadata } from 'react-plaid-link';
 import { encryptData, bytesToBase64 } from '@ollie/crypto';
+import { hasNecessaryConsent } from '@ollie/consent';
 import { store } from '../store';
 import { getAccount } from '../lib/account-boot';
 
@@ -69,7 +70,8 @@ export function PlaidLinkButton({ onLinked, onSkip }: PlaidLinkButtonProps): JSX
   const [errMsg, setErrMsg] = useState<string | null>(null);
 
   // Consent gate. Defense in depth — ConsentScreen already enforces.
-  const consentGiven = Boolean(store.get<boolean>('shared', 'consent.necessary', false));
+  // Reads the canonical @ollie/consent state (consent.state row).
+  const consentGiven = hasNecessaryConsent(store);
   if (!consentGiven) return null;
 
   // No-op render if the worker URL is unset (dev environment, no
