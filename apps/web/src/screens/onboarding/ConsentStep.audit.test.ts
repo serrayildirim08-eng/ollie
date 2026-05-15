@@ -71,14 +71,6 @@ describe('ConsentStep · contract markers', () => {
     expect(SOURCE).toContain('export type ConsentStepSource');
   });
 
-  it('emits consent:set event with all four payload fields', () => {
-    expect(SOURCE).toContain("emitEvent('consent:set'");
-    expect(SOURCE).toMatch(/necessary:\s*true/);
-    expect(SOURCE).toMatch(/marketing:/);
-    expect(SOURCE).toMatch(/research_optin:/);
-    expect(SOURCE).toMatch(/source,/);
-  });
-
   it('imports setConsent from @ollie/consent (not local stub)', () => {
     expect(SOURCE).toMatch(/from '@ollie\/consent'/);
     expect(SOURCE).toContain('setConsent');

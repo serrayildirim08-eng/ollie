@@ -34,7 +34,6 @@ import {
   setMarketingConsentSync,
   type ConsentState,
 } from '@ollie/consent';
-import { emit as emitEvent } from '@ollie/events';
 import { useStoreSlice, store } from '../store';
 import { SUPPORTED_COUNTRIES } from '../lib/country';
 import { getAccount } from '../lib/account-boot';
@@ -1405,17 +1404,6 @@ export function ResearchSection({ userId }: ResearchSectionProps) {
     setSaving(true);
     try {
       await setConsent(userId, { research_optin: next });
-      // Read the canonical state back so we surface what was persisted,
-      // not what the user clicked — the package coerces necessary, and
-      // future fields may apply server defaults.
-      const after = await getConsent(userId);
-      emitEvent('consent:set', {
-        necessary: true as const,
-        marketing: after.marketing,
-        research_optin: after.research_optin === true,
-        source: 'settings',
-        ts: Date.now(),
-      });
       setFlipDirection(next ? 'just-on' : 'just-off');
     } catch {
       // setConsent should never reject in practice — local write is sync.

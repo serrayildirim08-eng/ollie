@@ -71,11 +71,6 @@ describe('ResearchSection · contract markers', () => {
     expect(SOURCE).toContain('setConsent');
   });
 
-  it("emits consent:set with source: 'settings'", () => {
-    expect(SOURCE).toContain("emitEvent('consent:set'");
-    expect(SOURCE).toContain("source: 'settings'");
-  });
-
   it('renders the canonical research opt-in copy', () => {
     expect(COPY_BLOCK).toContain('research opt-in');
     expect(COPY_BLOCK).toContain('your anonymized text helps us find adhd patterns');
