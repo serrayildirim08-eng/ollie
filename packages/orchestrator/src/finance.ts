@@ -1045,6 +1045,19 @@ export function createFinanceOrchestrator(
     unsubs.push(store.subscribeKey('finance', 'cancellations', () => {
       try { schedule(); } catch (err) { console.error('[orchestrator/finance] cancellations tick failed', err); }
     }));
+    // Faz 2 fix (2026-05-15): the module's own in-app forms write these
+    // slices directly (FinanceModule.tsx / braindump-dispatch.ts finance
+    // sub-classification). They don't go through processDump/processBacklog,
+    // so without these subscriptions a manually-added bill/subscription/
+    // transaction/goal/adhd-tax row never triggers a recompute and the
+    // anomaly/pattern/savings-milestone cards go stale. schedule() (debounced
+    // recomputeDerived) is the right trigger — these slices carry their own
+    // form schema and produce no new FinanceRecord, so processBacklog is wrong.
+    for (const formSlice of ['bills', 'subscriptions', 'transactions', 'goals', 'adhd_tax'] as const) {
+      unsubs.push(store.subscribeKey('finance', formSlice, () => {
+        try { schedule(); } catch (err) { console.error(`[orchestrator/finance] finance.${formSlice} tick failed`, err); }
+      }));
+    }
     unsubs.push(events.on('finance:subscription_cancelled', (p) => {
       try { onSubscriptionCancelled(p); }
       catch (err) { console.error('[orchestrator/finance] onSubscriptionCancelled failed', err); }
