@@ -101,6 +101,9 @@ export const REGISTRY: Registry = {
   'sleep:wind_down_started':       { payload: '{ ts: number }' },
   'sleep:wind_down_completed':     { payload: '{ ts: number, durationMs: number, itemsCompleted: number }' },
   'sleep:wind_down_skipped':       { payload: '{ ts: number, itemsCompleted: number }' },
+  // Per-step row — emitted once per ritual-item tap. The sleep orchestrator
+  // subscribes and appends each to sleep.windDownLog for detectWindDownFriction.
+  'sleep:wind_down_step':          { payload: '{ ts: number, step_id: string, step_label?: string, action: "checked"|"unchecked" }' },
 
   // ─── episodes ───────────────────────────────────────────────────
   'void:episode:opened':           { payload: '{ id: string, label: string, kind: string, started_at: number }' },

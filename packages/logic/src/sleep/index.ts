@@ -22,7 +22,15 @@ export {
   detectDSPSPattern,
   detectShortSleepRun,
   forecastTonightTST,
+  forecastTonightHeuristic,
 } from './stats';
+export {
+  INSOMNIA_SURVEY_LENGTH,
+  INSOMNIA_SURVEY_QUESTIONS,
+  insomniaSeverityBand,
+  scoreInsomniaSurvey,
+} from './survey';
+export type { InsomniaSurveyQuestion } from './survey';
 export {
   // Phase 1
   detectRevengeBedtime,

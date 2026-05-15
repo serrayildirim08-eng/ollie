@@ -78,6 +78,9 @@ export const SHAPES: Record<string, ShapeSpec> = {
   'sleep:wind_down_started':   { ts: 'number' },
   'sleep:wind_down_completed': { ts: 'number', durationMs: 'number', itemsCompleted: 'number' },
   'sleep:wind_down_skipped':   { ts: 'number', itemsCompleted: 'number' },
+  // per-step row → sleep.windDownLog (action is 'checked' | 'unchecked';
+  // typed as string here since SHAPES has no literal-union token).
+  'sleep:wind_down_step':      { ts: 'number', step_id: 'string', 'step_label?': 'string', action: 'string' },
 
   // body notifications · 11 push events (Sprint body-v2 wiring)
   'cycle:period_approaching':    { predictedTs: 'number', daysUntil: 'number', ts: 'number' },
