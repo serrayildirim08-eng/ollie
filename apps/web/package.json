@@ -24,6 +24,7 @@
     "@ollie/logic": "workspace:*",
     "@ollie/notifications": "workspace:*",
     "@ollie/orchestrator": "workspace:*",
+    "@ollie/research-cache": "workspace:*",
     "@ollie/research-stream": "workspace:*",
     "@ollie/router": "workspace:*",
     "@ollie/store": "workspace:*",

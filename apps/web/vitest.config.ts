@@ -19,6 +19,7 @@ export default defineConfig({
       pkg('@ollie/events', '../../packages/events/src/index.ts'),
       pkg('@ollie/orchestrator', '../../packages/orchestrator/src/index.ts'),
       pkg('@ollie/research-stream', '../../packages/research-stream/src/index.ts'),
+      pkg('@ollie/research-cache', '../../packages/research-cache/src/index.ts'),
     ],
   },
   test: {
