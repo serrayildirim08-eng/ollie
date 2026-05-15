@@ -34,6 +34,16 @@
  *      device" promise concerns free-text, which this path never carries.
  *      Kept as-is.
  *
+ *   ─── Telemetry event bridge ────────────────────────────────────────────
+ *
+ * A small set of orphaned product events (finance impulse-pause, sign-up,
+ * voice capture) carry behavioural / funnel signal but had no consumer.
+ * `attachTelemetryBridge()` subscribes them ONCE here and forwards each to
+ * `research.track(type, payload)` — the structured-event queue, consent
+ * gated inside track(). Payloads are metadata only (counts, reasons,
+ * sources, timestamps): no free-text user content, so path-A's "no PII"
+ * invariant holds. This is path A, not B.
+ *
  *   B. @ollie/orchestrator · research → scrubPII → POST /label → research_corpus
  *      The Sprint B' pipeline. Captures FREE-TEXT the user typed
  *      (brain_dump_log, finance_records.description, *_records.note, …),
@@ -105,6 +115,47 @@ interface AccountBootHandles {
 }
 
 let handles: AccountBootHandles | null = null;
+
+/** Active telemetry-bridge unsubscribers — torn down in _resetAccountBoot(). */
+let telemetryUnsubs: Array<() => void> = [];
+
+/**
+ * Subscribe the orphaned telemetry events and forward each to
+ * `research.track()`. Called once from bootAccount(). track() is consent
+ * gated and fire-and-forget, so this is harmless when consent is off.
+ *
+ * Events bridged:
+ *   finance:impulse_pause_started / _resolved → behavioural retention
+ *     signal — did the user actually abandon the purchase?
+ *   auth:signed_up                            → sign-up funnel marker
+ *   voice:capture_started / _transcribed / _cancelled → voice-input
+ *     adoption + failure rate. capture_cancelled.reason is a UX
+ *     diagnostic ('no-speech' vs. an error code).
+ */
+function attachTelemetryBridge(research: ResearchClient): void {
+  if (telemetryUnsubs.length > 0) return; // idempotent
+
+  /** Forward one event to research.track, mapping name → telemetry type. */
+  function bridge(eventName: string, telemetryType: string): void {
+    telemetryUnsubs.push(
+      events.on(eventName, (raw: unknown) => {
+        try {
+          const payload = (raw && typeof raw === 'object')
+            ? (raw as Record<string, unknown>)
+            : {};
+          research.track(telemetryType, payload);
+        } catch { /* telemetry is best-effort */ }
+      }),
+    );
+  }
+
+  bridge('finance:impulse_pause_started', 'finance.impulse_pause.started');
+  bridge('finance:impulse_pause_resolved', 'finance.impulse_pause.resolved');
+  bridge('auth:signed_up', 'auth.signed_up');
+  bridge('voice:capture_started', 'voice.capture.started');
+  bridge('voice:capture_transcribed', 'voice.capture.transcribed');
+  bridge('voice:capture_cancelled', 'voice.capture.cancelled');
+}
 
 /**
  * Optional boot overrides. Production passes nothing — every value is read
@@ -182,6 +233,9 @@ export function bootAccount(overrides: BootOverrides = {}): AccountBootHandles {
   // On future sign-in / sign-up, the auth client emits auth:signed_in.
   events.on('auth:signed_in', () => { void attachSync(); });
   events.on('auth:signed_out', () => { detachSync(); });
+
+  // Bridge orphaned telemetry events → research.track (consent gated).
+  attachTelemetryBridge(research);
 
   return handles;
 }
@@ -304,6 +358,7 @@ export function _resetAccountBoot(): void {
   if (handles?.financeSync) {
     try { handles.financeSync.stop(); } catch { /* noop */ }
   }
+  telemetryUnsubs.splice(0).forEach((fn) => { try { fn(); } catch { /* noop */ } });
   handles = null;
   bootOverrides = {};
 }

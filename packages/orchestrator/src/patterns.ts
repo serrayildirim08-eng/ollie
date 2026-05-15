@@ -16,10 +16,28 @@
  *   sleep.records          → schedule recompute
  *   finance.records        → schedule recompute
  *   dump.items             → schedule recompute
+ *
+ * Module-pattern sink (consolidation of the 6 orphaned `*:pattern_detected`
+ * events — goals/sleep/work/finance/habits/grocery):
+ *   Each module's own pattern detector emits `<module>:pattern_detected`
+ *   when it first sees a pattern. Those events had zero consumers — the UI
+ *   recomputed patterns itself, so the events fell on the floor and a
+ *   notification opportunity was lost. This orchestrator is the single,
+ *   consistent consumer: it appends a quiet card to `shared.moduleInsights`
+ *   and (when scheduleNotification is injected) raises one PATTERN_ALERT
+ *   push per pattern. Mirrors body-correlations' `pattern:detected` →
+ *   APNs idiom, kept module-scoped here so the body correlation payload
+ *   (correlation_name/copy) and the module payload (pattern/confidence)
+ *   don't collide on one event name.
+ *
+ * Derived key written for the sink:
+ *   shared.moduleInsights  ModuleInsight[]  (capped, newest-last)
  */
 
 import type { Store } from '@ollie/store';
 import type { Unsubscribe } from '@ollie/events';
+import * as events from '@ollie/events';
+import type { NotificationSpec } from '@ollie/notifications';
 import { detectPatterns } from '@ollie/logic/patterns';
 import type {
   PatternResult,
@@ -32,12 +50,53 @@ import type { Orchestrator } from './types';
 
 const DEFAULT_THROTTLE_MS = 2_000;
 
+/** The 6 module pattern events this orchestrator consolidates. */
+const MODULE_PATTERN_EVENTS = [
+  'goals:pattern_detected',
+  'sleep:pattern_detected',
+  'work:pattern_detected',
+  'finance:pattern_detected',
+  'habits:pattern_detected',
+  'grocery:pattern_detected',
+] as const;
+
+/** Max insight cards kept in shared.moduleInsights (newest-last). */
+const MODULE_INSIGHTS_CAP = 50;
+
+/** A quiet, surfaced module pattern — read by the insights UI layer. */
+export interface ModuleInsight {
+  /** Source module id, derived from the event name. */
+  module: string;
+  /** The pattern key the module's detector produced. */
+  pattern: string;
+  /** Detector confidence, when the module supplied one. */
+  confidence?: string;
+  /** Sample size behind the pattern, when supplied. */
+  sample_n?: number;
+  /** Detection timestamp. */
+  ts: number;
+}
+
 export function createPatternsOrchestrator(
   store: Store,
-  { now: nowFn, throttleMs }: { now?: () => number; throttleMs?: number } = {},
+  {
+    now: nowFn,
+    throttleMs,
+    scheduleNotification,
+  }: {
+    now?: () => number;
+    throttleMs?: number;
+    /**
+     * APNs push scheduler — injected by the app boot layer. Omit in tests
+     * and contexts without APNs. When omitted the module-pattern sink
+     * still writes shared.moduleInsights; only the push is skipped.
+     */
+    scheduleNotification?: (spec: NotificationSpec, fireAt: number) => void;
+  } = {},
 ): Orchestrator & { recompute(): void } {
   const getNow = nowFn ?? (() => Date.now());
   const THROTTLE_MS = throttleMs ?? DEFAULT_THROTTLE_MS;
+  const pushNotification = scheduleNotification ?? null;
 
   let initialized = false;
   const unsubs: Unsubscribe[] = [];
@@ -138,6 +197,61 @@ export function createPatternsOrchestrator(
     }
   }
 
+  // ── module-pattern sink (6 orphaned *:pattern_detected events) ────────────
+
+  /**
+   * Handle one `<module>:pattern_detected` event: append a card to
+   * shared.moduleInsights (deduped per module+pattern) and, when a
+   * scheduler is wired, raise one PATTERN_ALERT push.
+   */
+  function onModulePattern(eventName: string, raw: unknown): void {
+    try {
+      const p = (raw ?? {}) as {
+        pattern?: unknown;
+        confidence?: unknown;
+        sample_n?: unknown;
+        ts?: unknown;
+      };
+      if (typeof p.pattern !== 'string' || p.pattern.length === 0) return;
+
+      const module = eventName.split(':')[0] ?? eventName;
+      const ts = typeof p.ts === 'number' ? p.ts : getNow();
+      const confidence = typeof p.confidence === 'string' ? p.confidence : undefined;
+      const sample_n = typeof p.sample_n === 'number' ? p.sample_n : undefined;
+
+      const prev = store.get<ModuleInsight[]>('shared', 'moduleInsights', []) ?? [];
+      // Dedup: one card per module+pattern. The module's own detector
+      // only emits on first detection, but a teardown/re-init replays
+      // cold-start patterns — this guard keeps the list stable.
+      if (prev.some((c) => c.module === module && c.pattern === p.pattern)) return;
+
+      const next = [...prev, { module, pattern: p.pattern, confidence, sample_n, ts }];
+      // Cap newest-last so the UI can render a bounded recent list.
+      store.set(
+        'shared',
+        'moduleInsights',
+        next.length > MODULE_INSIGHTS_CAP ? next.slice(-MODULE_INSIGHTS_CAP) : next,
+      );
+
+      if (pushNotification) {
+        const label = p.pattern.replace(/_/g, ' ');
+        pushNotification(
+          {
+            title: `${module}: noticed a pattern — ${label}.`,
+            category: 'PATTERN_ALERT',
+            // One push per module+pattern, ever — the pattern is a
+            // standing observation, not a recurring deadline.
+            dedupe_key: `pattern:${module}:${p.pattern}`,
+            action_url: `/${module}`,
+          },
+          ts,
+        );
+      }
+    } catch (e) {
+      console.error('[orchestrator/patterns] module-pattern sink failed:', e);
+    }
+  }
+
   // ── throttled schedule ────────────────────────────────────────────────────
 
   function schedule(): void {
@@ -162,6 +276,14 @@ export function createPatternsOrchestrator(
     unsubs.push(store.subscribeKey('sleep', 'records', schedule));
     unsubs.push(store.subscribeKey('finance', 'records', schedule));
     unsubs.push(store.subscribeKey('dump', 'items', schedule));
+
+    // Module-pattern sink — single consistent consumer for the 6
+    // previously-orphaned `<module>:pattern_detected` events.
+    for (const eventName of MODULE_PATTERN_EVENTS) {
+      unsubs.push(
+        events.on(eventName, (raw: unknown) => onModulePattern(eventName, raw)),
+      );
+    }
 
     // Cold start — run immediately.
     recompute();
