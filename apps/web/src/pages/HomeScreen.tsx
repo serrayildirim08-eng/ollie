@@ -128,11 +128,15 @@ function TimeTracker() {
 }
 
 export interface HomeScreenProps {
-  onNavigate: (to: 'dashboard' | 'garden' | 'settings') => void;
+  onNavigate: (
+    to: 'dashboard' | 'garden' | 'settings' | 'insights' | 'voice' | 'gallery',
+  ) => void;
   onBrainDump: (text: string) => void;
+  /** Opens the calm crisis surface. Optional so older callers still typecheck. */
+  onCrisis?: () => void;
 }
 
-export function HomeScreen({ onNavigate, onBrainDump }: HomeScreenProps) {
+export function HomeScreen({ onNavigate, onBrainDump, onCrisis }: HomeScreenProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hour = new Date().getHours();
   const sky = getSkyVideoSrc(hour);
@@ -250,6 +254,88 @@ export function HomeScreen({ onNavigate, onBrainDump }: HomeScreenProps) {
 
       {/* Sky orb — top right */}
       <SkyOrb hour={hour} />
+
+      {/* Quiet nav cluster — insights · voice · gallery.
+          Glass pills matching the weather/settings grammar. Each is a
+          ≥44pt touch target. Sits top-left under the weather pill. */}
+      <nav
+        aria-label="more"
+        style={{
+          position: 'absolute',
+          top: 100,
+          left: 32,
+          zIndex: 12,
+          display: 'flex',
+          gap: 8,
+          flexWrap: 'wrap',
+          maxWidth: 'calc(100vw - 64px)',
+        }}
+      >
+        {(
+          [
+            { key: 'insights', label: 'this week' },
+            { key: 'voice', label: 'voice' },
+            { key: 'gallery', label: 'finished' },
+          ] as const
+        ).map((item) => (
+          <button
+            key={item.key}
+            type="button"
+            onClick={() => onNavigate(item.key)}
+            aria-label={`open ${item.label}`}
+            style={{
+              minHeight: 44,
+              display: 'inline-flex',
+              alignItems: 'center',
+              background: 'rgba(255,255,255,0.12)',
+              backdropFilter: 'blur(16px)',
+              WebkitBackdropFilter: 'blur(16px)',
+              border: '1px solid rgba(255,255,255,0.18)',
+              borderRadius: 20,
+              padding: '8px 14px',
+              fontFamily: "'DM Mono', monospace",
+              fontSize: 10,
+              letterSpacing: '0.14em',
+              textTransform: 'uppercase',
+              color: 'rgba(255,255,255,0.72)',
+              cursor: 'pointer',
+            }}
+          >
+            {item.label}
+          </button>
+        ))}
+      </nav>
+
+      {/* Crisis surface entry — deliberately quiet, never alarming.
+          A single low-contrast line; tapping opens a calm support page.
+          Only rendered when the host wired onCrisis. */}
+      {onCrisis && (
+        <button
+          type="button"
+          onClick={onCrisis}
+          aria-label="open support — someone to talk to"
+          style={{
+            position: 'absolute',
+            bottom: 'calc(env(safe-area-inset-bottom, 0px) + 4px)',
+            left: 28,
+            zIndex: 16,
+            minHeight: 44,
+            display: 'inline-flex',
+            alignItems: 'center',
+            background: 'transparent',
+            border: 'none',
+            padding: '8px 4px',
+            fontFamily: "'DM Mono', monospace",
+            fontSize: 9,
+            letterSpacing: '0.14em',
+            textTransform: 'uppercase',
+            color: 'rgba(255,255,255,0.34)',
+            cursor: 'pointer',
+          }}
+        >
+          need a moment?
+        </button>
+      )}
 
       {/* Settings entry — top-right corner, quiet kicker glyph (F4) */}
       <button
