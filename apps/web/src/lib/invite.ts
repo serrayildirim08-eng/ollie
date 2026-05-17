@@ -21,7 +21,7 @@ interface ViteEnv {
 }
 const env: ViteEnv = (import.meta as unknown as { env?: ViteEnv }).env ?? {};
 
-const BETA_INVITE_REQUIRED = true;
+const BETA_INVITE_REQUIRED = false;
 
 export function isBetaInviteRequired(): boolean {
   return BETA_INVITE_REQUIRED;
