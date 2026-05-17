@@ -19,6 +19,7 @@ import type {
   GroceryPattern,
 } from '@ollie/logic/grocery';
 import { useStoreSlice } from '../../store';
+import { mkId } from '../../lib/mkId';
 
 // ─── local types ──────────────────────────────────────────────────────────────
 
@@ -234,7 +235,7 @@ export function GroceryModule() {
       const name = overrideCanon ?? parsed.name;
       const alias = ALIAS_TABLE[name];
       setPantry([...(pantry ?? []), {
-        id: `g-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        id: mkId('g'),
         name,
         normalizedName: name,
         category: parsed.category,
@@ -250,7 +251,7 @@ export function GroceryModule() {
     } else {
       const name = overrideCanon ?? parsed.name;
       setItems([...(items ?? []), {
-        id: `g-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        id: mkId('g'),
         name,
         normalizedName: parsed.normalizedName ?? (overrideCanon ?? null),
         category: parsed.category ?? 'other',
@@ -270,7 +271,7 @@ export function GroceryModule() {
     const next = (items ?? []).filter((i) => i.id !== id);
     setItems(next);
     setPantry([...(pantry ?? []), {
-      id: `g-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      id: mkId('g'),
       name,
       normalizedName: name,
       category: it.category ?? 'other',
@@ -291,7 +292,7 @@ export function GroceryModule() {
       const name = it.normalizedName ?? it.name ?? 'item';
       const alias = ALIAS_TABLE[name];
       return {
-        id: `g-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        id: mkId('g'),
         name,
         normalizedName: name,
         category: it.category ?? 'other',
@@ -314,7 +315,7 @@ export function GroceryModule() {
 
   function addMissingIngredients(missing: string[]) {
     const additions: StoredShoppingItem[] = missing.map((m) => ({
-      id: `g-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      id: mkId('g'),
       name: m,
       normalizedName: m,
       category: 'other',
@@ -399,9 +400,12 @@ export function GroceryModule() {
       style={{
         width: '100%',
         minHeight: '100vh',
+        overflowX: 'hidden',
         background: BG,
         color: INK,
         boxSizing: 'border-box',
+        paddingTop: 'env(safe-area-inset-top)',
+        paddingBottom: 'env(safe-area-inset-bottom)',
       }}
     >
       <div

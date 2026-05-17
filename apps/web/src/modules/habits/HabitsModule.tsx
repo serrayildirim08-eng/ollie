@@ -435,11 +435,13 @@ export function HabitsModule({ onBack }: { onBack: () => void }) {
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div style={{
-      width: '100vw', height: '100vh', overflow: 'hidden',
+      width: '100vw', minHeight: '100vh', overflowY: 'auto', overflowX: 'hidden',
       background: BG, color: INK,
       fontFamily: "'Inter Tight', sans-serif",
       position: 'relative',
       display: 'flex', flexDirection: 'column',
+      paddingTop: 'env(safe-area-inset-top)',
+      paddingBottom: 'env(safe-area-inset-bottom)',
     }}>
       {/* Back */}
       <button
@@ -781,7 +783,8 @@ export function HabitsModule({ onBack }: { onBack: () => void }) {
                             title="remove"
                             aria-label={`remove habit ${h.name ?? ''}`}
                             style={{
-                              background: 'none', border: 'none', padding: '2px 4px',
+                              background: 'none', border: 'none', padding: '10px 8px',
+                              minHeight: 44,
                               fontFamily: "'Inter Tight', sans-serif", fontSize: 16,
                               color: V_MUTED, cursor: 'pointer',
                               opacity: 0, transition: 'opacity 180ms ease',

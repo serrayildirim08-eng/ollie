@@ -209,14 +209,17 @@ export function DashboardScreen({ onNavigate, onBrainDump, stats }: DashboardScr
         }}
       />
 
-      {/* Scrollable content */}
+      {/* Scrollable content — top/bottom padding includes the iPhone
+          safe areas so the header clears the notch and the cluster grid
+          clears the home indicator. */}
       <div
         style={{
           position: 'relative',
           zIndex: 2,
           maxWidth: 1200,
           margin: '0 auto',
-          padding: '40px 24px 160px',
+          padding:
+            'calc(40px + env(safe-area-inset-top)) 24px calc(160px + env(safe-area-inset-bottom))',
         }}
       >
         {/* ── Header ───────────────────────────────────────────────────── */}
@@ -293,7 +296,23 @@ export function DashboardScreen({ onNavigate, onBrainDump, stats }: DashboardScr
         </header>
 
         {/* ── Stats bar ────────────────────────────────────────────────── */}
+        {/* 3 columns is too tight on a ~390px iPhone — the "tracked" value
+            ("1h 30m") crowds its 9px label. Below 480px the grid collapses
+            to 2-up: the third stat ("tracked") spans the full width on its
+            own row. Desktop keeps the 3-column row untouched. */}
+        <style>{`
+          @media (max-width: 480px) {
+            .ollie-stats-bar { grid-template-columns: 1fr 1fr !important; }
+            .ollie-stats-bar > .ollie-stat-cell:nth-child(2) { border-right: none !important; }
+            .ollie-stats-bar > .ollie-stat-cell:nth-child(3) {
+              grid-column: 1 / -1;
+              border-right: none !important;
+              border-top: 1px solid rgba(255,255,255,0.25);
+            }
+          }
+        `}</style>
         <FrostedCard
+          className="ollie-stats-bar"
           style={{
             display: 'grid',
             gridTemplateColumns: '1fr 1fr 1fr',
@@ -309,6 +328,7 @@ export function DashboardScreen({ onNavigate, onBrainDump, stats }: DashboardScr
           ).map((s, i) => (
             <div
               key={s.label}
+              className="ollie-stat-cell"
               style={{
                 padding: '18px 20px',
                 borderRight: i < 2 ? '1px solid rgba(255,255,255,0.25)' : 'none',

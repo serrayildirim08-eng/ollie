@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Burhan3D } from '../components/Burhan3D';
 import { RetentionWelcomeBar } from '../components/RetentionWelcomeBar';
 import { getSkyVideoSrc } from '../lib/skyVideo';
+import { useKeyboardInset } from '../lib/useKeyboardInset';
 import { store } from '../store';
 import { getLocalWeather, formatWeatherPill, type WeatherSummary } from '../lib/weather';
 
@@ -157,6 +158,11 @@ export function HomeScreen({ onNavigate, onBrainDump, onCrisis }: HomeScreenProp
   const [weather, setWeather] = useState<WeatherSummary | null>(null);
   const [weatherFetched, setWeatherFetched] = useState(false);
 
+  // iPhone keyboard handling — when the on-screen keyboard opens it would
+  // otherwise cover the bottom brain-dump bar. Translate the bar up by the
+  // keyboard's overlap. 0 on desktop / when no keyboard is shown.
+  const kbInset = useKeyboardInset();
+
   useEffect(() => {
     let cancelled = false;
     void getLocalWeather().then((w) => {
@@ -233,7 +239,7 @@ export function HomeScreen({ onNavigate, onBrainDump, onCrisis }: HomeScreenProp
       {/* Location / weather — top left (F6 · live via BigDataCloud + Open-Meteo).
           Hidden entirely if offline / permission denied / API failure. */}
       {weatherFetched && weather && (
-        <div style={{ position: 'absolute', top: 52, left: 32, zIndex: 10 }}>
+        <div style={{ position: 'absolute', top: 'calc(52px + env(safe-area-inset-top))', left: 32, zIndex: 10 }}>
           <div
             style={{
               background: 'rgba(255,255,255,0.12)',
@@ -271,7 +277,7 @@ export function HomeScreen({ onNavigate, onBrainDump, onCrisis }: HomeScreenProp
         aria-label="more"
         style={{
           position: 'absolute',
-          top: 100,
+          top: 'calc(100px + env(safe-area-inset-top))',
           left: 32,
           zIndex: 12,
           display: 'flex',
@@ -353,7 +359,7 @@ export function HomeScreen({ onNavigate, onBrainDump, onCrisis }: HomeScreenProp
         aria-label="open settings"
         style={{
           position: 'absolute',
-          top: 52,
+          top: 'calc(52px + env(safe-area-inset-top))',
           right: 32,
           zIndex: 12,
           background: 'rgba(255,255,255,0.12)',
@@ -446,19 +452,24 @@ export function HomeScreen({ onNavigate, onBrainDump, onCrisis }: HomeScreenProp
         DASHBOARD
       </div>
 
-      {/* Brain dump input — bottom fixed, dashboard grid button */}
+      {/* Brain dump input — bottom fixed, dashboard grid button.
+          Bottom padding clears the iPhone home indicator; when the
+          on-screen keyboard opens the whole bar translates up by the
+          keyboard overlap so it is never covered. */}
       <div
         style={{
           position: 'absolute',
           bottom: 0,
           left: 0,
           width: '100%',
-          padding: '16px 24px 28px',
+          padding: '16px 24px calc(28px + env(safe-area-inset-bottom))',
           zIndex: 15,
           boxSizing: 'border-box',
           display: 'flex',
           gap: 10,
           alignItems: 'center',
+          transform: `translateY(-${kbInset}px)`,
+          transition: 'transform 180ms ease-out',
         }}
       >
         {/* BrainDumpInput wraps itself in position:fixed — use a local inline
