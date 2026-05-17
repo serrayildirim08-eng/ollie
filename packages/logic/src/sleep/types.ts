@@ -165,6 +165,34 @@ export interface InsomniaSurveyResult {
   scored_at: number;
 }
 
+// ─── Epworth Sleepiness Scale (ESS) ───────────────────────────────────
+// The 8-item Epworth Sleepiness Scale: each situation is scored 0–3 for
+// likelihood of dozing, total 0–24. This is the second "go deeper"
+// instrument — it measures DAYTIME sleepiness, the one read not already
+// derived from logged nights. Each answer is the chosen 0–3 option index
+// for the matching question.
+
+export type EpworthAnswers = [
+  number, number, number, number, number, number, number, number,
+];
+
+export type EpworthSleepinessBand =
+  | 'normal'     // 0–10  · normal range of daytime sleepiness
+  | 'mild'       // 11–12 · mild excessive daytime sleepiness
+  | 'moderate'   // 13–15 · moderate excessive daytime sleepiness
+  | 'high';      // 16–24 · severe excessive daytime sleepiness
+
+export interface EpworthResult {
+  /** Sum of the 8 item scores, 0–24. */
+  score: number;
+  /** Sleepiness band derived from the score. */
+  band: EpworthSleepinessBand;
+  /** Number of questions answered with a valid 0–3 value. */
+  answered: number;
+  /** ms timestamp the survey was scored. */
+  scored_at: number;
+}
+
 // ─── Pattern source ───────────────────────────────────────────────────
 
 export interface PatternSource {
