@@ -7,7 +7,9 @@ import type {
   Meeting,
   ScheduledFocusBlock,
 } from '@ollie/logic/work';
-import { useStoreSlice } from '../../store';
+import { useStoreSlice, store } from '../../store';
+import type { ActiveFocus } from '@ollie/notifications/suppression';
+import { mkId } from '../../lib/mkId';
 import { ModuleHelp } from '../../components/ModuleHelp';
 import { SourcesLink } from '../../components/SourcesLink';
 
@@ -367,7 +369,7 @@ export function WorkModule({ onBack }: WorkModuleProps) {
     const t = newTask.trim();
     if (!t) return;
     const next: WorkItem = {
-      id: `w-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+      id: mkId('w'),
       text: sanitize(t),
       ts: Date.now(),
       status: 'open',
@@ -419,6 +421,8 @@ export function WorkModule({ onBack }: WorkModuleProps) {
         const next = s + 1;
         if (next >= timerDuration) {
           setTimerState('done');
+          // Session completed naturally → clear the active-focus marker.
+          store.set('work', 'active_focus', null);
           const entry: LogicFocusLogEntry = {
             ts: sessionStartRef.current || Date.now(),
             duration_min: ((focusDuration ?? 25) as FocusDurationMin),
@@ -454,10 +458,19 @@ export function WorkModule({ onBack }: WorkModuleProps) {
   }, [timerState, noiseEnabled]);
 
   const startTimer = useCallback(() => {
-    setTimerDuration((focusDuration ?? 25) * 60);
+    const durationMin = focusDuration ?? 25;
+    setTimerDuration(durationMin * 60);
     setTimerSec(0);
-    sessionStartRef.current = Date.now();
+    const startedAt = Date.now();
+    sessionStartRef.current = startedAt;
     setTimerState('running');
+    // Publish the active focus session so notification suppression can
+    // defer PATTERN_ALERT / CONTENT_DELIVERY cues until the session ends.
+    const session: ActiveFocus = {
+      startedAt,
+      endsAt: startedAt + durationMin * 60_000,
+    };
+    store.set('work', 'active_focus', session);
   }, [focusDuration]);
 
   const stopTimer = useCallback(() => {
@@ -473,11 +486,14 @@ export function WorkModule({ onBack }: WorkModuleProps) {
     }
     setTimerState('idle');
     setTimerSec(0);
+    // Session over → clear the active-focus marker so suppression lifts.
+    store.set('work', 'active_focus', null);
   }, [timerSec, focusDuration, activeProjectId, focusLog, setFocusLog]);
 
   const resetTimer = useCallback(() => {
     setTimerState('idle');
     setTimerSec(0);
+    store.set('work', 'active_focus', null);
   }, []);
 
   const todaySessions = useMemo(
@@ -495,7 +511,7 @@ export function WorkModule({ onBack }: WorkModuleProps) {
     const name = newProjectName.trim();
     if (!name) return;
     const p: Project = {
-      id: `proj-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+      id: mkId('proj'),
       name: sanitize(name),
       created_at: Date.now(),
     };
@@ -552,7 +568,7 @@ export function WorkModule({ onBack }: WorkModuleProps) {
       .map((s) => s.trim())
       .filter(Boolean);
     const m: Meeting = {
-      id: `mtg-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+      id: mkId('mtg'),
       title: sanitize(title),
       start_at: startMs,
       end_at: startMs + durMin * 60_000,
@@ -590,7 +606,7 @@ export function WorkModule({ onBack }: WorkModuleProps) {
     // Refuse past times — silent no-op (the disabled state guards already).
     if (startMs < Date.now()) return;
     const block: ScheduledFocusBlock = {
-      id: `block-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+      id: mkId('block'),
       start_at: startMs,
       duration_min: blockDuration,
       ...(blockProjectId ? { project_id: blockProjectId } : {}),
@@ -627,7 +643,7 @@ export function WorkModule({ onBack }: WorkModuleProps) {
     const w = distractText.trim();
     if (!w) return;
     const entry: DistractionEntry = {
-      id: `dx-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+      id: mkId('dx'),
       ts: Date.now(),
       what: sanitize(w),
     };
@@ -675,7 +691,7 @@ export function WorkModule({ onBack }: WorkModuleProps) {
     const t = noteText.trim();
     if (!t) return;
     const note: HandoffNote = {
-      id: `hn-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+      id: mkId('hn'),
       ts: Date.now(),
       text: sanitize(t),
       ...(noteTo.trim() ? { to: sanitize(noteTo.trim()) } : {}),
