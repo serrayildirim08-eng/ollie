@@ -327,7 +327,7 @@ export function ModuleScreen({
             onClick={() => onNavigate('dashboard')}
             style={{
               position: 'fixed',
-              top: 24,
+              top: 'calc(24px + env(safe-area-inset-top))',
               left: 32,
               zIndex: 10,
               background: 'transparent',
@@ -436,14 +436,17 @@ export function ModuleScreen({
         </>
       )}
 
-      {/* Scrollable content */}
+      {/* Scrollable content — top/bottom padding includes the iPhone
+          safe areas so the module header clears the notch and content
+          clears the home indicator. */}
       <div
         style={{
           position: 'relative',
           zIndex: 2,
           maxWidth: 1200,
           margin: '0 auto',
-          padding: '40px 24px 120px',
+          padding:
+            'calc(40px + env(safe-area-inset-top)) 24px calc(120px + env(safe-area-inset-bottom))',
         }}
       >
         {/* ── Header ───────────────────────────────────────────────────── */}

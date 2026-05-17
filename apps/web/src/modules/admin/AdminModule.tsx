@@ -25,6 +25,7 @@ import type {
 } from '@ollie/logic/admin';
 import * as events from '@ollie/events';
 import { useStoreSlice } from '../../store';
+import { mkId } from '../../lib/mkId';
 import { ModuleHelp } from '../../components/ModuleHelp';
 import { SourcesLink } from '../../components/SourcesLink';
 
@@ -185,8 +186,7 @@ function cueCopy(label: string, stage: RenewalStage, daysLeft: number, verb: str
 }
 
 function newId(): string {
-  const now = Date.now();
-  return 'ad-' + now.toString(36) + Math.random().toString(36).slice(2, 6);
+  return mkId('ad');
 }
 
 const CATEGORIES: [string, string][] = [
@@ -407,7 +407,7 @@ function AdminNoticed() {
                   position: 'absolute', top: 10, right: 12,
                   background: 'transparent', border: 'none', color: FAINT,
                   fontFamily: "'DM Mono',monospace", fontSize: 14,
-                  cursor: 'pointer', padding: '4px 6px', lineHeight: 1,
+                  cursor: 'pointer', padding: '10px 8px', minHeight: 44, lineHeight: 1,
                 }}
               >×</button>
               <div style={{
@@ -869,8 +869,8 @@ export function AdminModule({ onBack }: AdminModuleProps) {
     const picked = firehose.candidates.filter((c) => c.checked);
     if (picked.length === 0) { setFirehose(null); return; }
     const n = now();
-    const made = picked.map((c, i): AdminItemRow => ({
-      id: 'ad-' + (n + i).toString(36) + Math.random().toString(36).slice(2, 6),
+    const made = picked.map((c): AdminItemRow => ({
+      id: mkId('ad'),
       title: sanitize(c.token),
       label: sanitize(c.token),
       category: 'other',
@@ -1046,9 +1046,12 @@ export function AdminModule({ onBack }: AdminModuleProps) {
     <div style={{
       width: '100vw',
       minHeight: '100vh',
+      overflowX: 'hidden',
       background: BG,
       color: INK,
       fontFamily: "'Inter Tight','DM Sans',sans-serif",
+      paddingTop: 'env(safe-area-inset-top)',
+      paddingBottom: 'env(safe-area-inset-bottom)',
     }}>
       <div style={{ maxWidth: 960, margin: '0 auto', padding: 'clamp(32px, 5vw, 44px) clamp(24px, 5vw, 56px) 120px' }}>
 
