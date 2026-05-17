@@ -81,12 +81,6 @@ vi.mock('../lib/invite', () => ({
   generateInvite: vi.fn(),
 }));
 
-vi.mock('../lib/encryption-boot', () => ({
-  hasSessionPassphrase: () => false,
-  setSessionPassphrase: vi.fn(),
-  clearSessionPassphrase: vi.fn(),
-}));
-
 const { getConsentSpy, setConsentSpy } = mocks;
 
 // Now safe to import — all transitive deps mocked.
