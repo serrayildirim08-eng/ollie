@@ -422,6 +422,23 @@ export async function requestPermission(): Promise<'granted' | 'denied' | 'defau
   }
 }
 
+/**
+ * Read the current OS notification permission WITHOUT prompting. Use this
+ * to render permission state in the UI; use `requestPermission()` to
+ * actually prompt. Backends with no permission concept (or no
+ * `checkPermission`) resolve to `'granted'`.
+ */
+export async function checkPermission(): Promise<'granted' | 'denied' | 'default'> {
+  const fn = state.backend.checkPermission;
+  if (!fn) return 'granted';
+  try {
+    return await fn.call(state.backend);
+  } catch (err) {
+    console.warn('[notify] checkPermission failed', err);
+    return 'default';
+  }
+}
+
 /** Cancel a scheduled or sticky notification by dedupe_key. */
 export function cancel(dedupeKey: string): void {
   const t = inProcessTimers.get(dedupeKey);

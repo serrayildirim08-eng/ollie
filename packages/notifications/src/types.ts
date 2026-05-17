@@ -63,6 +63,8 @@ export interface NotificationBackend {
   cancel(dedupeKey: string): void | Promise<void>;
   /** Request user permission, if applicable. Resolves to 'granted' / 'denied' / 'default'. */
   requestPermission?(): Promise<'granted' | 'denied' | 'default'>;
+  /** Read current permission WITHOUT prompting. Resolves to 'granted' / 'denied' / 'default'. */
+  checkPermission?(): Promise<'granted' | 'denied' | 'default'>;
 }
 
 export interface NotificationLogEntry {
