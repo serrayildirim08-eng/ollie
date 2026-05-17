@@ -23,7 +23,7 @@ import {
   hasNecessaryConsent,
 } from '@ollie/consent';
 import { useApplyBrainDump } from './hooks/useApplyBrainDump';
-import { trackSession } from './lib/retention';
+import { trackSession, makeRetentionBridge } from './lib/retention';
 import { emit as emitEvent } from '@ollie/events';
 import { bootAccount } from './lib/account-boot';
 import { sessionTracker } from './lib/session-tracker';
@@ -225,13 +225,9 @@ function AppInner() {
     return () => off();
   }, [toast]);
 
-  // Retention markers — fires once per app mount. Emits
-  // void:retention:installed on fresh install, session_started every
-  // time, d1_returned the first time the user comes back ≥24h after
-  // install, d7_returned at ≥7d. Local-only until backend lands.
-  React.useEffect(() => {
-    trackSession(store, emitEvent);
-  }, []);
+  // Retention markers run once, after auth+consent (see effect below) so
+  // a user_hash exists for the server bridge.
+  const retentionRanRef = React.useRef(false);
 
   // Session telemetry — emits session_events start row once auth +
   // consent are confirmed, and an end row on tab close / background.
@@ -243,6 +239,23 @@ function AppInner() {
     const research = accountRef.current.research;
     const userHash = readUserHash() ?? '';
     const country = store.get<string>('shared', 'settings.country', 'INTL') ?? 'INTL';
+
+    // Retention: fan void:retention:* to retention_events via the bridge.
+    // Once per mount; local markers always emit, server rows need user_hash.
+    if (!retentionRanRef.current) {
+      retentionRanRef.current = true;
+      trackSession(
+        store,
+        makeRetentionBridge(emitEvent, research, () => ({
+          user_hash: readUserHash() ?? '',
+          device_id: getDeviceId(),
+          country,
+          locale: typeof navigator !== 'undefined' ? navigator.language : 'en',
+          app_version: getAppVersion(),
+        })),
+      );
+    }
+
     sessionTracker.start(research, {
       user_hash: userHash,
       country,
