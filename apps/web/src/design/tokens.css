@@ -1,4 +1,18 @@
 /* ───────────────────────────────────────────────────────────────────── */
+/* RESET · minimal · iPhone-readiness                                    */
+/* ───────────────────────────────────────────────────────────────────── */
+/* No global box-sizing override — the app is built content-box.         */
+
+html {
+  /* prevent iOS Safari/WKWebView from auto-inflating text on rotate */
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+}
+
+/* ───────────────────────────────────────────────────────────────────── */
 /* FONTS · local · downloaded to apps/web/public/fonts/                  */
 /* ───────────────────────────────────────────────────────────────────── */
 

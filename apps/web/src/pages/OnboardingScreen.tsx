@@ -25,6 +25,7 @@ import React, { useReducer, useRef, useEffect } from 'react';
 import { Burhan3D } from '../components/Burhan3D';
 import { HealthKitConsent } from '../components/HealthKitConsent';
 import { store } from '../store';
+import { mkId } from '../lib/mkId';
 import { SUPPORTED_COUNTRIES, detectCountryFromLocale } from '../lib/country';
 import { commitAll, type State } from './OnboardingScreen.commit';
 
@@ -72,7 +73,7 @@ const WORK_TIMES = [
 // ─── reducer ─────────────────────────────────────────────────────────────────
 
 function uid(): string {
-  return Math.random().toString(36).slice(2, 10);
+  return mkId();
 }
 
 function reducer(state: State, action: Action): State {
@@ -164,7 +165,9 @@ function ProgressDots({ current }: { current: number }) {
         display: 'flex',
         gap: '6px',
         justifyContent: 'center',
-        paddingBottom: '32px',
+        // bottom padding includes the iPhone safe area so the dots
+        // clear the home indicator.
+        paddingBottom: 'calc(32px + env(safe-area-inset-bottom))',
       }}
     >
       {Array.from({ length: TOTAL_SCREENS }, (_, i) => (
@@ -878,12 +881,13 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
         flexDirection: 'column',
       }}
     >
-      {/* Top bar */}
+      {/* Top bar — top padding includes the iPhone safe area so the
+          skip button clears the notch / status bar. */}
       <div
         style={{
           display: 'flex',
           justifyContent: 'flex-end',
-          padding: '24px 32px 0',
+          padding: 'calc(24px + env(safe-area-inset-top)) 32px 0',
         }}
       >
         <button

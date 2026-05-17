@@ -542,10 +542,11 @@ export function SleepModule({ onBack }: SleepModuleProps) {
           type="button"
           onClick={onBack}
           style={{
-            position: 'fixed', top: 28, left: 32, zIndex: 4,
+            position: 'fixed', top: 'calc(28px + env(safe-area-inset-top))', left: 'clamp(20px, 5vw, 32px)', zIndex: 4,
             background: 'none', border: 'none', cursor: 'pointer',
             fontFamily: COURIER, fontSize: 11, fontWeight: 700,
             letterSpacing: '0.18em', color: C.inkSoft, textTransform: 'lowercase',
+            minHeight: 44, display: 'flex', alignItems: 'center',
           }}
           aria-label="back to dashboard"
         >
@@ -555,7 +556,7 @@ export function SleepModule({ onBack }: SleepModuleProps) {
 
       {/* ── header ── */}
       <div style={{
-        position: 'fixed', top: 32, right: 32, zIndex: 4,
+        position: 'fixed', top: 'calc(32px + env(safe-area-inset-top))', right: 'clamp(20px, 5vw, 32px)', zIndex: 4,
         textAlign: 'right', display: 'flex', alignItems: 'flex-start', gap: 14,
       }}>
         <div>
@@ -573,7 +574,8 @@ export function SleepModule({ onBack }: SleepModuleProps) {
       <main style={{
         minHeight: '100vh', display: 'flex', flexDirection: 'column',
         justifyContent: 'center', alignItems: 'center',
-        padding: '96px 56px', gap: 36, position: 'relative', zIndex: 2,
+        padding: 'calc(96px + env(safe-area-inset-top)) clamp(20px, 5vw, 56px) calc(96px + env(safe-area-inset-bottom))',
+        gap: 36, position: 'relative', zIndex: 2,
       }}>
 
         {/* ── empty state ── */}
@@ -589,7 +591,7 @@ export function SleepModule({ onBack }: SleepModuleProps) {
               log a night below, or brain-dump "slept 8 hours" from home.
               the module wakes after a few nights.
             </div>
-            <div style={{ marginTop: 28, display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+            <div className="sleep-feel-grid" style={{ marginTop: 28, display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
               {feelButtons.map((b) => (
                 <button
                   key={b.feel}
@@ -599,7 +601,7 @@ export function SleepModule({ onBack }: SleepModuleProps) {
                   style={{
                     background: 'none', border: `1.5px solid ${C.rule}`,
                     padding: '16px 12px', fontFamily: COURIER, cursor: 'pointer',
-                    fontWeight: 700, fontSize: 16, color: C.ink,
+                    fontWeight: 700, fontSize: 16, color: C.ink, minHeight: 44,
                   }}
                 >
                   {b.feel}
@@ -669,7 +671,7 @@ export function SleepModule({ onBack }: SleepModuleProps) {
               )}
 
               {/* feel buttons */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, width: '100%' }}>
+              <div className="sleep-feel-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, width: '100%' }}>
                 {feelButtons.map((b) => (
                   <button
                     key={b.feel}
@@ -680,6 +682,7 @@ export function SleepModule({ onBack }: SleepModuleProps) {
                       background: 'none', border: `1.5px solid ${C.rule}`,
                       padding: '18px 12px', fontFamily: COURIER, cursor: 'pointer',
                       fontWeight: 700, fontSize: 16, color: C.ink, textAlign: 'center',
+                      minHeight: 44,
                     }}
                   >
                     {b.feel}
@@ -696,7 +699,7 @@ export function SleepModule({ onBack }: SleepModuleProps) {
                     background: 'none', border: 'none', padding: '6px 0',
                     fontFamily: COURIER, cursor: 'pointer', fontSize: 13,
                     color: C.inkSoft, fontWeight: 700, letterSpacing: '0.04em',
-                    borderBottom: `1px solid ${C.rule}`,
+                    borderBottom: `1px solid ${C.rule}`, minHeight: 44,
                   }}
                 >
                   say more, parse it for me <span style={{ color: C.accent, marginLeft: 4 }}>→</span>
@@ -833,10 +836,10 @@ export function SleepModule({ onBack }: SleepModuleProps) {
         type="button"
         onClick={() => setDrawerOpen(true)}
         style={{
-          position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)',
+          position: 'fixed', bottom: 'calc(28px + env(safe-area-inset-bottom))', left: '50%', transform: 'translateX(-50%)',
           background: 'none', border: 'none', fontFamily: COURIER, cursor: 'pointer',
           fontSize: 12, color: C.inkSoft, fontWeight: 700, letterSpacing: '0.10em',
-          textTransform: 'lowercase', padding: '4px 0',
+          textTransform: 'lowercase', padding: '4px 0', minHeight: 44,
           borderBottom: `1px solid ${C.rule}`, zIndex: 5,
         }}
         aria-label="open patterns and history drawer"
@@ -846,7 +849,7 @@ export function SleepModule({ onBack }: SleepModuleProps) {
 
       {/* ── brand mark ── */}
       <div style={{
-        position: 'fixed', bottom: 28, left: 32, zIndex: 4,
+        position: 'fixed', bottom: 'calc(28px + env(safe-area-inset-bottom))', left: 'clamp(20px, 5vw, 32px)', zIndex: 4,
         fontSize: 11, letterSpacing: '0.18em', color: C.inkSoft,
         textTransform: 'lowercase', fontFamily: COURIER, fontWeight: 700,
       }}>
@@ -901,6 +904,7 @@ export function SleepModule({ onBack }: SleepModuleProps) {
                   background: 'none', border: 'none', padding: '4px 0', fontFamily: COURIER,
                   cursor: 'pointer', fontSize: 13, letterSpacing: '0.08em', color: C.ink,
                   fontWeight: 700, textTransform: 'lowercase', borderBottom: `1px solid ${C.rule}`,
+                  minHeight: 44,
                 }}
               >
                 cancel
@@ -912,6 +916,7 @@ export function SleepModule({ onBack }: SleepModuleProps) {
                   background: 'none', border: 'none', padding: '4px 0', fontFamily: COURIER,
                   cursor: 'pointer', fontSize: 13, letterSpacing: '0.08em', color: C.accent,
                   fontWeight: 700, textTransform: 'lowercase', borderBottom: `2px solid ${C.accent}`,
+                  minHeight: 44,
                 }}
               >
                 save <span style={{ color: C.accent, marginLeft: 4 }}>→</span>
@@ -1110,6 +1115,9 @@ export function SleepModule({ onBack }: SleepModuleProps) {
       <style>{`
         @media (max-width: 880px) {
           .sleep-spread { grid-template-columns: 1fr !important; gap: 40px !important; }
+        }
+        @media (max-width: 640px) {
+          .sleep-feel-grid { grid-template-columns: repeat(2, 1fr) !important; }
         }
       `}</style>
     </div>
