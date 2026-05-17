@@ -6,8 +6,8 @@
  *   1  Pets          — yes/no; if yes: add pets
  *   2  Pantry        — tap-to-remove staples chips
  *   3  Subscriptions — tap-to-confirm subscription chips
- *   4  BankLink      — optional Plaid Link (sandbox scaffold; hidden
- *                       until VITE_PLAID_SYNC_WORKER_URL is set)
+ *   4  HealthKit     — optional Apple Health consent; auto-skips when
+ *                       VITE_HEALTHKIT_ENABLED is unset (the default)
  *   5  WorkTime      — best-work-time chips
  *   6  Cycle         — cycle tracking question (drives module visibility)
  *   7  Burhan        — seedling intro + "let's go" CTA
@@ -21,9 +21,8 @@
  *   onComplete — called after screen 7 or after Skip. Sets onboarded = true.
  */
 
-import React, { useReducer, useRef, useEffect, useState } from 'react';
+import React, { useReducer, useRef, useEffect } from 'react';
 import { Burhan3D } from '../components/Burhan3D';
-import { PlaidLinkButton } from '../components/PlaidLinkButton';
 import { HealthKitConsent } from '../components/HealthKitConsent';
 import { store } from '../store';
 import { mkId } from '../lib/mkId';
@@ -685,14 +684,14 @@ function SubscriptionsScreen({
   );
 }
 
-// ─── Screen 4: Bank Link + (optional) HealthKit ─────────────────────────────
+// ─── Screen 4: (optional) Apple Health consent ──────────────────────────────
 //
-// HealthKit consent is rendered as a sub-step AFTER the user resolves the
-// bank link prompt — only when `VITE_HEALTHKIT_ENABLED === '1'` AND the
-// Capacitor native runtime is available (the consent component itself
-// no-ops on web). This keeps the screen index stable for tests + the
-// progress dots, and lets a single env flag toggle the entire flow
-// without renumbering.
+// Bank-link (Plaid) was removed from onboarding for the alpha — the Plaid
+// integration is not wired end-to-end, so a connect prompt would be dead UI.
+// HealthKit consent keeps this screen index so tests + progress dots stay
+// stable without renumbering. When HealthKit is not enabled (the default —
+// VITE_HEALTHKIT_ENABLED !== '1'), the screen has nothing to show and
+// auto-advances on mount.
 
 function isHealthKitOnboardingEnabled(): boolean {
   try {
@@ -702,46 +701,28 @@ function isHealthKitOnboardingEnabled(): boolean {
   } catch { return false; }
 }
 
-function BankLinkScreen({ onNext }: { onNext: () => void }) {
-  // Two-phase: 'bank' → (optional 'health') → next screen.
-  const [phase, setPhase] = useState<'bank' | 'health'>('bank');
+function HealthKitScreen({ onNext }: { onNext: () => void }) {
+  const enabled = isHealthKitOnboardingEnabled();
 
-  function leaveBankPhase() {
-    if (isHealthKitOnboardingEnabled()) {
-      setPhase('health');
-    } else {
-      onNext();
-    }
-  }
+  // Nothing to consent to when HealthKit is off — skip straight through.
+  useEffect(() => {
+    if (!enabled) onNext();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  if (phase === 'health') {
-    return (
-      <>
-        <Headline>connect apple health?</Headline>
-        <Sub>
-          optional. ollie reads your steps, heart rate, and sleep to
-          surface patterns. stays on your device — nothing leaves your
-          phone. you can revoke in settings → privacy → health.
-        </Sub>
-        <HealthKitConsent onDone={onNext} />
-        <div style={{ marginTop: '24px' }}>
-          <PrimaryBtn label="skip for now" onClick={onNext} />
-        </div>
-      </>
-    );
-  }
+  if (!enabled) return null;
 
   return (
     <>
-      <Headline>connect a bank account?</Headline>
+      <Headline>connect apple health?</Headline>
       <Sub>
-        optional. when connected, ollie auto-imports transactions to power
-        spending patterns + subscription tracking. read-only. you can
-        disconnect anytime in settings.
+        optional. ollie reads your steps, heart rate, and sleep to
+        surface patterns. stays on your device — nothing leaves your
+        phone. you can revoke in settings → privacy → health.
       </Sub>
-      <PlaidLinkButton onLinked={leaveBankPhase} onSkip={() => { /* user can hit next */ }} />
+      <HealthKitConsent onDone={onNext} />
       <div style={{ marginTop: '24px' }}>
-        <PrimaryBtn label="skip for now" onClick={leaveBankPhase} />
+        <PrimaryBtn label="skip for now" onClick={onNext} />
       </div>
     </>
   );
@@ -905,7 +886,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
       );
       break;
     case 4:
-      screenContent = <BankLinkScreen onNext={advance} />;
+      screenContent = <HealthKitScreen onNext={advance} />;
       break;
     case 5:
       screenContent = (
