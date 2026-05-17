@@ -17,16 +17,16 @@
  */
 
 import { on as onEvent } from '@ollie/events';
-import type { NotificationBackend, NotificationSpec } from '../types';
+import type { NotificationBackend } from '../types';
 
-interface CapPluginRef<T> {
+interface CapPluginRef {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   Plugins?: Record<string, any>;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   [k: string]: any;
 }
 
-declare const globalThis: { Capacitor?: CapPluginRef<unknown> };
+type CapacitorGlobal = { Capacitor?: CapPluginRef };
 
 // The two Capacitor plugins are optional peer-style deps — present only
 // inside the iOS shell. We load them via a runtime-tolerant dynamic
@@ -34,7 +34,7 @@ declare const globalThis: { Capacitor?: CapPluginRef<unknown> };
 //
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const dynImport: (s: string) => Promise<any> =
-  // eslint-disable-next-line no-new-func
+   
   new Function('s', 'return import(s)') as (s: string) => Promise<unknown> as never;
 
 interface LocalNotificationsPlugin {
@@ -70,7 +70,8 @@ async function loadPushNotifications(): Promise<PushNotificationsPlugin | null> 
 
 function isCapacitorNative(): boolean {
   if (typeof globalThis === 'undefined') return false;
-  return Boolean(globalThis.Capacitor?.isNativePlatform?.());
+  const g = globalThis as unknown as CapacitorGlobal;
+  return Boolean(g.Capacitor?.isNativePlatform?.());
 }
 
 function dedupeKeyToNumericId(key: string): number {
@@ -180,7 +181,25 @@ export const capacitorBackend: NotificationBackend = {
     await ensurePlugins();
     if (!localPlugin) return 'denied';
     try {
+      // Local-notifications permission (covers schedule_at fires).
       const r = await localPlugin.requestPermissions();
+      // Remote APNs: only relevant inside the iOS shell. This is the
+      // call that pops the iOS system dialog — it now runs ONLY from an
+      // explicit requestPermission() (i.e. behind the priming screen),
+      // never as a side-effect of installCapacitorBackend(). On grant we
+      // also kick off APNs device registration so the token flows to the
+      // worker. Best-effort: a push-permission failure never downgrades
+      // the local-notifications result below.
+      if (isCapacitorNative() && pushPlugin) {
+        try {
+          const pp = await pushPlugin.requestPermissions();
+          if (pp.receive === 'granted') {
+            await pushPlugin.register();
+          }
+        } catch (err) {
+          console.warn('[notify · capacitor] push permission/register failed', err);
+        }
+      }
       if (r.display === 'granted') return 'granted';
       if (r.display === 'denied') return 'denied';
       return 'default';
@@ -191,9 +210,20 @@ export const capacitorBackend: NotificationBackend = {
 };
 
 /**
- * Install the capacitor backend AND register for remote APNs pushes.
- * The returned promise resolves when the device token (if any) has
- * been forwarded to the worker.
+ * Install the capacitor backend.
+ *
+ * IMPORTANT — no cold permission prompt: this function does NOT call
+ * `requestPermissions()`. Popping the iOS system dialog at app boot with
+ * zero context was the bug a prior audit flagged. The OS dialog now fires
+ * only from `capacitorBackend.requestPermission()` — an explicit on-demand
+ * call made behind the NotificationPrimer screen.
+ *
+ * What this DOES do at install time is wire the APNs `registration` /
+ * `registrationError` listeners and the `auth:signed_in` re-POST hook, so
+ * that once the user later grants permission (and `register()` runs inside
+ * `requestPermission()`), the device token is captured and forwarded to
+ * the worker with the correct `user_id`. Setting up listeners pops no
+ * dialog — only `requestPermissions()` / `register()` do.
  */
 export async function installCapacitorBackend(
   opts: CapacitorBackendOptions = {},
@@ -250,9 +280,10 @@ export async function installCapacitorBackend(
   }
 
   try {
-    const perms = await pushPlugin.requestPermissions();
-    if (perms.receive !== 'granted') return capacitorBackend;
-    await pushPlugin.register();
+    // Set up the APNs listeners NOW (this pops no dialog). The actual
+    // `requestPermissions()` + `register()` that triggers the OS dialog
+    // and makes APNs emit `registration` runs later, on-demand, inside
+    // `capacitorBackend.requestPermission()` — behind the priming screen.
     await pushPlugin.addListener('registration', async (token: unknown) => {
       const t = (token as { value?: string })?.value;
       if (!t) return;
@@ -267,7 +298,7 @@ export async function installCapacitorBackend(
     // now-known user_id. No-ops when no token has been captured yet.
     onEvent('auth:signed_in', () => { void postRegistration(); });
   } catch (err) {
-    console.warn('[notify · capacitor] push setup failed', err);
+    console.warn('[notify · capacitor] push listener setup failed', err);
   }
 
   return capacitorBackend;
