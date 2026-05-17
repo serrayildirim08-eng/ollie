@@ -1,12 +1,19 @@
 /**
  * apps/web · push registration bootstrap (NL2)
  *
- * Called once on app boot when running inside Capacitor iOS. Installs
- * the capacitor backend on the notification dispatcher AND registers
- * the device with APNs, forwarding the token to the Cloudflare Worker.
+ * Called once on app boot. Installs the platform notification backend on
+ * the dispatcher and, on Capacitor iOS, wires the APNs token listeners.
  *
- * On web / desktop, this is a no-op — installWebBackend() /
- * installElectronBackend() take care of those platforms separately.
+ * IMPORTANT — no cold permission prompt: booting this layer does NOT pop
+ * the OS permission dialog. `installCapacitorBackend()` only sets up the
+ * APNs `registration` listeners. The iOS system dialog is triggered later,
+ * on-demand, by the NotificationPrimer screen calling the dispatcher's
+ * `requestPermission()` — see apps/web/src/components/NotificationPrimer.tsx.
+ * (A prior audit flagged the old boot-time cold request: the dialog fired
+ * on first launch with zero context.)
+ *
+ * On web / desktop, this is a no-op for permissions — installWebBackend() /
+ * installElectronBackend() request lazily on their own.
  *
  * Configure via Vite env (apps/web/.env or wherever):
  *   VITE_PUSH_REGISTER_ENDPOINT  https://ollie-notifications.<sub>.workers.dev/register-token

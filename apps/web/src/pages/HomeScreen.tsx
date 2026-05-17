@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Burhan3D } from '../components/Burhan3D';
-import { BrainDumpInput } from '../components/BrainDumpInput';
 import { RetentionWelcomeBar } from '../components/RetentionWelcomeBar';
 import { getSkyVideoSrc } from '../lib/skyVideo';
 import { store } from '../store';
@@ -59,10 +58,20 @@ function TimeTracker() {
 
   useEffect(() => {
     if (active) {
-      startTsRef.current = Date.now();
+      const startedAt = Date.now();
+      startTsRef.current = startedAt;
       timerRef.current = setInterval(() => setSec((s) => s + 1), 1000);
+      // Publish an active focus session so notification suppression can
+      // defer PATTERN_ALERT / CONTENT_DELIVERY cues. This tracker is
+      // open-ended, so cap the session at 90 minutes.
+      store.set('work', 'active_focus', {
+        startedAt,
+        endsAt: startedAt + 90 * 60_000,
+      });
     } else {
       if (timerRef.current) clearInterval(timerRef.current);
+      // Tracker stopped → clear the active-focus marker so suppression lifts.
+      store.set('work', 'active_focus', null);
       // Append to work.focus_log on stop using the canonical shape
       // WorkModule reads: { at, duration_min }. Audit-fix #2.
       // Skip zero-duration accidental clicks.
@@ -162,7 +171,7 @@ export function HomeScreen({ onNavigate, onBrainDump, onCrisis }: HomeScreenProp
     if (videoRef.current) {
       try {
         videoRef.current.playbackRate = 0.25;
-      } catch (_) {
+      } catch {
         // Chrome minimum is 0.0625; 0.25 is safe but guard anyway
       }
     }
