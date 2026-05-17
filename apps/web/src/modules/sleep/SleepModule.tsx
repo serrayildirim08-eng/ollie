@@ -1042,48 +1042,6 @@ export function SleepModule({ onBack }: SleepModuleProps) {
               start
             </span>
           </button>
-
-          {/* daytime sleepiness — Epworth scale (Serra decision 2026-05-18) */}
-          <button
-            type="button"
-            onClick={() => { setDrawerOpen(false); setEpworthOpen(true); }}
-            style={{
-              display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
-              width: '100%', boxSizing: 'border-box', textAlign: 'left', background: 'none', cursor: 'pointer',
-              border: 'none', borderBottom: `1px solid ${C.rule}`,
-              padding: '14px 4px', fontFamily: COURIER,
-            }}
-            aria-label="open the daytime sleepiness survey"
-          >
-            <span style={{ fontSize: 13, color: C.ink, fontWeight: 700 }}>
-              daytime sleepiness
-              <span style={{ fontStyle: 'italic', fontWeight: 400, color: C.inkFaint, marginLeft: 6 }}>
-                {epworthResult
-                  ? `last score ${epworthResult.score}/24 · retake`
-                  : '8 questions · about 1 min'}
-              </span>
-            </span>
-            <span style={{ fontSize: 12, color: C.accent, fontWeight: 700, marginLeft: 12, flexShrink: 0 }}>
-              start
-            </span>
-          </button>
-          {/* future instruments — not built yet (lite survey only, per scope) */}
-          {[
-            { name: 'profile chronotype', sub: 'MCTQ · later' },
-            { name: 'last month quality', sub: 'PSQI · later' },
-          ].map((l) => (
-            <div
-              key={l.name}
-              aria-disabled="true"
-              style={{
-                padding: '14px 4px', fontSize: 13, color: C.inkGhost, fontWeight: 700,
-                borderBottom: `1px solid ${C.ruleSoft}`,
-              }}
-            >
-              {l.name}
-              <span style={{ fontStyle: 'italic', fontWeight: 400, color: C.inkGhost, marginLeft: 6 }}>{l.sub}</span>
-            </div>
-          ))}
         </div>
 
         {/* settings toggles */}
