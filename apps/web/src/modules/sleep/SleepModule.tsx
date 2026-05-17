@@ -1027,25 +1027,6 @@ export function SleepModule({ onBack }: SleepModuleProps) {
               start
             </span>
           </button>
-
-          {/* future instruments — not built yet (lite survey only, per scope) */}
-          {[
-            { name: 'profile chronotype', sub: 'MCTQ · later' },
-            { name: 'last month quality', sub: 'PSQI · later' },
-            { name: 'daytime sleepiness', sub: 'ESS · later' },
-          ].map((l) => (
-            <div
-              key={l.name}
-              aria-disabled="true"
-              style={{
-                padding: '14px 4px', fontSize: 13, color: C.inkGhost, fontWeight: 700,
-                borderBottom: `1px solid ${C.ruleSoft}`,
-              }}
-            >
-              {l.name}
-              <span style={{ fontStyle: 'italic', fontWeight: 400, color: C.inkGhost, marginLeft: 6 }}>{l.sub}</span>
-            </div>
-          ))}
         </div>
 
         {/* settings toggles */}
