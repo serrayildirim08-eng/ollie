@@ -12,7 +12,8 @@
     "./backends/capacitor": "./src/backends/capacitor.ts",
     "./budget": "./src/budget.ts",
     "./aggregator": "./src/aggregator.ts",
-    "./server-schedule": "./src/server-schedule.ts"
+    "./server-schedule": "./src/server-schedule.ts",
+    "./suppression": "./src/suppression.ts"
   },
   "scripts": {
     "test": "vitest run",
