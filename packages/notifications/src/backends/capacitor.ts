@@ -207,6 +207,19 @@ export const capacitorBackend: NotificationBackend = {
       return 'denied';
     }
   },
+  async checkPermission() {
+    await ensurePlugins();
+    if (!localPlugin) return 'denied';
+    try {
+      // Read-only — checkPermissions() never pops the OS dialog.
+      const r = await localPlugin.checkPermissions();
+      if (r.display === 'granted') return 'granted';
+      if (r.display === 'denied') return 'denied';
+      return 'default';
+    } catch {
+      return 'default';
+    }
+  },
 };
 
 /**

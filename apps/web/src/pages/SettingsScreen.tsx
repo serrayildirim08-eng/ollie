@@ -26,6 +26,7 @@ import React, { useEffect, useState } from 'react';
 import { getString, type Locale } from '../i18n';
 import type { AuthClient } from '@ollie/auth';
 import { exportBackup, envelopeToFileBytes, defaultFilename, importBackup } from '@ollie/backup';
+import { requestPermission, checkPermission } from '@ollie/notifications';
 import {
   CONSENT_STORE_KEY,
   CONSENT_STORE_MODULE,
@@ -506,6 +507,20 @@ function NotificationsSection() {
   const cap = budget?.daily_cap ?? 4;
   const muted = budget?.muted_categories ?? [];
 
+  // OS push permission — the escape hatch the priming screen promises.
+  // 'checking' until the first non-prompting read resolves.
+  const [perm, setPerm] = useState<'granted' | 'denied' | 'default' | 'checking'>('checking');
+
+  useEffect(() => {
+    let alive = true;
+    void checkPermission().then((p) => { if (alive) setPerm(p); });
+    return () => { alive = false; };
+  }, []);
+
+  async function handleEnable() {
+    setPerm(await requestPermission());
+  }
+
   function setCap(value: number) {
     setBudget({ ...budget, daily_cap: value });
   }
@@ -518,6 +533,30 @@ function NotificationsSection() {
   return (
     <section style={styles.section} aria-label="notifications">
       <h2 style={styles.sectionHeader}>notifications</h2>
+
+      <div style={styles.row}>
+        <div>
+          <p style={styles.rowLabel}>push notifications</p>
+          <p style={styles.rowHint}>
+            {perm === 'granted'
+              ? 'on. ollie can reach you when something needs you.'
+              : perm === 'denied'
+                ? 'blocked. turn them on in your phone settings → ollie.'
+                : 'off. ollie can only nudge you inside the app.'}
+          </p>
+        </div>
+        {perm === 'granted' ? (
+          <span style={styles.rowValue}>on</span>
+        ) : perm === 'denied' ? (
+          <span style={{ ...styles.rowValue, color: 'var(--ink-faint)' }}>blocked</span>
+        ) : perm === 'checking' ? (
+          <span style={styles.rowValue}>·</span>
+        ) : (
+          <button type="button" onClick={() => void handleEnable()} style={styles.linkBtn}>
+            turn on
+          </button>
+        )}
+      </div>
 
       <div style={{ padding: '12px 0', borderBottom: '1px solid var(--rule-soft)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
@@ -913,7 +952,6 @@ interface InviteCache {
   week_start: number;
 }
 
-const WEEK_MS = 7 * 86_400_000;
 const WEEKLY_INVITE_CAP = 5;
 
 function startOfIsoWeek(now: number): number {
