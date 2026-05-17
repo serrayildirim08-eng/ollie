@@ -48,6 +48,7 @@ import {
   detectShortSleepRun,
   forecastTonightHeuristic,
   scoreInsomniaSurvey,
+  scoreEpworth,
   detectRevengeBedtime,
   detectCaffeineCutoff,
   detectSleepOnsetGap,
@@ -214,6 +215,22 @@ export function createSleepOrchestrator(
       if (result) setKey('insomnia_survey_result', result);
     } catch (err) {
       console.warn('[orchestrator/sleep] insomnia survey scoring failed:', err);
+    }
+  }
+
+  // ── Epworth sleepiness scale ───────────────────────────────────────────────
+  // The second "go deeper" instrument. The UI writes the raw 0–3 answer array
+  // to `sleep.epworth_answers`; we score it (pure fn) and write the derived
+  // result to `sleep.epworth_result` for the drawer to read.
+  function scoreEpworthFromStore(): void {
+    try {
+      const answers = store.get<number[] | null>('sleep', 'epworth_answers', null);
+      if (!Array.isArray(answers)) return;
+      const result = scoreEpworth(answers, getNow());
+      // null = incomplete/invalid; leave any prior result untouched.
+      if (result) setKey('epworth_result', result);
+    } catch (err) {
+      console.warn('[orchestrator/sleep] epworth scoring failed:', err);
     }
   }
 
@@ -581,6 +598,11 @@ export function createSleepOrchestrator(
     unsubs.push(store.subscribeKey('sleep', 'insomnia_survey_answers', () => {
       try { scoreInsomniaSurveyFromStore(); }
       catch (err) { console.error('[orchestrator/sleep] insomnia survey tick failed', err); }
+    }));
+    // "Go deeper" Epworth scale — UI writes raw answers, we score them.
+    unsubs.push(store.subscribeKey('sleep', 'epworth_answers', () => {
+      try { scoreEpworthFromStore(); }
+      catch (err) { console.error('[orchestrator/sleep] epworth tick failed', err); }
     }));
 
     unsubs.push(
