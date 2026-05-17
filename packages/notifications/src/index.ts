@@ -35,6 +35,11 @@ import type {
   NotificationLogEntry,
   NotificationSpec,
 } from './types';
+import {
+  applySuppression,
+  type ActiveFocus,
+  type SleepSettingsLike,
+} from './suppression';
 
 export type {
   NotificationBackend,
@@ -259,7 +264,35 @@ export async function notify(spec: NotificationSpec): Promise<NotificationDispat
   }
 
   const now = Date.now();
-  const fireAt = coerceScheduleAt(spec.schedule_at);
+  const scheduledAt = coerceScheduleAt(spec.schedule_at);
+
+  // Suppression (quiet hours + focus-session). Both rules only ever DEFER —
+  // never drop. For an immediate notification (no schedule_at) the intended
+  // fire time is `now`; if either rule applies the notification becomes a
+  // future-scheduled one. The store carries the slices the rules read.
+  let fireAt = scheduledAt;
+  if (state.store) {
+    const sleepSettings = state.store.get<SleepSettingsLike | null>('sleep', 'settings', null);
+    const activeFocus = state.store.get<ActiveFocus | null>('work', 'active_focus', null);
+    const intendedFireAt = scheduledAt ?? now;
+    const suppressed = applySuppression({
+      fireAt: intendedFireAt,
+      category: spec.category,
+      now,
+      sleepSettings,
+      activeFocus,
+    });
+    if (suppressed.deferred) {
+      console.log(
+        '[notify] suppression deferred',
+        spec.dedupe_key,
+        suppressed.reasons.join('+'),
+        '→',
+        new Date(suppressed.fireAt).toISOString(),
+      );
+      fireAt = suppressed.fireAt;
+    }
+  }
 
   if (state.store) {
     // Consent rewrite (Sprint 6): the per-feature consent.astrology
@@ -368,6 +401,25 @@ export async function notify(spec: NotificationSpec): Promise<NotificationDispat
   }
 
   return deliverNow(spec);
+}
+
+/**
+ * Request OS notification permission via the installed backend.
+ *
+ * This is the ONLY place the platform permission dialog should be
+ * triggered from app code — call it on-demand, behind a priming screen
+ * (apps/web NotificationPrimer), never at boot. Backends that have no
+ * permission concept (or no `requestPermission`) resolve to `'granted'`.
+ */
+export async function requestPermission(): Promise<'granted' | 'denied' | 'default'> {
+  const fn = state.backend.requestPermission;
+  if (!fn) return 'granted';
+  try {
+    return await fn.call(state.backend);
+  } catch (err) {
+    console.warn('[notify] requestPermission failed', err);
+    return 'denied';
+  }
 }
 
 /** Cancel a scheduled or sticky notification by dedupe_key. */

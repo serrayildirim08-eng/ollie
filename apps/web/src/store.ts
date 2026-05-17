@@ -25,6 +25,11 @@ import { useStoreSlice as baseUseStoreSlice } from '@ollie/store/react';
 import type { BirthData } from '@ollie/logic/astrology';
 import { createOrchestrator, initPatternDetectedSubscriber } from '@ollie/orchestrator';
 import { scheduleServerJob } from '@ollie/notifications/server-schedule';
+import {
+  applySuppression,
+  type ActiveFocus,
+  type SleepSettingsLike,
+} from '@ollie/notifications/suppression';
 import { getAccount } from './lib/account-boot';
 
 runMigrations(browserAdapter);
@@ -126,10 +131,34 @@ function scheduleNotificationWrapper(spec: import('@ollie/notifications').Notifi
   if (!account?.auth) return;
   const session = account.auth.state().session;
   if (!session) return;
+
+  // Notification suppression — quiet hours + focus-session. This wrapper is
+  // the single client-side funnel for every orchestrator cue, so both rules
+  // are applied here against the live store. Rules only ever DEFER (push the
+  // fire time later); they never drop a cue. See @ollie/notifications/suppression.
+  const sleepSettings = store.get<SleepSettingsLike | null>('sleep', 'settings', null);
+  const activeFocus = store.get<ActiveFocus | null>('work', 'active_focus', null);
+  const suppressed = applySuppression({
+    fireAt,
+    category: spec.category,
+    now: Date.now(),
+    sleepSettings,
+    activeFocus,
+  });
+  if (suppressed.deferred) {
+    console.log(
+      '[scheduleNotification] suppression deferred',
+      spec.dedupe_key,
+      suppressed.reasons.join('+'),
+      '→',
+      new Date(suppressed.fireAt).toISOString(),
+    );
+  }
+
   void scheduleServerJob(
     { api: account.api, authJwt: session.access_token, userId: session.user_id },
     spec,
-    fireAt,
+    suppressed.fireAt,
   );
 }
 
@@ -165,3 +194,11 @@ appEvents.on('void:reminder:scheduled', (payload: unknown) => {
     status: 'scheduled',
   });
 });
+
+// ─── Garden resource ledger ───────────────────────────────────────────────────
+// The "earn" half of the garden game loop: every burhan life-event credits
+// the garden with water + (occasionally) seed. Append-only + idempotent —
+// see apps/web/src/lib/garden-ledger.ts. Safe to boot pre-auth: it only
+// reads/writes the local store.
+import { bootGardenLedger } from './lib/garden-ledger';
+bootGardenLedger(store);
