@@ -1259,25 +1259,6 @@ export function CycleModule({ onBack }: CycleModuleProps) {
 
         </div>{/* /.body */}
 
-        {/* footer */}
-        <footer style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 16, marginTop: 96, paddingTop: 32, borderTop: `1px solid ${C.sand}` }}>
-          <button
-            type="button"
-            style={{ background: 'none', border: 'none', color: C.inkSoft, fontFamily: "'DM Mono', monospace", fontSize: 11, letterSpacing: '0.14em', textTransform: 'lowercase', padding: 12, cursor: 'pointer' }}
-            onClick={() => { /* export handled by host app */ }}
-          >
-            {t('cycle.archive.export')}
-          </button>
-          <span style={{ color: C.inkFaint, fontFamily: "'DM Mono', monospace" }}>·</span>
-          <button
-            type="button"
-            style={{ background: 'none', border: 'none', color: C.inkSoft, fontFamily: "'DM Mono', monospace", fontSize: 11, letterSpacing: '0.14em', textTransform: 'lowercase', padding: 12, cursor: 'pointer' }}
-            onClick={() => { /* import handled by host app */ }}
-          >
-            {t('cycle.archive.import')}
-          </button>
-        </footer>
-
       </div>{/* /.inner */}
 
       {/* settings panel */}
