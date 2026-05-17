@@ -10,6 +10,7 @@ import {
   detectSunkCostFlag,
   classifyPacing,
 } from '@ollie/logic/goals';
+import { mkId } from '../../lib/mkId';
 import type {
   Goal,
   GoalSession,
@@ -665,7 +666,8 @@ function GoalsNoticed() {
                   fontFamily: "'DM Mono',monospace",
                   fontSize: 14,
                   cursor: 'pointer',
-                  padding: '4px 6px',
+                  padding: '10px 8px',
+                  minHeight: 44,
                   lineHeight: 1,
                 }}
               >
@@ -983,7 +985,7 @@ export function GoalsModule({ onBack }: GoalsModuleProps) {
         ? (draftPacing as 'sprint' | 'marathon' | 'rolling')
         : undefined;
     return {
-      id: `g-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+      id: mkId('g'),
       title: t,
       why: draftWhy.trim() || undefined,
       target_date: targetIso,
@@ -1091,7 +1093,7 @@ export function GoalsModule({ onBack }: GoalsModuleProps) {
     const d = milestoneDrafts[goalId];
     if (!d?.title?.trim()) return;
     const ms: Milestone = {
-      id: `ms-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+      id: mkId('ms'),
       title: sanitize(d.title.trim()),
       target_date: d.target ? Date.parse(d.target) : undefined,
       completed_at: null,
@@ -1401,9 +1403,12 @@ export function GoalsModule({ onBack }: GoalsModuleProps) {
       style={{
         width: '100%',
         minHeight: '100vh',
+        overflowX: 'hidden',
         background: BG,
         color: INK,
         fontFamily: "'Inter Tight','DM Sans',sans-serif",
+        paddingTop: 'env(safe-area-inset-top)',
+        paddingBottom: 'env(safe-area-inset-bottom)',
       }}
     >
       <div
