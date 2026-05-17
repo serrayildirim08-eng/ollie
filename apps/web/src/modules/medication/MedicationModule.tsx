@@ -6,6 +6,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { useStoreSlice } from '../../store';
+import { mkId } from '../../lib/mkId';
 import { emit } from '@ollie/events';
 import {
   takenToday,
@@ -52,7 +53,7 @@ export function MedicationModule() {
     const trimmed = name.trim();
     if (!trimmed) return;
     const item: MedicationItem = {
-      id: `m-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      id: mkId('m'),
       name: trimmed.toLowerCase(),
       dose: dose.trim() || undefined,
       kind,
@@ -87,6 +88,7 @@ export function MedicationModule() {
   }
 
   return (
+    <div style={{ minHeight: '100vh', overflowX: 'hidden', paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
     <div style={{ maxWidth: 800, margin: '0 auto', padding: '40px 24px 120px' }}>
       <header style={{ marginBottom: 32 }}>
         <h1 style={{ fontFamily: "'DM Serif Display', serif", fontSize: 32, fontWeight: 400, margin: 0 }}>
@@ -213,6 +215,7 @@ export function MedicationModule() {
           + add medication
         </button>
       )}
+    </div>
     </div>
   );
 }

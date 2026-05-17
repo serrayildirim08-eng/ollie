@@ -6,6 +6,7 @@ import {
   computeCareGaps,
 } from '@ollie/logic/pets';
 import type { Pet, CareLogEntry, Observation, CareGap, Milestone } from '@ollie/logic/pets';
+import { mkId } from '../../lib/mkId';
 import { useStoreSlice } from '../../store';
 import { PetCard } from './PetCard';
 import { PetsNoticed } from './PetsNoticed';
@@ -139,7 +140,7 @@ export function PetsModule() {
   // ── Handlers ─────────────────────────────────────────────────────────────
 
   function logManual(petId: string, task: string) {
-    const id = `id-${Math.random().toString(36).slice(2)}`;
+    const id = mkId('id');
     const entry: StoredCareLogEntry = {
       id,
       pet_id: petId,
@@ -205,7 +206,7 @@ export function PetsModule() {
 
   function addPet() {
     if (!newName.trim()) return;
-    const id = `id-${Math.random().toString(36).slice(2)}`;
+    const id = mkId('id');
     const pet: StoredPet = {
       id,
       name: newName.trim(),
@@ -259,7 +260,10 @@ export function PetsModule() {
         color: '#14130F',
         width: '100%',
         minHeight: '100vh',
+        overflowX: 'hidden',
         boxSizing: 'border-box',
+        paddingTop: 'env(safe-area-inset-top)',
+        paddingBottom: 'env(safe-area-inset-bottom)',
       }}
     >
       <div

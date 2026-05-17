@@ -22,15 +22,26 @@ import {
 import type { CycleItem, Phase } from '@ollie/logic/cycle';
 import { useStoreSlice } from '../../store';
 import { SourcesLink } from '../../components/SourcesLink';
-import { getString } from '../../i18n';
+import { getString, getPlural, type InterpolationVars } from '../../i18n';
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
 function t(key: string, ...args: (string | number)[]): string {
-  let s = getString('en', key);
-  if (s === key) s = key; // fallback: key itself
-  args.forEach((a, i) => { s = s.replace(`\${${i}}`, String(a)); });
-  return s;
+  // `${i}` tokens map to interpolation vars '0', '1', … — getString's
+  // interpolation replaces EVERY occurrence (the old `.replace` here only
+  // hit the first).
+  const vars: InterpolationVars = {};
+  args.forEach((a, i) => { vars[String(i)] = a; });
+  return getString('en', key, args.length ? vars : undefined);
+}
+
+/**
+ * Plural-aware variant of `t`. Pass the BASE key (no `_one`/`_many`
+ * suffix); i18next picks the CLDR-correct form for the count. `count`
+ * fills the `${0}` token automatically.
+ */
+function tn(baseKey: string, count: number): string {
+  return getPlural('en', baseKey, count);
 }
 
 const CERAMIC_TAGS = [
@@ -138,7 +149,7 @@ function MoonPhaseTile({ cycleDay, cycleLength }: MoonPhaseTileProps) {
       viewBox="0 0 200 200"
       preserveAspectRatio="xMidYMid meet"
       aria-hidden="true"
-      style={{ display: 'block', margin: '0 auto 56px', width: 320, height: 320 }}
+      style={{ display: 'block', margin: '0 auto 56px', width: 'min(320px, 78vw)', height: 'min(320px, 78vw)' }}
     >
       <rect x="0" y="0" width="200" height="200" fill={C.bone} />
       <circle cx={cx} cy={cy} r={r} fill={C.deep} />
@@ -172,9 +183,11 @@ function RecordPanel({ onSave, onCancel }: RecordPanelProps) {
   return (
     <div style={{
       margin: '24px auto 0',
+      width: '100%',
       maxWidth: 640,
-      padding: 32,
+      padding: 'clamp(20px, 5vw, 32px)',
       background: C.bone,
+      boxSizing: 'border-box',
     }}>
       {/* tag row */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 24 }}>
@@ -391,7 +404,7 @@ function PillLogSection({ items, onLogPill, now, masked }: PillLogSectionProps) 
       <div
         role="group"
         aria-label="pill log — past 7 days"
-        style={{ display: 'flex', gap: 10, alignItems: 'flex-end' }}
+        style={{ display: 'flex', gap: 6, alignItems: 'flex-end', flexWrap: 'wrap' }}
       >
         {stripDays.map(({ key, ts, daysBack }) => {
           const logged = loggedDates.has(key);
@@ -417,7 +430,10 @@ function PillLogSection({ items, onLogPill, now, masked }: PillLogSectionProps) 
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
+                justifyContent: 'center',
                 gap: 6,
+                minWidth: 44,
+                minHeight: 44,
                 opacity: tooOld && !logged ? 0.35 : 1,
               }}
             >
@@ -704,7 +720,7 @@ function PartnerSection({ asks, onAsksChange }: PartnerSectionProps) {
   return (
     <section style={{ marginBottom: 80 }}>
       <SectionLabel>{t('cycle.section.ask_partner')}</SectionLabel>
-      <div style={{ padding: '28px 32px', background: C.bone, borderRadius: 2 }}>
+      <div style={{ padding: '28px clamp(16px, 5vw, 32px)', background: C.bone, borderRadius: 2 }}>
         {PARTNER_OPTIONS.map(([, catKey, options]) => (
           <div key={catKey} style={{ paddingBottom: 16 }}>
             <div style={{
@@ -760,7 +776,7 @@ function PartnerSection({ asks, onAsksChange }: PartnerSectionProps) {
         fontWeight: 500,
       }}>
         {asks.length > 0
-          ? t(asks.length === 1 ? 'cycle.partner.summary_one' : 'cycle.partner.summary_many', asks.length)
+          ? tn('cycle.partner.summary', asks.length)
           : t('cycle.partner.empty')}
       </div>
     </section>
@@ -942,22 +958,28 @@ export function CycleModule({ onBack }: CycleModuleProps) {
         ['--ceramic-ovulation' as string]: '#5A7A5A',   // sage · distinct from umber accent
         background: '#E8DED0',
         color: '#1E1E1E',
-        width: '100vw',
+        width: '100%',
         minHeight: '100vh',
         boxSizing: 'border-box',
+        overflowX: 'hidden',
       }}
     >
+      <style>{`
+        @media (max-width: 640px) {
+          .cycle-module .cycle-history-grid { gap: 8px !important; }
+        }
+      `}</style>
       <div style={{
         width: '100%',
         maxWidth: 1400,
         margin: '0 auto',
-        padding: '88px 64px 200px',
+        padding: 'calc(88px + env(safe-area-inset-top)) clamp(20px, 5vw, 64px) calc(200px + env(safe-area-inset-bottom))',
       }}>
 
         {/* ── header ─────────────────────────────────────────────────── */}
-        <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 120 }}>
+        <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap', marginBottom: 'clamp(56px, 12vw, 120px)' }}>
           <div>
-            <h1 style={{ font: "600 56px/1 'Inter Tight', sans-serif", color: C.ink, margin: 0, letterSpacing: '-0.03em' }}>
+            <h1 style={{ font: "600 clamp(34px, 8vw, 56px)/1 'Inter Tight', sans-serif", color: C.ink, margin: 0, letterSpacing: '-0.03em' }}>
               {t('cycle.title')}
             </h1>
             <p style={{ font: "500 12px/1 'DM Mono', monospace", letterSpacing: '0.18em', textTransform: 'uppercase', color: C.inkFaint, margin: '14px 0 0 0' }}>
@@ -989,14 +1011,14 @@ export function CycleModule({ onBack }: CycleModuleProps) {
         )}
 
         {/* ── hero ──────────────────────────────────────────────────── */}
-        <div style={{ maxWidth: 860, margin: '0 auto 72px' }}>
+        <div style={{ width: '100%', maxWidth: 860, margin: '0 auto 72px' }}>
           {stats.irregular_flag ? (
             <div style={{
-              width: 320, height: 320,
+              width: 'min(320px, 78vw)', height: 'min(320px, 78vw)',
               background: C.bone,
               margin: '0 auto 56px',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              padding: 40, textAlign: 'center',
+              padding: 'clamp(24px, 7vw, 40px)', textAlign: 'center',
               font: "500 12px/1.6 'DM Mono', monospace",
               letterSpacing: '0.18em',
               textTransform: 'uppercase',
@@ -1012,12 +1034,12 @@ export function CycleModule({ onBack }: CycleModuleProps) {
             {currentDay !== null ? (
               <>
                 <div
-                  style={{ font: "600 224px/0.9 'Inter Tight', sans-serif", fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.05em', color: C.ink, marginBottom: 28 }}
+                  style={{ font: "600 clamp(120px, 38vw, 224px)/0.9 'Inter Tight', sans-serif", fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.05em', color: C.ink, marginBottom: 28 }}
                   aria-label={t('cycle.day.aria', currentDay, cyclePhaseLabel(phaseName))}
                 >
                   {String(currentDay).padStart(2, '0')}
                 </div>
-                <div style={{ font: "500 40px/1 'Inter Tight', sans-serif", color: C.ink, letterSpacing: '-0.015em', marginBottom: 14 }}>
+                <div style={{ font: "500 clamp(28px, 7vw, 40px)/1 'Inter Tight', sans-serif", color: C.ink, letterSpacing: '-0.015em', marginBottom: 14 }}>
                   {cyclePhaseLabel(phaseName)}
                 </div>
                 <div style={{ font: "400 17px/1.5 'Inter Tight', sans-serif", color: C.inkSoft }}>
@@ -1027,7 +1049,7 @@ export function CycleModule({ onBack }: CycleModuleProps) {
             ) : (
               <>
                 <div
-                  style={{ font: "600 96px/0.9 'Inter Tight', sans-serif", fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.02em', color: C.inkFaint, marginBottom: 28 }}
+                  style={{ font: "600 clamp(64px, 18vw, 96px)/0.9 'Inter Tight', sans-serif", fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.02em', color: C.inkFaint, marginBottom: 28 }}
                   aria-label={t('cycle.day.aria_empty')}
                 >
                   —
@@ -1102,12 +1124,12 @@ export function CycleModule({ onBack }: CycleModuleProps) {
         </div>
 
         {/* ── body ──────────────────────────────────────────────────── */}
-        <div style={{ maxWidth: 1000, margin: '0 auto' }}>
+        <div style={{ width: '100%', maxWidth: 1000, margin: '0 auto' }}>
 
           {/* next period */}
           <section style={{ marginBottom: 80 }}>
             <SectionLabel>{t('cycle.section.next_period')}</SectionLabel>
-            <p style={{ font: "500 44px/1.2 'Inter Tight', sans-serif", color: C.ink, letterSpacing: '-0.02em', margin: '0 0 16px 0' }}>
+            <p style={{ font: "500 clamp(28px, 6vw, 44px)/1.2 'Inter Tight', sans-serif", color: C.ink, letterSpacing: '-0.02em', margin: '0 0 16px 0' }}>
               {prediction.confidenceRange
                 ? t('cycle.next.approximately', fmtRange(prediction.confidenceRange))
                 : t('cycle.next.need_logged')}
@@ -1115,7 +1137,7 @@ export function CycleModule({ onBack }: CycleModuleProps) {
             <p style={{ font: "500 17px/1.5 'Inter Tight', sans-serif", color: C.inkSoft, margin: '0 0 14px 0', letterSpacing: '-0.005em' }}>
               {confidenceTierCopy(prediction.next_period?.confidence ?? prediction.confidenceLevel ?? 'cold')}
               {prediction.cyclesUsed > 0
-                ? ` · ${t(prediction.cyclesUsed === 1 ? 'cycle.next.cycles_logged_one' : 'cycle.next.cycles_logged_many', prediction.cyclesUsed)}`
+                ? ` · ${tn('cycle.next.cycles_logged', prediction.cyclesUsed)}`
                 : ''}
             </p>
             <p style={{ font: "400 15px/1.55 'Inter Tight', sans-serif", color: C.inkFaint, margin: 0 }}>
@@ -1174,7 +1196,7 @@ export function CycleModule({ onBack }: CycleModuleProps) {
           {fertileWin && (
             <section style={{ marginBottom: 80 }}>
               <SectionLabel>{t('cycle.section.fertile_window')}</SectionLabel>
-              <p style={{ font: "500 44px/1.2 'Inter Tight', sans-serif", color: C.ink, letterSpacing: '-0.02em', margin: '0 0 16px 0' }}>
+              <p style={{ font: "500 clamp(28px, 6vw, 44px)/1.2 'Inter Tight', sans-serif", color: C.ink, letterSpacing: '-0.02em', margin: '0 0 16px 0' }}>
                 {fmtRange(fertileWin)}
               </p>
               <p style={{ font: "400 15px/1.55 'Inter Tight', sans-serif", color: C.inkFaint, margin: 0 }}>
@@ -1187,9 +1209,9 @@ export function CycleModule({ onBack }: CycleModuleProps) {
           {recentCycles.length > 0 && (
             <section style={{ marginBottom: 80 }}>
               <SectionLabel>
-                {t(recentCycles.length === 1 ? 'cycle.section.record_one' : 'cycle.section.record_many', recentCycles.length)}
+                {tn('cycle.section.record', recentCycles.length)}
               </SectionLabel>
-              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+              <div className="cycle-history-grid" style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                 {recentCycles.map(c => (
                   <div key={c.cycleStartTs} style={{
                     width: 96, height: 96,

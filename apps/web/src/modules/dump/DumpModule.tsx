@@ -342,10 +342,13 @@ export function DumpModule({ onBack }: DumpModuleProps) {
       style={{
         width: '100vw',
         minHeight: '100vh',
+        overflowX: 'hidden',
         background: PAPER,
         position: 'relative',
         fontFamily: "'DM Mono', monospace",
         color: INK,
+        paddingTop: 'env(safe-area-inset-top)',
+        paddingBottom: 'env(safe-area-inset-bottom)',
       }}
     >
       {/* paper grain */}
@@ -601,7 +604,8 @@ export function DumpModule({ onBack }: DumpModuleProps) {
                     style={{
                       background: 'none',
                       border: 'none',
-                      padding: '4px 0',
+                      padding: '10px 4px',
+                      minHeight: 44,
                       fontFamily: "'DM Mono',monospace",
                       fontSize: 10,
                       letterSpacing: '0.22em',
@@ -811,7 +815,8 @@ export function DumpModule({ onBack }: DumpModuleProps) {
                           fontSize: 10,
                           color: VERY_MUTED,
                           cursor: 'pointer',
-                          padding: '2px 6px',
+                          padding: '10px 8px',
+                          minHeight: 44,
                           opacity: 0,
                           transition: 'opacity 160ms ease',
                           letterSpacing: '0.22em',
