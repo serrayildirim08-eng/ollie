@@ -16,6 +16,7 @@
  * the device while offline) go through LocalNotifications.
  */
 
+import { on as onEvent } from '@ollie/events';
 import type { NotificationBackend, NotificationSpec } from '../types';
 
 interface CapPluginRef<T> {
@@ -91,11 +92,45 @@ async function ensurePlugins(): Promise<void> {
   if (!pushPlugin) pushPlugin = await loadPushNotifications();
 }
 
+/**
+ * Build the JSON body for the worker's `/register-token` POST.
+ *
+ * `user_id` is included ONLY when a non-empty session id is supplied —
+ * the worker (apps/api/src/worker.ts `handleRegister`) gates its Postgres
+ * `push_tokens` mirror on `if (body.user_id)`, so omitting the key (rather
+ * than sending `null`) keeps that gate unambiguous. `registeredAt` is a
+ * param purely so tests can pin a deterministic value.
+ */
+export function buildRegistrationBody(
+  token: string,
+  userId: string | null | undefined,
+  registeredAt: number = Date.now(),
+): { token: string; platform: 'ios'; registered_at: number; user_id?: string } {
+  return {
+    token,
+    platform: 'ios',
+    registered_at: registeredAt,
+    ...(userId ? { user_id: userId } : {}),
+  };
+}
+
 export interface CapacitorBackendOptions {
   /** Cloudflare worker endpoint that registers device tokens with APNs. */
   pushRegisterEndpoint?: string;
   /** Bearer token sent with the register POST (matches worker). */
   pushRegisterAuth?: string;
+  /**
+   * Returns the signed-in user's id, or null when no session exists yet.
+   * Read lazily at POST time (not at boot) so it picks up a sign-in that
+   * happens after `installCapacitorBackend()` runs.
+   *
+   * WHY THIS MATTERS: the worker (apps/api/src/worker.ts) only mirrors a
+   * token into the joinable Postgres `push_tokens` table when the register
+   * POST carries `user_id`. Without it the iOS token lands in KV only and
+   * the cron drain's `tokensForUser()` JOIN never finds it → remote push
+   * is silently never delivered.
+   */
+  getUserId?: () => string | null | undefined;
 }
 
 export const capacitorBackend: NotificationBackend = {
@@ -171,6 +206,49 @@ export async function installCapacitorBackend(
   await ensurePlugins();
   if (!pushPlugin) return capacitorBackend;
 
+  // Capacitor fires the 'registration' event with the APNs device token
+  // as soon as APNs hands one back — which can be BEFORE the user signs
+  // in, so getUserId() may return null at that moment. We therefore keep
+  // the latest token here and (re-)POST it whenever a user_id becomes
+  // available: once on 'registration', and again on `auth:signed_in`.
+  let latestToken: string | null = null;
+
+  function resolveUserId(): string | null {
+    try {
+      return opts.getUserId?.() ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * POST the current device token to the worker, including `user_id` when
+   * a session exists. Best-effort: a failed POST never throws. Re-POSTing
+   * the same token is safe — the worker upserts on `device_token`, so a
+   * later call with a user_id simply rebinds the row.
+   */
+  async function postRegistration(): Promise<void> {
+    const t = latestToken;
+    if (!t) return;
+    if (!opts.pushRegisterEndpoint) {
+      console.log('[notify · capacitor] device token captured (no worker endpoint set):', t.slice(0, 12) + '…');
+      return;
+    }
+    const userId = resolveUserId();
+    try {
+      await fetch(opts.pushRegisterEndpoint, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          ...(opts.pushRegisterAuth ? { authorization: `Bearer ${opts.pushRegisterAuth}` } : {}),
+        },
+        body: JSON.stringify(buildRegistrationBody(t, userId)),
+      });
+    } catch (err) {
+      console.warn('[notify · capacitor] push register POST failed', err);
+    }
+  }
+
   try {
     const perms = await pushPlugin.requestPermissions();
     if (perms.receive !== 'granted') return capacitorBackend;
@@ -178,26 +256,16 @@ export async function installCapacitorBackend(
     await pushPlugin.addListener('registration', async (token: unknown) => {
       const t = (token as { value?: string })?.value;
       if (!t) return;
-      if (!opts.pushRegisterEndpoint) {
-        console.log('[notify · capacitor] device token captured (no worker endpoint set):', t.slice(0, 12) + '…');
-        return;
-      }
-      try {
-        await fetch(opts.pushRegisterEndpoint, {
-          method: 'POST',
-          headers: {
-            'content-type': 'application/json',
-            ...(opts.pushRegisterAuth ? { authorization: `Bearer ${opts.pushRegisterAuth}` } : {}),
-          },
-          body: JSON.stringify({ token: t, platform: 'ios', registered_at: Date.now() }),
-        });
-      } catch (err) {
-        console.warn('[notify · capacitor] push register POST failed', err);
-      }
+      latestToken = t;
+      await postRegistration();
     });
     await pushPlugin.addListener('registrationError', (err: unknown) => {
       console.warn('[notify · capacitor] APNs registration error', err);
     });
+    // When the user signs in AFTER the APNs token arrived, re-POST so the
+    // worker can mirror the token into Postgres `push_tokens` keyed on the
+    // now-known user_id. No-ops when no token has been captured yet.
+    onEvent('auth:signed_in', () => { void postRegistration(); });
   } catch (err) {
     console.warn('[notify · capacitor] push setup failed', err);
   }
