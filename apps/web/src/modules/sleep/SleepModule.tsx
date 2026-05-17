@@ -34,6 +34,7 @@ import type {
   ForecastResult,
   AnySleepPattern,
   InsomniaSurveyResult,
+  EpworthResult,
 } from '@ollie/logic/sleep';
 import type { CaffeineSleepResult } from '@ollie/logic/body';
 import { useStoreSlice } from '../../store';
@@ -42,6 +43,7 @@ import { SourcesLink } from '../../components/SourcesLink';
 import { SleepSoundPlayer } from '../../components/SleepSoundPlayer';
 import { WindDownChecklist } from './WindDownChecklist';
 import { InsomniaSurvey } from './InsomniaSurvey';
+import { EpworthSurvey } from './EpworthSurvey';
 
 // ─── palette ─────────────────────────────────────────────────────────────────
 
@@ -246,11 +248,16 @@ export function SleepModule({ onBack }: SleepModuleProps) {
   const [sayMoreOpen, setSayMoreOpen] = useState(false);
   const [sayMoreText, setSayMoreText] = useState('');
   const [surveyOpen, setSurveyOpen] = useState(false);
+  const [epworthOpen, setEpworthOpen] = useState(false);
 
   // "Go deeper" insomnia survey — orchestrator-scored result, if the user
   // has taken it before. Drives the drawer line's sub-copy.
   const [insomniaResult] = useStoreSlice<InsomniaSurveyResult | null>(
     'sleep', 'insomnia_survey_result', null,
+  );
+  // "Go deeper" Epworth scale — orchestrator-scored result, if taken before.
+  const [epworthResult] = useStoreSlice<EpworthResult | null>(
+    'sleep', 'epworth_result', null,
   );
 
   // ── derived (useMemo — pure logic only) ──────────────────────────────────
@@ -917,6 +924,9 @@ export function SleepModule({ onBack }: SleepModuleProps) {
       {/* ── insomnia survey ("go deeper" lite survey) ── */}
       {surveyOpen && <InsomniaSurvey onClose={() => setSurveyOpen(false)} />}
 
+      {/* ── epworth sleepiness scale ("go deeper") ── */}
+      {epworthOpen && <EpworthSurvey onClose={() => setEpworthOpen(false)} />}
+
       {/* ── drawer backdrop ── */}
       {drawerOpen && (
         <div
@@ -1021,6 +1031,31 @@ export function SleepModule({ onBack }: SleepModuleProps) {
                 {insomniaResult
                   ? `last score ${insomniaResult.score}/28 · retake`
                   : '7 questions · about 2 min'}
+              </span>
+            </span>
+            <span style={{ fontSize: 12, color: C.accent, fontWeight: 700, marginLeft: 12, flexShrink: 0 }}>
+              start
+            </span>
+          </button>
+
+          {/* daytime sleepiness — Epworth scale (Serra decision 2026-05-18) */}
+          <button
+            type="button"
+            onClick={() => { setDrawerOpen(false); setEpworthOpen(true); }}
+            style={{
+              display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
+              width: '100%', textAlign: 'left', background: 'none', cursor: 'pointer',
+              border: 'none', borderBottom: `1px solid ${C.rule}`,
+              padding: '14px 4px', fontFamily: COURIER,
+            }}
+            aria-label="open the daytime sleepiness survey"
+          >
+            <span style={{ fontSize: 13, color: C.ink, fontWeight: 700 }}>
+              daytime sleepiness
+              <span style={{ fontStyle: 'italic', fontWeight: 400, color: C.inkFaint, marginLeft: 6 }}>
+                {epworthResult
+                  ? `last score ${epworthResult.score}/24 · retake`
+                  : '8 questions · about 1 min'}
               </span>
             </span>
             <span style={{ fontSize: 12, color: C.accent, fontWeight: 700, marginLeft: 12, flexShrink: 0 }}>
