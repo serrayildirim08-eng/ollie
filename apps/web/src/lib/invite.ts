@@ -21,13 +21,6 @@ interface ViteEnv {
 }
 const env: ViteEnv = (import.meta as unknown as { env?: ViteEnv }).env ?? {};
 
-// Closed alpha (TestFlight): sign-up is gated on a valid invite code.
-// This also powers the activation funnel — claim-invite only fires when
-// the code field is shown, so the funnel's "claimed" step depends on it.
-//
-// OFF on the redesign/money-v2 branch so Serra can sign in on her own
-// device to test the v2 redesign without an invite code. FLIP BACK TO
-// `true` before any real closed-alpha / TestFlight release.
 const BETA_INVITE_REQUIRED = false;
 
 export function isBetaInviteRequired(): boolean {
