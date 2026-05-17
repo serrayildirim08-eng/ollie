@@ -26,6 +26,7 @@ import {
 } from '@ollie/logic/body';
 import type { Episode, EpisodeKind, TreatmentPlan, AnyBodyPattern } from '@ollie/logic/body';
 import { useStoreSlice } from '../../store';
+import { mkId } from '../../lib/mkId';
 import { ModuleHelp } from '../../components/ModuleHelp';
 import { SourcesLink } from '../../components/SourcesLink';
 
@@ -1981,7 +1982,7 @@ export function BodyModule({ onBack }: BodyModuleProps) {
     const n = newSuppName.trim();
     if (!n) return;
     const s: Supplement = {
-      id: 'sup-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      id: mkId('sup'),
       name: n,
       dose: newSuppDose.trim() || null,
       added_at: Date.now(),
@@ -2043,9 +2044,12 @@ export function BodyModule({ onBack }: BodyModuleProps) {
       style={{
         width: '100%',
         minHeight: '100vh',
+        overflowX: 'hidden',
         background: C.bg,
         color: C.ink,
         fontFamily: "'Inter Tight', 'DM Sans', sans-serif",
+        paddingTop: 'env(safe-area-inset-top)',
+        paddingBottom: 'env(safe-area-inset-bottom)',
       }}
     >
       <div

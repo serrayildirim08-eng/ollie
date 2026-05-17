@@ -32,6 +32,7 @@ import type {
   RecurringCandidate,
 } from '@ollie/logic/finance';
 import { buildSavingsCardCopy } from '@ollie/logic/finance';
+import { mkId } from '../../lib/mkId';
 import { IncomeCard } from './IncomeCard';
 import { emit } from '@ollie/events';
 import { useStoreSlice } from '../../store';
@@ -107,16 +108,16 @@ const ghostBtn: React.CSSProperties = {
 };
 
 const addBtn: React.CSSProperties = { ...ghostBtn, color: T.text };
-const removeBtn: React.CSSProperties = { ...ghostBtn, opacity: 0.4, padding: '5px 10px' };
+const removeBtn: React.CSSProperties = {
+  ...ghostBtn, opacity: 0.4,
+  minWidth: 44, minHeight: 44,
+  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+};
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
 function fmtMoney(n: number | null | undefined): string {
   return new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(Math.round(n ?? 0));
-}
-
-function mkId(prefix: string): string {
-  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
 }
 
 // ─── stored types ────────────────────────────────────────────────────────────
@@ -497,7 +498,7 @@ function RecurringCandidateCards() {
       else if (c.estimatedInterval >= 350 && c.estimatedInterval <= 380) freq = 'yearly';
     }
     const newBill = {
-      id: `bill-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`,
+      id: mkId('bill'),
       name: c.merchant.toLowerCase().slice(0, 80),
       preset: null,
       amount: c.estimatedAmount ?? 0,
@@ -975,7 +976,9 @@ function FinanceNoticed() {
                   color: T.faint,
                   fontFamily: "'DM Mono', monospace",
                   fontSize: 14, cursor: 'pointer',
-                  padding: '4px 6px', lineHeight: 1,
+                  lineHeight: 1,
+                  minWidth: 44, minHeight: 44,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}
               >
                 ×
@@ -1712,13 +1715,16 @@ export function FinanceModule() {
         background: '#14130F',
         color: T.text,
         boxSizing: 'border-box',
+        overflowX: 'hidden',
+        paddingTop: 'env(safe-area-inset-top)',
+        paddingBottom: 'env(safe-area-inset-bottom)',
       }}
     >
       <div
         style={{
           maxWidth: 780,
           margin: '0 auto',
-          padding: '52px 40px 140px',
+          padding: '52px clamp(20px, 5vw, 40px) 140px',
           position: 'relative',
           boxSizing: 'border-box',
         }}
@@ -1726,7 +1732,7 @@ export function FinanceModule() {
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 48 }}>
           <div>
-            <h1 style={{ fontFamily: "'DM Serif Display', serif", fontSize: 40, fontWeight: 400, margin: 0, color: T.text }}>
+            <h1 style={{ fontFamily: "'DM Serif Display', serif", fontSize: 'clamp(30px, 7vw, 40px)', fontWeight: 400, margin: 0, color: T.text }}>
               finance.
             </h1>
             <div style={{ ...labelStyle, marginTop: 6 }}>{dateStr}</div>
@@ -1752,7 +1758,7 @@ export function FinanceModule() {
         {txOpen && (
           <div style={{ marginBottom: 40, padding: '18px 20px', background: 'rgba(255,255,255,0.04)', border: `1px solid ${T.border}`, borderRadius: 14 }}>
             <div style={{ ...labelStyle, marginBottom: 12 }}>log transaction</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '110px 1fr 150px auto', gap: 10, alignItems: 'center' }}>
+            <div className="fin-tx-grid" style={{ display: 'grid', gridTemplateColumns: '110px 1fr 150px auto', gap: 10, alignItems: 'center' }}>
               <input
                 autoFocus
                 value={txDraft.amount}
@@ -2448,6 +2454,13 @@ export function FinanceModule() {
           {toast}
         </div>
       )}
+
+      {/* ── responsive ── */}
+      <style>{`
+        @media (max-width: 640px) {
+          .fin-tx-grid { grid-template-columns: 1fr !important; }
+        }
+      `}</style>
     </div>
   );
 }
