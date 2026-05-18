@@ -106,6 +106,7 @@ export const REGISTRY: Registry = {
 
   // ─── pattern detection (per-module) ─────────────────────────────
   'work:pattern_detected':         { payload: '{ pattern: string, confidence: string, sample_n: number, ts: number }' },
+  'work:matters_routed':           { payload: '{ filed: number, loose: number, suggestions: number, ts: number }' },
   'body:pattern_detected':         { payload: '{ pattern: string, confidence: string, sample_n: number, ts: number }' },
   'sleep:pattern_detected':        { payload: '{ pattern: string, confidence: string, sample_n: number, ts: number }' },
   'pattern:caffeine_sleep_detected': { payload: '{ correlation: number, threshold: { hours: number, minutes: number } | null, sampleSize: number, copy: string, ts: number }' },
