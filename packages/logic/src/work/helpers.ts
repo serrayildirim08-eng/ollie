@@ -6,6 +6,7 @@
  */
 
 import type { WorkState, WorkPatternOpts, TriageDay } from './types';
+import { dayKey } from '../util';
 
 // ─── Consent ──────────────────────────────────────────────────────────
 
@@ -16,10 +17,9 @@ export function consentOn(opts: WorkPatternOpts): boolean {
 
 // ─── Date key ─────────────────────────────────────────────────────────
 
-export function dayKey(ts: number): string {
-  const d = new Date(ts);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
+// `dayKey` (local-tz `YYYY-MM-DD`) is owned by the shared `../util` module.
+// Re-exported so the work barrel API path is unchanged.
+export { dayKey } from '../util';
 
 // ─── Block label ──────────────────────────────────────────────────────
 

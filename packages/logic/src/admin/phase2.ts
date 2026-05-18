@@ -23,6 +23,7 @@ import type {
 } from './types';
 import { PAPERWORK_RE, IMPL_HINT_RE, FIREHOSE_STOPWORDS, SOURCES } from './constants';
 import { resolveNow } from './helpers';
+import { DAY_MS } from '../util';
 
 // ─── A4 ──────────────────────────────────────────────────────────────────
 
@@ -216,20 +217,20 @@ export function detectRecurringPattern(
 ): RecurringPatternSignal[] | null {
   const now = resolveNow(history, opts);
   const horizonDays = opts.horizonDays ?? 30;
-  const minSpanMs = (opts.minSpanMonths ?? 10) * 30 * 86_400_000;
+  const minSpanMs = (opts.minSpanMonths ?? 10) * 30 * DAY_MS;
   const tasks = Array.isArray(history?.tasks) ? history!.tasks : [];
   if (tasks.length === 0) return null;
 
   const dayOfYear = (ts: number): number => {
     const d = new Date(ts);
     const start = Date.UTC(d.getUTCFullYear(), 0, 1);
-    return Math.floor((ts - start) / 86_400_000);
+    return Math.floor((ts - start) / DAY_MS);
   };
   const isLeap = (y: number): boolean => (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
   const tsForDayOfYear = (year: number, doy: number): number => {
     const max = isLeap(year) ? 365 : 364;
     const safe = Math.max(0, Math.min(max, doy));
-    return Date.UTC(year, 0, 1) + safe * 86_400_000;
+    return Date.UTC(year, 0, 1) + safe * DAY_MS;
   };
 
   const groups = new Map<string, number[]>();
@@ -259,7 +260,7 @@ export function detectRecurringPattern(
     const meanDoy = Math.round(closures.reduce((s, c) => s + dayOfYear(c), 0) / closures.length);
     let predicted = tsForDayOfYear(nowYear, meanDoy);
     if (predicted < now) predicted = tsForDayOfYear(nowYear + 1, meanDoy);
-    const daysUntil = Math.floor((predicted - now) / 86_400_000);
+    const daysUntil = Math.floor((predicted - now) / DAY_MS);
     if (daysUntil < 0 || daysUntil > horizonDays) continue;
     out.push({
       signal: 'admin_recurring_pattern',

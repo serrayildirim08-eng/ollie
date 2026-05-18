@@ -10,6 +10,7 @@
  */
 
 import type { SessionRef, PacingBreachEpisode, FocusSession } from './types';
+import { HOUR_MS } from '../util';
 
 export const DEFAULT_RECOVERY_HOURS = 72;
 export const MIN_BREACH_HOURS = 8;
@@ -32,7 +33,7 @@ export function detectBreachSession(
   for (const s of sessions) {
     if (!s || typeof s.start !== 'number' || typeof s.end !== 'number') continue;
     if (s.end <= s.start || s.end > now) continue;
-    const hours = (s.end - s.start) / 3600000;
+    const hours = (s.end - s.start) / HOUR_MS;
     if (hours < minHours) continue;
     if (hours > pickHours) {
       pickHours = hours;
@@ -91,7 +92,7 @@ export function isBreachExpired(
   const hours = typeof episode.expected_recovery_hours === 'number'
     ? episode.expected_recovery_hours
     : DEFAULT_RECOVERY_HOURS;
-  return (now - opened) >= hours * 3600000;
+  return (now - opened) >= hours * HOUR_MS;
 }
 
 /**

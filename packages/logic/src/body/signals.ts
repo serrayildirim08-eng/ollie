@@ -84,7 +84,7 @@ export interface BodySignalsOpts {
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
-import { DAY_MS } from '../util';
+import { DAY_MS, MINUTE_MS, dayKey } from '../util';
 
 const SLEEP_SOURCE: PatternSource = {
   citation: 'Lim & Dinges 2010, Psychol Bull — A meta-analysis of the impact of short-term sleep deprivation on cognitive variables',
@@ -96,17 +96,13 @@ const CYCLE_SOURCE: PatternSource = {
   url: 'https://doi.org/10.3390/brainsci10040198',
 };
 
-/** Local-ish day key for a ms timestamp. */
-function dayKeyOf(ts: number): string {
-  const d = new Date(ts);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
+/** Local-time day key for a ms timestamp — delegates to the shared util. */
+const dayKeyOf = dayKey;
 
 
 /** Completion ratio of a focus session, clamped to [0, 1.5]. */
 function completionRatio(s: SignalFocusSession): number {
-  const planned = s.duration_min * 60_000;
+  const planned = s.duration_min * MINUTE_MS;
   if (!(planned > 0)) return 0;
   const r = s.duration_ms / planned;
   return Math.max(0, Math.min(1.5, r));
@@ -235,7 +231,7 @@ export function detectCyclePhaseEnergy(
     if (typeof s.duration_ms !== 'number' || !isFinite(s.duration_ms)) continue;
     const phase = phaseAt(s.ts);
     if (phase == null) continue;
-    const minutes = s.duration_ms / 60_000;
+    const minutes = s.duration_ms / MINUTE_MS;
     const key = dayKeyOf(s.ts);
     if (phase === 'luteal') {
       lutealMinByDay[key] = (lutealMinByDay[key] ?? 0) + minutes;

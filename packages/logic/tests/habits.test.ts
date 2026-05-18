@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   dayKey,
+  dayKeyUTC,
   completionsInWindow,
   buildDayCompletionMap,
   detectExternalizationGap,
@@ -363,6 +364,157 @@ describe('detectSleepHabitCoupling', () => {
   it('returns null when no sleep records', () => {
     const h: HabitsHistory = { now: NOW, habits: [makeHabit('x', null, [1])], sleepRecords: [] };
     expect(detectSleepHabitCoupling(h)).toBeNull();
+  });
+
+  // Regression: the detector keys sleep follow-days and habit completions in
+  // the SAME (local) key-space. Previously the sleep side anchored `night_of`
+  // at UTC noon ('T12:00:00Z') and keyed with `dayKeyUTC`, while the
+  // completion map keys with the local `dayKey` — so for any non-UTC user the
+  // two key-spaces diverged and the detector correlated the wrong day's sleep
+  // with the wrong day's completions. These tests pin the corrected behavior.
+
+  // Local day-key for a date-only `night_of` string, anchored at LOCAL noon —
+  // mirrors exactly what the detector now does internally. A ±12h shift from
+  // local noon can never cross a calendar boundary, so this is off-by-one free.
+  const localNightKey = (nightOf: string): string =>
+    dayKey(Date.parse(nightOf + 'T12:00:00'));
+  const followKeyOf = (nightOf: string): string =>
+    dayKey(Date.parse(nightOf + 'T12:00:00') + DAY);
+  // A timestamp that lands on a given local calendar day-key (local noon).
+  const tsForKey = (key: string): number => Date.parse(key + 'T12:00:00');
+
+  it('couples short-sleep nights to the next local calendar day for a non-UTC user', () => {
+    // night_of strings as plain calendar dates the user actually slept on.
+    const shortNights = [
+      '2024-03-01', '2024-03-04', '2024-03-07', '2024-03-10',
+      '2024-03-13', '2024-03-16', '2024-03-19', '2024-03-22',
+    ];
+    const normalNights = [
+      '2024-03-02', '2024-03-05', '2024-03-08', '2024-03-11',
+      '2024-03-14', '2024-03-17', '2024-03-20', '2024-03-23',
+    ];
+    // `now` sits after the last record, window large enough to include all.
+    const lastNight = tsForKey('2024-03-24');
+    const now = lastNight + 5 * DAY;
+
+    // Habits complete on EVERY normal-sleep follow-day and on NONE of the
+    // short-sleep follow-days. Keys are built with the local `dayKey` — the
+    // exact key-space the corrected detector reads. Under the old UTC keying
+    // these completions would land on the wrong side of midnight for a
+    // non-UTC host and the coupling would not surface (or surface inverted).
+    const completionTs: number[] = [];
+    for (const n of normalNights) completionTs.push(tsForKey(followKeyOf(n)));
+    const habits: Habit[] = [1, 2, 3].map(i => ({
+      id: 'h' + i,
+      name: 'h' + i,
+      completions: completionTs.map(t => ({ ts: t, habit_id: 'h' + i })),
+    }));
+
+    const sleepRecords = [
+      ...shortNights.map(night_of => ({ night_of, tst_min: 240 })),
+      ...normalNights.map(night_of => ({ night_of, tst_min: 480 })),
+    ];
+
+    const result = detectSleepHabitCoupling(
+      { now, habits, sleepRecords },
+      { minLowSleepN: 7, minNormalN: 7 },
+    );
+    expect(result).not.toBeNull();
+    expect(result?.signal).toBe('habits_sleep_coupling');
+    // low-sleep follow-days have 0 completions, normal ones are fully completed.
+    expect(result?.evidence).toContain('low_post_rate:0');
+  });
+
+  it('follow-day key equals dayKey(local-noon(night_of) + 1 day) — no off-by-one', () => {
+    // Pin the contract the detector relies on: a date-only night maps to its
+    // own calendar day, and its follow-day key is the very next calendar day.
+    expect(localNightKey('2024-03-10')).toBe('2024-03-10');
+    expect(followKeyOf('2024-03-10')).toBe('2024-03-11');
+    // month boundary
+    expect(followKeyOf('2024-02-29')).toBe('2024-03-01');
+    // year boundary
+    expect(followKeyOf('2024-12-31')).toBe('2025-01-01');
+  });
+
+  it('sleep follow-day keys share the completion-map key-space (buildDayCompletionMap)', () => {
+    // The completion map is built with the local `dayKey`. Assert that the
+    // detector's follow-day key for a night is exactly a key the completion
+    // map would produce for a completion placed on that local follow-day.
+    const night = '2024-03-15';
+    const followKey = followKeyOf(night);
+    const completionOnFollowDay = tsForKey(followKey);
+    const h: Habit = {
+      id: 'h1', name: 'h1',
+      completions: [{ ts: completionOnFollowDay, habit_id: 'h1' }],
+    };
+    const map = buildDayCompletionMap(
+      [h], null,
+      completionOnFollowDay - DAY, completionOnFollowDay + DAY,
+    );
+    // Same string on both sides → key-spaces agree.
+    expect(map.get(followKey)).toBe(1);
+  });
+
+  it('keys ts-based sleep records by LOCAL day — would fail under old UTC keying', () => {
+    // Host-independent regression for the UTC/local key-space split, exercised
+    // through `SleepRecord.ts` (a real instant, not a date-only `night_of`).
+    //
+    // Each sleep record's `ts` sits just past LOCAL midnight (00:30 local). For
+    // ANY non-UTC host that instant falls in a different *UTC* calendar day.
+    //   - Old buggy detector: followKey = dayKeyUTC(ts + 1 day)  → UTC bucket.
+    //   - Corrected detector: followKey = dayKey(ts + 1 day)     → LOCAL bucket.
+    // The completion map always keys LOCAL (`dayKey`). So under the old code
+    // the sleep follow-day and the completions landed in different calendar
+    // buckets and the coupling miscounted; under the fix they agree.
+    const baseKeys = [
+      '2024-04-02', '2024-04-04', '2024-04-06', '2024-04-08',
+      '2024-04-10', '2024-04-12', '2024-04-14', '2024-04-16',
+      '2024-04-18', '2024-04-20', '2024-04-22', '2024-04-24',
+      '2024-04-26', '2024-04-28', '2024-04-30', '2024-05-02',
+    ];
+    // Sleep record instant: 00:30 LOCAL on the night's calendar day.
+    const sleepTs = (key: string): number => Date.parse(key + 'T00:30:00');
+    // The detector adds DAY_MS then keys LOCAL → next local calendar day.
+    const localFollowKey = (key: string): string => dayKey(sleepTs(key) + DAY);
+
+    // Confirm the chosen instants genuinely straddle the date line vs UTC on a
+    // non-UTC host — i.e. this fixture really stresses the timezone bug.
+    if (new Date().getTimezoneOffset() !== 0) {
+      const s = sleepTs('2024-04-10');
+      expect(dayKey(s)).not.toBe(dayKeyUTC(s));
+    }
+
+    // Split nights: even-index = short sleep, odd-index = normal sleep.
+    const shortKeys = baseKeys.filter((_, i) => i % 2 === 0);
+    const normalKeys = baseKeys.filter((_, i) => i % 2 === 1);
+    const sleepRecords = baseKeys.map((k, i) => ({
+      ts: sleepTs(k),
+      tst_min: i % 2 === 0 ? 240 : 480,
+    }));
+
+    // Completions land ONLY on the LOCAL follow-days of normal-sleep nights.
+    const completionTs = normalKeys.map(k => Date.parse(localFollowKey(k) + 'T12:00:00'));
+    const now = sleepTs('2024-05-02') + 5 * DAY;
+    const habits: Habit[] = [1, 2, 3].map(i => ({
+      id: 'h' + i,
+      name: 'h' + i,
+      completions: completionTs.map(t => ({ ts: t, habit_id: 'h' + i })),
+    }));
+
+    const result = detectSleepHabitCoupling(
+      { now, habits, sleepRecords },
+      { minLowSleepN: 7, minNormalN: 7 },
+    );
+    expect(result).not.toBeNull();
+    expect(result?.signal).toBe('habits_sleep_coupling');
+    // Short-sleep follow-days stay empty, normal-sleep follow-days fully
+    // completed → clean 0% vs 100% split. Under the old UTC keying the sleep
+    // follow-day key and the local-keyed completions diverge by one calendar
+    // day, the split collapses, and `habits_sleep_coupling` does not surface.
+    expect(result?.evidence).toContain('low_post_rate:0');
+    expect(result?.evidence).toContain('normal_post_rate:1');
+    expect(shortKeys.length).toBe(8);
+    expect(normalKeys.length).toBe(8);
   });
 });
 

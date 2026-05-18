@@ -10,6 +10,7 @@
 
 import type { TreatmentPlan, TreatmentCyclePosition, TreatmentSideEffectPattern, DumpEntry } from './types';
 import { SIDE_EFFECT_RE } from './regexes';
+import { DAY_MS } from '../util';
 
 export function newTreatmentPlan(
   label: string,
@@ -63,7 +64,7 @@ export function cyclePosition(
   }
   const cycle_n = idx + 1;
   if (cycle_n > (plan.total_cycles || cycle_n)) return null;
-  const dayOfCycle = Math.floor((now - starts[idx]) / 86400000) + 1;
+  const dayOfCycle = Math.floor((now - starts[idx]) / DAY_MS) + 1;
   return {
     cycle_n,
     total: plan.total_cycles || starts.length,
@@ -92,14 +93,14 @@ export function detectSideEffectPattern(
 
   for (let c = 0; c < starts.length; c++) {
     const cycleStart = starts[c];
-    const cycleEnd = starts[c + 1] || (cycleStart + cycleLength * 86400000);
+    const cycleEnd = starts[c + 1] || (cycleStart + cycleLength * DAY_MS);
     const flags = new Set<number>();
     for (const d of list) {
       if (!d || typeof d.ts !== 'number') continue;
       if (d.ts < cycleStart || d.ts >= cycleEnd) continue;
       const text = String(d.rawText || d.text || '');
       if (!SIDE_EFFECT_RE.test(text)) continue;
-      const dayOfCycle = Math.floor((d.ts - cycleStart) / 86400000) + 1;
+      const dayOfCycle = Math.floor((d.ts - cycleStart) / DAY_MS) + 1;
       flags.add(dayOfCycle);
     }
     dayFlagsByCycle.push(flags);

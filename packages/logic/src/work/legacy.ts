@@ -13,6 +13,7 @@ import type {
 } from './types';
 import { DAY } from './constants';
 import { dayKey, fmtBlockLabel } from './helpers';
+import { MINUTE_MS } from '../util';
 
 interface SessionHistory {
   sessions?: WorkSession[];
@@ -110,9 +111,9 @@ export function detectPacingBreach(
     if (!s) continue;
     let start: number, end: number, dur: number;
     if (typeof s.start === 'number' && typeof s.end === 'number' && s.end > s.start) {
-      start = s.start; end = s.end; dur = (end - start) / 60_000;
+      start = s.start; end = s.end; dur = (end - start) / MINUTE_MS;
     } else if (typeof s.at === 'number' && typeof s.duration_min === 'number' && s.duration_min > 0) {
-      start = s.at; end = s.at + s.duration_min * 60_000; dur = s.duration_min;
+      start = s.at; end = s.at + s.duration_min * MINUTE_MS; dur = s.duration_min;
     } else {
       continue;
     }

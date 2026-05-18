@@ -16,6 +16,7 @@ import {
   spearman,
   nextDayKey,
 } from './math';
+import { DAY_MS, HOUR_MS, MINUTE_MS } from '../util';
 
 import {
   HEADACHE_RE,
@@ -95,7 +96,7 @@ export function detectHeadacheHydration(
   const minRunLength = o.minRunLength || 3;
   const minAbsR = typeof o.minAbsR === 'number' ? o.minAbsR : 0.3;
   const lowGlasses = typeof o.lowGlassesThreshold === 'number' ? o.lowGlassesThreshold : 2;
-  const windowStart = now - windowDays * 86400000;
+  const windowStart = now - windowDays * DAY_MS;
 
   const byDay: Record<string, { glasses_am: number; glasses_total: number; headache: number; hasData: boolean }> = {};
   const ensure = (k: string) => {
@@ -173,7 +174,7 @@ export function detectInteroceptionDrift(
   const minEntries = o.minEntries || 8;
   const cvThreshold = typeof o.cvThreshold === 'number' ? o.cvThreshold : 1.5;
   const minRunLength = o.minRunLength || 3;
-  const windowStart = now - windowDays * 86400000;
+  const windowStart = now - windowDays * DAY_MS;
 
   const tsList: number[] = [];
   for (const entry of (history.waterLog || [])) {
@@ -204,9 +205,9 @@ export function detectInteroceptionDrift(
     ? (sortedGaps[mid / 2 - 1] + sortedGaps[mid / 2]) / 2
     : sortedGaps[(mid - 1) / 2];
 
-  const minMin = Math.round(Math.min(...gaps) / 60000);
-  const maxMin = Math.round(Math.max(...gaps) / 60000);
-  const medianMin = Math.round(medianGap / 60000);
+  const minMin = Math.round(Math.min(...gaps) / MINUTE_MS);
+  const maxMin = Math.round(Math.max(...gaps) / MINUTE_MS);
+  const medianMin = Math.round(medianGap / MINUTE_MS);
   const sampleN = tsList.length;
   const confidence = sampleN >= 25 ? 'high' : sampleN >= 14 ? 'medium' : 'low';
 
@@ -244,7 +245,7 @@ export function detectHyperfocusDehydration(
   const windowDays = o.windowDays || 60;
   const minSessions = o.minSessions || 10;
   const ratioThreshold = typeof o.ratioThreshold === 'number' ? o.ratioThreshold : 0.3;
-  const windowStart = now - windowDays * 86400000;
+  const windowStart = now - windowDays * DAY_MS;
 
   const sessions = (history.focusSessions || []).filter(s =>
     s && typeof s.start === 'number' && typeof s.end === 'number' &&
@@ -257,7 +258,7 @@ export function detectHyperfocusDehydration(
   if (sessions.length < minSessions) return null;
 
   let inFocusHours = 0;
-  for (const s of sessions) inFocusHours += (s.end - s.start) / 3600000;
+  for (const s of sessions) inFocusHours += (s.end - s.start) / HOUR_MS;
   if (inFocusHours <= 0) return null;
 
   let validWaterCount = 0;
@@ -278,7 +279,7 @@ export function detectHyperfocusDehydration(
   if (validWaterCount === 0) return null;
 
   const obsSpanMs = Math.max(latest - earliest, 0);
-  const outFocusHours = Math.max((obsSpanMs / 3600000) - inFocusHours, 0);
+  const outFocusHours = Math.max((obsSpanMs / HOUR_MS) - inFocusHours, 0);
   if (outFocusHours <= 0 || outFocusGlasses === 0) return null;
 
   const inFocusRate = inFocusGlasses / inFocusHours;
@@ -326,7 +327,7 @@ export function detectAfternoonCrashWindow(
   const minSampleN = typeof o.minSampleN === 'number' ? o.minSampleN : 10;
   const peakShareThreshold = typeof o.peakShareThreshold === 'number' ? o.peakShareThreshold : 0.5;
   const minRunLength = typeof o.minRunLength === 'number' ? o.minRunLength : 3;
-  const windowStart = now - windowDays * 86400000;
+  const windowStart = now - windowDays * DAY_MS;
 
   const crashes: Array<{ ts: number; hour: number; dayKey: string }> = [];
   for (const d of (history.dumps || [])) {
@@ -393,8 +394,8 @@ export function detectSupplementDrift(
   const dropThreshold = typeof o.dropRatioThreshold === 'number' ? o.dropRatioThreshold : 0.3;
   const priorMinDays = typeof o.priorMinDays === 'number' ? o.priorMinDays : 7;
 
-  const recentStart = now - 14 * 86400000;
-  const priorStart = now - 28 * 86400000;
+  const recentStart = now - 14 * DAY_MS;
+  const priorStart = now - 28 * DAY_MS;
 
   const recentDaySet = new Set<string>();
   const priorDaySet = new Set<string>();
@@ -450,7 +451,7 @@ export function detectMultiSymptomRecurrence(
   const sleepLowMin = typeof o.sleepLowMin === 'number' ? o.sleepLowMin : 360;
   const waterLowCount = typeof o.waterLowCount === 'number' ? o.waterLowCount : 4;
   const crossThreshold = typeof o.crossThreshold === 'number' ? o.crossThreshold : 0.6;
-  const windowStart = now - windowDays * 86400000;
+  const windowStart = now - windowDays * DAY_MS;
 
   const dumps = history.dumps || [];
   const waterLog = history.waterLog || [];
@@ -597,9 +598,9 @@ export function detectHungerThirstConfusion(
   const o = opts || {};
   const now = resolveNow(history);
   const windowDays = o.windowDays || 30;
-  const burstWindowMs = (o.burstWindowMin || 30) * 60000;
+  const burstWindowMs = (o.burstWindowMin || 30) * MINUTE_MS;
   const minBursts = typeof o.minBursts === 'number' ? o.minBursts : 5;
-  const windowStart = now - windowDays * 86400000;
+  const windowStart = now - windowDays * DAY_MS;
 
   const waterTsList: number[] = [];
   for (const entry of (history.waterLog || [])) {
@@ -665,7 +666,7 @@ export function detectCaffeineWaterTradeoff(
   const windowDays = o.windowDays || 30;
   const minDays = typeof o.minDays === 'number' ? o.minDays : 21;
   const rhoThreshold = typeof o.rhoThreshold === 'number' ? o.rhoThreshold : -0.3;
-  const windowStart = now - windowDays * 86400000;
+  const windowStart = now - windowDays * DAY_MS;
 
   const byDay: Record<string, { water: number; caffeine: number }> = {};
   const ensure = (k: string) => {
@@ -736,7 +737,7 @@ export function detectMealSkipPattern(
   const windowDays = o.windowDays || 14;
   const skipFloor = typeof o.skipFloor === 'number' ? o.skipFloor : 7;
   const cutoffHour = typeof o.cutoffHour === 'number' ? o.cutoffHour : 14;
-  const windowStart = now - windowDays * 86400000;
+  const windowStart = now - windowDays * DAY_MS;
 
   const observedDays = new Set<string>();
   const morningFoodDays = new Set<string>();
@@ -789,7 +790,7 @@ export function detectGISymptomCyclePhase(
   const minMentions = typeof o.minMentions === 'number' ? o.minMentions : 5;
   const minCycles = typeof o.minCycles === 'number' ? o.minCycles : 3;
   const concThreshold = typeof o.concThreshold === 'number' ? o.concThreshold : 0.6;
-  const windowStart = now - windowDays * 86400000;
+  const windowStart = now - windowDays * DAY_MS;
 
   const rawPhases = history.cyclePhases || [];
   if (rawPhases.length === 0) return null;
@@ -862,7 +863,7 @@ export function detectMovementGap(
   const windowDays = o.windowDays || 14;
   const movementCeiling = typeof o.movementCeiling === 'number' ? o.movementCeiling : 4;
   const minObservedDays = typeof o.minObservedDays === 'number' ? o.minObservedDays : 5;
-  const windowStart = now - windowDays * 86400000;
+  const windowStart = now - windowDays * DAY_MS;
 
   const movementDays = new Set<string>();
   const observedDays = new Set<string>();
@@ -911,7 +912,7 @@ export function detectVasomotorPattern(
   const now = resolveNow(history);
   const windowDays = o.windowDays || 30;
   const minDays = typeof o.minDays === 'number' ? o.minDays : 6;
-  const windowStart = now - windowDays * 86400000;
+  const windowStart = now - windowDays * DAY_MS;
 
   const days = new Set<string>();
   for (const d of (history.dumps || [])) {
@@ -953,7 +954,7 @@ export function detectSymptomPhaseCoupling(
   const minLutealDays = o.minLutealDays || 5;
   const minOtherDays = o.minOtherDays || 10;
   const minLift = typeof o.minLift === 'number' ? o.minLift : 1.6;
-  const windowStart = now - windowDays * 86400000;
+  const windowStart = now - windowDays * DAY_MS;
 
   const dumps = history.dumps || [];
   const rawPhases = history.cyclePhases || [];
@@ -965,7 +966,7 @@ export function detectSymptomPhaseCoupling(
     if (!p || typeof p.start !== 'number' || typeof p.end !== 'number' || typeof p.name !== 'string') continue;
     const s = Math.max(p.start, windowStart);
     const e = Math.min(p.end, now);
-    for (let t = s; t <= e; t += 86400000) phaseForDay.set(dayKey(t), p.name);
+    for (let t = s; t <= e; t += DAY_MS) phaseForDay.set(dayKey(t), p.name);
   }
   if (phaseForDay.size === 0) return null;
 
@@ -1037,7 +1038,7 @@ export function detectSleepDebtSymptomLag(
   const minShortNights = o.minShortNights || 5;
   const minBaselineNights = o.minBaselineNights || 10;
   const minLift = typeof o.minLift === 'number' ? o.minLift : 1.5;
-  const windowStart = now - windowDays * 86400000;
+  const windowStart = now - windowDays * DAY_MS;
 
   const dumps = history.dumps || [];
   const sleepRecords = history.sleepRecords || [];
