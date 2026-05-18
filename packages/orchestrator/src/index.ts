@@ -29,6 +29,7 @@ import { createMedicationOrchestrator } from './medication';
 import { scheduleWeeklyReview } from './body-weekly';
 import { scheduleBodyCorrelationPass, runBodyCorrelationPass } from './body-correlations';
 import { createOrphanCueBridge } from './orphan-cue-bridge';
+import { createMatterRoutingOrchestrator } from './matter-routing';
 
 export type { Orchestrator } from './types';
 export { appendCapped, DEFAULT_DEDUP_CAP } from './dedup-store';
@@ -98,6 +99,16 @@ export type {
   DispatchOptions,
   FinanceSlice,
 } from './braindump-dispatch';
+export {
+  createMatterRoutingOrchestrator,
+  runMatterRoutingPass,
+  collectRoutableDumps,
+} from './matter-routing';
+export type {
+  MatterRoutingOptions,
+  MatterRoutingPassResult,
+  LooseDumpRef,
+} from './matter-routing';
 
 export interface RootOrchestrator extends Orchestrator {
   cycle: ReturnType<typeof createCycleOrchestrator>;
@@ -115,6 +126,7 @@ export interface RootOrchestrator extends Orchestrator {
   burhan: ReturnType<typeof createBurhanOrchestrator>;
   medication: ReturnType<typeof createMedicationOrchestrator>;
   orphanCueBridge: ReturnType<typeof createOrphanCueBridge>;
+  matterRouting: ReturnType<typeof createMatterRoutingOrchestrator>;
 }
 
 export interface RootOrchestratorOptions {
@@ -172,6 +184,8 @@ export function createOrchestrator(
   });
   // Audit #3: gives every orphan cross-module cue a real consumer.
   const orphanCueBridge = createOrphanCueBridge(store);
+  // WORK-VISION Phase 2: batches dumps → matters (deterministic, no AI).
+  const matterRoutingOrch = createMatterRoutingOrchestrator(store);
 
   // ── client-side timed passes ──────────────────────────────────────────
   // These two are NOT createXOrchestrator()-shaped — they are
@@ -203,6 +217,7 @@ export function createOrchestrator(
     burhan: burhanOrch,
     medication: medicationOrch,
     orphanCueBridge,
+    matterRouting: matterRoutingOrch,
 
     init() {
       cycleOrch.init();
@@ -220,6 +235,7 @@ export function createOrchestrator(
       burhanOrch.init();
       medicationOrch.init();
       orphanCueBridge.init();
+      matterRoutingOrch.init();
 
       // Arm the two timed passes. Idempotent — re-arming clears any
       // prior timer first.
@@ -260,6 +276,7 @@ export function createOrchestrator(
       burhanOrch.teardown();
       medicationOrch.teardown();
       orphanCueBridge.teardown();
+      matterRoutingOrch.teardown();
 
       weeklyReviewTeardown?.();
       weeklyReviewTeardown = null;
