@@ -2,7 +2,7 @@
  * Sprint 5 · F3 · onboarding country auto-detection.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { detectCountryFromLocale } from './country';
 
 const original = {

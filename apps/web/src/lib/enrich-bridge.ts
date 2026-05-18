@@ -6,13 +6,33 @@
  *
  * Consent gate is the caller's responsibility — typically the
  * useApplyBrainDump hook checks `research.hasConsent()` before invoking.
+ *
+ * Auth: the worker's `/enrich-dump` endpoint requires a verified Supabase
+ * user JWT. We attach `Authorization: Bearer <jwt>` from the booted auth
+ * client. If no session JWT is available, we skip the request entirely —
+ * an unauthenticated POST would just 401, and this is a best-effort path.
  */
+
+import { getAccount } from './account-boot';
 
 interface ViteEnv {
   VITE_AI_WORKER_URL?: string;
 }
 
 const env: ViteEnv = (import.meta as unknown as { env?: ViteEnv }).env ?? {};
+
+/**
+ * Default JWT source — the Supabase access token off the booted auth
+ * client. Same access path as lib/invite.ts · getJwt(). Returns null
+ * pre-sign-in or before bootAccount() has run.
+ */
+function defaultGetJwt(): string | null {
+  try {
+    return getAccount()?.auth.state().session?.access_token ?? null;
+  } catch {
+    return null;
+  }
+}
 
 export interface EnrichDumpInput {
   user_hash: string;
@@ -29,6 +49,8 @@ export interface EnrichDumpDeps {
   fetchImpl?: typeof fetch;
   workerUrl?: string | undefined;
   now?: () => number;
+  /** Injectable JWT source — defaults to the booted auth client's session. */
+  getJwt?: () => string | null;
 }
 
 export function postEnrichDump(input: EnrichDumpInput, deps: EnrichDumpDeps = {}): void {
@@ -36,6 +58,11 @@ export function postEnrichDump(input: EnrichDumpInput, deps: EnrichDumpDeps = {}
   if (!workerUrl) return; // dev / unconfigured
   if (!input.user_hash) return; // pre-sign-in dumps stay local
   if (!input.raw_text) return;
+
+  // The worker requires a verified Supabase JWT. No session → skip; an
+  // unauthenticated POST would only 401, and this path is best-effort.
+  const jwt = (deps.getJwt ?? defaultGetJwt)();
+  if (!jwt) return;
 
   const f = deps.fetchImpl ?? (typeof fetch === 'function' ? fetch : null);
   if (!f) return;
@@ -57,7 +84,10 @@ export function postEnrichDump(input: EnrichDumpInput, deps: EnrichDumpDeps = {}
   try {
     void f(url, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${jwt}`,
+      },
       body: JSON.stringify(payload),
     }).catch(() => { /* best-effort */ });
   } catch {

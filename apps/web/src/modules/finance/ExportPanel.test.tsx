@@ -143,12 +143,6 @@ function queryAllByAriaLabel(name: string): HTMLElement[] {
   return Array.from(container.querySelectorAll(`[aria-label="${name}"]`));
 }
 
-function fire(el: HTMLElement, type: string) {
-  act(() => {
-    el.dispatchEvent(new Event(type, { bubbles: true }));
-  });
-}
-
 // React 18 patches the native value setter to ignore plain assignments
 // that come from outside its synthetic event system. To trigger an
 // onChange in tests, set the value via the original prototype setter

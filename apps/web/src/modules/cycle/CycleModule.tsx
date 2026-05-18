@@ -22,9 +22,31 @@ import {
 import type { CycleItem, Phase } from '@ollie/logic/cycle';
 import { useStoreSlice } from '../../store';
 import { SourcesLink } from '../../components/SourcesLink';
-import { getString, getPlural, type InterpolationVars } from '../../i18n';
+import { getString, getPlural, type InterpolationVars, type Locale } from '../../i18n';
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
+
+/**
+ * Active UI locale for this module's `t`/`tn` helpers.
+ *
+ * `t` and `tn` are module-level (not hooks) because they are called from
+ * ~10 sibling render functions, not just the component — threading a
+ * `t` prop through all of them would be a large, churny refactor. Instead
+ * the `CycleModule` component syncs this variable from
+ * `shared.settings.locale` at the top of its render body (see
+ * `syncCycleLocale`). Because every `t()` call happens during render of a
+ * descendant — which runs strictly after the parent's body — the value is
+ * always current. `useStoreSlice('shared','settings')` drives the
+ * re-render when the user switches language.
+ *
+ * Audit-fix #5: previously hardcoded to `'en'`, so Spanish users saw the
+ * cycle module in English regardless of their setting.
+ */
+let activeLocale: Locale = 'en';
+
+function syncCycleLocale(raw: string | undefined): void {
+  activeLocale = raw === 'es' ? 'es' : raw === 'en-literal' ? 'en-literal' : 'en';
+}
 
 function t(key: string, ...args: (string | number)[]): string {
   // `${i}` tokens map to interpolation vars '0', '1', … — getString's
@@ -32,7 +54,7 @@ function t(key: string, ...args: (string | number)[]): string {
   // hit the first).
   const vars: InterpolationVars = {};
   args.forEach((a, i) => { vars[String(i)] = a; });
-  return getString('en', key, args.length ? vars : undefined);
+  return getString(activeLocale, key, args.length ? vars : undefined);
 }
 
 /**
@@ -41,7 +63,7 @@ function t(key: string, ...args: (string | number)[]): string {
  * fills the `${0}` token automatically.
  */
 function tn(baseKey: string, count: number): string {
-  return getPlural('en', baseKey, count);
+  return getPlural(activeLocale, baseKey, count);
 }
 
 const CERAMIC_TAGS = [
@@ -815,6 +837,14 @@ export function CycleModule({ onBack }: CycleModuleProps) {
   }, []);
   const [lastEditedByCycle, setLastEditedByCycle] = useStoreSlice<Record<number, number>>('cycle', 'lastEditedByCycle', {});
   const [asks, setAsks] = useStoreSlice<string[]>('cycle', 'asks', []);
+
+  // Audit-fix #5: keep the module-level `t`/`tn` locale in sync with the
+  // user's setting. Subscribing here re-renders the whole module (and its
+  // sibling render functions) when the locale changes; setting the value
+  // synchronously in the parent body means every descendant `t()` call
+  // sees the current locale.
+  const [sharedSettings] = useStoreSlice<{ locale?: string }>('shared', 'settings', {});
+  syncCycleLocale(sharedSettings?.locale);
 
   // Local UI state
   const [settingsOpen, setSettingsOpen] = useState(false);

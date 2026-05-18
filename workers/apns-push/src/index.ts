@@ -14,8 +14,27 @@
  *                              userId?: string,   // for per-user rate-limit key
  *                              topic?: string }   // overrides bundle id
  *
+ * Auth:
+ *   /push is called worker-to-worker by ollie-cron's notification drain
+ *   via a service binding — there is no legitimate browser caller. It is
+ *   gated by a shared-secret bearer header: the caller must send
+ *   `Authorization: Bearer <APNS_INTERNAL_SECRET>`. Without it /push would
+ *   let anyone push an arbitrary payload to any device token.
+ *   (Same pattern as apps/api/src/worker.ts · REGISTER_SHARED_SECRET.)
+ *
  * Rate-limit: 5 req/sec per user via Cloudflare KV (RATE_KV).
  */
+
+import { createApnsJwtSigner } from '@ollie/apns-jwt';
+import { json } from '@ollie/worker-http';
+
+/**
+ * Cloudflare native Rate Limiting binding. `limit()` is atomic edge-side,
+ * which fixes the read-then-write race the KV counter had.
+ */
+export interface RateLimiter {
+  limit(opts: { key: string }): Promise<{ success: boolean }>;
+}
 
 export interface Env {
   // Secrets — set via `wrangler secret put`.
@@ -23,9 +42,16 @@ export interface Env {
   APPLE_KEY_ID: string;     // 10-char Apple Key ID
   APPLE_TEAM_ID: string;    // 10-char Apple Team ID
   APPLE_BUNDLE_ID: string;  // e.g. app.ollie.ollie
+  // Shared secret — the cron worker presents this on every /push call.
+  // Set the SAME value on ollie-cron as APNS_INTERNAL_SECRET.
+  APNS_INTERNAL_SECRET: string;
 
   // Bindings — set in wrangler.toml.
   RATE_KV: KVNamespace;
+  // Native rate-limit binding (item #5). Optional so a deploy that hasn't
+  // picked up the wrangler.toml [[ratelimits]] block still type-checks and
+  // falls back to the legacy KV counter.
+  PUSH_RATE_LIMITER?: RateLimiter;
 }
 
 interface PushBody {
@@ -35,14 +61,12 @@ interface PushBody {
   topic?: string;
 }
 
-// ─── JWT cache (token is valid up to 1 hour per Apple spec) ────────────────────
+// ─── APNs JWT signer ────────────────────────────────────────────────────────────
+// ES256 signing lives in the shared @ollie/apns-jwt package — one copy,
+// shared with apps/api/src/worker.ts. The signer caches the token in this
+// module's scope (Apple: valid 1h, regenerate ≤ once / 20 min).
 
-interface CachedJwt {
-  token: string;
-  exp: number;
-}
-
-let __jwtCache: CachedJwt | null = null;
+const apnsSigner = createApnsJwtSigner();
 
 // ─── handler ───────────────────────────────────────────────────────────────────
 
@@ -52,6 +76,18 @@ export default {
 
     if (req.method !== 'POST' || url.pathname !== '/push') {
       return json({ error: 'not_found' }, 404);
+    }
+
+    // Shared-secret gate — /push is internal (worker-to-worker only).
+    // Reject anything that does not present the exact secret. If the
+    // secret is unset the endpoint is closed (fail-closed).
+    const auth = req.headers.get('authorization') ?? '';
+    if (
+      !env.APNS_INTERNAL_SECRET ||
+      !auth.startsWith('Bearer ') ||
+      auth.slice('Bearer '.length) !== env.APNS_INTERNAL_SECRET
+    ) {
+      return json({ error: 'unauthorized' }, 401);
     }
 
     let body: PushBody;
@@ -68,9 +104,9 @@ export default {
       return json({ error: 'missing_payload' }, 400);
     }
 
-    // Rate-limit: 5 req/sec per user (or per-device-token if no userId).
+    // Rate-limit per user (or per-device-token if no userId).
     const rateKey = `rl:apns:${body.userId ?? body.deviceToken}`;
-    const allowed = await checkRate(env.RATE_KV, rateKey, 5, 1);
+    const allowed = await checkRate(env.PUSH_RATE_LIMITER, env.RATE_KV, rateKey);
     if (!allowed) {
       return json({ error: 'rate_limited' }, 429);
     }
@@ -106,84 +142,45 @@ export default {
   },
 };
 
-// ─── rate-limit helper (KV-backed token bucket) ────────────────────────────────
+// ─── rate-limit helper ─────────────────────────────────────────────────────────
+//
+// Prefers the native Cloudflare Rate Limiting binding (atomic at the edge —
+// fixes the read-then-write race the KV counter had). Falls back to the legacy
+// KV fixed-window counter when the binding is not present, so a deploy that
+// has not yet picked up the [[ratelimits]] config still enforces a limit.
+
+const LEGACY_RATE_MAX = 50;     // 50 requests …
+const LEGACY_RATE_WINDOW = 10;  // … per 10 seconds (matches the native limiter)
 
 async function checkRate(
+  limiter: RateLimiter | undefined,
   kv: KVNamespace,
   key: string,
-  max: number,
-  windowSec: number,
 ): Promise<boolean> {
+  if (limiter) {
+    const { success } = await limiter.limit({ key });
+    return success;
+  }
+  // Legacy fallback — racy fixed-window KV counter.
   const now = Math.floor(Date.now() / 1000);
-  const slot = `${key}:${Math.floor(now / windowSec)}`;
+  const slot = `${key}:${Math.floor(now / LEGACY_RATE_WINDOW)}`;
   const raw = await kv.get(slot);
   const count = raw ? parseInt(raw, 10) || 0 : 0;
-  if (count >= max) return false;
-  // expirationTtl: clean up after 2× window so we don't leak keys.
-  await kv.put(slot, String(count + 1), { expirationTtl: windowSec * 2 + 1 });
+  if (count >= LEGACY_RATE_MAX) return false;
+  await kv.put(slot, String(count + 1), { expirationTtl: LEGACY_RATE_WINDOW * 2 + 1 });
   return true;
 }
 
 // ─── JWT signing (ES256 / Apple p8) ────────────────────────────────────────────
+// Delegates to the shared @ollie/apns-jwt signer. This worker's env uses
+// the `APPLE_*` secret names, so we just adapt them to ApnsKeyConfig.
 
 async function getApnsJwt(env: Env): Promise<string> {
-  const now = Math.floor(Date.now() / 1000);
-  // Apple recommends regenerating no more than once every 20 minutes,
-  // and the token is valid for 1 hour. We reuse for 45 minutes.
-  if (__jwtCache && __jwtCache.exp - now > 900) {
-    return __jwtCache.token;
-  }
-
-  const header = { alg: 'ES256', kid: env.APPLE_KEY_ID };
-  const claims = { iss: env.APPLE_TEAM_ID, iat: now };
-
-  const encoder = new TextEncoder();
-  const headerB64 = b64url(encoder.encode(JSON.stringify(header)));
-  const claimsB64 = b64url(encoder.encode(JSON.stringify(claims)));
-  const signingInput = `${headerB64}.${claimsB64}`;
-
-  const keyBytes = pemToBinary(env.APPLE_AUTH_KEY);
-  const cryptoKey = await crypto.subtle.importKey(
-    'pkcs8',
-    keyBytes,
-    { name: 'ECDSA', namedCurve: 'P-256' },
-    false,
-    ['sign'],
-  );
-
-  const sigRaw = await crypto.subtle.sign(
-    { name: 'ECDSA', hash: 'SHA-256' },
-    cryptoKey,
-    encoder.encode(signingInput),
-  );
-
-  const token = `${signingInput}.${b64url(new Uint8Array(sigRaw))}`;
-  __jwtCache = { token, exp: now + 3600 };
-  return token;
-}
-
-function pemToBinary(pem: string): ArrayBuffer {
-  const cleaned = pem
-    .replace(/-----BEGIN [^-]+-----/g, '')
-    .replace(/-----END [^-]+-----/g, '')
-    .replace(/\s+/g, '');
-  const bin = atob(cleaned);
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  return bytes.buffer;
-}
-
-function b64url(bytes: Uint8Array): string {
-  let bin = '';
-  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
-  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
-}
-
-// ─── tiny helpers ──────────────────────────────────────────────────────────────
-
-function json(obj: unknown, status = 200): Response {
-  return new Response(JSON.stringify(obj), {
-    status,
-    headers: { 'content-type': 'application/json' },
+  return apnsSigner.getApnsJwt({
+    authKey: env.APPLE_AUTH_KEY,
+    keyId: env.APPLE_KEY_ID,
+    teamId: env.APPLE_TEAM_ID,
   });
 }
+
+// `json()` is the shared helper from @ollie/worker-http (imported above).

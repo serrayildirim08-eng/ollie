@@ -8,8 +8,7 @@
  */
 
 import type { HabitsHistory, HabitsOpts, HabitSignal, Habit } from './types';
-import { NEG_SELF_RE } from './constants';
-import { dayKey, mean, buildDayCompletionMap } from './helpers';
+import { mean, buildDayCompletionMap } from './helpers';
 
 // ─── detectFreshStartCrash ────────────────────────────────────────────
 

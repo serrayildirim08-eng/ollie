@@ -97,7 +97,7 @@ export function createBodyOrchestrator(
     let curStart = fromTs;
     let curName: string | null = null;
     for (let t = fromTs; t <= toTs; t += 86_400_000) {
-      let phase: string | null = null;
+      let phase: string | null;
       try { phase = computePhaseForDate(cycles as Parameters<typeof computePhaseForDate>[0], t); } catch { phase = null; }
       if (curName === null) { curName = phase; curStart = t; continue; }
       if (phase !== curName) {
@@ -346,57 +346,32 @@ export function createBodyOrchestrator(
 
     // ── APNs push subscribers (body-v2 wiring) ──────────────────────────
     if (scheduleNotification) {
-      // body:supplement_due → aggregate emits in the same recompute pass
-      // into one push. Flush after a short 10ms macrotask delay so any
-      // additional emits in the same tick get coalesced.
-      let supplementBuffer: Array<{ name: string; id: string; ts: number }> = [];
-      let supplementFlushTimer: ReturnType<typeof setTimeout> | null = null;
-
-      function flushSupplements(): void {
-        if (supplementBuffer.length === 0) return;
-        const items = supplementBuffer.slice();
-        supplementBuffer = [];
-        supplementFlushTimer = null;
-        const dayKey = new Date(items[0].ts).toISOString().slice(0, 10);
-        if (items.length === 1) {
-          scheduleNotification!(
-            {
-              title: `${items[0].name}. just a heads up.`,
-              category: 'REMINDER',
-              dedupe_key: `body:supplement_due:${items[0].id}:${dayKey}`,
-              action_url: '/body',
-            },
-            getNow(),
-          );
-        } else {
-          const list = items.map((i) => i.name).join(', ');
-          scheduleNotification!(
-            {
-              title: `${list}. just a heads up.`,
-              category: 'REMINDER',
-              dedupe_key: `body:supplement_due:agg:${dayKey}:${items.map((i) => i.id).sort().join(',')}`,
-              aggregation_group: `body:supplement_due:${dayKey}`,
-              action_url: '/body',
-            },
-            getNow(),
-          );
-        }
-      }
-
+      // body:supplement_due → each emit is handed straight to the
+      // dispatcher tagged with a shared aggregation_group. The dispatcher's
+      // notification aggregator (packages/notifications/src/aggregator.ts)
+      // already coalesces every spec in the same group into one digest
+      // push — so the old hand-rolled 10ms setTimeout buffer here was a
+      // duplicate of that mechanism and has been removed.
       unsubs.push(events.on('body:supplement_due', (raw) => {
         try {
           const p = (raw ?? {}) as { supplementId?: string; supplementName?: string; ts?: number };
           if (!p.supplementId || !p.supplementName) return;
           const ts = typeof p.ts === 'number' ? p.ts : getNow();
-          supplementBuffer.push({ id: p.supplementId, name: p.supplementName, ts });
-          if (supplementFlushTimer) clearTimeout(supplementFlushTimer);
-          supplementFlushTimer = setTimeout(flushSupplements, 10);
+          const dayKey = new Date(ts).toISOString().slice(0, 10);
+          scheduleNotification!(
+            {
+              title: `${p.supplementName}. just a heads up.`,
+              category: 'REMINDER',
+              dedupe_key: `body:supplement_due:${p.supplementId}:${dayKey}`,
+              // Shared group → the dispatcher's aggregator merges every
+              // supplement that comes due the same day into one digest.
+              aggregation_group: `body:supplement_due:${dayKey}`,
+              action_url: '/body',
+            },
+            getNow(),
+          );
         } catch { /* non-fatal */ }
       }));
-      unsubs.push(() => {
-        if (supplementFlushTimer) { clearTimeout(supplementFlushTimer); supplementFlushTimer = null; }
-        supplementBuffer = [];
-      });
 
       // body:posture_nudge
       unsubs.push(events.on('body:posture_nudge', (raw) => {

@@ -24,6 +24,7 @@
  */
 
 import type { FinanceRecord } from './types';
+import { median } from '../stats';
 
 // ─── 1. SUBSCRIPTION DETECTION ────────────────────────────────────────────
 
@@ -53,13 +54,6 @@ const CADENCE_BANDS: Array<{ cadence: DetectedSubscriptionCadence; min: number; 
 function normalize(merchant: string | null | undefined): string {
   if (!merchant) return '';
   return merchant.toLowerCase().trim().replace(/\s+/g, ' ');
-}
-
-function median(xs: number[]): number {
-  if (!xs.length) return 0;
-  const s = [...xs].sort((a, b) => a - b);
-  const m = Math.floor(s.length / 2);
-  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
 }
 
 interface MerchantAmountCluster {

@@ -35,7 +35,7 @@ function makeFakeApi() {
       anonKey: 'anon',
       rest: {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        get: vi.fn(async (_t: string, opts: any) => {
+        get: vi.fn(async (_t: string, _opts: any) => {
           captured.getCalls++;
           return { ok: true, status: 200, data: captured.remoteRows };
           // eslint-disable-next-line @typescript-eslint/no-explicit-any

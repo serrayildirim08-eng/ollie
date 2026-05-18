@@ -38,6 +38,7 @@ import {
   decryptData,
   randomSalt,
   passphraseStrength,
+  CRYPTO_PARAMS,
 } from '@ollie/crypto';
 import type { Store } from '@ollie/store';
 
@@ -51,6 +52,13 @@ export interface BackupEnvelope {
   salt: string;
   iv: string;
   ciphertext: string;
+  /**
+   * SECURITY (S7): PBKDF2 iteration count the encryption key was derived
+   * with. New backups always carry it (600k). Backups exported before the
+   * S7 bump have NO such field — `importBackup` falls back to the legacy
+   * 100k count so they still decrypt. Optional purely for back-compat.
+   */
+  kdf_iterations?: number;
   metadata: {
     module_count: number;
     exported_by?: string;
@@ -98,8 +106,9 @@ export async function exportBackup(
   passphrase: string,
   opts: BackupOptions = {},
 ): Promise<BackupEnvelope> {
-  const strength = passphraseStrength(passphrase);
-  if (strength.notes.some((n) => n.startsWith('must be at least'))) {
+  // passphraseStrength is async (zxcvbn is lazy-loaded).
+  const strength = await passphraseStrength(passphrase);
+  if (strength.notes.some((n: string) => n.startsWith('must be at least'))) {
     throw new Error('@ollie/backup: passphrase too short');
   }
   const modules = opts.modules ?? DEFAULT_MODULES;
@@ -116,7 +125,10 @@ export async function exportBackup(
   }
 
   const salt = randomSalt();
-  const key = await deriveKey(passphrase, salt);
+  // SECURITY (S7): new backups derive at the current 600k iteration count
+  // and record it in the envelope so importBackup can reproduce the key.
+  const kdfIterations = CRYPTO_PARAMS.PBKDF2_ITERATIONS;
+  const key = await deriveKey(passphrase, salt, kdfIterations);
   const enc = await encryptData(key, snapshot);
 
   return {
@@ -126,6 +138,7 @@ export async function exportBackup(
     salt: bytesToBase64(salt),
     iv: bytesToBase64(enc.iv),
     ciphertext: bytesToBase64(enc.ciphertext),
+    kdf_iterations: kdfIterations,
     metadata: {
       module_count: moduleCount,
       exported_by: opts.exportedBy,
@@ -200,7 +213,16 @@ export async function importBackup(
     const salt = base64ToBytes(envelope.salt);
     const iv = base64ToBytes(envelope.iv);
     const ciphertext = base64ToBytes(envelope.ciphertext);
-    const key = await deriveKey(passphrase, salt);
+    // SECURITY (S7): derive with the iteration count this backup was
+    // written with. Pre-S7 backups carry no `kdf_iterations` field →
+    // fall back to the legacy 100k count so they still decrypt.
+    const kdfIterations =
+      typeof envelope.kdf_iterations === 'number' &&
+      Number.isInteger(envelope.kdf_iterations) &&
+      envelope.kdf_iterations > 0
+        ? envelope.kdf_iterations
+        : CRYPTO_PARAMS.LEGACY_PBKDF2_ITERATIONS;
+    const key = await deriveKey(passphrase, salt, kdfIterations);
     snapshot = await decryptData<Record<string, unknown>>(key, { iv, ciphertext });
   } catch {
     return { ok: false, code: 'wrong-passphrase', message: 'wrong passphrase, or backup file is corrupt' };

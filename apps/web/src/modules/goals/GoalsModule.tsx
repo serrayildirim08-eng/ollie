@@ -4,7 +4,6 @@ import {
   detectObstacleEcho,
   detectPreMortemEcho,
   retrieveUlyssesContract,
-  detectActiveCap,
   detectResearchAsProgress,
   detectIdentityDrift,
   detectSunkCostFlag,
@@ -19,12 +18,6 @@ import type {
   GoalCategory,
   Milestone,
   LowMoodSignal,
-  UlyssesContractSignal,
-  ActiveCapSignal,
-  ResearchAsProgressSignal,
-  IdentityDriftSignal,
-  SunkCostSignal,
-  PacingClassifiedSignal,
 } from '@ollie/logic/goals';
 import { emit as emitEvent } from '@ollie/events';
 import { useStoreSlice } from '../../store';
@@ -47,6 +40,53 @@ const CATEGORIES: ReadonlyArray<GoalCategory> = [
 ];
 
 type CategoryFilter = GoalCategory | 'all';
+
+// ─── step completion (audit-fix #11) ─────────────────────────────────────────
+
+/**
+ * Step completion state.
+ *
+ * Steps are plain strings with no id, so completion is keyed by step TEXT
+ * — a stable key that survives deleting/reordering steps. The legacy
+ * `boolean[]` shape (indexed by array position) is still accepted on read
+ * and migrated to the record form on the next write.
+ *
+ * `boolean[]` — legacy, positional. `Record<string,boolean>` — current.
+ */
+export type StepDone = boolean[] | Record<string, boolean>;
+
+/** Is the step at `(text, idx)` marked done, tolerating either shape. */
+export function isStepDone(
+  done: StepDone | undefined,
+  stepText: string,
+  idx: number,
+): boolean {
+  if (Array.isArray(done)) return !!done[idx];
+  return !!done?.[stepText];
+}
+
+/**
+ * Toggle completion for `stepText`, returning the next record. A legacy
+ * positional `boolean[]` is migrated to a text-keyed record first, using
+ * `steps` to map index → text.
+ */
+export function toggleStepDone(
+  done: StepDone | undefined,
+  steps: readonly string[],
+  stepText: string,
+): Record<string, boolean> {
+  let next: Record<string, boolean>;
+  if (Array.isArray(done)) {
+    next = {};
+    steps.forEach((s, i) => {
+      if (done[i]) next[s] = true;
+    });
+  } else {
+    next = { ...(done ?? {}) };
+  }
+  next[stepText] = !next[stepText];
+  return next;
+}
 
 // ─── palette (paper/ink canonical) ───────────────────────────────────────────
 
@@ -439,12 +479,18 @@ interface StepBlockProps {
   busy: boolean;
   error: string | undefined;
   onAsk: () => void;
-  onToggle: (idx: number) => void;
+  /** Toggle completion for the step with the given text (stable key). */
+  onToggle: (stepText: string) => void;
 }
 
 function StepBlock({ goal, busy, error, onAsk, onToggle }: StepBlockProps) {
   const steps = goal.steps ?? [];
-  const done = (goal as StoredGoal & { steps_done?: boolean[] }).steps_done ?? [];
+  // Audit-fix #11: completion is keyed by step TEXT, not array index.
+  // Steps have no id, so the text is the stable key — deleting or
+  // reordering a step no longer mis-marks a different step as done.
+  // Reads tolerate the legacy `boolean[]` shape (migrated lazily on the
+  // next toggle, see `toggleStep`).
+  const doneRaw = (goal as StoredGoal & { steps_done?: StepDone }).steps_done;
   return (
     <div style={{ paddingTop: 18 }}>
       <div
@@ -502,10 +548,10 @@ function StepBlock({ goal, busy, error, onAsk, onToggle }: StepBlockProps) {
           }}
         >
           {steps.map((s, i) => {
-            const isDone = !!done[i];
+            const isDone = isStepDone(doneRaw, s, i);
             return (
               <li
-                key={i}
+                key={s}
                 style={{
                   display: 'grid',
                   gridTemplateColumns: 'auto 1fr',
@@ -517,7 +563,7 @@ function StepBlock({ goal, busy, error, onAsk, onToggle }: StepBlockProps) {
               >
                 <button
                   type="button"
-                  onClick={() => onToggle(i)}
+                  onClick={() => onToggle(s)}
                   aria-pressed={isDone}
                   aria-label={isDone ? 'mark step open' : 'mark step done'}
                   style={{
@@ -1074,16 +1120,20 @@ export function GoalsModule({ onBack }: GoalsModuleProps) {
     }
   }
 
-  function toggleStep(goalId: string, idx: number) {
-    // Steps are simple strings; toggling completion stores a parallel
-    // boolean array under steps_done. We piggyback as a Record on the goal.
+  function toggleStep(goalId: string, stepText: string) {
+    // Audit-fix #11: completion is stored as a Record keyed by step TEXT,
+    // not a parallel boolean array indexed by position. The old array
+    // shape broke whenever a step was deleted or reordered — `steps_done[i]`
+    // then pointed at a different step. `toggleStepDone` migrates legacy
+    // `boolean[]` values to the Record form, in step order, on first toggle.
     setGoals(
       (goals ?? []).map((g) => {
         if (g?.id !== goalId) return g;
-        const done = (g as StoredGoal & { steps_done?: boolean[] }).steps_done ?? [];
-        const next = [...done];
-        next[idx] = !next[idx];
-        return { ...g, steps_done: next };
+        const stored = (g as StoredGoal & { steps_done?: StepDone }).steps_done;
+        return {
+          ...g,
+          steps_done: toggleStepDone(stored, g.steps ?? [], stepText),
+        };
       }) as StoredGoal[],
     );
   }
@@ -2543,7 +2593,7 @@ export function GoalsModule({ onBack }: GoalsModuleProps) {
                       busy={!!stepFetching[g.id!]}
                       error={stepError[g.id!]}
                       onAsk={() => fetchSteps(g)}
-                      onToggle={(idx) => toggleStep(g.id!, idx)}
+                      onToggle={(stepText) => toggleStep(g.id!, stepText)}
                     />
                   )}
 

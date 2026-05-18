@@ -14,16 +14,19 @@ import {
   // patterns
   detectHeadacheHydration,
   detectInteroceptionDrift,
-  detectHyperfocusDehydration,
   detectAfternoonCrashWindow,
   detectSupplementDrift,
-  detectMultiSymptomRecurrence,
   detectHungerThirstConfusion,
-  detectCaffeineWaterTradeoff,
-  detectMealSkipPattern,
   detectMovementGap,
   detectVasomotorPattern,
   detectPatterns,
+  detectHyperfocusDehydration,
+  detectMultiSymptomRecurrence,
+  detectCaffeineWaterTradeoff,
+  detectMealSkipPattern,
+  detectGISymptomCyclePhase,
+  detectSymptomPhaseCoupling,
+  detectSleepDebtSymptomLag,
   envelopeCopy,
   // episodes
   openEpisode,
@@ -31,13 +34,14 @@ import {
   normalizeEpisode,
   isWellFormedEpisode,
   logSeverity,
-  logMed,
-  logNote,
   closeEpisode,
   activeEpisode,
   summarizeEpisode,
   detectDurationDistribution,
   detectMedicationAdherence,
+  detectTriggerCorrelation,
+  detectRecurrenceRhythm,
+  detectMentalEpisodePattern,
   generateDoctorSummary,
   // signals
   detectSleepDebtFocusQuality,
@@ -708,5 +712,409 @@ describe('detectBodySignals', () => {
     const out = detectBodySignals({ now: NOW, cyclePhases, focusSessions });
     expect(out.length).toBeGreaterThan(0);
     for (const s of out) expect(s.modules.length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+// ─── detectHyperfocusDehydration ──────────────────────────────────────────────
+
+describe('detectHyperfocusDehydration', () => {
+  it('returns null when fewer than minSessions focus sessions', () => {
+    expect(detectHyperfocusDehydration({ now: NOW, focusSessions: [], waterLog: [] })).toBeNull();
+  });
+
+  it('surfaces when in-focus drinking rate is far below out-of-focus rate', () => {
+    // 12 short focus sessions inside one continuous 12h observation span.
+    // out-of-focus span = 12h - 6h focus = 6h, holding 30 glasses → high rate.
+    // in-focus = 12 glasses over 6h → far lower rate.
+    const focusSessions = [];
+    const waterLog = [];
+    const base = NOW - 12 * HOUR;
+    for (let i = 0; i < 12; i++) {
+      const fStart = base + i * 60 * MIN;       // each focus session 30 min
+      focusSessions.push({ start: fStart, end: fStart + 30 * MIN });
+      waterLog.push(fStart + 10 * MIN);          // 1 glass per focus session
+    }
+    // Many glasses crammed into the gaps between sessions (out-of-focus) so
+    // the out-of-focus drinking rate dwarfs the in-focus rate.
+    for (let i = 0; i < 12; i++) {
+      const gapStart = base + i * 60 * MIN + 32 * MIN;
+      for (let g = 0; g < 6; g++) waterLog.push(gapStart + g * 4 * MIN);
+    }
+    const result = detectHyperfocusDehydration(
+      { now: NOW, focusSessions, waterLog },
+      { minSessions: 10 },
+    );
+    expect(result).not.toBeNull();
+    expect(result?.pattern).toBe('hyperfocus_dehydration');
+    expect(result?.in_focus_rate).toBeLessThan(result!.out_focus_rate);
+  });
+
+  it('returns null when in-focus drinking keeps pace with out-of-focus', () => {
+    const focusSessions = [];
+    const waterLog = [];
+    const base = NOW - 12 * HOUR;
+    for (let i = 0; i < 12; i++) {
+      const fStart = base + i * 60 * MIN;
+      focusSessions.push({ start: fStart, end: fStart + 30 * MIN });
+      // even drinking: 3 glasses inside focus, 3 in the gap
+      waterLog.push(fStart + 5 * MIN, fStart + 12 * MIN, fStart + 20 * MIN);
+      const gapStart = fStart + 35 * MIN;
+      for (let g = 0; g < 3; g++) waterLog.push(gapStart + g * 6 * MIN);
+    }
+    expect(detectHyperfocusDehydration(
+      { now: NOW, focusSessions, waterLog },
+      { minSessions: 10 },
+    )).toBeNull();
+  });
+});
+
+// ─── detectMultiSymptomRecurrence ─────────────────────────────────────────────
+
+describe('detectMultiSymptomRecurrence', () => {
+  it('returns [] for empty history', () => {
+    expect(detectMultiSymptomRecurrence({ now: NOW })).toEqual([]);
+  });
+
+  it('surfaces a symptom recurring on >= standaloneN distinct days', () => {
+    const dumps = [];
+    // 8 distinct days; standaloneN lowered to 5 so a no-correlation symptom
+    // still surfaces (default standaloneN=10 would suppress it).
+    for (let d = 1; d <= 8; d++) {
+      dumps.push({ ts: NOW - d * 5 * DAY, rawText: 'back pain again today' });
+    }
+    const result = detectMultiSymptomRecurrence(
+      { now: NOW, dumps }, { minSampleDays: 5, standaloneN: 5 },
+    );
+    expect(Array.isArray(result)).toBe(true);
+    expect(result.length).toBeGreaterThan(0);
+    expect(result[0].pattern).toBe('multi_symptom_recurrence');
+  });
+
+  it('returns [] when a symptom appears on fewer than minSampleDays', () => {
+    const dumps = [
+      { ts: NOW - 5 * DAY, rawText: 'back pain' },
+      { ts: NOW - 10 * DAY, rawText: 'back pain' },
+    ];
+    expect(detectMultiSymptomRecurrence(
+      { now: NOW, dumps }, { minSampleDays: 5, standaloneN: 5 },
+    )).toEqual([]);
+  });
+
+  it('returns [] when an uncorrelated symptom stays below standaloneN', () => {
+    // 8 days of a symptom with no sleep/water/phase correlation: under the
+    // default standaloneN=10 floor → suppressed.
+    const dumps = [];
+    for (let d = 1; d <= 8; d++) {
+      dumps.push({ ts: NOW - d * 5 * DAY, rawText: 'back pain again today' });
+    }
+    expect(detectMultiSymptomRecurrence({ now: NOW, dumps }, { minSampleDays: 5 })).toEqual([]);
+  });
+
+  it('de-dupes multiple mentions on the same day', () => {
+    const dumps = [];
+    for (let d = 1; d <= 6; d++) {
+      const base = NOW - d * 6 * DAY;
+      dumps.push({ ts: base + 2 * HOUR, rawText: 'stomach ache' });
+      dumps.push({ ts: base + 8 * HOUR, rawText: 'stomach ache again' });
+    }
+    const result = detectMultiSymptomRecurrence(
+      { now: NOW, dumps }, { minSampleDays: 5, standaloneN: 5 },
+    );
+    expect(result.length).toBeGreaterThan(0);
+    expect(result[0].sample_n).toBe(6);
+  });
+});
+
+// ─── detectCaffeineWaterTradeoff ──────────────────────────────────────────────
+
+describe('detectCaffeineWaterTradeoff', () => {
+  it('returns null when fewer than minDays of paired data', () => {
+    expect(detectCaffeineWaterTradeoff({ now: NOW, waterLog: [], dumps: [] })).toBeNull();
+  });
+
+  it('surfaces a negative caffeine/water correlation', () => {
+    // 24 days: high-caffeine days have low water, low-caffeine days have high water
+    const waterLog = [];
+    const dumps = [];
+    for (let d = 1; d <= 24; d++) {
+      const base = NOW - d * DAY + 9 * HOUR;
+      const highCaf = d % 2 === 0;
+      const cafCups = highCaf ? 3 : 1;
+      const waterGlasses = highCaf ? 2 : 6;
+      for (let c = 0; c < cafCups; c++) dumps.push({ ts: base + c * 30 * MIN, rawText: 'coffee' });
+      for (let w = 0; w < waterGlasses; w++) waterLog.push(base + 4 * HOUR + w * 20 * MIN);
+    }
+    const result = detectCaffeineWaterTradeoff({ now: NOW, waterLog, dumps }, { minDays: 21 });
+    expect(result).not.toBeNull();
+    expect(result?.pattern).toBe('caffeine_water_tradeoff');
+    expect(result?.rho).toBeLessThanOrEqual(-0.3);
+  });
+
+  it('returns null when caffeine and water are uncorrelated/positive', () => {
+    const waterLog = [];
+    const dumps = [];
+    for (let d = 1; d <= 24; d++) {
+      const base = NOW - d * DAY + 9 * HOUR;
+      dumps.push({ ts: base, rawText: 'coffee' });
+      dumps.push({ ts: base + 30 * MIN, rawText: 'coffee' });
+      waterLog.push(base + 4 * HOUR, base + 5 * HOUR, base + 6 * HOUR);
+    }
+    expect(detectCaffeineWaterTradeoff({ now: NOW, waterLog, dumps }, { minDays: 21 })).toBeNull();
+  });
+});
+
+// ─── detectMealSkipPattern ────────────────────────────────────────────────────
+
+describe('detectMealSkipPattern', () => {
+  // Detector uses local getHours() with cutoffHour=14. Build timestamps at
+  // explicit local hours so the morning/evening split is timezone-stable.
+  const localTs = (daysAgo: number, hour: number): number => {
+    const d = new Date(NOW);
+    d.setDate(d.getDate() - daysAgo);
+    d.setHours(hour, 0, 0, 0);
+    return d.getTime();
+  };
+
+  it('returns null when meal-timing tracking is disabled', () => {
+    const dumps = [];
+    for (let d = 1; d <= 14; d++) dumps.push({ ts: localTs(d, 18), rawText: 'random' });
+    expect(detectMealSkipPattern({ now: NOW, dumps })).toBeNull();
+  });
+
+  it('surfaces when most observed days have no morning food log', () => {
+    const dumps = [];
+    // 14 observed days; food only ever logged at 20:00 (after cutoff 14:00)
+    for (let d = 1; d <= 14; d++) {
+      dumps.push({ ts: localTs(d, 20), rawText: 'dinner — akşam yemeği yedim' });
+    }
+    const result = detectMealSkipPattern(
+      { now: NOW, dumps, settings: { tracking_meal_timing: true } },
+    );
+    expect(result).not.toBeNull();
+    expect(result?.pattern).toBe('meal_skip');
+    expect(result?.skip_days).toBeGreaterThanOrEqual(7);
+  });
+
+  it('returns null when morning food is logged most days', () => {
+    const dumps = [];
+    for (let d = 1; d <= 14; d++) {
+      dumps.push({ ts: localTs(d, 8), rawText: 'breakfast — kahvaltı yaptım' });
+    }
+    expect(detectMealSkipPattern(
+      { now: NOW, dumps, settings: { tracking_meal_timing: true } },
+    )).toBeNull();
+  });
+
+  it('respects opts.tracking_meal_timing as an enable override', () => {
+    const dumps = [];
+    for (let d = 1; d <= 14; d++) dumps.push({ ts: localTs(d, 20), rawText: 'dinner' });
+    const result = detectMealSkipPattern({ now: NOW, dumps }, { tracking_meal_timing: true });
+    expect(result).not.toBeNull();
+  });
+});
+
+// ─── detectGISymptomCyclePhase ────────────────────────────────────────────────
+
+describe('detectGISymptomCyclePhase', () => {
+  it('returns null when GI tracking is disabled', () => {
+    expect(detectGISymptomCyclePhase({ now: NOW, dumps: [], cyclePhases: [] })).toBeNull();
+  });
+
+  it('returns null when there are no cycle phase markers', () => {
+    expect(detectGISymptomCyclePhase(
+      { now: NOW, dumps: [], cyclePhases: [], settings: { tracking_gi: true } },
+    )).toBeNull();
+  });
+
+  it('surfaces when GI symptoms concentrate in one phase across enough cycles', () => {
+    // 4 menstrual phase markers (cycle starts) + luteal markers between them.
+    const cyclePhases: Array<{ ts: number; phase: string }> = [];
+    const dumps = [];
+    for (let c = 0; c < 4; c++) {
+      const cycleStart = NOW - (80 - c * 25) * DAY;
+      cyclePhases.push({ ts: cycleStart, phase: 'menstrual' });
+      cyclePhases.push({ ts: cycleStart + 14 * DAY, phase: 'luteal' });
+      // GI symptom dumps in the luteal window
+      dumps.push({ ts: cycleStart + 16 * DAY, rawText: 'mide ağrısı çok kötü' });
+      dumps.push({ ts: cycleStart + 18 * DAY, rawText: 'midem bulanıyor' });
+    }
+    const result = detectGISymptomCyclePhase(
+      { now: NOW, dumps, cyclePhases, settings: { tracking_gi: true } },
+      { minMentions: 5, minCycles: 3, concThreshold: 0.6 },
+    );
+    expect(result).not.toBeNull();
+    expect(result?.pattern).toBe('gi_cycle_phase');
+    expect(result?.phase_dominant).toBe('luteal');
+  });
+});
+
+// ─── detectSymptomPhaseCoupling ───────────────────────────────────────────────
+
+describe('detectSymptomPhaseCoupling', () => {
+  it('returns null with empty dumps or phases', () => {
+    expect(detectSymptomPhaseCoupling({ now: NOW, dumps: [], cyclePhases: [] })).toBeNull();
+  });
+
+  it('surfaces when symptoms cluster in luteal vs other phases', () => {
+    // CyclePhaseRange shape: { start, end, name }
+    const cyclePhases = [
+      { start: NOW - 90 * DAY, end: NOW - 75 * DAY, name: 'other' },
+      { start: NOW - 75 * DAY, end: NOW - 65 * DAY, name: 'luteal' },
+      { start: NOW - 65 * DAY, end: NOW - 45 * DAY, name: 'other' },
+      { start: NOW - 45 * DAY, end: NOW - 35 * DAY, name: 'luteal' },
+      { start: NOW - 35 * DAY, end: NOW - 5 * DAY, name: 'other' },
+    ];
+    const dumps = [];
+    // Heavy symptom load on luteal days, almost none on other days
+    for (const p of cyclePhases) {
+      if (p.name !== 'luteal') continue;
+      for (let t = p.start; t < p.end; t += DAY) {
+        dumps.push({ ts: t + 10 * HOUR, rawText: 'headache yine' });
+      }
+    }
+    // a couple of non-symptom dumps on other days for observed-day coverage
+    const result = detectSymptomPhaseCoupling(
+      { now: NOW, dumps, cyclePhases },
+      { minLutealDays: 5, minOtherDays: 10, minLift: 1.6 },
+    );
+    expect(result).not.toBeNull();
+    expect(result?.pattern).toBe('symptom_phase_coupling');
+    expect(result?.luteal_symptom_rate).toBeGreaterThan(result!.other_symptom_rate);
+  });
+});
+
+// ─── detectSleepDebtSymptomLag ────────────────────────────────────────────────
+
+describe('detectSleepDebtSymptomLag', () => {
+  it('returns null with empty dumps or sleep records', () => {
+    expect(detectSleepDebtSymptomLag({ now: NOW, dumps: [], sleepRecords: [] })).toBeNull();
+  });
+
+  it('surfaces when symptoms spike on days after short-sleep nights', () => {
+    const sleepRecords = [];
+    const dumps = [];
+    // Local-day key, matching the detector's local dayKey().
+    const dKey = (daysAgo: number): string => {
+      const d = new Date(NOW);
+      d.setDate(d.getDate() - daysAgo);
+      const p = (n: number) => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+    };
+    // A symptom dump anchored to the day AFTER a given night.
+    const followDumpTs = (nightDaysAgo: number): number => {
+      const d = new Date(NOW);
+      d.setDate(d.getDate() - (nightDaysAgo - 1));
+      d.setHours(15, 0, 0, 0);
+      return d.getTime();
+    };
+    // 8 short nights (each followed by a symptom day), within the 60d window.
+    // Short uses 6-day spacing, baseline uses 4-day spacing offset by 1 →
+    // no two records ever land on the same local day.
+    for (let i = 0; i < 8; i++) {
+      const nightDaysAgo = 4 + i * 6;     // 4,10,16,...,46 days ago
+      sleepRecords.push({ night_of: dKey(nightDaysAgo), tst_min: 300 });
+      dumps.push({ ts: followDumpTs(nightDaysAgo), rawText: 'headache, brutal day' });
+    }
+    // 12 baseline (rested) nights, no symptom dumps, still inside the window.
+    for (let i = 0; i < 12; i++) {
+      sleepRecords.push({ night_of: dKey(5 + i * 4), tst_min: 450 }); // 5,9,...,49
+    }
+    const result = detectSleepDebtSymptomLag(
+      { now: NOW, dumps, sleepRecords },
+      { minShortNights: 5, minBaselineNights: 10, minLift: 1.5 },
+    );
+    expect(result).not.toBeNull();
+    expect(result?.pattern).toBe('sleep_debt_symptom_lag');
+    expect(result?.short_symptom_rate).toBeGreaterThan(result!.baseline_symptom_rate);
+  });
+});
+
+// ─── episode detectors: trigger / rhythm / mental ─────────────────────────────
+
+describe('detectTriggerCorrelation', () => {
+  it('returns null when fewer than minEpisodes episodes', () => {
+    const eps = [openEpisode('migren', 'acute', { now: NOW - 5 * DAY })];
+    expect(detectTriggerCorrelation(eps, {}, { now: NOW })).toBeNull();
+  });
+
+  it('surfaces low_sleep trigger when most episodes follow short-sleep weeks', () => {
+    const dKey = (ts: number) => {
+      const d = new Date(ts);
+      const p = (n: number) => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+    };
+    const eps = [];
+    const sleepRecords = [];
+    for (let i = 0; i < 5; i++) {
+      const epStart = NOW - (10 + i * 12) * DAY;
+      eps.push(openEpisode('migren', 'acute', { now: epStart }));
+      // 7 short nights before each episode
+      for (let n = 1; n <= 7; n++) {
+        sleepRecords.push({ night_of: dKey(epStart - n * DAY), tst_min: 300 });
+      }
+    }
+    const result = detectTriggerCorrelation(eps, { sleepRecords }, { now: NOW, minEpisodes: 4 });
+    expect(result).not.toBeNull();
+    expect(result?.trigger).toBe('low_sleep');
+    expect(result?.match_rate).toBeGreaterThanOrEqual(0.6);
+  });
+
+  it('returns null when no trigger reaches the 60% match rate', () => {
+    const eps = [];
+    for (let i = 0; i < 5; i++) {
+      eps.push(openEpisode('migren', 'acute', { now: NOW - (10 + i * 12) * DAY }));
+    }
+    // no sleep / dump / phase history → all trigger counts 0
+    expect(detectTriggerCorrelation(eps, {}, { now: NOW, minEpisodes: 4 })).toBeNull();
+  });
+});
+
+describe('detectRecurrenceRhythm', () => {
+  it('returns null when fewer than minEpisodes episodes', () => {
+    const eps = [
+      openEpisode('migren', 'acute', { now: NOW - 30 * DAY }),
+      openEpisode('migren', 'acute', { now: NOW - 20 * DAY }),
+    ];
+    expect(detectRecurrenceRhythm(eps, { now: NOW })).toBeNull();
+  });
+
+  it('surfaces a regular rhythm when intervals are low-variance', () => {
+    // 5 episodes ~14 days apart → low CV
+    const eps = [];
+    for (let i = 0; i < 5; i++) {
+      eps.push(openEpisode('migren', 'acute', { now: NOW - (70 - i * 14) * DAY }));
+    }
+    const result = detectRecurrenceRhythm(eps, { now: NOW, minEpisodes: 4 });
+    expect(result).not.toBeNull();
+    expect(result?.pattern).toBe('episode_recurrence_rhythm');
+    expect(result?.mean_interval_days).toBeCloseTo(14, 0);
+  });
+
+  it('returns null when interval variance exceeds jitterTolerance', () => {
+    // wildly irregular gaps
+    const offsets = [80, 79, 50, 10, 9];
+    const eps = offsets.map(o => openEpisode('migren', 'acute', { now: NOW - o * DAY }));
+    expect(detectRecurrenceRhythm(eps, { now: NOW, minEpisodes: 4, jitterTolerance: 0.2 })).toBeNull();
+  });
+});
+
+describe('detectMentalEpisodePattern', () => {
+  it('returns [] when there are no mental-kind episodes', () => {
+    const eps = [openEpisode('grip', 'acute', { now: NOW - 10 * DAY })];
+    expect(detectMentalEpisodePattern(eps, {}, { now: NOW })).toEqual([]);
+  });
+
+  it('returns [] for empty / null episodes input', () => {
+    expect(detectMentalEpisodePattern([], {}, { now: NOW })).toEqual([]);
+  });
+
+  it('emits a rhythm pattern for regularly-recurring mental episodes', () => {
+    const eps = [];
+    for (let i = 0; i < 5; i++) {
+      eps.push(openEpisode('low spell', 'mental_episode', { now: NOW - (70 - i * 14) * DAY }));
+    }
+    const out = detectMentalEpisodePattern(eps, {}, { now: NOW, minEpisodes: 4 });
+    expect(Array.isArray(out)).toBe(true);
+    expect(out.some(p => p.pattern === 'mental_episode_rhythm')).toBe(true);
   });
 });

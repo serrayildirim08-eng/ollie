@@ -7,28 +7,9 @@
 import type { Observation, Series, TimestampedObservation } from './types';
 import { DAY_MS } from './constants';
 
-export function sum(a: number[]): number {
-  return a.reduce((s, x) => s + x, 0);
-}
-
-export function mean(a: number[]): number {
-  return sum(a) / a.length;
-}
-
-export function variance(a: number[]): number {
-  const m = mean(a);
-  return a.reduce((s, x) => s + (x - m) ** 2, 0) / a.length;
-}
-
-export function sampleSd(a: number[]): number {
-  return Math.sqrt(variance(a));
-}
-
-export function median(a: number[]): number {
-  const s = a.slice().sort((x, y) => x - y);
-  const n = s.length;
-  return n % 2 ? s[(n - 1) / 2]! : (s[n / 2 - 1]! + s[n / 2]!) / 2;
-}
+// Statistical primitives are re-exported from the canonical `../stats`
+// module — single source of truth, carries the even-length median fix.
+export { sum, mean, variance, sampleSd, median } from '../stats';
 
 export function toSeries(input: Observation[]): Series {
   const arr = (input ?? []).filter((x): x is Observation => x != null);

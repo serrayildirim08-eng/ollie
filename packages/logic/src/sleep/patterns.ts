@@ -14,7 +14,6 @@
  */
 
 import type {
-  SleepRecord,
   RevengeBedtimePattern,
   CaffeineCutoffPattern,
   SleepOnsetGapPattern,
@@ -56,7 +55,6 @@ import type {
 import {
   parseTimeOfDay,
   bedtimeRelativeMinutes,
-  minutesInBed,
   formatTime,
   isoDate,
   _mean,

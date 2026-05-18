@@ -235,7 +235,13 @@ export function setNecessaryConsentSync(
     v: 1,
   };
   store.set<ConsentState>(CONSENT_STORE_MODULE, CONSENT_STORE_KEY, next);
-  cache.set(userId, next);
+  // SECURITY (S5): the store is the single source of truth. The in-memory
+  // cache is only a perf shortcut and is keyed inconsistently across
+  // setters (`_local` here vs a real userId in setConsent), so a stale
+  // entry under a different key could keep a research opt-out from being
+  // seen by getConsent/hasResearchConsent. Clear it so every reader
+  // re-hydrates from the just-written store row.
+  cache.clear();
   void syncRef(next, userId).catch(() => { /* best-effort audit */ });
 }
 
@@ -254,7 +260,9 @@ export function setMarketingConsentSync(
     v: 1,
   };
   store.set<ConsentState>(CONSENT_STORE_MODULE, CONSENT_STORE_KEY, next);
-  cache.set(userId, next);
+  // SECURITY (S5): see setNecessaryConsentSync — clear the cache so every
+  // reader re-hydrates from the store (the single source of truth).
+  cache.clear();
   void syncRef(next, userId).catch(() => { /* best-effort audit */ });
 }
 
@@ -333,10 +341,18 @@ export async function setConsent(
     v: 1,
   };
 
-  cache.set(userId, next);
-
   if (storeRef) {
     storeRef.set<ConsentState>(CONSENT_STORE_MODULE, CONSENT_STORE_KEY, next);
+    // SECURITY (S5): store is the source of truth. Clear the whole cache
+    // rather than writing `cache.set(userId, next)` — the *Sync setters
+    // write under `_local`, so a per-userId cache.set here would leave a
+    // stale `_local` entry (and vice-versa) and a research opt-OUT could
+    // be masked by a cached opt-in. A subsequent getConsent re-hydrates.
+    cache.clear();
+  } else {
+    // Unconfigured (tests / offline): no durable store to re-read from, so
+    // the cache *is* the source of truth here — keep the write-through.
+    cache.set(userId, next);
   }
 
   // Non-blocking sync — never await failures.

@@ -24,24 +24,26 @@
  *        readable post-auth). Salt is non-secret; ciphertext is
  *        useless without the user's passphrase.
  *   2. signIn:
- *      - fetch salt + encrypted server password from `profiles`. To
- *        fetch we need an auth jwt, so first we get a temporary session
- *        by attempting auth with a deterministic "lookup" password that
- *        ALWAYS fails — no, simpler: the salt is stored in BOTH
- *        localStorage (when this device has seen the user) AND profiles
- *        (after first signIn).
+ *      - the salt + encrypted server password live in BOTH localStorage
+ *        (when this device has seen the user) AND the `profiles` row
+ *        (uploaded after signUp / first signIn).
  *      - if salt found locally → derive key locally → decrypt server
  *        password from local cache. If wrong passphrase → decrypt
  *        throws → "wrong passphrase" without contacting Supabase.
- *      - if no local data (new device) → first call supabase.auth
- *        passwordless lookup is not available; instead we ask the user
- *        to import a backup from the original device. (Pattern A
- *        accepts this UX tradeoff — sign-in on a brand-new device
- *        requires a backup file. Documented at signup.)
+ *      - if no local data (NEW DEVICE) → fetch salt + encrypted server
+ *        password from Supabase `profiles`, keyed by email. Both
+ *        columns are non-secret (PBKDF2 salt; ciphertext is useless
+ *        without the passphrase) so they can be served pre-auth via the
+ *        anon key. The user still needs the correct passphrase to
+ *        derive the key and decrypt — the passphrase never leaves the
+ *        device. Recovered credentials are then cached locally so the
+ *        next sign-in on this device takes the fast local path.
+ *      - if neither local nor Supabase has the data → `missing-salt`;
+ *        the UI guides the user to import a backup from the original
+ *        device.
  *      - once decrypted, call supabase.auth.signInWithPassword(email,
  *        serverPassword). Receive session JWT. Salt + ciphertext are
- *        also uploaded to profiles for cross-device discovery in
- *        future revs.
+ *        also re-uploaded to profiles for cross-device discovery.
  *   3. signOut: drop in-memory key + clear session. Salt + encrypted
  *      server password stay (needed for next sign-in on this device).
  *
@@ -65,7 +67,6 @@
  * appears anywhere. Do not regress this.
  */
 
-import { createOllieAPI } from '@ollie/api';
 import type { OllieAPI } from '@ollie/api';
 import {
   base64ToBytes,
@@ -129,7 +130,7 @@ interface SignUpResult { ok: true; user_id: string; }
 interface SignUpError { ok: false; code: 'weak-passphrase' | 'mismatch' | 'no-consent' | 'http' | 'network'; message: string; notes?: string[]; }
 export type SignUpResultLike = SignUpResult | SignUpError;
 
-interface SignInResult { ok: true; user_id: string; }
+interface SignInResult { ok: true; user_id: string; /** true when salt/credentials were recovered from Supabase (new-device path). */ recovered_from_server?: boolean; }
 interface SignInError { ok: false; code: 'wrong-passphrase' | 'wrong-email' | 'http' | 'network' | 'missing-salt' | 'no-device-data'; message: string; }
 export type SignInResultLike = SignInResult | SignInError;
 
@@ -195,7 +196,7 @@ export interface AuthClient {
    * server fails mid-cascade the data on this device stays usable.
    */
   deleteAccount(): Promise<DeleteAccountResultLike>;
-  /** Recompute the strength bucket for UI meters. Pure. */
+  /** Recompute the strength bucket for UI meters. Async (zxcvbn is lazy-loaded). */
   strength(passphrase: string): ReturnType<typeof passphraseStrength>;
 }
 
@@ -223,44 +224,100 @@ export function createAuthClient(deps: AuthDeps): AuthClient {
   async function uploadProfileToSupabase(
     authJwt: string,
     userId: string,
+    email: string,
     saltBase64: string,
     encryptedServerPw: string,
   ): Promise<void> {
     try {
       // Pattern A: salt is non-secret (PBKDF2 salt) and encrypted_server_pw
-      // is useless without the user's passphrase. Both are RLS-gated
-      // anyway. Upload so a second device can fetch them post-auth.
+      // is useless without the user's passphrase. Upload so a second
+      // device can fetch them — keyed by `email` for the new-device
+      // sign-in path (where the userId is not yet known).
       await deps.api.supabase.rest.upsert(
         profilesTable,
-        [{ id: userId, salt: saltBase64, encrypted_server_pw: encryptedServerPw }],
+        [{ id: userId, email: email.toLowerCase(), salt: saltBase64, encrypted_server_pw: encryptedServerPw }],
         { authJwt },
       );
     } catch (err) {
-      console.warn('[auth] uploading profile failed; continuing — data is in localStorage', err);
+      // SECURITY (S4): never log the raw `err` — it can carry the failed
+      // request (with `Authorization: Bearer <jwt>`) or the profile body
+      // (`encrypted_server_pw`). Log only a safe summary.
+      console.warn(
+        '[auth] uploading profile failed; continuing — data is in localStorage:',
+        safeErrSummary(err),
+      );
     }
   }
 
+  /**
+   * Fetch the per-user `salt` + `encrypted_server_pw` from Supabase
+   * `profiles`. Both columns are non-secret (PBKDF2 salt; ciphertext
+   * useless without the passphrase) — see `uploadProfileToSupabase`.
+   *
+   * Two lookup modes:
+   *   - by `userId` (post-auth, e.g. re-uploading on signIn). RLS for
+   *     the authed user gates the row; pass `authJwt`.
+   *   - by `email` (the "new device" path — we have no userId yet and
+   *     no JWT). Relies on the `profiles` RLS policy permitting an
+   *     anon `select` of (salt, encrypted_server_pw) keyed by email.
+   *     `apikey` (anon key) is sent automatically by `rest.get`.
+   *
+   * Returns null on any miss / network error so callers can degrade
+   * to the existing `missing-salt` path.
+   */
   async function fetchProfileFromSupabase(
-    authJwt: string,
-    userId: string,
+    lookup: { authJwt?: string; userId?: string; email?: string },
   ): Promise<{ salt?: string; encrypted_server_pw?: string } | null> {
+    const filter: Record<string, string> = { select: 'salt,encrypted_server_pw' };
+    if (lookup.userId) filter.id = `eq.${lookup.userId}`;
+    else if (lookup.email) filter.email = `eq.${lookup.email.toLowerCase()}`;
+    else return null;
     try {
       const r = await deps.api.supabase.rest.get<Array<{ salt?: string; encrypted_server_pw?: string }>>(profilesTable, {
-        authJwt,
-        params: { id: `eq.${userId}`, select: 'salt,encrypted_server_pw' },
+        authJwt: lookup.authJwt,
+        params: filter,
       });
       if (r.ok && r.data?.[0]) return r.data[0];
     } catch { /* fall through */ }
     return null;
   }
 
-  /** Encrypt the server password with the derived key and pack to base64 JSON. */
-  async function packServerPw(key: CryptoKey, serverPassword: string): Promise<string> {
+  /**
+   * Encrypt the server password with the derived key and pack to base64 JSON.
+   *
+   * SECURITY (S7): the envelope records `kdf_iter` — the PBKDF2 iteration
+   * count the key was derived with — so a later sign-in can re-derive the
+   * SAME key even after the global default changes. New envelopes always
+   * carry this field; legacy envelopes (pre-S7) do not and the reader
+   * falls back to the legacy 100k count.
+   */
+  async function packServerPw(
+    key: CryptoKey,
+    serverPassword: string,
+    kdfIterations: number,
+  ): Promise<string> {
     const env = await encryptData(key, serverPassword);
     return JSON.stringify({
       iv: bytesToBase64(env.iv),
       ct: bytesToBase64(env.ciphertext),
+      kdf_iter: kdfIterations,
     });
+  }
+
+  /**
+   * Read the PBKDF2 iteration count an envelope was written with.
+   * Legacy envelopes (no `kdf_iter`) → the historical 100k count.
+   * The envelope JSON is plaintext, so this is readable BEFORE the key
+   * is derived — which is exactly what sign-in needs.
+   */
+  function envelopeKdfIterations(envelopeBase64: string): number {
+    try {
+      const parsed = JSON.parse(envelopeBase64) as { kdf_iter?: unknown };
+      if (typeof parsed.kdf_iter === 'number' && Number.isInteger(parsed.kdf_iter) && parsed.kdf_iter > 0) {
+        return parsed.kdf_iter;
+      }
+    } catch { /* fall through to legacy */ }
+    return CRYPTO_PARAMS.LEGACY_PBKDF2_ITERATIONS;
   }
 
   /** Decrypt a packed envelope. Throws if wrong key (wrong passphrase). */
@@ -276,8 +333,9 @@ export function createAuthClient(deps: AuthDeps): AuthClient {
     if (!input.acknowledged_unrecoverable) {
       return { ok: false, code: 'no-consent', message: 'must acknowledge passphrase is unrecoverable' };
     }
-    const strength = passphraseStrength(input.passphrase);
+    // passphraseStrength is async (zxcvbn is lazy-loaded).
     if (input.passphrase.length < MIN_PASSPHRASE_LENGTH) {
+      const strength = await passphraseStrength(input.passphrase);
       return {
         ok: false, code: 'weak-passphrase',
         message: `passphrase must be at least ${MIN_PASSPHRASE_LENGTH} characters`,
@@ -297,9 +355,12 @@ export function createAuthClient(deps: AuthDeps): AuthClient {
     //      ciphertext locally + (post-auth) on profiles.
     const salt = randomSalt();
     const saltBase64 = bytesToBase64(salt);
-    inMemoryKey = await deriveKey(input.passphrase, salt);
+    // SECURITY (S7): new derivations use the current 600k iteration count.
+    // The count is recorded in the envelope so sign-in can reproduce the key.
+    const kdfIterations = CRYPTO_PARAMS.PBKDF2_ITERATIONS;
+    inMemoryKey = await deriveKey(input.passphrase, salt, kdfIterations);
     const serverPassword = generateRandomServerPassword();
-    const encryptedServerPw = await packServerPw(inMemoryKey, serverPassword);
+    const encryptedServerPw = await packServerPw(inMemoryKey, serverPassword, kdfIterations);
 
     // SAFETY: the only password ever sent to Supabase is `serverPassword`,
     // which is uncorrelated with `input.passphrase`. See passphrase-on-device
@@ -336,7 +397,7 @@ export function createAuthClient(deps: AuthDeps): AuthClient {
         signed_in_at: new Date(nowFn()).toISOString(),
       };
       deps.store.set('shared', 'auth.session', session);
-      void uploadProfileToSupabase(accessToken, userId, saltBase64, encryptedServerPw);
+      void uploadProfileToSupabase(accessToken, userId, input.email, saltBase64, encryptedServerPw);
     }
     deps.store.set('shared', 'auth.email_for_login', input.email);
 
@@ -360,21 +421,39 @@ export function createAuthClient(deps: AuthDeps): AuthClient {
     // New device with no local data → no-device-data. UX: import a
     // backup from the original device first. Documented at signup.
 
-    const saltBase64 = deps.store.get<string | null>(
+    let saltBase64 = deps.store.get<string | null>(
       'shared',
       SALT_LOCAL_KEY_BY_EMAIL(input.email),
       null,
     );
-    const encryptedServerPwLocal = deps.store.get<string | null>(
+    let encryptedServerPwLocal = deps.store.get<string | null>(
       'shared',
       ENCRYPTED_SERVER_PW_BY_EMAIL(input.email),
       null,
     );
 
+    // Whether this sign-in pulled its credentials from Supabase rather
+    // than the local store (the documented "new device" path, step 2).
+    let recoveredFromServer = false;
+
     if (!saltBase64 || !encryptedServerPwLocal) {
-      // Pre-Pattern A devices may have only the salt cached. In that
-      // case there's no way to recover the server password locally —
-      // ask the user to import a backup.
+      // New device (doc-comment step 2): no local salt/ciphertext for
+      // this email. Fall back to fetching the non-secret salt +
+      // encrypted_server_pw from Supabase `profiles` keyed by email.
+      // Both columns are useless without the user's passphrase, so
+      // serving them pre-auth leaks nothing.
+      const remote = await fetchProfileFromSupabase({ email: input.email });
+      if (remote?.salt && remote.encrypted_server_pw) {
+        saltBase64 = remote.salt;
+        encryptedServerPwLocal = remote.encrypted_server_pw;
+        recoveredFromServer = true;
+      }
+    }
+
+    if (!saltBase64 || !encryptedServerPwLocal) {
+      // No local data AND Supabase could not supply it (no profiles
+      // row, network failure, or RLS denied). Surface the existing
+      // user-facing guidance — import a backup from the first device.
       if (!saltBase64) {
         return {
           ok: false,
@@ -390,7 +469,12 @@ export function createAuthClient(deps: AuthDeps): AuthClient {
     }
 
     const salt = base64ToBytes(saltBase64);
-    const derivedKey = await deriveKey(input.passphrase, salt);
+    // SECURITY (S7): derive with the iteration count this envelope was
+    // written with. Legacy envelopes (pre-S7) carry no count → 100k;
+    // post-S7 envelopes carry 600k. Reading the count from the (plaintext)
+    // envelope BEFORE deriving is what keeps old logins working.
+    const kdfIterations = envelopeKdfIterations(encryptedServerPwLocal);
+    const derivedKey = await deriveKey(input.passphrase, salt, kdfIterations);
 
     let serverPassword: string;
     try {
@@ -421,6 +505,13 @@ export function createAuthClient(deps: AuthDeps): AuthClient {
     inMemoryKey = derivedKey;
     deps.store.set('shared', SALT_LOCAL_KEY, saltBase64);
     deps.store.set('shared', ENCRYPTED_SERVER_PW_KEY, encryptedServerPwLocal);
+    // On the new-device path the credentials came from Supabase — cache
+    // them per-email locally so future sign-ins on THIS device take the
+    // fast local path (no profiles round-trip, no regression).
+    if (recoveredFromServer) {
+      persistSalt(input.email, saltBase64);
+      persistEncryptedServerPw(input.email, encryptedServerPwLocal);
+    }
 
     const session: AuthSession = {
       user_id: userId,
@@ -434,12 +525,14 @@ export function createAuthClient(deps: AuthDeps): AuthClient {
 
     // Best-effort: re-upload profile so future devices can discover
     // post-import. Failure is non-fatal — we already have local data.
-    void uploadProfileToSupabase(accessToken, userId, saltBase64, encryptedServerPwLocal);
+    void uploadProfileToSupabase(accessToken, userId, input.email, saltBase64, encryptedServerPwLocal);
 
     try { events.emit('auth:signed_in', { user_id: userId, ts: nowFn() }); }
     catch { /* registry warn ok */ }
 
-    return { ok: true, user_id: userId };
+    return recoveredFromServer
+      ? { ok: true, user_id: userId, recovered_from_server: true }
+      : { ok: true, user_id: userId };
   }
 
   async function signOut(): Promise<void> {
@@ -533,9 +626,21 @@ export function createAuthClient(deps: AuthDeps): AuthClient {
 
     inMemoryKey = null;
     deps.store.set('shared', 'auth.session', null);
-    // Wipe every `void.state.*` key. The store adapter's own
-    // `removeItem` is fine but doesn't know about peer modules — we
-    // scan localStorage directly for the prefix used by storeModuleKey.
+
+    // SECURITY (S6): wipe the credential material. The old `void.state.*`
+    // localStorage scan was insufficient on two counts:
+    //   1. It bypassed the store, so the store's in-memory module cache
+    //      still held `shared.auth.*` — a later `store.set` on `shared`
+    //      would re-flush the cached blob and RESURRECT the deleted keys.
+    //   2. It only touched `localStorage` — on adapters that aren't
+    //      `localStorage` (memory/Electron/Capacitor) it cleared nothing.
+    // Fix: explicitly remove every auth credential key THROUGH the store
+    // (cache + adapter both drop it), including the dynamic per-email
+    // variants, BEFORE the prefix scan.
+    wipeAuthCredentials(deps.store);
+
+    // Then wipe every `void.state.*` key from localStorage as a
+    // belt-and-suspenders sweep of peer module data.
     try {
       if (typeof localStorage !== 'undefined') {
         const keys: string[] = [];
@@ -572,6 +677,81 @@ export function createAuthClient(deps: AuthDeps): AuthClient {
 // ──────────────────────────────────────────────────────────────────────────
 // helpers
 // ──────────────────────────────────────────────────────────────────────────
+
+/**
+ * SECURITY (S4): collapse an unknown thrown value into a SAFE one-line
+ * summary fit for `console.*` / Sentry breadcrumbs.
+ *
+ * A raw error object can carry the originating `fetch` Request (with an
+ * `Authorization: Bearer <jwt>` header) or the request body (which for
+ * this package includes `encrypted_server_pw`). We deliberately surface
+ * ONLY a short message string and, when present, a numeric `status` —
+ * never the object, never its `cause`, never `config`/`request`/`response`.
+ */
+export function safeErrSummary(err: unknown): string {
+  if (err == null) return 'unknown error';
+  if (typeof err === 'string') return err.slice(0, 200);
+  if (typeof err === 'object') {
+    const o = err as { message?: unknown; name?: unknown; status?: unknown; code?: unknown };
+    const parts: string[] = [];
+    if (typeof o.name === 'string' && o.name && o.name !== 'Error') parts.push(o.name);
+    if (typeof o.message === 'string' && o.message) parts.push(o.message.slice(0, 200));
+    else parts.push('error (no message)');
+    if (typeof o.status === 'number') parts.push(`status=${o.status}`);
+    if (typeof o.code === 'string' && o.code) parts.push(`code=${o.code}`);
+    return parts.join(' · ');
+  }
+  return 'non-error thrown value';
+}
+
+/**
+ * SECURITY (S6): remove every auth credential key from the store.
+ *
+ * Account deletion must leave NO material an attacker with device access
+ * could brute-force. The keys (all in the `shared` module):
+ *   - `auth.session`
+ *   - `auth.email_for_login`
+ *   - `shared.auth.salt`                          (fixed)
+ *   - `shared.auth.encrypted_server_pw`           (fixed)
+ *   - `shared.auth.salt_by_email.<email>`         (one per known email)
+ *   - `shared.auth.encrypted_server_pw_by_email.<email>` (per email)
+ *
+ * The per-email variants have dynamic suffixes, so we cannot hard-code
+ * them — we enumerate the live `shared` module and remove any key under
+ * the two `shared.auth.*_by_email.` prefixes. Going through `store.remove`
+ * (not a raw localStorage delete) keeps the store's in-memory cache and
+ * the underlying adapter in sync, so the keys cannot be resurrected by a
+ * later write to the `shared` module.
+ *
+ * Exported for direct unit testing.
+ */
+export function wipeAuthCredentials(store: Store): void {
+  // Fixed keys.
+  const fixed = [
+    'auth.session',
+    'auth.email_for_login',
+    SALT_LOCAL_KEY,                // 'shared.auth.salt'
+    ENCRYPTED_SERVER_PW_KEY,       // 'shared.auth.encrypted_server_pw'
+  ];
+  for (const k of fixed) {
+    try { store.remove('shared', k); } catch { /* non-fatal */ }
+  }
+
+  // Dynamic per-email keys: enumerate the `shared` module and drop any
+  // key under the per-email prefixes.
+  const SALT_BY_EMAIL_PREFIX = 'shared.auth.salt_by_email.';
+  const PW_BY_EMAIL_PREFIX = 'shared.auth.encrypted_server_pw_by_email.';
+  try {
+    const sharedModule = store.getModule('shared');
+    if (sharedModule) {
+      for (const key of Object.keys(sharedModule)) {
+        if (key.startsWith(SALT_BY_EMAIL_PREFIX) || key.startsWith(PW_BY_EMAIL_PREFIX)) {
+          try { store.remove('shared', key); } catch { /* non-fatal */ }
+        }
+      }
+    }
+  } catch { /* non-fatal */ }
+}
 
 function generateRandomServerPassword(): string {
   // Pattern A: 32 random bytes → 64-char hex. This is the ONLY string

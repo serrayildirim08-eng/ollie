@@ -2,9 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMemoryAdapter, createStore } from '@ollie/store';
 import * as events from '@ollie/events';
 import {
-  CONSENT_STORE_KEY,
-  CONSENT_STORE_MODULE,
-  type ConsentState,
   type ConsentStoreAdapter,
   configureConsent,
   setConsent,

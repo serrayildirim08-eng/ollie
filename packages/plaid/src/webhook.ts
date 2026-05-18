@@ -162,7 +162,7 @@ export async function verifyWebhook(
   const rawSig = b64urlDecodeBytes(sigB64);
   void sigBytes; // suppress unused
 
-  let ok = false;
+  let ok: boolean;
   try {
     ok = await crypto.subtle.verify(
       { name: 'ECDSA', hash: 'SHA-256' },

@@ -26,12 +26,6 @@ export function ModuleHelp({ moduleId, locale = 'en' }: ModuleHelpProps) {
     if (value && value !== key) bullets.push(value);
   }
 
-  if (bullets.length === 0) return null;
-
-  const heading = getString(locale, 'help.heading');
-  const btnAria = getString(locale, 'help.btn_aria');
-  const closeLabel = getString(locale, 'help.close');
-
   const close = useCallback(() => {
     setOpen(false);
     buttonRef.current?.focus();
@@ -58,6 +52,13 @@ export function ModuleHelp({ moduleId, locale = 'en' }: ModuleHelpProps) {
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [open, close]);
+
+  // Hooks must run on every render — only bail out after them.
+  if (bullets.length === 0) return null;
+
+  const heading = getString(locale, 'help.heading');
+  const btnAria = getString(locale, 'help.btn_aria');
+  const closeLabel = getString(locale, 'help.close');
 
   return (
     <div ref={wrapperRef} style={{ position: 'relative', display: 'inline-block' }}>

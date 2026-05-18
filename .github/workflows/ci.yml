@@ -12,17 +12,41 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      # No install needed — scanner is plain Node, no deps.
-      - name: scanner unit tests
-        run: node tools/banned-phrases.test.cjs
-      - name: scan codebase for banned phrases
-        run: node tools/scan-banned-phrases.cjs
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      # The TS/TSX source scan is now the ESLint rule `ollie/no-banned-copy`
+      # (an "error" rule) — it runs in the `lint` job below. This job keeps:
+      #   1. the shared rule-table unit tests (banned-phrases.cjs)
+      #   2. the ESLint rule's own RuleTester suite
+      #   3. the i18n-JSON value scan, which ESLint cannot cover
+      - name: rule-table + ESLint-rule unit tests
+        run: pnpm scan:banned:test
+      - name: scan i18n string tables for banned phrases
+        run: pnpm scan:banned:json
+
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      # Most ESLint rules are warnings (report-only) — pre-existing warnings
+      # are acceptable. But `ollie/no-banned-copy` is an "error" rule: it is
+      # the voice-library guard (the AST replacement for the old
+      # tools/scan-banned-phrases.cjs), so a banned phrase fails this job.
+      - run: pnpm lint
 
   build:
-    name: typecheck + test
+    name: typecheck + test + coverage
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -33,4 +57,32 @@ jobs:
           cache: 'pnpm'
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
-      - run: pnpm test
+      # `test:coverage` runs every package's vitest suite with the v8
+      # coverage provider; the banned-phrase pretest hook still runs via
+      # `pnpm test` in local flows. Coverage failures = test failures here.
+      - name: test with coverage
+        run: pnpm test:coverage
+      - name: upload coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: '**/coverage/**'
+          if-no-files-found: ignore
+          retention-days: 7
+
+  app-build:
+    name: web app build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      # Verifies the production web bundle compiles + builds (tsc --noEmit
+      # then vite build). A broken build can no longer merge green just
+      # because typecheck/test passed in isolation.
+      - run: pnpm --filter @ollie/web build

@@ -20,11 +20,6 @@ export function SourcesLink({ sources, label, locale = 'en' }: SourcesLinkProps)
   const wrapperRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
 
-  if (sources.length === 0) return null;
-
-  const defaultLabel = getString(locale, 'help.sources_label');
-  const displayLabel = label ?? defaultLabel;
-
   const close = useCallback(() => {
     setOpen(false);
     triggerRef.current?.focus();
@@ -51,6 +46,12 @@ export function SourcesLink({ sources, label, locale = 'en' }: SourcesLinkProps)
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [open, close]);
+
+  // Hooks must run on every render — only bail out after them.
+  if (sources.length === 0) return null;
+
+  const defaultLabel = getString(locale, 'help.sources_label');
+  const displayLabel = label ?? defaultLabel;
 
   return (
     <div ref={wrapperRef} style={{ position: 'relative', display: 'inline-block' }}>

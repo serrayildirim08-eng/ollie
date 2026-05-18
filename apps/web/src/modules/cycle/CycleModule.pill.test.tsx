@@ -51,6 +51,10 @@ vi.mock('../../store', () => {
 
 vi.mock('../../i18n', () => ({
   getString: (_locale: string, path: string) => path,
+  getPlural: (_locale: string, baseKey: string) => baseKey,
+  interpolate: (template: string) => template,
+  pluralCategory: (_locale: string, count: number) =>
+    count === 1 ? 'one' : 'other',
 }));
 
 vi.mock('../../components/SourcesLink', () => ({

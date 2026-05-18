@@ -6,7 +6,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createStore, createMemoryAdapter } from '@ollie/store';
 import { _clearAllHandlers, on, emit } from '@ollie/events';
 import { createAdminOrchestrator } from '../src/admin';
-import type { AdminTask, DumpEntry } from '@ollie/logic/admin';
+import type { AdminTask } from '@ollie/logic/admin';
 import type { AdminPattern, PhoneTaskItem } from '../src/admin';
 
 // Fixed wall-clock: 2026-05-09T12:00:00Z

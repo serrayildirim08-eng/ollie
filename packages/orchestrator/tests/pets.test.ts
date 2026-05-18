@@ -16,9 +16,6 @@ import type {
 
 // Fixed wall-clock: 2026-05-09T12:00:00Z
 const NOW = new Date('2026-05-09T12:00:00Z').getTime();
-// Stale feeding: 10 days ago (well past guinea_pig hay_refill critical_days: 4)
-const STALE = NOW - 10 * 86_400_000;
-
 const TONTIN: Pet = {
   id: 'tontin',
   name: 'Tontin',

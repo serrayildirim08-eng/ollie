@@ -245,7 +245,7 @@ export function createSleepOrchestrator(
     let curStart = fromTs;
     let curName: string | null = null;
     for (let t = fromTs; t <= toTs; t += 86_400_000) {
-      let phase: string | null = null;
+      let phase: string | null;
       try {
         phase = computePhaseForDate(
           cycles as Parameters<typeof computePhaseForDate>[0],

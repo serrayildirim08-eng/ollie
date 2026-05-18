@@ -14,7 +14,7 @@
  */
 
 import React, { act } from 'react';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createRoot, type Root } from 'react-dom/client';

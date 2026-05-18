@@ -858,14 +858,16 @@ export function AstrologyModule({ onBack }: AstrologyModuleProps) {
                       className={`astro-planet-g${dim ? ' astro-planet-dim' : ''}`}
                       onClick={e => {
                         e.stopPropagation();
-                        filterPlanet === pos.planet.id ? clearReading() : openPlanet(pos.planet.id);
+                        if (filterPlanet === pos.planet.id) clearReading();
+                        else openPlanet(pos.planet.id);
                       }}
                       role="button"
                       tabIndex={0}
                       aria-label={`${pos.planet.id} in ${sd.sign.name}`}
                       onKeyDown={e => {
                         if (e.key === 'Enter' || e.key === ' ') {
-                          filterPlanet === pos.planet.id ? clearReading() : openPlanet(pos.planet.id);
+                          if (filterPlanet === pos.planet.id) clearReading();
+                          else openPlanet(pos.planet.id);
                         }
                       }}
                       style={{ cursor: 'pointer', animationDelay: `${1400 + i * 80}ms` }}

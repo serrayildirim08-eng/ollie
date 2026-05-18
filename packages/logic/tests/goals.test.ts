@@ -14,21 +14,23 @@ import {
   retrieveUlyssesContract,
   getUlyssesText,
   detectActiveCap,
-  detectResearchAsProgress,
-  detectIdentityDrift,
-  detectSunkCostFlag,
   classifyPacing,
   detectPacingBreach,
   detectContagion,
   isIncubating,
-  classifyAnchor,
   detectMissingAnchorPair,
   detectFloatingGoal,
   detectMissingConstrual,
   construalFrameForState,
-  detectAntiGoalInDump,
   detectGoalInterference,
   detectExperimentCandidate,
+  detectResearchAsProgress,
+  detectIdentityDrift,
+  detectSunkCostFlag,
+  classifyAnchor,
+  detectAntiGoalOpportunity,
+  detectAntiGoalInDump,
+  detectGoalVelocityByCategory,
 } from '../src/goals';
 
 const NOW = 1_700_000_000_000; // fixed epoch for determinism
@@ -390,5 +392,336 @@ describe('consent gate (opts.consent)', () => {
       { id: 'g2', status: 'active', interference_tags: ['save'] },
     ];
     expect(detectGoalInterference({ goals: g }, { now: NOW, consent: false })).toBeNull();
+  });
+});
+
+// ─── phase 2 — previously-untested detectors ─────────────────────────
+
+describe('detectResearchAsProgress', () => {
+  it('returns null with no goals or no sessions', () => {
+    expect(detectResearchAsProgress({ goals: [], sessions: [] }, { now: NOW })).toBeNull();
+    expect(detectResearchAsProgress(
+      { goals: [{ id: 'g1', status: 'active' }], sessions: [] },
+      { now: NOW },
+    )).toBeNull();
+  });
+
+  it('fires when an active goal has only thinking sessions (>=5, contiguous)', () => {
+    const sessions = Array.from({ length: 5 }, (_, i) => ({
+      ts: NOW - (i + 1) * DAY, goal_id: 'g1', type: 'thinking',
+    }));
+    const result = detectResearchAsProgress(
+      { goals: [{ id: 'g1', status: 'active' }], sessions },
+      { now: NOW },
+    );
+    expect(result).not.toBeNull();
+    expect(result![0].signal).toBe('goals_research_as_progress');
+    expect(result![0].thinking_count).toBe(5);
+  });
+
+  it('does NOT fire when any doing session exists', () => {
+    const sessions = [
+      ...Array.from({ length: 5 }, (_, i) => ({ ts: NOW - (i + 2) * DAY, goal_id: 'g1', type: 'thinking' })),
+      { ts: NOW - 1 * DAY, goal_id: 'g1', type: 'doing' },
+    ];
+    expect(detectResearchAsProgress(
+      { goals: [{ id: 'g1', status: 'active' }], sessions },
+      { now: NOW },
+    )).toBeNull();
+  });
+
+  it('threshold: 4 thinking sessions (one below minThinking=5) → null', () => {
+    const sessions = Array.from({ length: 4 }, (_, i) => ({
+      ts: NOW - (i + 1) * DAY, goal_id: 'g1', type: 'thinking',
+    }));
+    expect(detectResearchAsProgress(
+      { goals: [{ id: 'g1', status: 'active' }], sessions },
+      { now: NOW },
+    )).toBeNull();
+  });
+
+  it('ignores non-active goals', () => {
+    const sessions = Array.from({ length: 6 }, (_, i) => ({
+      ts: NOW - (i + 1) * DAY, goal_id: 'g1', type: 'thinking',
+    }));
+    expect(detectResearchAsProgress(
+      { goals: [{ id: 'g1', status: 'archived' }], sessions },
+      { now: NOW },
+    )).toBeNull();
+  });
+});
+
+describe('detectIdentityDrift', () => {
+  it('returns null with no goals', () => {
+    expect(detectIdentityDrift({ goals: [] }, { now: NOW })).toBeNull();
+  });
+
+  it('fires when a role goal has zero role-aligned activity in 30d', () => {
+    const result = detectIdentityDrift(
+      { goals: [{ id: 'g1', status: 'active', role: 'writer' }], dumps: [], sessions: [] },
+      { now: NOW },
+    );
+    expect(result).not.toBeNull();
+    expect(result![0].signal).toBe('goals_identity_drift');
+    expect(result![0].role).toBe('writer');
+  });
+
+  it('does NOT fire when a dump mentions the role', () => {
+    const result = detectIdentityDrift(
+      {
+        goals: [{ id: 'g1', status: 'active', role: 'writer' }],
+        dumps: [{ ts: NOW - 2 * DAY, text: 'felt like a real writer today' }],
+        sessions: [],
+      },
+      { now: NOW },
+    );
+    expect(result).toBeNull();
+  });
+
+  it('does NOT fire when a doing session touched the goal', () => {
+    const result = detectIdentityDrift(
+      {
+        goals: [{ id: 'g1', status: 'active', role: 'writer' }],
+        dumps: [],
+        sessions: [{ ts: NOW - 3 * DAY, goal_id: 'g1', type: 'doing' }],
+      },
+      { now: NOW },
+    );
+    expect(result).toBeNull();
+  });
+
+  it('ignores goals with no role', () => {
+    expect(detectIdentityDrift(
+      { goals: [{ id: 'g1', status: 'active' }], dumps: [], sessions: [] },
+      { now: NOW },
+    )).toBeNull();
+  });
+});
+
+describe('detectSunkCostFlag', () => {
+  it('returns null with no goals or no reviews', () => {
+    expect(detectSunkCostFlag({ goals: [], reviews: [] }, { now: NOW })).toBeNull();
+    expect(detectSunkCostFlag(
+      { goals: [{ id: 'g1' }], reviews: [] },
+      { now: NOW },
+    )).toBeNull();
+  });
+
+  it('fires when last 3 reviews are all "invested"', () => {
+    const reviews = [
+      { ts: NOW - 1 * DAY, goal_id: 'g1', alive_flag: 'invested' },
+      { ts: NOW - 10 * DAY, goal_id: 'g1', alive_flag: 'invested' },
+      { ts: NOW - 20 * DAY, goal_id: 'g1', alive_flag: 'invested' },
+    ];
+    const result = detectSunkCostFlag({ goals: [{ id: 'g1' }], reviews }, { now: NOW });
+    expect(result).not.toBeNull();
+    expect(result![0].signal).toBe('goals_sunk_cost_flag');
+  });
+
+  it('does NOT fire when the most recent review is "still want"', () => {
+    const reviews = [
+      { ts: NOW - 1 * DAY, goal_id: 'g1', alive_flag: 'still_want' },
+      { ts: NOW - 10 * DAY, goal_id: 'g1', alive_flag: 'invested' },
+      { ts: NOW - 20 * DAY, goal_id: 'g1', alive_flag: 'invested' },
+    ];
+    expect(detectSunkCostFlag({ goals: [{ id: 'g1' }], reviews }, { now: NOW })).toBeNull();
+  });
+
+  it('threshold: 2 reviews (below minRun=3) → null', () => {
+    const reviews = [
+      { ts: NOW - 1 * DAY, goal_id: 'g1', alive_flag: 'invested' },
+      { ts: NOW - 10 * DAY, goal_id: 'g1', alive_flag: 'invested' },
+    ];
+    expect(detectSunkCostFlag({ goals: [{ id: 'g1' }], reviews }, { now: NOW })).toBeNull();
+  });
+
+  it('ignores reviews outside the 60d window', () => {
+    const reviews = [
+      { ts: NOW - 1 * DAY, goal_id: 'g1', alive_flag: 'invested' },
+      { ts: NOW - 10 * DAY, goal_id: 'g1', alive_flag: 'invested' },
+      { ts: NOW - 90 * DAY, goal_id: 'g1', alive_flag: 'invested' },
+    ];
+    expect(detectSunkCostFlag({ goals: [{ id: 'g1' }], reviews }, { now: NOW })).toBeNull();
+  });
+});
+
+// ─── phase 3 — previously-untested detectors ─────────────────────────
+
+describe('classifyAnchor', () => {
+  it('returns the anchor type for a valid identity goal', () => {
+    expect(classifyAnchor({ id: 'g1', anchor_type: 'identity' })).toBe('identity');
+  });
+  it('returns the anchor type for a valid metric goal', () => {
+    expect(classifyAnchor({ id: 'g1', anchor_type: 'metric' })).toBe('metric');
+  });
+  it('returns null for an unknown anchor type', () => {
+    // @ts-expect-error intentional invalid anchor
+    expect(classifyAnchor({ id: 'g1', anchor_type: 'vibes' })).toBeNull();
+  });
+  it('returns null for a goal with no anchor', () => {
+    expect(classifyAnchor({ id: 'g1' })).toBeNull();
+  });
+  it('returns null for null / undefined', () => {
+    expect(classifyAnchor(null)).toBeNull();
+    expect(classifyAnchor(undefined)).toBeNull();
+  });
+});
+
+describe('detectAntiGoalOpportunity', () => {
+  it('returns null with no goals', () => {
+    expect(detectAntiGoalOpportunity({ goals: [] }, { now: NOW })).toBeNull();
+  });
+
+  it('fires in "avoidance" mode when a stuck goal has an anti_goal', () => {
+    const result = detectAntiGoalOpportunity(
+      {
+        goals: [{ id: 'g1', status: 'active', label: 'ship app', anti_goal: 'become a perfectionist' }],
+        sessions: [],
+      },
+      { now: NOW },
+    );
+    expect(result).not.toBeNull();
+    expect(result![0].mode).toBe('avoidance');
+  });
+
+  it('fires in "suggest" mode when a stuck goal has no anti_goal', () => {
+    const result = detectAntiGoalOpportunity(
+      { goals: [{ id: 'g1', status: 'active', label: 'ship app' }], sessions: [] },
+      { now: NOW },
+    );
+    expect(result).not.toBeNull();
+    expect(result![0].mode).toBe('suggest');
+  });
+
+  it('does NOT fire when a recent doing session keeps the goal un-stuck', () => {
+    const result = detectAntiGoalOpportunity(
+      {
+        goals: [{ id: 'g1', status: 'active', label: 'ship app' }],
+        sessions: [{ ts: NOW - 2 * DAY, goal_id: 'g1', type: 'doing' }],
+      },
+      { now: NOW },
+    );
+    expect(result).toBeNull();
+  });
+
+  it('threshold: doing session just inside 14d window → not stuck → null', () => {
+    const result = detectAntiGoalOpportunity(
+      {
+        goals: [{ id: 'g1', status: 'active', label: 'ship app' }],
+        sessions: [{ ts: NOW - 13 * DAY, goal_id: 'g1', type: 'doing' }],
+      },
+      { now: NOW },
+    );
+    expect(result).toBeNull();
+  });
+
+  it('threshold: doing session just outside 14d window → stuck → fires', () => {
+    const result = detectAntiGoalOpportunity(
+      {
+        goals: [{ id: 'g1', status: 'active', label: 'ship app' }],
+        sessions: [{ ts: NOW - 15 * DAY, goal_id: 'g1', type: 'doing' }],
+      },
+      { now: NOW },
+    );
+    expect(result).not.toBeNull();
+  });
+
+  it('returns null when consent=false', () => {
+    expect(detectAntiGoalOpportunity(
+      { goals: [{ id: 'g1', status: 'active' }], sessions: [] },
+      { now: NOW, consent: false },
+    )).toBeNull();
+  });
+});
+
+describe('detectAntiGoalInDump', () => {
+  it('returns null with no dumps', () => {
+    expect(detectAntiGoalInDump({ dumps: [] }, { now: NOW })).toBeNull();
+  });
+
+  it('fires when a recent dump contains avoidance language', () => {
+    const result = detectAntiGoalInDump(
+      { dumps: [{ ts: NOW - 1 * DAY, text: "i don't want to become my burnt-out boss" }] },
+      { now: NOW },
+    );
+    expect(result).not.toBeNull();
+    expect(result!.signal).toBe('goals_anti_goal_in_dump');
+    expect(result!.excerpt.length).toBeGreaterThan(0);
+  });
+
+  it('does NOT fire on a neutral dump', () => {
+    expect(detectAntiGoalInDump(
+      { dumps: [{ ts: NOW - 1 * DAY, text: 'had a good productive day' }] },
+      { now: NOW },
+    )).toBeNull();
+  });
+
+  it('ignores dumps outside the 7d window', () => {
+    expect(detectAntiGoalInDump(
+      { dumps: [{ ts: NOW - 30 * DAY, text: "i don't want to become my boss" }] },
+      { now: NOW },
+    )).toBeNull();
+  });
+
+  it('returns null when consent=false', () => {
+    expect(detectAntiGoalInDump(
+      { dumps: [{ ts: NOW - 1 * DAY, text: "i don't want to become my boss" }] },
+      { now: NOW, consent: false },
+    )).toBeNull();
+  });
+});
+
+describe('detectGoalVelocityByCategory', () => {
+  it('returns null with no goals', () => {
+    expect(detectGoalVelocityByCategory({ goals: [] }, { now: NOW })).toBeNull();
+  });
+
+  it('returns null when all categories are below minSample (3)', () => {
+    const goals = [
+      { id: 'g1', category: 'learning' as const, status: 'done', created_at: NOW - 10 * DAY, status_at: NOW - 5 * DAY },
+      { id: 'g2', category: 'learning' as const, status: 'active', created_at: NOW - 10 * DAY },
+    ];
+    expect(detectGoalVelocityByCategory({ goals }, { now: NOW })).toBeNull();
+  });
+
+  it('emits a signal per category with >=3 goals in the window', () => {
+    const goals = [
+      { id: 'g1', category: 'learning' as const, status: 'done', created_at: NOW - 20 * DAY, status_at: NOW - 10 * DAY },
+      { id: 'g2', category: 'learning' as const, status: 'done', created_at: NOW - 20 * DAY, status_at: NOW - 12 * DAY },
+      { id: 'g3', category: 'learning' as const, status: 'active', created_at: NOW - 20 * DAY },
+    ];
+    const result = detectGoalVelocityByCategory({ goals }, { now: NOW });
+    expect(result).not.toBeNull();
+    expect(result![0].signal).toBe('goals_velocity_pattern');
+    expect(result![0].category).toBe('learning');
+    expect(result![0].total).toBe(3);
+    expect(result![0].completed).toBe(2);
+    expect(result![0].velocity).toBeCloseTo(0.67, 2);
+  });
+
+  it('computes velocity_gap when two categories pass threshold', () => {
+    const goals = [
+      // learning: 3/3 done → velocity 1.0
+      ...Array.from({ length: 3 }, (_, i) => ({
+        id: 'L' + i, category: 'learning' as const, status: 'done',
+        created_at: NOW - 30 * DAY, status_at: NOW - 20 * DAY,
+      })),
+      // career: 1/3 done → velocity ~0.33
+      { id: 'C1', category: 'career' as const, status: 'done', created_at: NOW - 30 * DAY, status_at: NOW - 25 * DAY },
+      { id: 'C2', category: 'career' as const, status: 'active', created_at: NOW - 30 * DAY },
+      { id: 'C3', category: 'career' as const, status: 'active', created_at: NOW - 30 * DAY },
+    ];
+    const result = detectGoalVelocityByCategory({ goals }, { now: NOW });
+    expect(result).not.toBeNull();
+    expect(result!.length).toBe(2);
+    expect(result![0].velocity_gap).toBeGreaterThan(1);
+  });
+
+  it('returns null when consent=false', () => {
+    const goals = Array.from({ length: 3 }, (_, i) => ({
+      id: 'g' + i, category: 'learning' as const, status: 'done',
+      created_at: NOW - 20 * DAY, status_at: NOW - 10 * DAY,
+    }));
+    expect(detectGoalVelocityByCategory({ goals }, { now: NOW, consent: false })).toBeNull();
   });
 });

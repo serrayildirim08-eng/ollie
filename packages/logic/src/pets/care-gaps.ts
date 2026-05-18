@@ -16,7 +16,7 @@ import type {
 } from './types';
 import { SEVERITY_LADDER } from './constants';
 
-const DAY_MS = 86_400_000;
+import { DAY_MS } from '../util';
 
 /**
  * For every (pet × task) pair, compute how long since the last entry

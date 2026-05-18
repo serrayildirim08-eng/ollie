@@ -8,11 +8,19 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { createStore, createMemoryAdapter } from '@ollie/store';
 import {
+  deriveKey,
+  encryptData,
+  randomSalt,
+  bytesToBase64,
+  CRYPTO_PARAMS,
+} from '@ollie/crypto';
+import {
   exportBackup,
   importBackup,
   defaultFilename,
   envelopeToFileBytes,
   BACKUP_VERSION,
+  type BackupEnvelope,
 } from '../src/index';
 
 const PW = 'correct-horse-battery-staple-22';
@@ -114,6 +122,89 @@ describe('importBackup · adversarial', () => {
     const r = await importBackup(fresh, '{not valid json', PW);
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.code).toBe('corrupt-envelope');
+  });
+});
+
+// ─── S7 · PBKDF2 iteration count back-compat ──────────────────────────────────
+
+describe('importBackup · S7 iteration-count back-compat', () => {
+  /**
+   * Hand-build a LEGACY backup envelope: encrypt the snapshot with a key
+   * derived at the legacy 100k count and OMIT the `kdf_iterations` field —
+   * exactly what a backup exported before the S7 bump looks like.
+   */
+  async function buildLegacyEnvelope(
+    snapshot: Record<string, unknown>,
+    passphrase: string,
+  ): Promise<BackupEnvelope> {
+    const salt = randomSalt();
+    const key = await deriveKey(passphrase, salt, CRYPTO_PARAMS.LEGACY_PBKDF2_ITERATIONS);
+    const enc = await encryptData(key, snapshot);
+    return {
+      version: BACKUP_VERSION,
+      app: 'ollie',
+      created_at: '2026-01-01T00:00:00.000Z',
+      salt: bytesToBase64(salt),
+      iv: bytesToBase64(enc.iv),
+      ciphertext: bytesToBase64(enc.ciphertext),
+      // NO kdf_iterations field — this is a pre-S7 envelope.
+      metadata: { module_count: Object.keys(snapshot).length },
+    };
+  }
+
+  it('a NEW backup stamps kdf_iterations = 600k', async () => {
+    const env = await exportBackup(original, PW);
+    expect(env.kdf_iterations).toBe(CRYPTO_PARAMS.PBKDF2_ITERATIONS);
+    expect(env.kdf_iterations).toBe(600_000);
+  });
+
+  it('a NEW (600k) backup round-trips through importBackup', async () => {
+    const env = await exportBackup(original, PW);
+    const fresh = createStore(createMemoryAdapter());
+    const r = await importBackup(fresh, env, PW);
+    expect(r.ok).toBe(true);
+    expect(fresh.get('finance', 'records', [])).toEqual([{ id: 'r1', amount: 20 }]);
+  });
+
+  it('a LEGACY (100k, no kdf_iterations) backup STILL decrypts — back-compat', async () => {
+    const legacy = await buildLegacyEnvelope(
+      { cycle: { items: [{ ts: 9, action: 'legacy' }] } },
+      PW,
+    );
+    expect(legacy.kdf_iterations).toBeUndefined();
+
+    const fresh = createStore(createMemoryAdapter());
+    const r = await importBackup(fresh, legacy, PW);
+    expect(r.ok).toBe(true);
+    expect(fresh.get('cycle', 'items', [])).toEqual([{ ts: 9, action: 'legacy' }]);
+  });
+
+  it('a legacy backup with the WRONG passphrase still fails cleanly (no false positive)', async () => {
+    const legacy = await buildLegacyEnvelope({ shared: { x: 1 } }, PW);
+    const fresh = createStore(createMemoryAdapter());
+    const r = await importBackup(fresh, legacy, 'a-different-passphrase-zz');
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.code).toBe('wrong-passphrase');
+  });
+
+  it('an explicit kdf_iterations=100k envelope decrypts (forward-explicit legacy)', async () => {
+    const legacy = await buildLegacyEnvelope({ shared: { y: 2 } }, PW);
+    // Same bytes, but with the field explicitly present at 100k.
+    const explicit: BackupEnvelope = { ...legacy, kdf_iterations: 100_000 };
+    const fresh = createStore(createMemoryAdapter());
+    const r = await importBackup(fresh, explicit, PW);
+    expect(r.ok).toBe(true);
+    expect(fresh.get('shared', 'y', null)).toBe(2);
+  });
+
+  it('a 600k envelope mislabeled as 100k fails (proves the field is honoured on read)', async () => {
+    const env = await exportBackup(original, PW); // real 600k
+    const mislabeled: BackupEnvelope = { ...env, kdf_iterations: 100_000 };
+    const fresh = createStore(createMemoryAdapter());
+    const r = await importBackup(fresh, mislabeled, PW);
+    // Wrong count → wrong key → AES auth-tag mismatch → wrong-passphrase.
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.code).toBe('wrong-passphrase');
   });
 });
 

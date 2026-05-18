@@ -5,7 +5,7 @@
  *   - claim-invite: atomic PATCH, second claim returns reason='used'
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   handleGenerateInvite,
   handleValidateInvite,
@@ -323,6 +323,80 @@ describe('handleClaimInvite', () => {
     expect(data.success).toBe(false);
     expect(data.reason).toBe('not_found');
     fetchSpy.mockRestore();
+  });
+});
+
+// ─── S8 · PostgREST error bodies must not leak to the caller ──────────────────
+
+describe('invites · S8 · upstream error bodies are not disclosed', () => {
+  let env: ReturnType<typeof makeEnv>;
+
+  beforeEach(() => {
+    env = makeEnv();
+  });
+
+  // A realistic PostgREST error — it discloses table + constraint names.
+  const POSTGREST_ERR = JSON.stringify({
+    code: '42501',
+    details: null,
+    hint: null,
+    message: 'permission denied for table invites',
+  });
+
+  it('generate-invite: a non-409 Supabase error returns a GENERIC code, no detail', async () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const fetchSpy = scriptFetch([
+      async () => new Response(JSON.stringify({ id: 'user-1' }), { status: 200 }),
+      // Supabase POST fails with a PostgREST 500 body.
+      async () => new Response(POSTGREST_ERR, { status: 500 }),
+    ]);
+    const resp = await handleGenerateInvite(
+      makeReq('/generate-invite', { inviter_user_hash: 'h' }, { 'x-user-jwt': 'good' }),
+      env,
+    );
+    expect(resp.status).toBe(502);
+    const body = await resp.json() as Record<string, unknown>;
+    expect(body.error).toBe('supabase_error');
+    expect(typeof body.request_id).toBe('string');
+    // The PostgREST schema detail must NOT reach the caller.
+    const serialized = JSON.stringify(body);
+    expect(serialized).not.toContain('permission denied');
+    expect(serialized).not.toContain('invites');
+    expect(serialized).not.toContain('42501');
+    expect(body.detail).toBeUndefined();
+
+    // ...but the full detail IS logged server-side, with the request id.
+    const logLine = errSpy.mock.calls.flat().map(String).join(' ');
+    expect(logLine).toContain('permission denied for table invites');
+    expect(logLine).toContain(String(body.request_id));
+
+    fetchSpy.mockRestore();
+    errSpy.mockRestore();
+  });
+
+  it('claim-invite: a Supabase error returns a GENERIC code, no detail', async () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const fetchSpy = scriptFetch([
+      async () => new Response(JSON.stringify({ id: 'user-1' }), { status: 200 }),
+      // PATCH fails with a PostgREST error body.
+      async () => new Response(POSTGREST_ERR, { status: 500 }),
+    ]);
+    const resp = await handleClaimInvite(
+      makeReq(
+        '/claim-invite',
+        { code: 'olli-abcd-efgh', invitee_user_hash: 'h' },
+        { 'x-user-jwt': 'good' },
+      ),
+      env,
+    );
+    expect(resp.status).toBe(502);
+    const body = await resp.json() as Record<string, unknown>;
+    expect(body.error).toBe('supabase_error');
+    expect(typeof body.request_id).toBe('string');
+    expect(JSON.stringify(body)).not.toContain('permission denied');
+    expect(body.detail).toBeUndefined();
+    fetchSpy.mockRestore();
+    errSpy.mockRestore();
   });
 });
 

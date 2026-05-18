@@ -25,6 +25,7 @@
  */
 
 import { scrubPII } from './pii';
+import { json, upstreamError } from '@ollie/worker-http';
 
 export interface LabelEnv {
   ANTHROPIC_API_KEY: string;
@@ -172,8 +173,13 @@ export async function handleLabel(req: Request, env: LabelEnv): Promise<Response
   });
 
   if (!anthropicResp.ok) {
+    // SECURITY (S8): generic code to the client; upstream Anthropic body
+    // logged server-side only behind a request id.
     const errText = await anthropicResp.text();
-    return json({ error: 'anthropic_error', status: anthropicResp.status, detail: errText }, 502);
+    return upstreamError('anthropic_error', 502, errText, {
+      endpoint: 'label',
+      upstream_status: anthropicResp.status,
+    });
   }
 
   const anthropicJson = (await anthropicResp.json()) as {
@@ -223,11 +229,14 @@ export async function handleLabel(req: Request, env: LabelEnv): Promise<Response
   );
 
   if (!insertResp.ok) {
+    // SECURITY (S8): generic code to the client; PostgREST detail (which
+    // discloses research_corpus column/constraint names) logged
+    // server-side only behind a request id.
     const errText = await insertResp.text();
-    return json(
-      { error: 'corpus_insert_failed', status: insertResp.status, detail: errText },
-      502,
-    );
+    return upstreamError('corpus_insert_failed', 502, errText, {
+      endpoint: 'label',
+      upstream_status: insertResp.status,
+    });
   }
 
   // Bump daily spend tracker — best effort, never block on this.
@@ -277,9 +286,4 @@ function validateLabel(raw: Record<string, unknown>):
   };
 }
 
-function json(obj: unknown, status = 200): Response {
-  return new Response(JSON.stringify(obj), {
-    status,
-    headers: { 'content-type': 'application/json' },
-  });
-}
+// `json()` is the shared helper from @ollie/worker-http (imported above).

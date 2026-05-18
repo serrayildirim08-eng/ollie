@@ -57,11 +57,27 @@ export function handleUrl(url: string): void {
     return;
   }
 
-  // Other paths: stub for future. Today the App.tsx screen state is
-  // owned by AppInner — wiring a navigate() from outside means lifting
-  // setScreen via a context. Deferred until needed.
-  if (path === 'admin' || path === 'dashboard') {
-    try { window.dispatchEvent(new CustomEvent(SIRI_CAPTURE_EVENT, { detail: { source: 'siri', target: path } })); }
-    catch { /* noop */ }
+  // Screen deep links. As of the 2026-05-18 react-router migration the
+  // app uses hash routing, so a deep link just needs to set the hash —
+  // the router (and its gate layout) picks it up on the next tick. The
+  // gates still apply: an unauthenticated cold-start deep link lands on
+  // AuthFlow first, then resolves to the requested screen post-gate.
+  const HASH_TARGETS: Record<string, string> = {
+    dashboard: '#/dashboard',
+    admin: '#/module/admin',
+  };
+  const hash = HASH_TARGETS[path];
+  if (hash) {
+    try {
+      window.location.hash = hash;
+    } catch {
+      /* noop */
+    }
+    // Keep the legacy event too, in case anything else still listens.
+    try {
+      window.dispatchEvent(
+        new CustomEvent(SIRI_CAPTURE_EVENT, { detail: { source: 'siri', target: path } }),
+      );
+    } catch { /* noop */ }
   }
 }

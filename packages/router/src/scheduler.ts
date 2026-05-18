@@ -12,6 +12,14 @@ import type { Reminder } from './types';
 const REMINDERS_MOD = 'reminders';
 const REMINDERS_KEY = 'items';
 
+/**
+ * setTimeout stores its delay in a signed 32-bit int. Any delay above
+ * 2^31-1 ms (~24.8 days) overflows and the timer fires IMMEDIATELY.
+ * For longer reminders we arm a timer at the max safe delay, then
+ * re-schedule on wake until the remaining delay fits in one timer.
+ */
+const MAX_TIMEOUT_MS = 2_147_483_647;
+
 function readReminders(store: Store): Reminder[] {
   return store.get<Reminder[]>(REMINDERS_MOD, REMINDERS_KEY, []);
 }
@@ -49,6 +57,21 @@ export function createReminderScheduler(store: Store, evts: typeof events): Remi
     if (delay <= 0) {
       // Already past; fire asynchronously so callers see the add() return first.
       const t = setTimeout(() => fire(reminder), 0);
+      timers.set(reminder.id, t);
+      return;
+    }
+    if (delay > MAX_TIMEOUT_MS) {
+      // Delay exceeds the 32-bit setTimeout ceiling — a raw setTimeout here
+      // would overflow and fire instantly. Arm a re-arming timer at the max
+      // safe delay; on wake, recompute the remaining delay and schedule
+      // again. The reminder's status is unchanged, so the re-arm just
+      // re-enters this function until the remaining delay fits one timer.
+      const t = setTimeout(() => {
+        timers.delete(reminder.id);
+        // Re-read the reminder so a cancel/edit during the long wait wins.
+        const current = readReminders(store).find((r) => r.id === reminder.id);
+        if (current && current.status === 'scheduled') schedule(current);
+      }, MAX_TIMEOUT_MS);
       timers.set(reminder.id, t);
       return;
     }
