@@ -651,12 +651,8 @@ function SubscriptionsScreen({
 
 // ─── Screen 4: (optional) Apple Health consent ──────────────────────────────
 //
-// Bank-link (Plaid) was removed from onboarding for the alpha — the Plaid
-// integration is not wired end-to-end, so a connect prompt would be dead UI.
-// HealthKit consent keeps this screen index so tests + progress dots stay
-// stable without renumbering. When HealthKit is not enabled (the default —
-// VITE_HEALTHKIT_ENABLED !== '1'), the screen has nothing to show and
-// auto-advances on mount.
+// When HealthKit is not enabled (the default — VITE_HEALTHKIT_ENABLED !== '1'),
+// the screen has nothing to show and auto-advances on mount.
 
 function isHealthKitOnboardingEnabled(): boolean {
   try {

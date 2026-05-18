@@ -222,26 +222,10 @@ return `{success: false, reason: 'rate_limit', retry_after}`. UI shows
 
 ## 8. Worker auth security fixes (2026-05-17) — REQUIRED before this ships
 
-Three authentication holes in the Cloudflare Workers were fixed. The code
+Two authentication holes in the Cloudflare Workers were fixed. The code
 is done, but the workers will NOT function correctly until you set the
 new secrets below and redeploy. Run each `wrangler secret put` from inside
 the named worker directory; it will prompt you to paste the value.
-
-### S1 · plaid-sync — verify the bank-data JWT
-
-The plaid-sync worker now verifies every user JWT against Supabase
-instead of trusting a self-decoded token. It needs the Supabase anon key.
-
-```
-cd workers/plaid-sync
-wrangler secret put SUPABASE_ANON_KEY
-# paste the SAME anon key the web app uses
-# (Supabase dashboard → Settings → API → "anon public" key)
-```
-
-If this secret is missing, ALL authed plaid endpoints (/link/token/create,
-/exchange, /inbox/drain, /inbox/ack) reject every request with 401 — bank
-linking and inbox sync stop working. So this is mandatory, not optional.
 
 ### S2 · ai-proxy — authenticate the telemetry endpoints
 
@@ -292,7 +276,6 @@ from /push and no server-side notifications are delivered.
 ### Redeploy after setting the secrets
 
 ```
-cd workers/plaid-sync && wrangler deploy
 cd workers/apns-push  && wrangler deploy
 cd workers/cron       && wrangler deploy
 cd workers/ai-proxy   && wrangler deploy
@@ -303,7 +286,6 @@ binding resolves against a worker that already enforces the secret).
 
 ### Smoke check
 
-- Bank link: open Atelier, link a sandbox bank — should still work.
 - Notifications: trigger `POST /flush-notifications` on the cron worker;
   a due job should reach `sent`, not stick on `pending` with `apns-401`.
 - Telemetry: a signed-in user's brain dump should still land in
@@ -508,24 +490,18 @@ constraint names — an information-disclosure vector. Now:
   upstream detail is logged SERVER-SIDE only (`console.error`, visible in
   `wrangler tail`), tagged with the same `request_id` for support
   correlation.
-- `workers/plaid-sync` — the `supabaseSelect/Insert/Update/Delete` helpers
-  no longer dump the raw, unbounded PostgREST body into the worker log;
-  the body is bounded to 2 KB and tagged with a `request_id`. (plaid-sync
-  already returned generic codes to the client — no client-facing change.)
 - New shared helper `upstreamError()` in `@ollie/worker-http`.
 
 ### Deploy steps (Serra-runnable)
 
-NO new secrets, NO new bindings. Just redeploy the two affected workers:
+NO new secrets, NO new bindings. Just redeploy the affected worker:
 
 ```
 cd workers/ai-proxy   && wrangler deploy
-cd workers/plaid-sync && wrangler deploy
 ```
 
-Safe to deploy independently and in any order — there is no cross-worker
-contract change. Old web clients keep working: the response still has an
-`error` field they branch on; only the `detail`/`status` extras are gone.
+Old web clients keep working: the response still has an `error` field
+they branch on; only the `detail`/`status` extras are gone.
 
 ### Smoke check (S8)
 
