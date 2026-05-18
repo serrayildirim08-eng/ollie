@@ -1,13 +1,17 @@
 /**
  * apps/web · biometric unlock
  *
- * Single-purpose gate for the Money module's privacy mode. Locks all $
- * figures behind a platform-biometric prompt when the user opts in.
+ * GENERAL-PURPOSE platform-biometric prompt. Two call sites today:
+ *   - the Money module's privacy mode (mask all $ figures), and
+ *   - the app-lock gate (re-entry screen on cold boot / resume).
+ * The functions here are deliberately feature-agnostic — they only answer
+ * "did the user just pass a platform-biometric check?". Callers decide
+ * what that unlocks.
  *
  *   Web / SSR    → WebAuthn (`navigator.credentials.get`) with a discoverable
  *                  credential. On first unlock we silently register a resident
  *                  key so subsequent unlocks need no username/UI chrome.
- *   Capacitor    → `@capacitor-community/native-biometric` via dynamic import.
+ *   Capacitor    → `@capgo/capacitor-native-biometric` via dynamic import.
  *                  Dispatched when `Capacitor.isNativePlatform()` returns true.
  *                  If the module is not yet installed at runtime (workspace
  *                  install lag) we warn and fall back to WebAuthn.
@@ -15,8 +19,12 @@
  * Returns a discriminated result instead of throwing — the caller renders a
  * quiet inline error rather than a runtime crash.
  *
- * Persistence is handled by the caller: store `privacy.unlockedUntil` and
- * compare against `Date.now()` to decide whether a re-prompt is needed.
+ * IMPORTANT: this is NOT cryptographic. A successful unlock does not derive
+ * or hold any encryption key — it is a UI-level "the device owner is here"
+ * signal. The passphrase remains the only thing that decrypts data.
+ *
+ * Persistence is handled by the caller (e.g. store `privacy.unlockedUntil`
+ * or the app-lock `locked` flag) and compared against `Date.now()`.
  */
 
 export type BiometricResult =
@@ -176,7 +184,32 @@ export async function unlockViaWebAuthn(): Promise<BiometricResult> {
 
 // ─── Capacitor native path ─────────────────────────────────────────────────
 
-async function unlockViaNative(locale: 'en' | 'es' = 'en'): Promise<BiometricResult> {
+/**
+ * What the unlock is FOR — drives the native prompt's reason string so the
+ * OS dialog reads honestly ("unlock ollie" vs "unlock finance privacy
+ * mode"). WebAuthn shows no caller-supplied copy, so this only affects the
+ * Capacitor path.
+ */
+export type UnlockPurpose = 'app' | 'finance-privacy';
+
+const NATIVE_STRINGS: Record<
+  UnlockPurpose,
+  Record<'en' | 'es', { reason: string; title: string }>
+> = {
+  app: {
+    en: { reason: 'unlock ollie', title: 'unlock' },
+    es: { reason: 'desbloquear ollie', title: 'desbloquear' },
+  },
+  'finance-privacy': {
+    en: { reason: 'unlock finance privacy mode', title: 'unlock' },
+    es: { reason: 'desbloquear modo privado de finanzas', title: 'desbloquear' },
+  },
+};
+
+async function unlockViaNative(
+  locale: 'en' | 'es' = 'en',
+  purpose: UnlockPurpose = 'finance-privacy',
+): Promise<BiometricResult> {
   // Dynamic import so the web bundle doesn't choke when the dep is absent.
   let NativeBiometric: { isAvailable: () => Promise<{ isAvailable: boolean }>; verifyIdentity: (opts: Record<string, unknown>) => Promise<void> };
   try {
@@ -188,7 +221,7 @@ async function unlockViaNative(locale: 'en' | 'es' = 'en'): Promise<BiometricRes
   }
 
   // Check availability (no biometry enrolled, hardware absent, etc.)
-  let available = false;
+  let available: boolean;
   try {
     const check = await NativeBiometric.isAvailable();
     available = check.isAvailable;
@@ -200,11 +233,8 @@ async function unlockViaNative(locale: 'en' | 'es' = 'en'): Promise<BiometricRes
   }
 
   try {
-    const biometricStrings = {
-      en: { reason: 'unlock finance privacy mode', title: 'unlock' },
-      es: { reason: 'desbloquear modo privado de finanzas', title: 'desbloquear' },
-    };
-    const { reason, title } = biometricStrings[locale] ?? biometricStrings.en;
+    const byLocale = NATIVE_STRINGS[purpose] ?? NATIVE_STRINGS['finance-privacy'];
+    const { reason, title } = byLocale[locale] ?? byLocale.en;
     await NativeBiometric.verifyIdentity({
       reason,
       title,
@@ -233,8 +263,14 @@ async function unlockViaNative(locale: 'en' | 'es' = 'en'): Promise<BiometricRes
  * Prompt for biometric unlock. Dispatches to the native Capacitor plugin
  * when running inside a Capacitor native shell, and falls back to WebAuthn
  * everywhere else (web, SSR, Node test environments).
+ *
+ * `purpose` only colours the native OS prompt copy; defaults to the
+ * finance-privacy call site for backward compatibility.
  */
-export async function unlock(locale: 'en' | 'es' = 'en'): Promise<BiometricResult> {
+export async function unlock(
+  locale: 'en' | 'es' = 'en',
+  purpose: UnlockPurpose = 'finance-privacy',
+): Promise<BiometricResult> {
   // Dev bypass — Vite exposes `import.meta.env.DEV`. Lets test fixtures and
   // local development skip the prompt; production builds (`vite build`) get
   // the real path.
@@ -247,7 +283,7 @@ export async function unlock(locale: 'en' | 'es' = 'en'): Promise<BiometricResul
   } catch { /* no import.meta — fall through */ }
 
   if (isCapacitorNative()) {
-    return unlockViaNative(locale);
+    return unlockViaNative(locale, purpose);
   }
   return unlockViaWebAuthn();
 }

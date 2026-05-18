@@ -6,6 +6,7 @@
 
 import type { NormalizeResult, ParsedGroceryItem, GroceryIntent } from './types';
 import { ALIAS_TABLE, SORTED_ALIASES } from './data';
+import { levenshtein } from '../util';
 
 // ─── Regex constants ─────────────────────────────────────────────────────
 
@@ -45,25 +46,14 @@ export function stripPlural(s: string): string {
   return s;
 }
 
+/**
+ * Levenshtein distance, capped at 2. Delegates to the shared capped
+ * implementation in `../util`. Distances beyond 2 return 3 (the
+ * sole caller only checks `d <= 2`, so the over-budget sentinel value
+ * does not matter).
+ */
 export function lev(a: string, b: string): number {
-  if (a === b) return 0;
-  const m = a.length, n = b.length;
-  if (Math.abs(m - n) > 2) return 99;
-  let prev = new Array<number>(n + 1);
-  let curr = new Array<number>(n + 1);
-  for (let j = 0; j <= n; j++) prev[j] = j;
-  for (let i = 1; i <= m; i++) {
-    curr[0] = i;
-    let rowMin = curr[0];
-    for (let j = 1; j <= n; j++) {
-      const cost = a.charCodeAt(i - 1) === b.charCodeAt(j - 1) ? 0 : 1;
-      curr[j] = Math.min(curr[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost);
-      if (curr[j] < rowMin) rowMin = curr[j];
-    }
-    if (rowMin > 2) return 99;
-    const tmp = prev; prev = curr; curr = tmp;
-  }
-  return prev[n];
+  return levenshtein(a, b, 2);
 }
 
 // ─── Item normaliser ─────────────────────────────────────────────────────

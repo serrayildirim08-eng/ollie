@@ -66,7 +66,7 @@ function buildPhaseMarkers(
   const out: SignalCyclePhase[] = [];
   let lastPhase: string | null = null;
   for (let t = fromTs; t <= toTs; t += DAY_MS) {
-    let phase: string | null = null;
+    let phase: string | null;
     try {
       phase = computePhaseForDate(
         cycles as Parameters<typeof computePhaseForDate>[0],

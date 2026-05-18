@@ -20,6 +20,8 @@ import type {
 } from './types';
 
 import { STRESS_RE } from './regexes';
+import { median as medianOf } from '../stats';
+import { resolveNow } from '../util';
 
 // ─── ID generation ────────────────────────────────────────────────────────────
 
@@ -101,7 +103,7 @@ export function normalizeEpisode(
   raw: unknown,
   opts?: { now?: number },
 ): Episode {
-  const now = typeof opts?.now === 'number' ? opts.now : Date.now();
+  const now = resolveNow(opts?.now);
   const o = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
 
   const num = (v: unknown): number | undefined =>
@@ -111,7 +113,7 @@ export function normalizeEpisode(
   const startedAt =
     num(o.started_at) ?? num(o.opened_at) ?? num(o.ts) ?? now;
 
-  let label = '';
+  let label: string;
   if (typeof o.label === 'string' && o.label.trim()) {
     label = o.label.trim();
   } else if (typeof o.text === 'string' && o.text.trim()) {
@@ -220,7 +222,7 @@ export function closeEpisode(
   episode: Episode,
   opts?: { now?: number },
 ): Episode {
-  const now = typeof opts?.now === 'number' ? opts.now : Date.now();
+  const now = resolveNow(opts?.now);
   return { ...episode, ended_at: now };
 }
 
@@ -243,7 +245,7 @@ export function summarizeEpisode(
   episode: Episode,
   opts?: { now?: number },
 ): EpisodeSummary {
-  const now = typeof opts?.now === 'number' ? opts.now : Date.now();
+  const now = resolveNow(opts?.now);
   const end = typeof episode.ended_at === 'number' ? episode.ended_at : now;
   const start = typeof episode.started_at === 'number' ? episode.started_at : end;
   const sev = Array.isArray(episode.severity_log) ? episode.severity_log : [];
@@ -377,7 +379,6 @@ export function detectTriggerCorrelation(
   opts?: { now?: number; minEpisodes?: number; lookbackDays?: number; label?: string | null },
 ): EpisodeTriggerPattern | null {
   const o = opts || {};
-  const now = typeof o.now === 'number' ? o.now : Date.now();
   const minEpisodes = typeof o.minEpisodes === 'number' ? o.minEpisodes : 4;
   const lookbackDays = typeof o.lookbackDays === 'number' ? o.lookbackDays : 7;
   const label = o.label || null;
@@ -560,11 +561,7 @@ export function detectMedicationAdherence(
     const intervals: number[] = [];
     for (let i = 1; i < ts.length; i++) intervals.push(ts[i] - ts[i - 1]);
     if (intervals.length === 0) continue;
-    const sorted = intervals.slice().sort((a, b) => a - b);
-    const mid = Math.floor(sorted.length / 2);
-    const median = sorted.length % 2 === 0
-      ? (sorted[mid - 1] + sorted[mid]) / 2
-      : sorted[mid];
+    const median = medianOf(intervals);
     if (!(median > 0)) continue;
     const lastTs = ts[ts.length - 1];
     const currentGap = now - lastTs;

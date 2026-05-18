@@ -21,7 +21,7 @@
 import { useMemo } from 'react';
 import { FrostedCard } from '../components/FrostedCard';
 import { useStoreSlice } from '../store';
-import { getString, type Locale } from '../i18n';
+import { getString, interpolate, pluralCategory, type Locale } from '../i18n';
 
 export interface InsightsScreenProps {
   onNavigate: (to: 'home') => void;
@@ -75,7 +75,7 @@ export function InsightsScreen({ onNavigate }: InsightsScreenProps) {
       new Date(ms)
         .toLocaleDateString(locale === 'es' ? 'es-ES' : 'en-US', { month: 'short', day: 'numeric' })
         .toLowerCase();
-    return t('range_label').replace('${0}', fmt(since)).replace('${1}', fmt(now));
+    return interpolate(t('range_label'), { 0: fmt(since), 1: fmt(now) });
   }, [locale, since, now]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── what the user logged this week ──────────────────────────────────────
@@ -127,10 +127,14 @@ export function InsightsScreen({ onNavigate }: InsightsScreenProps) {
     if (focusMin > 0) {
       const focusText =
         focusMin < 60 ? `${focusMin}m` : `${Math.floor(focusMin / 60)}h ${focusMin % 60}m`;
-      rows.push({ module: 'work', template: t('logged_work'), count: focusMin, noun: undefined });
-      // store the rendered string in template by pre-substituting below
-      rows[rows.length - 1].template = t('logged_work').replace('${0}', focusText);
-      rows[rows.length - 1].count = 0; // already rendered
+      // template is pre-rendered (count sentinel 0) — interpolate fills
+      // the ${0} token, replacing every occurrence.
+      rows.push({
+        module: 'work',
+        template: interpolate(t('logged_work'), { 0: focusText }),
+        count: 0,
+        noun: undefined,
+      });
     }
 
     const dumpCount = (dumpItems ?? []).filter(
@@ -367,12 +371,17 @@ export function InsightsScreen({ onNavigate }: InsightsScreenProps) {
 function renderLoggedRow(row: LoggedRow): string {
   // work row is already rendered (count === 0 sentinel).
   if (row.count === 0 && !row.noun) return row.template;
+  // CLDR `one` category for en/es is exactly count === 1, so this is
+  // behavior-identical to the prior `row.count === 1`; row.noun is already
+  // resolved per-locale upstream.
   const noun = row.noun
-    ? row.count === 1
+    ? pluralCategory('en', row.count) === 'one'
       ? row.noun.one
       : row.noun.many
     : '';
-  return row.template.replace('${0}', String(row.count)).replace('${1}', noun);
+  // interpolate replaces every occurrence of each token (the old chained
+  // .replace stopped at the first hit per token).
+  return interpolate(row.template, { 0: String(row.count), 1: noun });
 }
 
 function SectionLabel({ children }: { children: React.ReactNode }) {

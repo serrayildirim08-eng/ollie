@@ -66,9 +66,8 @@ describe('boot-layer scheduleNotification injection', () => {
       ts: FIXED_NOW,
     });
 
-    // supplement subscriber uses a 10ms flush timer
-    vi.advanceTimersByTime(20);
-
+    // Item #16: no buffer timer — the emit is handed straight to the
+    // dispatcher (which owns aggregation).
     const bodyCall = calls.find((c) => c.spec.dedupe_key?.startsWith('body:supplement_due'));
     expect(bodyCall).toBeDefined();
     expect(bodyCall!.spec.category).toBe('REMINDER');

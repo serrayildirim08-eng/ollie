@@ -241,6 +241,11 @@ export function SleepSoundPlayer() {
   useEffect(() => {
     return () => {
       clearTimer();
+      // Read `howlCache.current` lazily at unmount: we deliberately want
+      // whatever Howl instances exist at teardown time, not a value
+      // captured when the effect first ran. `howlCache` is a stable ref,
+      // so it does not belong in the dependency array.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
       Object.values(howlCache.current).forEach((h) => { h.stop(); h.unload(); });
     };
   }, [clearTimer]);

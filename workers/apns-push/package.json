@@ -8,6 +8,10 @@
     "deploy": "wrangler deploy",
     "typecheck": "tsc --noEmit"
   },
+  "dependencies": {
+    "@ollie/apns-jwt": "workspace:*",
+    "@ollie/worker-http": "workspace:*"
+  },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250906.0",
     "typescript": "^5.6.0",

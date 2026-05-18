@@ -189,7 +189,7 @@ export function ModuleScreen({
       openedAtRef.current = null;
     };
   // Re-run when moduleId changes (navigate between modules without unmount).
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [moduleId]);
   const cycleAllowed = cycleTracking === 'yes';
 

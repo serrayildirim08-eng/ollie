@@ -37,6 +37,12 @@ import {
   type ConsentState,
 } from '@ollie/consent';
 import { useStoreSlice, store } from '../store';
+import { isBiometricSupported } from '../lib/biometric';
+import {
+  APP_LOCK_SLICE,
+  APP_LOCK_ENABLED_KEY,
+  setAppLockEnabled,
+} from '../lib/app-lock';
 import { SUPPORTED_COUNTRIES } from '../lib/country';
 import { getAccount } from '../lib/account-boot';
 import { readUserHash } from '../lib/user-hash';
@@ -1372,6 +1378,100 @@ export function ResearchSection({ userId }: ResearchSectionProps) {
   );
 }
 
+// ─── Security section (app-lock · 2026-05-18) ───────────────────────────────
+//
+// The opt-in for the app-lock curtain — a Face ID / fingerprint re-entry
+// screen over the whole app on cold boot and resume-after-idle.
+//
+// DEFAULT OFF. Nobody gets surprise-locked: the user turns this on
+// deliberately. When the device reports no biometric support the toggle
+// reads as disabled with a quiet hint, rather than offering a switch that
+// could only fail.
+//
+// Honest framing in the hint copy: the user is already signed in, the
+// lock is a privacy curtain, not encryption. See lib/app-lock.ts.
+//
+// Exported so SecuritySection.test.tsx can mount it in isolation, same as
+// ResearchSection — importing the whole SettingsScreen pulls store/react
+// transitively, which vitest can't resolve in this workspace shape.
+
+export function SecuritySection() {
+  // The feature flag lives in shared.app_lock.enabled. Read it reactively
+  // so an external flip (e.g. setAppLockEnabled clearing it) re-renders.
+  const [enabled] = useStoreSlice<boolean>(
+    APP_LOCK_SLICE,
+    APP_LOCK_ENABLED_KEY,
+    false,
+  );
+
+  // Resolve biometric support once. isBiometricSupported() is a sync
+  // capability probe (WebAuthn presence / Capacitor native shell) — it
+  // does NOT prompt, so it is safe to call on every render.
+  const [supported] = useState<boolean>(() => isBiometricSupported());
+
+  function handleChange(next: boolean) {
+    if (!supported) return; // guarded — the toggle is non-interactive anyway
+    // setAppLockEnabled also clears any live `locked` flag when turning
+    // off, so the user can't strand themselves behind the curtain.
+    setAppLockEnabled(next);
+  }
+
+  return (
+    <section style={styles.section} aria-label="security">
+      <h2 style={styles.sectionHeader}>security</h2>
+
+      <div style={styles.row}>
+        <div>
+          <p style={styles.rowLabel}>unlock with face id / fingerprint</p>
+          <p style={styles.rowHint}>
+            {supported
+              ? 'covers ollie with a quick unlock when you open it or return to it after a while. you stay signed in — this just keeps your screen private.'
+              : 'this device has no face id or fingerprint set up.'}
+          </p>
+        </div>
+        {supported ? (
+          <Toggle
+            on={enabled}
+            onChange={handleChange}
+            ariaLabel="unlock with face id or fingerprint"
+          />
+        ) : (
+          <span
+            role="switch"
+            aria-checked="false"
+            aria-disabled="true"
+            aria-label="unlock with face id or fingerprint (unavailable on this device)"
+            title="no biometrics available on this device"
+            style={{
+              width: '44px',
+              height: '24px',
+              borderRadius: '12px',
+              background: 'var(--ink-ghost)',
+              position: 'relative',
+              display: 'inline-block',
+              flexShrink: 0,
+              opacity: 0.4,
+            }}
+          >
+            <span
+              aria-hidden="true"
+              style={{
+                position: 'absolute',
+                top: '3px',
+                left: '3px',
+                width: '18px',
+                height: '18px',
+                borderRadius: '50%',
+                background: 'var(--bone)',
+              }}
+            />
+          </span>
+        )}
+      </div>
+    </section>
+  );
+}
+
 // ─── About section ───────────────────────────────────────────────────────────
 
 function AboutSection() {
@@ -1488,6 +1588,7 @@ export function SettingsScreen({ vault, onBack, onSignedOut, onPreview }: Settin
         <HealthSection />
         <FinanceSection />
         <PrivacySection />
+        <SecuritySection />
         <ResearchSection userId={userId} />
         <PreviewSection onPreview={onPreview} />
         <AboutSection />

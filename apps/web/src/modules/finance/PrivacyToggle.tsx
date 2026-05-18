@@ -150,7 +150,7 @@ export function PrivacyToggle({ state, onChange, onToast, unlockImpl }: Props): 
     } finally {
       setBusy(false);
     }
-  }, [busy, onChange, onToast, unlockImpl]);
+  }, [busy, onChange, onToast, unlockImpl, locale]);
 
   const onClick = useCallback(() => {
     if (!state.enabled) {

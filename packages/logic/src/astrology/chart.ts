@@ -108,7 +108,7 @@ export function computeNatalChart(
   if (!date) return null;
   const lat = typeof birthData.lat === 'number' ? birthData.lat : 0;
   const lng = typeof birthData.lng === 'number' ? birthData.lng : 0;
-  let observer: ReturnType<AstronomyAPI['Observer']['prototype']['constructor']> | null = null;
+  let observer: ReturnType<AstronomyAPI['Observer']['prototype']['constructor']> | null;
   try { observer = new astronomy.Observer(lat, lng, 0); } catch { observer = null; }
 
   const planets: NatalChart['planets'] = {};

@@ -22,6 +22,7 @@ import type {
 import type { FinanceRecord } from '../../finance/types';
 import type { BrainDumpEntry } from '../../finance/subscription-dormancy';
 import type { SleepRecord } from '../../sleep/types';
+import { resolveNow } from '../../util';
 
 const EVENING_HOUR_CUTOFF = 17;
 
@@ -60,7 +61,7 @@ export function correlateEveningMatchaAndSleep(
   sleep: readonly SleepRecord[] | undefined | null,
   opts?: CorrelateEveningMatchaOpts,
 ): EveningMatchaSleepResult {
-  const now = opts?.now ?? Date.now();
+  const now = resolveNow(opts?.now);
   const hourCutoff = opts?.eveningHourCutoff ?? EVENING_HOUR_CUTOFF;
 
   if (!Array.isArray(txns) && !Array.isArray(brainDumps)) {

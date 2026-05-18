@@ -12,6 +12,7 @@
  */
 
 import { store } from '../store';
+import { mkId } from '../lib/mkId';
 
 export interface PetDraft {
   id: string;
@@ -35,7 +36,7 @@ export interface State {
 }
 
 function uid(): string {
-  return Math.random().toString(36).slice(2, 10);
+  return mkId();
 }
 
 export function commitAll(state: State): void {

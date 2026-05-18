@@ -25,12 +25,12 @@
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
-import type { VaultClient } from '@ollie/auth';
+import type { AuthClient } from '@ollie/auth';
 import { unlock as biometricUnlock, isBiometricSupported } from '../lib/biometric';
 
 export interface AppLockGateProps {
-  /** The encryption vault — used for the passphrase escape hatch. */
-  vault: VaultClient | null;
+  /** The live auth client — used for the passphrase escape hatch. */
+  auth: AuthClient | null;
   /** Called once the user has passed biometric OR passphrase. */
   onUnlocked: () => void;
   /**
@@ -47,7 +47,7 @@ type Phase =
   | 'verifying';    // passphrase check in flight
 
 export function AppLockGate({
-  vault,
+  auth,
   onUnlocked,
   unlockImpl,
 }: AppLockGateProps): React.ReactElement {
@@ -97,8 +97,9 @@ export function AppLockGate({
   }, []);
 
   const verifyPassphrase = useCallback(async () => {
-    if (!vault) {
-      // Nothing to verify against — should not happen behind the gate,
+    const session = auth?.state().session ?? null;
+    if (!auth || !session) {
+      // No session to verify against — should not happen behind the gate,
       // but never trap the user: lift the curtain.
       onUnlocked();
       return;
@@ -107,9 +108,7 @@ export function AppLockGate({
     setError('');
     setPhase('verifying');
     try {
-      // The vault is already unlocked behind this gate; re-running unlock()
-      // simply re-derives + re-verifies the key — a clean passphrase check.
-      const r = await vault.unlock(passphrase);
+      const r = await auth.signIn({ email: session.email, passphrase });
       if (r.ok) {
         onUnlocked();
         return;
@@ -120,7 +119,7 @@ export function AppLockGate({
       setError('couldn’t verify right now. try again.');
       setPhase('passphrase');
     }
-  }, [vault, passphrase, onUnlocked]);
+  }, [auth, passphrase, onUnlocked]);
 
   const busy = phase === 'prompting' || phase === 'verifying';
   const showPassphrase = phase === 'passphrase' || phase === 'verifying';
@@ -339,7 +338,6 @@ export function AppLockGate({
 function primaryBtnStyle(disabled: boolean): React.CSSProperties {
   return {
     width: '100%',
-    boxSizing: 'border-box', // width:100% + h-padding overflowed the viewport (audit 2026-05-18)
     padding: '13px 20px',
     minHeight: 48,
     background: disabled ? 'transparent' : 'var(--ink)',
@@ -359,7 +357,6 @@ function primaryBtnStyle(disabled: boolean): React.CSSProperties {
 function ghostBtnStyle(disabled: boolean): React.CSSProperties {
   return {
     width: '100%',
-    boxSizing: 'border-box', // width:100% + h-padding overflowed the viewport (audit 2026-05-18)
     padding: '11px 20px',
     minHeight: 44,
     background: 'transparent',

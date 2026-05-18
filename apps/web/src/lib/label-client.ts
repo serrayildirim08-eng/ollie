@@ -14,12 +14,14 @@
  * Wire format (see workers/ai-proxy/src/label.ts · handleLabel):
  *   - Method: POST
  *   - URL:    `${VITE_AI_WORKER_URL}/label`
- *   - Headers: `content-type: application/json` ONLY. The /label route in
- *     workers/ai-proxy/src/index.ts does NOT participate in the per-user
- *     rate limit and requires NO bearer token or x-user-id header — the
- *     worker holds ANTHROPIC_API_KEY + SUPABASE_SERVICE_ROLE server-side
- *     and the research row is anonymized at write (no user identifier is
- *     ever sent here). Adding auth headers would be dead weight.
+ *   - Headers: `content-type: application/json` AND
+ *     `authorization: Bearer <supabase-user-jwt>`. As of the 2026-05-17
+ *     security fix the /label route in workers/ai-proxy REQUIRES a verified
+ *     Supabase user JWT — the endpoint uses ANTHROPIC_API_KEY +
+ *     SUPABASE_SERVICE_ROLE server-side, so leaving it open let anyone burn
+ *     the Anthropic budget. The JWT only authenticates the caller; the
+ *     research_corpus row itself is still anonymized at write (no user
+ *     identifier is persisted), so the privacy posture is unchanged.
  *   - Body: `{ scrubbed_text, sector_hint?, locale }`
  *   - Response 200: `{ corpus_id, label }` — we only surface corpus_id.
  *   - Non-200: throws. The orchestrator swallows + reports via onError;
@@ -27,20 +29,22 @@
  *
  * Privacy: `scrubbed_text` arrives already PII-scrubbed by the orchestrator.
  * The worker re-scrubs server-side as belt-and-suspenders. This client adds
- * nothing identifying.
+ * nothing identifying — the JWT is an auth credential, not corpus data.
  */
 
 import type { LabelClient } from '@ollie/orchestrator';
-import { getAuthJwt } from './account-boot';
+import { getAccount } from './account-boot';
 
 /**
  * Default JWT source — the Supabase access token off the booted auth
  * client. Same access path as lib/invite.ts · getJwt().
  */
 function defaultGetJwt(): string | null {
-  // Phase 1 (Clerk migration): no Supabase-accepted JWT — /label calls are
-  // skipped. Re-wired to the Clerk session token in Phase 3.
-  return getAuthJwt();
+  try {
+    return getAccount()?.auth.state().session?.access_token ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -55,6 +59,11 @@ export interface LabelClientDeps {
   workerUrl: string;
   /** Injected for tests. Defaults to global fetch. */
   fetchImpl?: typeof fetch;
+  /**
+   * Injectable JWT source. Defaults to the booted auth client's Supabase
+   * access token. The /label endpoint rejects calls without it.
+   */
+  getJwt?: () => string | null;
 }
 
 interface LabelOkResponse {
@@ -69,12 +78,21 @@ interface LabelOkResponse {
 export function createLabelClient(deps: LabelClientDeps): LabelClient {
   const fetchImpl =
     deps.fetchImpl ?? (typeof fetch === 'function' ? fetch.bind(globalThis) : null);
+  const getJwt = deps.getJwt ?? defaultGetJwt;
   const endpoint = `${deps.workerUrl.replace(/\/$/, '')}/label`;
 
   return {
     async postLabel(payload: LabelPayload): Promise<{ corpus_id: string }> {
       if (!fetchImpl) {
         throw new Error('label-client: no fetch implementation available');
+      }
+
+      // The worker requires a verified Supabase JWT. Throw on a missing
+      // session so the orchestrator's onError fires and the row is dropped
+      // (rather than firing a POST that 401s).
+      const jwt = getJwt();
+      if (!jwt) {
+        throw new Error('label-client: no Supabase session — cannot call /label');
       }
 
       const body: Record<string, unknown> = {
@@ -89,7 +107,10 @@ export function createLabelClient(deps: LabelClientDeps): LabelClient {
 
       const resp = await fetchImpl(endpoint, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: {
+          'content-type': 'application/json',
+          authorization: `Bearer ${jwt}`,
+        },
         body: JSON.stringify(body),
       });
 

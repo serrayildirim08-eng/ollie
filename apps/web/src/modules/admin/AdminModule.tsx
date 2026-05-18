@@ -264,7 +264,7 @@ function fmtDueAt(ts: number): string {
 }
 
 function AdminReflected() {
-  const [reflected, setReflected] = useStoreSlice<AdminReflectedEntry[]>('admin', 'reflected', []);
+  const [reflected] = useStoreSlice<AdminReflectedEntry[]>('admin', 'reflected', []);
   const [dismissed, setDismissed] = useStoreSlice<string[]>('admin', 'reflected_dismissed', []);
   const dset = new Set(dismissed ?? []);
   const list = (reflected ?? [])
@@ -712,7 +712,7 @@ export function AdminModule({ onBack }: AdminModuleProps) {
         return next;
       });
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [items]);
 
   // ── save ─────────────────────────────────────────────────────────────────
@@ -773,7 +773,7 @@ export function AdminModule({ onBack }: AdminModuleProps) {
       }
       return { ...it, status: 'done', state: 'done', done_at: now() };
     }));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [items, setItems]);
 
   const closeLoop = useCallback((id: string) => {
@@ -781,7 +781,7 @@ export function AdminModule({ onBack }: AdminModuleProps) {
       if (!it || it.id !== id) return it;
       return { ...it, status: 'done', state: 'closed', closed_at: now() };
     }));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [items, setItems]);
 
   const del = useCallback((id: string) => {

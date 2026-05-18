@@ -13,8 +13,6 @@ import {
   detectPatterns,
   inferRecipe,
   learnKnownStore,
-  type GroceryHistory,
-  type GroceryOpts,
   type PantryItem,
   type ShoppingItem,
   type KnownStore,
@@ -77,8 +75,11 @@ describe('lev', () => {
   it('returns 1 for single substitution', () => {
     expect(lev('milk', 'silk')).toBe(1);
   });
-  it('returns 99 when length diff > 2', () => {
-    expect(lev('a', 'abcde')).toBe(99);
+  it('reports an over-budget distance ( > 2 ) when more than 2 edits apart', () => {
+    // lev is capped at 2 edits; anything further returns an over-budget
+    // value. The sole caller only checks `d <= 2`, so the exact sentinel
+    // does not matter — what matters is that it fails the <= 2 check.
+    expect(lev('a', 'abcde')).toBeGreaterThan(2);
   });
 });
 

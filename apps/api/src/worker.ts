@@ -34,6 +34,8 @@
  */
 
 import type { NotificationSpec } from '@ollie/notifications';
+import { createApnsJwtSigner } from '@ollie/apns-jwt';
+import { Router } from '@ollie/worker-http';
 import { handleAccountDelete } from './account-delete';
 
 export interface Env {
@@ -54,45 +56,54 @@ export interface Env {
 // Routing
 // ──────────────────────────────────────────────────────────────────────────
 
+// itty-router declarative routing — replaces the hand-rolled
+// `if (method && pathname)` chain. Same paths, same methods, same
+// 404 fallthrough text.
+const router = Router<Request, [Env]>();
+
+router
+  .post('/register-token', (req, env) => handleRegister(req, env))
+  .post('/send', (req, env) => handleSend(req, env))
+  .post('/account/delete', (req, env) => handleAccountDelete(req, env))
+  // /health accepted any method in the hand-rolled version — keep that.
+  .all('/health', () => new Response('ok', { status: 200 }))
+  // Manual cron trigger — for local testing without waiting for the
+  // cron schedule. Same auth as /send.
+  .post('/cron/tick', async (req, env) => {
+    const auth = req.headers.get('authorization') ?? '';
+    if (!auth.startsWith('Bearer ') || auth.slice(7) !== env.REGISTER_SHARED_SECRET) {
+      return new Response('unauthorized', { status: 401 });
+    }
+    const result = await runCron(env);
+    return Response.json(result);
+  })
+  .all('*', () => new Response('not found', { status: 404 }));
+
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
-    const url = new URL(req.url);
-
-    if (req.method === 'POST' && url.pathname === '/register-token') {
-      return handleRegister(req, env);
-    }
-    if (req.method === 'POST' && url.pathname === '/send') {
-      return handleSend(req, env);
-    }
-    if (req.method === 'POST' && url.pathname === '/account/delete') {
-      return handleAccountDelete(req, env);
-    }
-    if (url.pathname === '/health') {
-      return new Response('ok', { status: 200 });
-    }
-    // Manual cron trigger — for local testing without waiting for the
-    // cron schedule. Same auth as /send.
-    if (req.method === 'POST' && url.pathname === '/cron/tick') {
-      const auth = req.headers.get('authorization') ?? '';
-      if (!auth.startsWith('Bearer ') || auth.slice(7) !== env.REGISTER_SHARED_SECRET) {
-        return new Response('unauthorized', { status: 401 });
-      }
-      const result = await runCron(env);
-      return Response.json(result);
-    }
-    return new Response('not found', { status: 404 });
+    return router.fetch(req, env);
   },
 
   /**
-   * Cloudflare Cron trigger. Invoked once per minute by the
-   * `[triggers].crons = ["* * * * *"]` schedule in wrangler.toml.
+   * Cron entrypoint — DECOMMISSIONED (audit item #1).
+   *
+   * The `[triggers]` block in wrangler.toml is removed, so Cloudflare
+   * never invokes this. The 5-min `flushNotificationQueue` in the
+   * workers/cron worker is the single owner of the `scheduled_jobs`
+   * scan; running this in parallel caused duplicate push delivery and
+   * broke the daily cap.
+   *
+   * The handler is kept (inert) only so that re-arming the trigger is a
+   * deliberate one-line change rather than a silent regression — if you
+   * re-add the trigger you MUST also remove flushNotificationQueue's
+   * scan, never run both. `runCron` itself stays reachable via the
+   * manual POST /cron/tick endpoint for local testing.
    */
-  async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
-    ctx.waitUntil(runCron(env).then((r) => {
-      console.log('[cron]', JSON.stringify(r));
-    }).catch((err) => {
-      console.error('[cron] failed', err);
-    }));
+  async scheduled(_event: ScheduledEvent, _env: Env, _ctx: ExecutionContext): Promise<void> {
+    console.warn(
+      '[cron] scheduled() invoked but the scheduled_jobs scan is decommissioned ' +
+      '(audit item #1). ollie-cron owns delivery. No-op.',
+    );
   },
 };
 
@@ -414,66 +425,20 @@ async function tokensForUser(env: Env, userId?: string): Promise<string[]> {
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-// APNs JWT (ES256). Cached in-process for 50 min.
+// APNs JWT (ES256). The signing routine lives in the shared @ollie/apns-jwt
+// package — one copy, shared with workers/apns-push. The signer caches the
+// token in this module's scope (Apple: valid 1h; this re-signs ~15 min
+// before expiry, so a token is reused for ~45 min).
 // ──────────────────────────────────────────────────────────────────────────
 
-let __jwtCache: { jwt: string; expiresAt: number } | null = null;
+const apnsSigner = createApnsJwtSigner();
 
 async function getApnsJwt(env: Env): Promise<string> {
-  const now = Date.now();
-  if (__jwtCache && __jwtCache.expiresAt > now + 60_000) return __jwtCache.jwt;
-  const jwt = await signApnsJwt(env);
-  __jwtCache = { jwt, expiresAt: now + 50 * 60_000 };
-  return jwt;
-}
-
-function base64UrlEncode(input: ArrayBuffer | Uint8Array | string): string {
-  let bytes: Uint8Array;
-  if (typeof input === 'string') {
-    bytes = new TextEncoder().encode(input);
-  } else if (input instanceof Uint8Array) {
-    bytes = input;
-  } else {
-    bytes = new Uint8Array(input);
-  }
-  let bin = '';
-  for (const b of bytes) bin += String.fromCharCode(b);
-  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-
-function pemToPkcs8(pem: string): ArrayBuffer {
-  const b64 = pem
-    .replace(/-----BEGIN [^-]+-----/g, '')
-    .replace(/-----END [^-]+-----/g, '')
-    .replace(/\s/g, '');
-  const bin = atob(b64);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out.buffer;
-}
-
-async function signApnsJwt(env: Env): Promise<string> {
-  const header = { alg: 'ES256', kid: env.APNS_KEY_ID };
-  const claims = {
-    iss: env.APNS_TEAM_ID,
-    iat: Math.floor(Date.now() / 1000),
-  };
-  const payload = `${base64UrlEncode(JSON.stringify(header))}.${base64UrlEncode(JSON.stringify(claims))}`;
-
-  const keyData = pemToPkcs8(env.APNS_AUTH_KEY);
-  const key = await crypto.subtle.importKey(
-    'pkcs8',
-    keyData,
-    { name: 'ECDSA', namedCurve: 'P-256' },
-    false,
-    ['sign'],
-  );
-  const sig = await crypto.subtle.sign(
-    { name: 'ECDSA', hash: { name: 'SHA-256' } },
-    key,
-    new TextEncoder().encode(payload),
-  );
-  return `${payload}.${base64UrlEncode(sig)}`;
+  return apnsSigner.getApnsJwt({
+    authKey: env.APNS_AUTH_KEY,
+    keyId: env.APNS_KEY_ID,
+    teamId: env.APNS_TEAM_ID,
+  });
 }
 
 // ──────────────────────────────────────────────────────────────────────────

@@ -11,7 +11,7 @@ import type {
   PacingBreachPattern,
   WorkPatternOpts,
 } from './types';
-import { DAY, HOUR } from './constants';
+import { DAY } from './constants';
 import { dayKey, fmtBlockLabel } from './helpers';
 
 interface SessionHistory {

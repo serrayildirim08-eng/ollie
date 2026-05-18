@@ -40,6 +40,7 @@ import type {
 } from '@ollie/logic/work';
 import type { NotificationSpec } from '@ollie/notifications';
 import type { Orchestrator } from './types';
+import { appendCapped } from './dedup-store';
 
 const DEBOUNCE_MS = 500;
 const MIN = 60_000;
@@ -172,7 +173,8 @@ export function createWorkOrchestrator(
           fresh.push(id);
         }
         if (fresh.length) {
-          store.set('work', '_hyperfocusEmittedIds', [...seenIds, ...fresh]);
+          // Cap the persisted dedup array (audit #8) — it grew unbounded.
+          store.set('work', '_hyperfocusEmittedIds', appendCapped([...seenIds], fresh));
         }
       } catch { /* non-fatal */ }
 

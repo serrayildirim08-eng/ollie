@@ -71,7 +71,7 @@ interface AccountBootHandles {
 let handles: AccountBootHandles | null = null;
 
 /** Active telemetry-bridge unsubscribers — torn down in _resetAccountBoot(). */
-let telemetryUnsubs: Array<() => void> = [];
+const telemetryUnsubs: Array<() => void> = [];
 
 /**
  * Subscribe the orphaned telemetry events and forward each to
@@ -153,11 +153,12 @@ export function bootAccount(): AccountBootHandles {
     api,
     endpointUrl: env.VITE_RESEARCH_ENDPOINT,
     ingestUrl: env.VITE_AI_WORKER_URL,
-    // Phase 1 (Clerk migration): the /ingest-event worker still expects a
-    // Supabase JWT, which we no longer mint. Hand it null — flushes degrade
-    // to local-only. Re-wired to the Clerk session token in Phase 3, when
-    // the workers verify Clerk JWTs.
-    getJwt: () => null,
+    // The /ingest-event worker endpoint requires a verified Supabase JWT.
+    // research-stream is auth-isolated, so we hand the bearer token IN via
+    // a lazy getter that reads the auth client's session at call time.
+    // `auth` is in scope below; this closure runs only when trackTable()
+    // fires, long after boot completes.
+    getJwt: () => auth.state().session?.access_token ?? null,
   });
   // Start the research flush loop unconditionally; track() is a no-op
   // until consent is granted, so the loop is harmless when off.

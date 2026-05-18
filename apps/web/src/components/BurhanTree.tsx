@@ -393,7 +393,7 @@ export function BurhanTree({
       const items: DrawItem[] = [];
 
       for (const lf of leaves) {
-        let bx: number, by: number, si = 0;
+        let bx: number, by: number, si: number;
         if (lf.free) {
           bx = lf.px!;
           by = lf.py!;

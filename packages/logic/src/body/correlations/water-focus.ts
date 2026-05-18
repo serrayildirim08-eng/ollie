@@ -54,7 +54,7 @@ import { pearson, dayKey } from '../math';
 import { OVERWHELMED_LEXICON } from '../../sleep/constants';
 import type { WaterEntry, DumpEntry } from '../types';
 
-const DAY_MS = 86_400_000;
+import { DAY_MS, resolveNow } from '../../util';
 const DEFAULT_LOOKBACK_DAYS = 30;
 const DEFAULT_MIN_SAMPLE = 14;
 const DEFAULT_THRESHOLD = 0.30;
@@ -129,7 +129,7 @@ export function correlateWaterAndFocus(
   dumps: readonly DumpEntry[] | undefined | null,
   opts?: CorrelateWaterFocusOpts,
 ): WaterFocusResult {
-  const now = opts?.now ?? Date.now();
+  const now = resolveNow(opts?.now);
   const lookback = opts?.lookbackDays ?? DEFAULT_LOOKBACK_DAYS;
   const minN = opts?.minSampleSize ?? DEFAULT_MIN_SAMPLE;
   const thresholdRho = opts?.thresholdRho ?? DEFAULT_THRESHOLD;

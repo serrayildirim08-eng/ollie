@@ -41,6 +41,7 @@ import type { NotificationSpec } from '@ollie/notifications';
 import * as cycle from '@ollie/logic/cycle';
 import type { CycleItem, CycleRecord } from '@ollie/logic/cycle';
 import type { Orchestrator } from './types';
+import { appendCapped } from './dedup-store';
 
 const CORRELATION_TAGS = ['cramps', 'bloating', 'headache', 'fatigue', 'mood swings'] as const;
 const DAY_MS = 86_400_000;
@@ -193,7 +194,8 @@ export function createCycleOrchestrator(
     }
 
     if (fresh.length) {
-      store.set('cycle', '_predictionEmittedKeys', [...emitted, ...fresh]);
+      // Cap the persisted dedup array (audit #8) — it grew unbounded.
+      store.set('cycle', '_predictionEmittedKeys', appendCapped([...emitted], fresh));
     }
   }
 

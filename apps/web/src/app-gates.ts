@@ -30,21 +30,23 @@ import {
   getConsentSync,
   hasNecessaryConsent,
 } from '@ollie/consent';
+import type { AuthClient } from '@ollie/auth';
 import { store } from './store';
 import { createConsentSync } from './lib/consent-sync';
 
 /**
- * Clerk is the identity layer. When `VITE_CLERK_PUBLISHABLE_KEY` is unset
- * (a keyless local/dogfood build) there is no way to sign in, so the auth
- * gate is skipped and the app falls through to onboarding-first behavior.
+ * Backend (Supabase) is optional in local/dogfood builds. When
+ * `VITE_SUPABASE_URL` is unset, AuthFlow can't create an account, so the
+ * auth gate is skipped and the app falls through to onboarding-first
+ * behavior. Identical to the old App.tsx module constant.
  */
-export const CLERK_CONFIGURED = Boolean(
-  (import.meta as unknown as { env?: { VITE_CLERK_PUBLISHABLE_KEY?: string } }).env
-    ?.VITE_CLERK_PUBLISHABLE_KEY,
+export const SUPABASE_CONFIGURED = Boolean(
+  (import.meta as unknown as { env?: { VITE_SUPABASE_URL?: string } }).env
+    ?.VITE_SUPABASE_URL,
 );
 
-if (!CLERK_CONFIGURED && typeof console !== 'undefined') {
-  console.warn('[ollie] VITE_CLERK_PUBLISHABLE_KEY missing — auth disabled');
+if (!SUPABASE_CONFIGURED && typeof console !== 'undefined') {
+  console.warn('[ollie] VITE_SUPABASE_URL missing — auth disabled, sync inactive');
 }
 
 /**
@@ -82,18 +84,18 @@ export interface AppGates {
  * Create the four gates as one shared state bundle. Called ONCE from
  * `AppServicesProvider`; the result is published on context.
  *
- * Gate 1 (auth) is driven by AuthFlow, which owns BOTH Clerk sign-in AND
- * the passphrase-vault unlock; it calls `markAuthed()` once both pass.
- * The vault always re-locks on reload (its key is in-memory only), so on
- * a configured build this gate always starts closed.
+ * @param auth the auth client (from the account boot handles) — its
+ *             `state().session` seeds the auth gate, exactly as the old
+ *             `AppInner` `useState` initializer did.
  */
-export function useAppGates(): AppGates {
+export function useAppGates(auth: AuthClient): AppGates {
   ensureConsentConfigured();
 
-  // Gate 1 — auth. Starts closed: Clerk sign-in + vault unlock must both
-  // complete (AuthFlow → markAuthed). Open from the start only on a
-  // keyless dev build where there is no sign-in to perform.
-  const [authed, setAuthed] = useState<boolean>(!CLERK_CONFIGURED);
+  // Gate 1 — auth. Seed from the existing session, or `true` when
+  // Supabase is unconfigured so dogfood builds skip auth.
+  const [authed, setAuthed] = useState<boolean>(
+    () => !SUPABASE_CONFIGURED || Boolean(auth.state().session),
+  );
 
   // Gate 2 — consent.necessary (master app-boot gate, one-way).
   const [consentGiven, setConsentGiven] = useState<boolean>(() =>

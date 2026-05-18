@@ -183,15 +183,18 @@ describe('body orchestrator — push notification subscribers', () => {
       reminderHHMM: '08:00',
       ts: FIXED_NOW,
     });
-    // flush the 10ms aggregation timer
-    vi.advanceTimersByTime(20);
     expect(scheduled).toHaveLength(1);
     expect(scheduled[0].spec.category).toBe('REMINDER');
     expect(scheduled[0].spec.title).toBe('vitamin d. just a heads up.');
     expect(scheduled[0].spec.dedupe_key).toContain('body:supplement_due:sup-d');
   });
 
-  it('body:supplement_due → aggregates multiple supplements emitted within same tick', () => {
+  // Item #16: the hand-rolled 10ms setTimeout buffer is gone. Each
+  // supplement_due emit is handed straight to the dispatcher tagged with a
+  // shared aggregation_group; the dispatcher's notification aggregator
+  // coalesces them. So with a plain scheduleNotification spy we see one
+  // call per emit, each carrying the same aggregation_group.
+  it('body:supplement_due → each emit routed to dispatcher with shared aggregation_group', () => {
     orch.init();
     emit('body:supplement_due', {
       supplementId: 'sup-d', supplementName: 'vitamin d',
@@ -205,10 +208,17 @@ describe('body orchestrator — push notification subscribers', () => {
       supplementId: 'sup-fe', supplementName: 'iron',
       reminderHHMM: '08:00', ts: FIXED_NOW,
     });
-    vi.advanceTimersByTime(20);
-    expect(scheduled).toHaveLength(1);
-    expect(scheduled[0].spec.title).toBe('vitamin d, magnesium, iron. just a heads up.');
-    expect(scheduled[0].spec.aggregation_group).toContain('body:supplement_due:');
+    expect(scheduled).toHaveLength(3);
+    // Every spec carries the same per-day aggregation_group so the
+    // dispatcher's aggregator merges them into one digest push.
+    const groups = new Set(scheduled.map((s) => s.spec.aggregation_group));
+    expect(groups.size).toBe(1);
+    expect([...groups][0]).toContain('body:supplement_due:');
+    expect(scheduled.map((s) => s.spec.title)).toEqual([
+      'vitamin d. just a heads up.',
+      'magnesium. just a heads up.',
+      'iron. just a heads up.',
+    ]);
   });
 
   it('body:posture_nudge → REMINDER push with deadpan copy', () => {

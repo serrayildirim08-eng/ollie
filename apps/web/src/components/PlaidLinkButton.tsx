@@ -71,15 +71,9 @@ export function PlaidLinkButton({ onLinked, onSkip }: PlaidLinkButtonProps): JSX
 
   // Consent gate. Defense in depth — ConsentScreen already enforces.
   // Reads the canonical @ollie/consent state (consent.state row).
+  // Computed here, but the early return is deferred until after every
+  // hook has run (React Rules of Hooks).
   const consentGiven = hasNecessaryConsent(store);
-  if (!consentGiven) return null;
-
-  // No-op render if the worker URL is unset (dev environment, no
-  // production Plaid yet). The build does not break, but the button
-  // is hidden so users don't see a non-functional CTA.
-  if (!env.VITE_PLAID_SYNC_WORKER_URL) {
-    return null;
-  }
 
   // Fetch link_token from the worker on mount. The token is one-shot
   // and short-lived; we fetch fresh per visit rather than caching.
@@ -248,6 +242,12 @@ export function PlaidLinkButton({ onLinked, onSkip }: PlaidLinkButtonProps): JSX
       onSkip?.();
     },
   });
+
+  // Visibility gates — applied only after every hook above has run.
+  //  · consent: defense in depth (ConsentScreen already enforces).
+  //  · worker URL unset (dev, no production Plaid yet): hide the button
+  //    so users don't see a non-functional CTA. The build does not break.
+  if (!consentGiven || !env.VITE_PLAID_SYNC_WORKER_URL) return null;
 
   const disabled = phase !== 'ready' || !ready;
   const label = labelForPhase(phase);

@@ -21,7 +21,7 @@ import React, {
   useMemo,
   useRef,
 } from 'react';
-import type { VaultClient } from '@ollie/auth';
+import type { AuthClient } from '@ollie/auth';
 import * as appEvents from '@ollie/events';
 import { emit as emitEvent } from '@ollie/events';
 import { useApplyBrainDump } from './hooks/useApplyBrainDump';
@@ -42,8 +42,8 @@ export type DumpModality = 'text' | 'voice';
 export interface AppServices {
   /** The account boot handles (auth / research / sync). */
   accountRef: React.MutableRefObject<AccountHandles>;
-  /** Convenience alias — the encryption vault (always non-null post-boot). */
-  vault: VaultClient;
+  /** Convenience alias — the auth client (always non-null post-boot). */
+  auth: AuthClient;
   /** The four app gates (auth / consent / research / onboarding). */
   gates: AppGates;
   /**
@@ -61,7 +61,7 @@ export function AppServicesProvider({ children }: { children: React.ReactNode })
   const accountRef = useRef<AccountHandles>(bootAccount());
   const apply = useApplyBrainDump();
   const toast = useToast();
-  const gates = useAppGates();
+  const gates = useAppGates(accountRef.current.auth);
   const { authed, consentGiven } = gates;
 
   // ── Effect 1 · void:toast bridge ──────────────────────────────────────────
@@ -166,7 +166,7 @@ export function AppServicesProvider({ children }: { children: React.ReactNode })
   const value = useMemo<AppServices>(
     () => ({
       accountRef,
-      vault: accountRef.current.vault,
+      auth: accountRef.current.auth,
       gates,
       applyDump: (text: string, modality: DumpModality) => {
         sessionTracker.onBrainDump(modality);

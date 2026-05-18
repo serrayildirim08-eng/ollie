@@ -14,6 +14,7 @@ import type {
   FinanceSettings,
 } from './types';
 import { DAY_MS } from './math';
+import { median as medianOf } from '../stats';
 import { detectRecurring, predictNextDue } from './recurring';
 
 const BLS_PRIOR = {
@@ -102,10 +103,11 @@ export function classifyPayFrequency(
   for (let i = 1; i < events.length; i++) {
     intervals.push((events[i] - events[i - 1]) / DAY_MS);
   }
-  const sorted = [...intervals].sort((a, b) => a - b);
-  const median = sorted[Math.floor(sorted.length / 2)];
-  const deviations = intervals.map((x) => Math.abs(x - median)).sort((a, b) => a - b);
-  const mad = deviations[Math.floor(deviations.length / 2)];
+  // FIX (#2): even-length median bug. The previous code took
+  // sorted[floor(n/2)] — the upper-middle element — instead of averaging
+  // the two middle elements. `medianOf` (canonical ../stats) does it right.
+  const median = medianOf(intervals);
+  const mad = medianOf(intervals.map((x) => Math.abs(x - median)));
 
   let freq: PayFrequencyResult['freq'];
   if (median >= 6 && median <= 8) freq = 'weekly';

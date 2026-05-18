@@ -16,6 +16,7 @@ import { deriveKey, randomSalt, bytesToBase64, encryptData } from '@ollie/crypto
 import { createFinanceSyncClient } from '../src/finance';
 import type { RemoteFinanceRow } from '../src/finance';
 import type { OllieAPI } from '@ollie/api';
+import { settleUntil, settleQuiet } from './_timers';
 
 interface CapturedUpsert {
   table: string;
@@ -146,8 +147,11 @@ describe('finance sync · outbound encryption + upsert', () => {
     store.set('finance', 'bills', [
       { id: 'b1', amount: 49.99, merchant: 'electric', last_edited_at: 5000 },
     ]);
-    await vi.advanceTimersByTimeAsync(500);
-    await vi.runAllTimersAsync();
+    // Wait for the OUTCOME (the upsert), not for a timer. The chain crosses a
+    // native crypto.subtle promise that fake timers do not control; a bare
+    // advance+runAllTimersAsync can return before that promise arms the drain
+    // timer — that is the documented flake.
+    await settleUntil(() => captured.upserts.length >= 1);
 
     expect(captured.upserts.length).toBe(1);
     expect(captured.upserts[0].table).toBe('finance_records');
@@ -179,14 +183,15 @@ describe('finance sync · outbound encryption + upsert', () => {
 
     const row = { id: 'b1', amount: 10, last_edited_at: 1000 };
     store.set('finance', 'bills', [row]);
-    await vi.advanceTimersByTimeAsync(500);
-    await vi.runAllTimersAsync();
+    // First write IS a real change → wait for the upsert outcome.
+    await settleUntil(() => captured.upserts.length >= 1);
     const firstCount = captured.upserts.length;
 
-    // Same structural value — diff should detect no change.
+    // Same structural value — diff should detect no change. There is no
+    // positive outcome to wait for here, so settle the chain quietly and
+    // assert the absence of a new upsert.
     store.set('finance', 'bills', [{ ...row }]);
-    await vi.advanceTimersByTimeAsync(500);
-    await vi.runAllTimersAsync();
+    await settleQuiet();
     // No drain triggered because queue is empty, so upserts unchanged.
     expect(captured.upserts.length).toBe(firstCount);
     sync.stop();
@@ -207,8 +212,7 @@ describe('finance sync · outbound encryption + upsert', () => {
 
     // Delete b2
     store.set('finance', 'bills', [{ id: 'b1', amount: 10, last_edited_at: 1000 }]);
-    await vi.advanceTimersByTimeAsync(500);
-    await vi.runAllTimersAsync();
+    await settleUntil(() => captured.deletes.length >= 1);
 
     expect(captured.deletes.length).toBe(1);
     expect(captured.deletes[0].table).toBe('finance_records');
@@ -359,8 +363,16 @@ describe('finance sync · RLS hardening at client layer', () => {
     store.set('finance', 'bills', [{ id: 'b1', amount: 10, last_edited_at: 1000 }]);
     // Attempt to spoof — irrelevant, since the sync layer overwrites user_id.
     store.set('finance', 'subscriptions', [{ id: 's1', amount: 5, user_id: 'user-b', last_edited_at: 1000 }]);
-    await vi.advanceTimersByTimeAsync(500);
-    await vi.runAllTimersAsync();
+    // bills + subscriptions are separate store keys → two debounced diffs.
+    // Wait until BOTH ids have been upserted (they may land in one batched
+    // upsert call or two — either way both ids must appear).
+    await settleUntil(() => {
+      const ids = new Set<string>();
+      for (const u of captured.upserts) {
+        for (const r of u.rows as Array<{ id: string }>) ids.add(r.id);
+      }
+      return ids.has('b1') && ids.has('s1');
+    });
 
     for (const u of captured.upserts) {
       const rows = u.rows as Array<{ user_id: string }>;

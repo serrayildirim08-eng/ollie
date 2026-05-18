@@ -1,0 +1,14 @@
+{
+  // Capacitor iOS shell. The actual app code is the @ollie/web bundle
+  // copied into ./www at build time — there is NO TypeScript source in
+  // this package. This tsconfig extends the monorepo base so an editor
+  // opened here resolves the same compiler settings; `files: []` keeps
+  // `tsc --noEmit` a clean no-op (avoids the "No inputs found" error)
+  // so `pnpm -r typecheck` can include this package without failing.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "files": [],
+  "include": []
+}

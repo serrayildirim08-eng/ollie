@@ -12,8 +12,9 @@
 
 import { BRAND_SEED } from './brands';
 import type { Brand, BrandMatch } from './types';
+import { withinEditDistance } from '../util';
 
-// eslint-disable-next-line no-irregular-whitespace
+ 
 const COMBINING_DOT_ABOVE = String.fromCodePoint(0x0307);
 
 export function normalize(text: string | undefined | null): string {
@@ -43,36 +44,12 @@ export function normalize(text: string | undefined | null): string {
     .trim();
 }
 
-/** Levenshtein distance ≤ 1 (insertion, deletion, or substitution). */
+/**
+ * Levenshtein distance ≤ 1 (insertion, deletion, or substitution).
+ * Delegates to the shared capped Levenshtein in `../util`.
+ */
 export function withinOne(a: string, b: string): boolean {
-  if (a === b) return true;
-  const la = a.length;
-  const lb = b.length;
-  if (Math.abs(la - lb) > 1) return false;
-  if (la === lb) {
-    let diffs = 0;
-    for (let i = 0; i < la; i++) {
-      if (a[i] !== b[i]) {
-        diffs++;
-        if (diffs > 1) return false;
-      }
-    }
-    return true;
-  }
-  const [shorter, longer] = la < lb ? [a, b] : [b, a];
-  let i = 0;
-  let skipped = 0;
-  for (let j = 0; j < longer.length; ) {
-    if (shorter[i] === longer[j]) {
-      i++;
-      j++;
-    } else {
-      skipped++;
-      if (skipped > 1) return false;
-      j++;
-    }
-  }
-  return true;
+  return withinEditDistance(a, b, 1);
 }
 
 function buildIndex(brands: readonly Brand[]): Map<string, Brand> {

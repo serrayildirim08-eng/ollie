@@ -1,0 +1,33 @@
+# Build output / deps
+node_modules/
+dist/
+build/
+out/
+.next/
+.vite/
+.turbo/
+.cache/
+coverage/
+.wrangler/
+dist-electron/
+
+# Generated / vendored
+pnpm-lock.yaml
+*.min.js
+apps/ios/ios/
+apps/ios/www/
+apps/web/public/
+apps/desktop/dist-electron/
+
+# Native + binary assets
+*.glb
+*.gltf
+*.icns
+*.ico
+*.png
+*.jpg
+*.jpeg
+*.webp
+
+# Supabase CLI state
+supabase/.temp/

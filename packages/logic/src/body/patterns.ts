@@ -35,7 +35,6 @@ import {
 import type {
   BodyHistory,
   BodyPatternOpts,
-  DumpEntry,
   WaterEntry,
   HeadacheHydrationPattern,
   InteroceptionDriftPattern,
@@ -499,7 +498,7 @@ export function detectMultiSymptomRecurrence(
 
   // Step-function cycle phases (CyclePhaseMarker shape only)
   const sortedPhases = (rawPhases as Array<{ ts?: number; phase?: string }>)
-    .filter((p): p is { ts: number; phase: string } => p != null && typeof (p as any).ts === 'number' && typeof (p as any).phase === 'string')
+    .filter((p): p is { ts: number; phase: string } => p != null && typeof p.ts === 'number' && typeof p.phase === 'string')
     .sort((a, b) => a.ts - b.ts);
   const getPhase = phaseAtFn(sortedPhases);
 
@@ -795,7 +794,7 @@ export function detectGISymptomCyclePhase(
   const rawPhases = history.cyclePhases || [];
   if (rawPhases.length === 0) return null;
   const sortedPhases = (rawPhases as Array<{ ts?: number; phase?: string }>)
-    .filter((p): p is { ts: number; phase: string } => p != null && typeof (p as any).ts === 'number' && typeof (p as any).phase === 'string')
+    .filter((p): p is { ts: number; phase: string } => p != null && typeof p.ts === 'number' && typeof p.phase === 'string')
     .sort((a, b) => a.ts - b.ts);
   const getPhase = phaseAtFn(sortedPhases);
 

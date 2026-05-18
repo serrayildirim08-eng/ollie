@@ -21,7 +21,7 @@
 
 import type { PantryItem, ShoppingItem } from './types';
 
-const DAY_MS = 86_400_000;
+import { DAY_MS } from '../util';
 const DEFAULT_WINDOW_DAYS = 21;
 const DEFAULT_THRESHOLD = 3;
 

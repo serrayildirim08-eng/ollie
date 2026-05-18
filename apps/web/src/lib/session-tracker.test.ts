@@ -11,7 +11,7 @@
  *   - consent gate: no-op when hasConsent() is false
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 
 // Each test gets a fresh tracker instance to avoid cross-test state.
 // We re-import from a factory function exposed via _makeSessionTracker

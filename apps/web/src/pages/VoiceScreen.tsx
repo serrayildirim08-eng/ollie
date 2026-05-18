@@ -20,6 +20,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { startVoiceCapture, voiceCaptureSupported } from '../lib/voice-capture';
 import { useStoreSlice } from '../store';
+import { mkId } from '../lib/mkId';
 import { getString, type Locale } from '../i18n';
 
 export interface VoiceScreenProps {
@@ -40,7 +41,7 @@ interface VoiceTranscript {
 }
 
 function uid(): string {
-  return `vt_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+  return mkId('vt');
 }
 
 export function VoiceScreen({ onNavigate, onApply }: VoiceScreenProps) {

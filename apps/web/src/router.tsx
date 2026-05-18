@@ -53,7 +53,6 @@ import {
   seedColdBootLock,
 } from './lib/app-lock';
 import { store } from './store';
-import { useAuth } from '@clerk/react';
 import { AuthFlow } from './components/AuthFlow';
 import { ConsentScreen } from './components/ConsentScreen';
 import { ConsentStep } from './screens/onboarding/ConsentStep';
@@ -337,7 +336,8 @@ function GatedLayout() {
       <Day30Prompt />
       <NotificationPrimerGate />
       <AppLockController />
-      {!CLERK_CONFIGURED && <DevModeBanner />}
+      <RoutedMicButton />
+      {!SUPABASE_CONFIGURED && <DevModeBanner />}
     </>
   );
 }
@@ -367,7 +367,7 @@ function GatedLayout() {
  * subscribes to it so a lock from a background event re-renders the gate.
  */
 function AppLockController() {
-  const { vault } = useAppServices();
+  const { auth } = useAppServices();
 
   // Seed cold-boot lock state ONCE, synchronously, before first paint —
   // so an enabled lock comes up covering the UI, not flashing it first.
@@ -441,7 +441,7 @@ function AppLockController() {
 
   return (
     <AppLockGate
-      vault={vault}
+      auth={auth}
       onUnlocked={() => {
         unlockApp();
         setLocked(false);

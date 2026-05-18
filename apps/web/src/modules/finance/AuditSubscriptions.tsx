@@ -30,7 +30,7 @@ import {
 } from '@ollie/logic/finance';
 import type { FinanceRecord } from '@ollie/logic/finance';
 import { emit } from '@ollie/events';
-import { getString, type Locale } from '../../i18n';
+import { getString, interpolate, pluralCategory, type Locale } from '../../i18n';
 import { useStoreSlice } from '../../store';
 
 // ─── types ─────────────────────────────────────────────────────────────
@@ -171,17 +171,34 @@ function fmtMonthly(n: number): string {
   return n.toFixed(2);
 }
 
+/**
+ * Plural lookup for the audit copy.
+ *
+ * Plural form is selected from the CLDR rules for `locale` via
+ * `pluralCategory` (the old code hand-rolled `n === 1`, which is not
+ * CLDR-correct for every language).
+ *
+ * The interpolation token convention in these specific strings differs
+ * by form:
+ *   - the `_one` strings hard-code "1" and use `${0}` for the FIRST extra
+ *     arg;
+ *   - the `_many` strings use `${0}` for the count and `${1}` for the
+ *     first extra arg.
+ * So extra args shift by one between forms. `interpolate` replaces EVERY
+ * occurrence of each token — the old `.replace('${0}', …)` only hit the
+ * first, dropping a repeated token.
+ */
 function pluralOne(locale: Locale, base: string, n: number, ...args: string[]): string {
-  const key = n === 1 ? `${base}_one` : `${base}_many`;
-  let s = getString(locale, key);
-  if (n !== 1) s = s.replace('${0}', String(n));
-  // Substitute remaining args
-  if (n === 1) {
-    args.forEach((v, i) => { s = s.replace(`\${${i}}`, v); });
+  const isOne = pluralCategory(locale, n) === 'one';
+  const raw = getString(locale, isOne ? `${base}_one` : `${base}_many`);
+  const vars: Record<string, string> = {};
+  if (isOne) {
+    args.forEach((v, i) => { vars[String(i)] = v; });
   } else {
-    args.forEach((v, i) => { s = s.replace(`\${${i + 1}}`, v); });
+    vars['0'] = String(n);
+    args.forEach((v, i) => { vars[String(i + 1)] = v; });
   }
-  return s;
+  return interpolate(raw, vars);
 }
 
 function buildEvidence(locale: Locale, sig: DormancySignal): string {
@@ -215,8 +232,9 @@ function buildEvidence(locale: Locale, sig: DormancySignal): string {
     case 'active':
       return getString(locale, 'finance.audit.evidence_active');
     case 'too_soon':
-      return getString(locale, 'finance.audit.evidence_too_soon')
-        .replace('${0}', String(sig.daysSinceCreated));
+      return getString(locale, 'finance.audit.evidence_too_soon', {
+        0: sig.daysSinceCreated,
+      });
     case 'inconclusive':
       if (!sig.aliasKey) {
         return getString(locale, 'finance.audit.evidence_inconclusive_uncatalogued');
@@ -312,7 +330,8 @@ export function AuditSubscriptions({ onBack }: AuditSubscriptionsProps) {
   const [settings] = useStoreSlice<{ locale?: string }>('shared', 'settings', {});
   const localeRaw = settings?.locale ?? 'en';
   const locale: Locale = localeRaw === 'es' ? 'es' : 'en';
-  const t = (k: string) => getString(locale, `finance.audit.${k}`);
+  const t = (k: string, vars?: Record<string, string | number>) =>
+    getString(locale, `finance.audit.${k}`, vars);
 
   const [subs, setSubs] = useStoreSlice<StoredSub[]>('finance', 'subscriptions', []);
   const [records] = useStoreSlice<FinanceRecord[]>('finance', 'records', []);
@@ -461,7 +480,7 @@ export function AuditSubscriptions({ onBack }: AuditSubscriptionsProps) {
     }
     const label = isAppleManaged(sig.aliasKey)
       ? t('btn_cancel_apple')
-      : t('btn_cancel_at').replace('${0}', urlDomain(url));
+      : t('btn_cancel_at', { 0: urlDomain(url) });
     return (
       <button type="button" style={primaryBtn} onClick={() => void cancelFlow(sig)}>
         {label}
@@ -621,11 +640,11 @@ export function AuditSubscriptions({ onBack }: AuditSubscriptionsProps) {
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 8 }}>
           <span style={heroNumeral}>{summary.totalSubs}</span>
           <span style={{ ...bodyText, color: 'var(--ink-soft)' }}>
-            {t('header_count').replace('${0}', '').trim()}
+            {t('header_count', { 0: '' }).trim()}
           </span>
         </div>
         <p style={{ ...meta, marginTop: 4 }}>
-          {t('header_monthly').replace('${0}', `$${fmtMonthly(summary.monthlyTotal)}`)}
+          {t('header_monthly', { 0: `$${fmtMonthly(summary.monthlyTotal)}` })}
         </p>
       </header>
 
@@ -639,7 +658,7 @@ export function AuditSubscriptions({ onBack }: AuditSubscriptionsProps) {
           border: '1px solid var(--rule)',
         }}>
           <p style={{ ...sectionHeading, marginBottom: 16 }}>
-            {t('return_prompt_title').replace('${0}', returnPrompt.sub_name)}
+            {t('return_prompt_title', { 0: returnPrompt.sub_name })}
           </p>
           <div style={{ display: 'flex', gap: 8 }}>
             <button type="button" style={primaryBtn} onClick={confirmCancelled}>
@@ -763,9 +782,9 @@ export function AuditSubscriptions({ onBack }: AuditSubscriptionsProps) {
             {pluralOne(locale, 'finance.audit.summary_cancelled', thisSession.length)}
           </p>
           <p style={{ ...bodyText, color: 'var(--ink)' }}>
-            {t('summary_saved_monthly').replace('${0}', fmtMonthly(savedMonthly))}
+            {t('summary_saved_monthly', { 0: fmtMonthly(savedMonthly) })}
             {' · '}
-            {t('summary_saved_yearly').replace('${0}', fmtMonthly(savedYearly))}
+            {t('summary_saved_yearly', { 0: fmtMonthly(savedYearly) })}
           </p>
         </section>
       )}
@@ -816,8 +835,9 @@ export function useAuditEntryKicker(): {
   } else if (candidateCount === 1) {
     kickerLabel = getString(locale, 'finance.audit.entry_kicker_one');
   } else {
-    kickerLabel = getString(locale, 'finance.audit.entry_kicker_many')
-      .replace('${0}', String(candidateCount));
+    kickerLabel = getString(locale, 'finance.audit.entry_kicker_many', {
+      0: candidateCount,
+    });
   }
 
   return { candidateCount, kickerLabel, locale };

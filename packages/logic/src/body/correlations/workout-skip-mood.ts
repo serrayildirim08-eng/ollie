@@ -9,10 +9,11 @@
  */
 
 import { spearman } from '../math';
+import { median as medianOf } from '../../stats';
 import { OVERWHELMED_LEXICON } from '../../sleep/constants';
 import type { Habit, HabitCompletion, DumpEntry } from '../../habits/types';
 
-const DAY_MS = 86_400_000;
+import { DAY_MS, resolveNow } from '../../util';
 const DEFAULT_LOOKBACK_DAYS = 30;
 
 const WORKOUT_NAME_RE =
@@ -128,8 +129,9 @@ function inferWorkoutCadenceDays(
     gaps.push(Math.round((cur - prev) / DAY_MS));
   }
   if (gaps.length === 0) return null;
-  const sorted = gaps.slice().sort((a, b) => a - b);
-  const median = sorted[Math.floor(sorted.length / 2)];
+  // FIX (#2): even-length median bug. Previously sorted[floor(n/2)] — the
+  // upper-middle element — instead of averaging the two middle elements.
+  const median = medianOf(gaps);
   if (median <= 0 || median > 7) return null;
   return median;
 }
@@ -139,7 +141,7 @@ export function correlateWorkoutSkipAndMood(
   dumps: readonly DumpEntry[] | undefined | null,
   opts?: CorrelateWorkoutSkipMoodOpts,
 ): WorkoutSkipMoodResult {
-  const now = opts?.now ?? Date.now();
+  const now = resolveNow(opts?.now);
   const lookback = opts?.lookbackDays ?? DEFAULT_LOOKBACK_DAYS;
   const minN = opts?.minSampleSize ?? 10;
   const thresholdRho = opts?.thresholdRho ?? 0.25;
@@ -214,7 +216,7 @@ export function correlateWorkoutSkipAndMood(
     return { correlation: rho, sampleSize: n, copy: '', ts: now };
   }
 
-  let copy = '';
+  let copy: string;
   if (rho > 0) {
     copy = `days after skipped workouts read heavier in dumps · ${n} days of data`;
   } else {

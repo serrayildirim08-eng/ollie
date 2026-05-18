@@ -23,6 +23,8 @@
  *   the visually ambiguous 0/o/1/l/I removed. Lower-cased.
  */
 
+import { json, upstreamError } from '@ollie/worker-http';
+
 export interface InvitesEnv {
   SUPABASE_URL: string;
   SUPABASE_SERVICE_ROLE: string;
@@ -84,10 +86,9 @@ export async function handleGenerateInvite(req: Request, env: InvitesEnv): Promi
   // on the `code` column (vanishingly unlikely with 30^8 keyspace, but
   // worth handling — service_role inserts surface 409 on conflict via
   // Prefer: return=minimal so we re-roll deterministically).
-  let code = '';
   let lastErr = '';
   for (let attempt = 0; attempt < 3; attempt++) {
-    code = makeCode();
+    const code = makeCode();
     const expiresAt = new Date(Date.now() + INVITE_TTL_DAYS * 86_400_000).toISOString();
     const url = `${env.SUPABASE_URL.replace(/\/$/, '')}/rest/v1/invites`;
     const resp = await fetchWithTimeout(url, {
@@ -117,10 +118,16 @@ export async function handleGenerateInvite(req: Request, env: InvitesEnv): Promi
     lastErr = errText;
     // 409 → unique collision. Loop. Anything else → surface.
     if (resp.status !== 409 && !/duplicate key/i.test(errText)) {
-      return json({ error: 'supabase_error', status: resp.status, detail: errText }, 502);
+      // SECURITY (S8): generic code to the client; PostgREST detail logged
+      // server-side only behind a request id.
+      return upstreamError('supabase_error', 502, errText, {
+        endpoint: 'generate-invite',
+        upstream_status: resp.status,
+      });
     }
   }
-  return json({ error: 'code_collision', detail: lastErr }, 503);
+  // All retries collided — log the last upstream body server-side only.
+  return upstreamError('code_collision', 503, lastErr, { endpoint: 'generate-invite' });
 }
 
 // ─── /validate-invite ──────────────────────────────────────────────────────────
@@ -234,8 +241,13 @@ export async function handleClaimInvite(req: Request, env: InvitesEnv): Promise<
     }),
   });
   if (!resp.ok) {
+    // SECURITY (S8): generic code to the client; PostgREST detail logged
+    // server-side only behind a request id.
     const errText = await resp.text();
-    return json({ error: 'supabase_error', status: resp.status, detail: errText }, 502);
+    return upstreamError('supabase_error', 502, errText, {
+      endpoint: 'claim-invite',
+      upstream_status: resp.status,
+    });
   }
   const rows = (await resp.json()) as Array<{ code: string }>;
   if (rows.length === 0) {
@@ -318,7 +330,15 @@ function randSegment(n: number): string {
   return out;
 }
 
-async function verifyJwt(jwt: string, env: InvitesEnv): Promise<string | null> {
+/**
+ * Verify a Supabase user JWT and return the user id Supabase reports.
+ * Returns null on any failure. Exported so the telemetry endpoints
+ * (/ingest-event, /label, /enrich-dump) gate on the same check.
+ */
+export async function verifyJwt(
+  jwt: string,
+  env: { SUPABASE_URL: string; SUPABASE_ANON_KEY: string },
+): Promise<string | null> {
   if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) return null;
   const url = `${env.SUPABASE_URL.replace(/\/$/, '')}/auth/v1/user`;
   try {
@@ -347,9 +367,4 @@ async function fetchWithTimeout(url: string, init: RequestInit): Promise<Respons
   }
 }
 
-function json(obj: unknown, status = 200): Response {
-  return new Response(JSON.stringify(obj), {
-    status,
-    headers: { 'content-type': 'application/json' },
-  });
-}
+// `json()` is the shared helper from @ollie/worker-http (imported above).
