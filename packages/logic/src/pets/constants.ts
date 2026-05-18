@@ -1,9 +1,11 @@
 /**
  * @ollie/logic · pets constants
+ *
+ * Day/hour lengths come from the shared `../util` module — single source
+ * of truth. Re-exported as `DAY` / `HOUR` so existing import paths are unchanged.
  */
 
-export const DAY = 86_400_000;
-export const HOUR = 3_600_000;
+export { DAY_MS as DAY, HOUR_MS as HOUR } from '../util';
 
 /** Offsets (in days before due) at which vet-cue notifications fire. */
 export const VET_CUE_OFFSETS_DAYS: readonly number[] = [14, 3, 0] as const;

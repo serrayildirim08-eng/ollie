@@ -68,6 +68,7 @@ import {
   RUMINATIVE_LEXICON,
   OVERWHELMED_LEXICON,
 } from './constants';
+import { DAY_MS, HOUR_MS, MINUTE_MS, dayKey } from '../util';
 
 // ─── Phase 1 ──────────────────────────────────────────────────────────
 
@@ -119,7 +120,7 @@ export function detectRevengeBedtime(
     .filter((r) => r && typeof r.night_of === 'string')
     .slice()
     .sort((a, b) => a.night_of.localeCompare(b.night_of));
-  const cutoff = history.now - W * 86400000;
+  const cutoff = history.now - W * DAY_MS;
   const windowed = sorted
     .filter((r) => {
       const t = targetEpochForNight(r.night_of);
@@ -151,7 +152,7 @@ export function detectRevengeBedtime(
       const gap = winEvents[i + 1].ts - winEvents[i].ts;
       if (gap <= SUSTAINED_GAP_MS) activeMs += gap;
     }
-    const activeMin = activeMs / 60000;
+    const activeMin = activeMs / MINUTE_MS;
     if (activeMin >= REVENGE_MIN) {
       nRevenge++;
       delays.push(Math.round(activeMin));
@@ -196,7 +197,7 @@ export function detectCaffeineCutoff(
   const gapThreshold = o.gap_threshold_hours != null ? o.gap_threshold_hours : 6;
   const minViolations = o.min_violation_nights != null ? o.min_violation_nights : 5;
 
-  const cutoff = history.now - windowDays * 86400000;
+  const cutoff = history.now - windowDays * DAY_MS;
   const latestCaffeineByNight = new Map<string, number>();
   for (const d of history.dumps) {
     if (!d || typeof d.ts !== 'number' || typeof d.text !== 'string') continue;
@@ -218,8 +219,8 @@ export function detectCaffeineCutoff(
     if (lastCaf == null) continue;
     const bedMs = bedtimeEpochFor(r.night_of, r.bedtime);
     if (bedMs == null) continue;
-    if (bedMs < cutoff || bedMs > history.now + 86400000) continue;
-    const gap = (bedMs - lastCaf) / 3600000;
+    if (bedMs < cutoff || bedMs > history.now + DAY_MS) continue;
+    const gap = (bedMs - lastCaf) / HOUR_MS;
     if (!isFinite(gap) || gap < 0) continue;
     pairs.push({
       gap_hours: gap,
@@ -492,7 +493,7 @@ export function detectWindDownFriction(
   if (!log.length || !records.length) return null;
 
   const now = typeof history.now === 'number' ? history.now : null;
-  const cutoff = now != null ? now - W * 86400000 : -Infinity;
+  const cutoff = now != null ? now - W * DAY_MS : -Infinity;
 
   const eventsByNight = new Map<string, typeof log>();
   for (const e of log) {
@@ -524,17 +525,17 @@ export function detectWindDownFriction(
     if (!ev || ev.length === 0) continue;
     const dayStart = new Date(r.night_of + 'T00:00:00').getTime();
     const targetEpoch =
-      target >= 720 ? dayStart + target * 60000 : dayStart + 86400000 + target * 60000;
+      target >= 720 ? dayStart + target * MINUTE_MS : dayStart + DAY_MS + target * MINUTE_MS;
     const btMin = parseTimeOfDay(r.bedtime);
     if (btMin == null) continue;
     const bedtimeEp =
-      btMin >= 720 ? dayStart + btMin * 60000 : dayStart + 86400000 + btMin * 60000;
+      btMin >= 720 ? dayStart + btMin * MINUTE_MS : dayStart + DAY_MS + btMin * MINUTE_MS;
     if (!isFinite(bedtimeEp) || !isFinite(targetEpoch)) continue;
     if (bedtimeEp <= targetEpoch) continue;
     const sorted = ev.slice().sort((a, b) => a.ts - b.ts);
     const firstAfter = sorted.find((x) => x.ts > targetEpoch && x.ts <= bedtimeEp);
     if (!firstAfter) continue;
-    const totalMin = (bedtimeEp - firstAfter.ts) / 60000;
+    const totalMin = (bedtimeEp - firstAfter.ts) / MINUTE_MS;
     if (!isFinite(totalMin) || totalMin <= 0) continue;
     totals.push(totalMin);
     const inWindow = sorted.filter((x) => x.ts >= firstAfter.ts && x.ts <= bedtimeEp);
@@ -543,7 +544,7 @@ export function detectWindDownFriction(
       const cur = inWindow[i];
       if (cur.action !== 'checked') continue;
       const nextTs = i + 1 < inWindow.length ? inWindow[i + 1].ts : bedtimeEp;
-      let dur = (nextTs - cur.ts) / 60000;
+      let dur = (nextTs - cur.ts) / MINUTE_MS;
       if (!isFinite(dur) || dur <= 0) continue;
       if (dur > 30) dur = 30;
       const slot = nightStepTime.get(cur.step_id) || {
@@ -624,7 +625,7 @@ export function detectMedicationTimingDrift(
     if (medsByDay[day] == null || e.ts > medsByDay[day]) medsByDay[day] = e.ts;
   }
 
-  const cutoff = now - windowDays * 86400000;
+  const cutoff = now - windowDays * DAY_MS;
   const pairs: Array<{ ts: number; gap: number }> = [];
   for (const r of sleepRecords) {
     if (!r || r.is_skipped || !r.bedtime || !r.night_of) continue;
@@ -640,7 +641,7 @@ export function detectMedicationTimingDrift(
     const medsTs = medsByDay[r.night_of];
     if (medsTs == null) continue;
     if (medsTs >= bedtimeEp) continue;
-    const gapHours = (bedtimeEp - medsTs) / 3600000;
+    const gapHours = (bedtimeEp - medsTs) / HOUR_MS;
     if (gapHours <= 0 || gapHours > 24) continue;
     pairs.push({ ts: bedtimeEp, gap: gapHours });
   }
@@ -805,9 +806,9 @@ export function detectSleepCyclePattern(
       if (!c || !c.start_date || typeof c.length_days !== 'number') continue;
       const start = new Date(c.start_date + 'T12:00:00').getTime();
       if (!isFinite(start)) continue;
-      const end = start + c.length_days * 86400000;
+      const end = start + c.length_days * DAY_MS;
       if (d < start || d >= end) continue;
-      const dayInCycle = Math.floor((d - start) / 86400000) + 1;
+      const dayInCycle = Math.floor((d - start) / DAY_MS) + 1;
       const ov = c.ovulation_day || Math.round(c.length_days / 2);
       return dayInCycle > ov ? 'luteal' : 'follicular';
     }
@@ -1009,9 +1010,9 @@ export function detectSleepDumpMoodPattern(
     if (btMin == null) continue;
     const baseDate = new Date(r.night_of + 'T00:00:00').getTime();
     if (!isFinite(baseDate)) continue;
-    const bedtimeMs = baseDate + btMin * 60000 + (btMin < 720 ? 86400000 : 0);
-    const winStart = bedtimeMs + 24 * 3600000;
-    const winEnd = winStart + lookback * 3600000;
+    const bedtimeMs = baseDate + btMin * MINUTE_MS + (btMin < 720 ? DAY_MS : 0);
+    const winStart = bedtimeMs + 24 * HOUR_MS;
+    const winEnd = winStart + lookback * HOUR_MS;
     for (const d of sortedDumps) {
       if (d.ts < winStart) continue;
       if (d.ts >= winEnd) break;
@@ -1070,16 +1071,8 @@ export function detectCyclePhaseSleepCoupling(
   const minOtherNights = o.minOtherNights != null ? o.minOtherNights : 10;
   const minDeltaMin = o.minDeltaMin != null ? o.minDeltaMin : 8;
 
-  const isoDayKey = (ms: number): string => {
-    const d = new Date(ms);
-    return (
-      d.getFullYear() +
-      '-' +
-      String(d.getMonth() + 1).padStart(2, '0') +
-      '-' +
-      String(d.getDate()).padStart(2, '0')
-    );
-  };
+  // Local-time day key — delegates to the shared util.
+  const isoDayKey = dayKey;
 
   const phaseForDay = new Map<string, string>();
   for (const p of cyclePhases) {
@@ -1090,7 +1083,7 @@ export function detectCyclePhaseSleepCoupling(
       typeof p.name !== 'string'
     )
       continue;
-    for (let t = p.start; t <= p.end; t += 86400000)
+    for (let t = p.start; t <= p.end; t += DAY_MS)
       phaseForDay.set(isoDayKey(t), p.name);
   }
   if (phaseForDay.size === 0) return null;
@@ -1161,16 +1154,8 @@ export function detectStimulantSleepDebt(
   const minBaselineNights = o.minBaselineNights != null ? o.minBaselineNights : 10;
   const minDeltaMin = o.minDeltaMin != null ? o.minDeltaMin : 10;
 
-  const isoDayKey = (ms: number): string => {
-    const d = new Date(ms);
-    return (
-      d.getFullYear() +
-      '-' +
-      String(d.getMonth() + 1).padStart(2, '0') +
-      '-' +
-      String(d.getDate()).padStart(2, '0')
-    );
-  };
+  // Local-time day key — delegates to the shared util.
+  const isoDayKey = dayKey;
 
   const stimDays = new Set<string>();
   for (const d of dumps) {

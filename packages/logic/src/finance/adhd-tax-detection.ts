@@ -20,6 +20,7 @@
  */
 
 import type { FinanceRecord } from './types';
+import { DAY_MS } from './math';
 
 // ─── types ────────────────────────────────────────────────────────────────
 
@@ -319,7 +320,7 @@ export function detectDuplicatePurchases(
         const dateJ = sorted[j].event_date;
         const msI = Date.parse(dateI + 'T12:00:00');
         const msJ = Date.parse(dateJ + 'T12:00:00');
-        const diffDays = Math.abs(msJ - msI) / 86_400_000;
+        const diffDays = Math.abs(msJ - msI) / DAY_MS;
         if (diffDays > windowDays) break; // further pairs will be even further apart
 
         const amtI = sorted[i].amount as number;

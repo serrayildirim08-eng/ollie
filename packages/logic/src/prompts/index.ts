@@ -14,6 +14,7 @@
  */
 
 import { currentPeakMatch, type Peak } from '../ritual';
+import { DAY_MS, HOUR_MS } from '../util';
 
 export interface PromptCandidate {
   id: string;
@@ -47,9 +48,8 @@ export const FALLBACK: PromptCandidate = {
   priority: 0,
 };
 
-const RATE_LIMIT_MS = 6 * 3_600_000;
+const RATE_LIMIT_MS = 6 * HOUR_MS;
 const MAX_SHOWN_HISTORY = 20;
-const HOUR_MS = 3_600_000;
 
 function defaultGlassLabel(n: number): string {
   return n === 1 ? 'glass' : 'glasses';
@@ -78,7 +78,7 @@ export function buildCandidates(state: BuildCandidatesState): PromptCandidate[] 
 
   // Cycle approaching — predicted next period within 3 days
   if (state.prediction && typeof state.prediction.nextPeriodTs === 'number') {
-    const daysUntil = (state.prediction.nextPeriodTs - now) / 86_400_000;
+    const daysUntil = (state.prediction.nextPeriodTs - now) / DAY_MS;
     if (daysUntil > -1 && daysUntil <= 3) {
       out.push({
         id: 'cycle-approaching',

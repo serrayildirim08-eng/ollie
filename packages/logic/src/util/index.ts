@@ -1,9 +1,21 @@
 /**
  * @ollie/logic · util — small shared helpers.
  *
- * Background: `DAY_MS` was defined 18× across the package, calendar
- * day-key formatting was reimplemented ~16×, and three slightly different
- * Levenshtein variants existed. This module is the single home for those.
+ * Single source of truth for, and only for:
+ *   - day/time constants: `DAY_MS`, `HOUR_MS`, `MINUTE_MS`
+ *   - calendar day-key formatting: `dayKey` (LOCAL tz) and `dayKeyUTC` (UTC),
+ *     plus the key-arithmetic helpers `nextDayKey` / `daysBetweenKeys`
+ *   - capped Levenshtein edit distance: `levenshtein` / `withinEditDistance`
+ *   - detector scaffolding: `resolveNow` / `windowFilter` / `confidenceForN`
+ *
+ * NOT consolidated here (deliberately): Jaro–Winkler merchant similarity
+ * (`finance/jaro.ts`) is a distinct similarity algorithm, not an edit-distance
+ * variant — it stays in the finance module. Year-month keys (`YYYY-MM`) and
+ * calendar-month arithmetic in `finance/*` are also out of scope.
+ *
+ * ⚠️ Timezone: `dayKey` and `dayKeyUTC` are NOT interchangeable. They produce
+ * different strings for the same timestamp near midnight. Each call site has a
+ * fixed semantics — pick the variant that matches; never swap one for the other.
  *
  * Pure: no I/O, no DOM, no clock reads.
  */
@@ -22,8 +34,12 @@ export const MINUTE_MS = 60_000;
 // ─── calendar day keys ──────────────────────────────────────────────────────────
 
 /**
- * Format an epoch-ms timestamp as a local `YYYY-MM-DD` key. This mirrors
- * the formatting the modules already used (local calendar date, not UTC).
+ * Format an epoch-ms timestamp as a **local-time** `YYYY-MM-DD` key. The
+ * year/month/day are read in the host's local timezone, so the same `ts`
+ * can yield a different key here than `dayKeyUTC` near midnight.
+ *
+ * Use this for anything anchored to the user's wall-clock calendar day
+ * (habit completions, focus blocks, trips, symptom logs, …).
  */
 export function dayKey(ts: number): string {
   const d = new Date(ts);
@@ -33,6 +49,25 @@ export function dayKey(ts: number): string {
     String(d.getMonth() + 1).padStart(2, '0') +
     '-' +
     String(d.getDate()).padStart(2, '0')
+  );
+}
+
+/**
+ * Format an epoch-ms timestamp as a **UTC** `YYYY-MM-DD` key. The
+ * year/month/day are read in UTC, so this is stable across timezones but
+ * can differ from `dayKey` near midnight.
+ *
+ * Use this only where the original call site read `getUTC*` — swapping it
+ * for the local variant silently shifts date math across midnight.
+ */
+export function dayKeyUTC(ts: number): string {
+  const d = new Date(ts);
+  return (
+    d.getUTCFullYear() +
+    '-' +
+    String(d.getUTCMonth() + 1).padStart(2, '0') +
+    '-' +
+    String(d.getUTCDate()).padStart(2, '0')
   );
 }
 
@@ -59,10 +94,16 @@ export function daysBetweenKeys(a: string, b: string): number {
 // ─── string distance ────────────────────────────────────────────────────────────
 
 /**
- * Full Levenshtein edit distance with an early-exit cap. Once a whole row
+ * Full Levenshtein edit distance with an early-exit cap — the single
+ * canonical edit-distance implementation for the package. Once a whole row
  * of the DP matrix exceeds `cap`, the function bails and returns
  * `cap + 1` — enough for "definitely too far" checks without paying for
- * the rest of the matrix.
+ * the rest of the matrix. With the default `cap = Infinity` it computes the
+ * exact distance.
+ *
+ * Callers (`journal/search` fuzzy-1, `grocery/parse` cap-2, `consumption`
+ * brand match-1) all delegate here via thin wrappers — no other
+ * edit-distance code exists.
  */
 export function levenshtein(a: string, b: string, cap = Infinity): number {
   if (a === b) return 0;
