@@ -1,15 +1,5 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
-import {
-  detectFreshStartCrash,
-  detectIdentityFraming,
-  detectBodyVsCognitive,
-  detectHabitDrift,
-  detectFrictionSignature,
-  detectSleepHabitCoupling,
-  detectHabitRebirth,
-  detectSelfTalkHabit,
-} from '@ollie/logic/habits';
-import type { Habit, HabitCompletion, HabitSignal } from '@ollie/logic/habits';
+import type { Habit, HabitCompletion } from '@ollie/logic/habits';
 import { useStoreSlice } from '../../store';
 import { ModuleHelp } from '../../components/ModuleHelp';
 
@@ -230,12 +220,6 @@ export function HabitsModule({ onBack }: { onBack: () => void }) {
   const [cueError, setCueError] = useState<'missing-name' | 'missing-cue' | null>(null);
   const [recentCheck, setRecentCheck] = useState<{ id: string; ts: number } | null>(null);
 
-  // Phase-2 signal state
-  const [bannerEvents, setBannerEvents] = useState<Record<string, HabitSignal>>({});
-  const [driftMap, setDriftMap] = useState<Record<string, { drop_pct: number; copy: string }>>({});
-  const [frictionMap, setFrictionMap] = useState<Record<string, { worst_day: string; copy: string }>>({});
-  const [dismissedSet, setDismissedSet] = useState<Set<string>>(() => new Set());
-
   const nameInputRef = useRef<HTMLInputElement>(null);
 
   // ── Derived date values ───────────────────────────────────────────────────
@@ -335,75 +319,6 @@ export function HabitsModule({ onBack }: { onBack: () => void }) {
     if (addingOpen) nameInputRef.current?.focus();
   }, [addingOpen]);
 
-  // ── Phase-2 signal derivation (runs on mount, no event bus dependency) ───
-  useEffect(() => {
-    const history = {
-      now: Date.now(),
-      habits: habitsArr,
-      completions: undefined,
-      dumps: [],
-      sleepRecords: [],
-      goals: [],
-      cyclePhases: [],
-    };
-
-    const newBanner: Record<string, HabitSignal> = {};
-    const newDrift:   Record<string, { drop_pct: number; copy: string }> = {};
-    const newFriction: Record<string, { worst_day: string; copy: string }> = {};
-
-    try {
-      const fsc = detectFreshStartCrash(history);
-      if (fsc && !Array.isArray(fsc)) newBanner['fresh_start_crash'] = fsc as HabitSignal;
-    } catch { /* ignore */ }
-    try {
-      const idf = detectIdentityFraming(history);
-      if (idf && !Array.isArray(idf)) newBanner['identity_framing'] = idf as HabitSignal;
-    } catch { /* ignore */ }
-    try {
-      const bvc = detectBodyVsCognitive(history);
-      if (bvc && !Array.isArray(bvc)) newBanner['body_vs_cognitive'] = bvc as HabitSignal;
-    } catch { /* ignore */ }
-    try {
-      const slc = detectSleepHabitCoupling(history);
-      if (slc && !Array.isArray(slc)) newBanner['sleep_coupling'] = slc as HabitSignal;
-    } catch { /* ignore */ }
-    try {
-      const reb = detectHabitRebirth(history);
-      if (reb && !Array.isArray(reb)) newBanner['rebirth_pattern'] = reb as HabitSignal;
-    } catch { /* ignore */ }
-    try {
-      const std = detectSelfTalkHabit(history);
-      if (std && !Array.isArray(std)) newBanner['self_talk_drop'] = std as HabitSignal;
-    } catch { /* ignore */ }
-
-    try {
-      const drifts = detectHabitDrift(history);
-      const arr = Array.isArray(drifts) ? drifts : drifts ? [drifts] : [];
-      for (const item of arr) {
-        const s = item as HabitSignal;
-        if (s.habit_id && typeof s.drop_pct === 'number') {
-          newDrift[s.habit_id] = { drop_pct: s.drop_pct, copy: s.copy ?? '' };
-        }
-      }
-    } catch { /* ignore */ }
-
-    try {
-      const frictions = detectFrictionSignature(history);
-      const arr = Array.isArray(frictions) ? frictions : frictions ? [frictions] : [];
-      for (const item of arr) {
-        const s = item as HabitSignal;
-        if (s.habit_id && s.worst_day) {
-          newFriction[s.habit_id] = { worst_day: s.worst_day, copy: s.copy ?? '' };
-        }
-      }
-    } catch { /* ignore */ }
-
-    setBannerEvents(newBanner);
-    setDriftMap(newDrift);
-    setFrictionMap(newFriction);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // intentionally run once on mount
-
   // ── Ordered list (morning → anytime → evening) ────────────────────────────
   const ordered = useMemo(() => {
     const out: Array<{ habit: StoredHabit; section: typeof SECTIONS[number]; firstOfSection: boolean }> = [];
@@ -421,21 +336,6 @@ export function HabitsModule({ onBack }: { onBack: () => void }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const doneToday   = useMemo(() => habitsArr.filter((h) => isCheckedToday(h)).length, [habitsArr, todayKey]);
   const totalCount  = habitsArr.length;
-
-  // ── Banner order ──────────────────────────────────────────────────────────
-  const SIGNAL_LABELS: Record<string, string> = {
-    fresh_start_crash: 'fresh start crash',
-    identity_framing:  'identity framing',
-    body_vs_cognitive: 'body vs cognitive',
-    sleep_coupling:    'sleep coupling',
-    rebirth_pattern:   'rebirth',
-    self_talk_drop:    'self talk drop',
-  };
-  const BANNER_ORDER = ['sleep_coupling', 'rebirth_pattern', 'fresh_start_crash', 'identity_framing', 'body_vs_cognitive', 'self_talk_drop'];
-
-  const liveBanners = BANNER_ORDER
-    .map((k) => ({ k, ev: bannerEvents[k] }))
-    .filter(({ k, ev }) => ev && ev.copy && !dismissedSet.has(`${k}:${ev.ts ?? ''}`));
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -575,54 +475,6 @@ export function HabitsModule({ onBack }: { onBack: () => void }) {
           display: 'flex', flexDirection: 'column',
           minHeight: 0, position: 'relative',
         }}>
-          {/* Phase-2 banners */}
-          {liveBanners.length > 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
-              {liveBanners.map(({ k, ev }) => (
-                <div
-                  key={`${k}:${ev.ts ?? ''}`}
-                  style={{
-                    background: '#EDE7DC', padding: 16,
-                    borderLeft: `4px solid ${INK}`,
-                    display: 'grid', gridTemplateColumns: '1fr auto',
-                    columnGap: 12, alignItems: 'flex-start',
-                  }}
-                >
-                  <div>
-                    <div style={{
-                      fontFamily: "'DM Mono', monospace", fontSize: 9, fontWeight: 600,
-                      letterSpacing: '0.26em', color: INK,
-                      textTransform: 'uppercase', marginBottom: 8,
-                    }}>{SIGNAL_LABELS[k] ?? k}</div>
-                    <div style={{
-                      fontFamily: "'Inter Tight', sans-serif", fontSize: 14,
-                      color: INK, lineHeight: 1.55,
-                    }}>{ev.copy}</div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setDismissedSet((prev) => {
-                        const n = new Set(prev);
-                        n.add(`${k}:${ev.ts ?? ''}`);
-                        return n;
-                      })
-                    }
-                    aria-label={`dismiss ${SIGNAL_LABELS[k] ?? k}`}
-                    style={{
-                      minWidth: 44, minHeight: 44,
-                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                      background: 'transparent',
-                      border: `1px solid ${HAIRLINE}`,
-                      fontFamily: "'Inter Tight', sans-serif", fontSize: 16,
-                      color: MUTED, cursor: 'pointer', padding: 0,
-                    }}
-                  >×</button>
-                </div>
-              ))}
-            </div>
-          )}
-
           <div style={{
             fontFamily: "'DM Mono', monospace", fontSize: 10, fontWeight: 500,
             letterSpacing: '0.36em', color: MUTED,
@@ -656,8 +508,6 @@ export function HabitsModule({ onBack }: { onBack: () => void }) {
                   recentCheck !== null &&
                   recentCheck.id === h.id &&
                   Date.now() - recentCheck.ts < 4000;
-                const drift   = driftMap[h.id];
-                const frict   = frictionMap[h.id];
 
                 return (
                   <div key={h.id}>
@@ -711,44 +561,11 @@ export function HabitsModule({ onBack }: { onBack: () => void }) {
                         />
                       </div>
 
-                      {/* cue + meta + chips */}
+                      {/* cue + meta */}
                       <div style={{
                         display: 'flex', flexDirection: 'column',
                         alignItems: 'flex-end', gap: 6, minWidth: 180,
                       }}>
-                        {(drift ?? frict) && (
-                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                            {drift && typeof drift.drop_pct === 'number' && (
-                              <span
-                                title={drift.copy}
-                                onClick={(e) => e.stopPropagation()}
-                                style={{
-                                  fontFamily: "'DM Mono', monospace", fontSize: 9, fontWeight: 600,
-                                  letterSpacing: '0.18em', color: INK,
-                                  textTransform: 'uppercase', padding: '4px 8px',
-                                  border: `1px solid ${HAIRLINE}`, whiteSpace: 'nowrap', cursor: 'help',
-                                }}
-                              >
-                                drift -{Math.round(Math.abs(drift.drop_pct))}%
-                              </span>
-                            )}
-                            {frict && frict.worst_day && (
-                              <span
-                                title={frict.copy}
-                                onClick={(e) => e.stopPropagation()}
-                                style={{
-                                  fontFamily: "'DM Mono', monospace", fontSize: 9, fontWeight: 600,
-                                  letterSpacing: '0.18em', color: INK,
-                                  textTransform: 'uppercase', padding: '4px 8px',
-                                  border: `1px solid ${HAIRLINE}`, whiteSpace: 'nowrap', cursor: 'help',
-                                }}
-                              >
-                                stuck on {frict.worst_day.toLowerCase().slice(0, 3)}
-                              </span>
-                            )}
-                          </div>
-                        )}
-
                         <div style={{
                           fontFamily: "'DM Mono', monospace", fontSize: 10, fontWeight: 500,
                           letterSpacing: '0.26em', color: checked ? V_MUTED : MUTED,
