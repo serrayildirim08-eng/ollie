@@ -679,9 +679,10 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 interface GhostBtnProps {
   children: React.ReactNode;
   onClick: () => void;
+  style?: React.CSSProperties;
 }
 
-function GhostBtn({ children, onClick }: GhostBtnProps) {
+function GhostBtn({ children, onClick, style }: GhostBtnProps) {
   return (
     <button
       type="button"
@@ -700,6 +701,8 @@ function GhostBtn({ children, onClick }: GhostBtnProps) {
         minHeight: 48,
         minWidth: 96,
         cursor: 'pointer',
+        boxSizing: 'border-box',
+        ...style,
       }}
     >
       {children}
@@ -1000,17 +1003,40 @@ export function CycleModule({ onBack }: CycleModuleProps) {
       <style>{`
         @media (max-width: 640px) {
           .cycle-module .cycle-history-grid { gap: 8px !important; }
+          /* Phone: drop the header's flex layout entirely so the
+             SETTINGS / BACK nav can never be clipped off the right edge.
+             Block flow stacks title above nav; nav becomes a 2-up grid. */
+          .cycle-module .cycle-header {
+            display: block !important;
+          }
+          .cycle-module .cycle-header-nav {
+            display: grid !important;
+            grid-template-columns: 1fr 1fr !important;
+            gap: 12px !important;
+            margin-top: 24px !important;
+          }
+          .cycle-module .cycle-header-nav > button {
+            width: 100% !important;
+            min-width: 0 !important;
+            box-sizing: border-box !important;
+            padding-left: 10px !important;
+            padding-right: 10px !important;
+          }
         }
       `}</style>
       <div style={{
         width: '100%',
         maxWidth: 1400,
         margin: '0 auto',
+        // border-box: without it, width:100% + horizontal padding made
+        // this content column ~40px wider than the viewport, pushing the
+        // header's BACK button off the right edge on an iPhone.
+        boxSizing: 'border-box',
         padding: 'calc(88px + env(safe-area-inset-top)) clamp(20px, 5vw, 64px) calc(200px + env(safe-area-inset-bottom))',
       }}>
 
         {/* ── header ─────────────────────────────────────────────────── */}
-        <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap', marginBottom: 'clamp(56px, 12vw, 120px)' }}>
+        <header className="cycle-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap', marginBottom: 'clamp(56px, 12vw, 120px)' }}>
           <div>
             <h1 style={{ font: "600 clamp(34px, 8vw, 56px)/1 'Inter Tight', sans-serif", color: C.ink, margin: 0, letterSpacing: '-0.03em' }}>
               {t('cycle.title')}
@@ -1019,9 +1045,37 @@ export function CycleModule({ onBack }: CycleModuleProps) {
               {fmtFullDate(today)}
             </p>
           </div>
-          <nav style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-            <GhostBtn onClick={() => setSettingsOpen(true)}>{t('cycle.btn.settings')}</GhostBtn>
-            {onBack && <GhostBtn onClick={onBack}>{t('cycle.btn.back')}</GhostBtn>}
+          {/* `flex: 1 1 auto` + `minWidth: 0` lets the nav take the
+              header's leftover width and SHRINK below its content size;
+              the header's flexWrap then drops it to its own full-width
+              line on a phone, where the two buttons split it evenly.
+              No media query — works at every width incl. desktop. */}
+          <nav
+            className="cycle-header-nav"
+            style={{
+              display: 'flex',
+              gap: 12,
+              flexWrap: 'wrap',
+              alignItems: 'center',
+              flex: '1 1 auto',
+              minWidth: 0,
+              justifyContent: 'flex-end',
+            }}
+          >
+            <GhostBtn
+              onClick={() => setSettingsOpen(true)}
+              style={{ flex: '1 1 130px', minWidth: 0 }}
+            >
+              {t('cycle.btn.settings')}
+            </GhostBtn>
+            {onBack && (
+              <GhostBtn
+                onClick={onBack}
+                style={{ flex: '1 1 130px', minWidth: 0 }}
+              >
+                {t('cycle.btn.back')}
+              </GhostBtn>
+            )}
           </nav>
         </header>
 

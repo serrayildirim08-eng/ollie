@@ -372,7 +372,7 @@ export function DumpModule({ onBack }: DumpModuleProps) {
         onClick={onBack}
         style={{
           position: 'fixed',
-          top: 22,
+          top: 'calc(22px + env(safe-area-inset-top))',
           left: 22,
           zIndex: 30,
           background: 'none',
@@ -390,7 +390,7 @@ export function DumpModule({ onBack }: DumpModuleProps) {
       </button>
 
       {/* help */}
-      <div style={{ position: 'fixed', top: 22, right: 22, zIndex: 30 }}>
+      <div style={{ position: 'fixed', top: 'calc(22px + env(safe-area-inset-top))', right: 22, zIndex: 30 }}>
         <ModuleHelp moduleId="dump" />
       </div>
 
@@ -565,7 +565,8 @@ export function DumpModule({ onBack }: DumpModuleProps) {
             </div>
           </div>
 
-          {/* sticky filter bar */}
+          {/* sticky filter bar — wraps to 2 rows on narrow widths so the
+              label + toggles never crowd at ~402px (P3 cosmetic, iter 3) */}
           <div
             style={{
               position: 'sticky',
@@ -577,8 +578,11 @@ export function DumpModule({ onBack }: DumpModuleProps) {
               marginBottom: 28,
               borderBottom: `1px solid ${HAIRLINE}`,
               display: 'flex',
+              flexWrap: 'wrap',
               justifyContent: 'space-between',
               alignItems: 'center',
+              rowGap: 4,
+              columnGap: 16,
             }}
           >
             <div
@@ -586,7 +590,7 @@ export function DumpModule({ onBack }: DumpModuleProps) {
                 fontFamily: "'DM Mono',monospace",
                 fontSize: 10,
                 color: VERY_MUTED,
-                letterSpacing: '0.22em',
+                letterSpacing: '0.18em',
                 textTransform: 'uppercase',
               }}
             >

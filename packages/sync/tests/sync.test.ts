@@ -49,6 +49,9 @@ function makeFakeApi() {
         }) as any,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         delete: vi.fn() as any,
+        // sync never calls rpc — present only to satisfy the rest interface.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        rpc: vi.fn() as any,
       },
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       auth: { signUp: vi.fn() as any, signInWithPassword: vi.fn() as any, refresh: vi.fn() as any, signOut: vi.fn() as any },

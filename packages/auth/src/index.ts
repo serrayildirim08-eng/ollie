@@ -235,12 +235,20 @@ export function createAuthClient(deps: AuthDeps): AuthClient {
    * useless without the passphrase) — see `uploadProfileToSupabase`.
    *
    * Two lookup modes:
-   *   - by `userId` (post-auth, e.g. re-uploading on signIn). RLS for
-   *     the authed user gates the row; pass `authJwt`.
+   *   - by `userId` (post-auth, e.g. re-uploading on signIn). The row is
+   *     RLS-gated to the authed user — a plain REST GET with `authJwt`.
    *   - by `email` (the "new device" path — we have no userId yet and
-   *     no JWT). Relies on the `profiles` RLS policy permitting an
-   *     anon `select` of (salt, encrypted_server_pw) keyed by email.
-   *     `apikey` (anon key) is sent automatically by `rest.get`.
+   *     no JWT). This goes through the `profile_recovery_lookup`
+   *     SECURITY DEFINER RPC, NOT a table GET.
+   *
+   * SECURITY (F1, 2026-05-19): the old email path did an anon REST GET
+   * against `profiles`. The RLS policy backing it (profiles_select_anon_
+   * recovery) had no row scoping, so anyone with the public anon key
+   * could omit the email filter and dump every user's email + credential
+   * material. The `profile_recovery_lookup` RPC closes this — its body
+   * owns the WHERE clause, so a caller can only ever resolve the single
+   * row for an email they ALREADY know. No enumeration is possible.
+   * See supabase/migrations/20260519000001_profiles_anon_rpc_fix.sql.
    *
    * Returns null on any miss / network error so callers can degrade
    * to the existing `missing-salt` path.
@@ -248,16 +256,32 @@ export function createAuthClient(deps: AuthDeps): AuthClient {
   async function fetchProfileFromSupabase(
     lookup: { authJwt?: string; userId?: string; email?: string },
   ): Promise<{ salt?: string; encrypted_server_pw?: string } | null> {
-    const filter: Record<string, string> = { select: 'salt,encrypted_server_pw' };
-    if (lookup.userId) filter.id = `eq.${lookup.userId}`;
-    else if (lookup.email) filter.email = `eq.${lookup.email.toLowerCase()}`;
-    else return null;
     try {
-      const r = await deps.api.supabase.rest.get<Array<{ salt?: string; encrypted_server_pw?: string }>>(profilesTable, {
-        authJwt: lookup.authJwt,
-        params: filter,
-      });
-      if (r.ok && r.data?.[0]) return r.data[0];
+      if (lookup.userId) {
+        // Post-auth path: RLS-gated row read keyed by id.
+        const r = await deps.api.supabase.rest.get<Array<{ salt?: string; encrypted_server_pw?: string }>>(profilesTable, {
+          authJwt: lookup.authJwt,
+          params: { select: 'salt,encrypted_server_pw', id: `eq.${lookup.userId}` },
+        });
+        if (r.ok && r.data?.[0]) return r.data[0];
+        return null;
+      }
+      if (lookup.email) {
+        // New-device path: SECURITY DEFINER RPC — point lookup by a
+        // known email, no table SELECT, no enumeration.
+        const r = await deps.api.supabase.rest.rpc<
+          Array<{ id?: string; salt?: string; encrypted_server_pw?: string }>
+        >('profile_recovery_lookup', { p_email: lookup.email.toLowerCase() }, {
+          authJwt: lookup.authJwt,
+        });
+        if (r.ok && r.data?.[0]) {
+          return {
+            salt: r.data[0].salt,
+            encrypted_server_pw: r.data[0].encrypted_server_pw,
+          };
+        }
+        return null;
+      }
     } catch { /* fall through */ }
     return null;
   }

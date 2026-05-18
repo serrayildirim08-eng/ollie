@@ -74,15 +74,10 @@ function getBgConfig(moduleId: string): {
   showSkyVideo: boolean;
   dark: boolean;
 } {
-  if (moduleId === 'finance') {
-    return {
-      bg: '#0E0C14',
-      text: 'rgba(255,255,255,0.85)',
-      muted: 'rgba(255,255,255,0.4)',
-      showSkyVideo: false,
-      dark: true,
-    };
-  }
+  // NOTE: finance is NOT handled here — it has its own full-screen
+  // takeover (see the `moduleId === 'finance'` early return below) and
+  // never reaches this generic-wrapper config. Removing the dead branch
+  // avoids implying finance routes through the wrapper.
   if (moduleId === 'grocery') {
     return {
       bg: '#F5F0E8',
@@ -291,12 +286,12 @@ export function ModuleScreen({
     return null;
   }
 
-  // Medication: dedicated module (E1) — cream bg
+  // Medication: dedicated module (E1) — cream bg, owns its own header
   if (moduleId === 'medication') {
     return (
       <>
         <Suspense fallback={<ModuleLoading />}>
-          <MedicationModule />
+          <MedicationModule onBack={() => onNavigate('dashboard')} />
         </Suspense>
         <BrainDumpInput onSubmit={onBrainDump} />
       </>
@@ -309,6 +304,20 @@ export function ModuleScreen({
       <>
         <Suspense fallback={<ModuleLoading />}>
           <GoalsModule onBack={() => onNavigate('dashboard')} />
+        </Suspense>
+        <BrainDumpInput onSubmit={onBrainDump} />
+      </>
+    );
+  }
+
+  // Finance: full-screen takeover — owns its own dark ledger layout +
+  // header (finance. / date / privacy / log tx / help). Routed here so
+  // it does NOT also get the generic wrapper header (double-header bug).
+  if (moduleId === 'finance') {
+    return (
+      <>
+        <Suspense fallback={<ModuleLoading />}>
+          <FinanceModule onBack={() => onNavigate('dashboard')} />
         </Suspense>
         <BrainDumpInput onSubmit={onBrainDump} />
       </>
@@ -398,42 +407,6 @@ export function ModuleScreen({
             pointerEvents: 'none',
           }}
         />
-      )}
-
-      {/* Finance decorative orbs */}
-      {moduleId === 'finance' && (
-        <>
-          <div
-            aria-hidden="true"
-            style={{
-              position: 'fixed',
-              top: '-10%',
-              right: '-5%',
-              width: 400,
-              height: 400,
-              borderRadius: '50%',
-              background:
-                'radial-gradient(circle, rgba(100,60,180,0.15), transparent)',
-              pointerEvents: 'none',
-              zIndex: 0,
-            }}
-          />
-          <div
-            aria-hidden="true"
-            style={{
-              position: 'fixed',
-              bottom: '-15%',
-              left: '-10%',
-              width: 500,
-              height: 500,
-              borderRadius: '50%',
-              background:
-                'radial-gradient(circle, rgba(60,100,180,0.1), transparent)',
-              pointerEvents: 'none',
-              zIndex: 0,
-            }}
-          />
-        </>
       )}
 
       {/* Scrollable content — top/bottom padding includes the iPhone
@@ -526,8 +499,6 @@ export function ModuleScreen({
         <Suspense fallback={<ModuleLoading />}>
           {moduleId === 'pets'
             ? <PetsModule />
-            : moduleId === 'finance'
-            ? <FinanceModule />
             : (children ?? <PlaceholderContent moduleId={moduleId} dark={cfg.dark} showSkyVideo={cfg.showSkyVideo} />)}
         </Suspense>
       </div>

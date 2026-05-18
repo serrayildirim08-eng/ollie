@@ -9,6 +9,7 @@
     "sync": "cap sync ios",
     "open": "cap open ios",
     "run": "cap run ios",
+    "typecheck": "tsc --noEmit",
     "build": "pnpm --filter @ollie/web build && node -e \"const{cpSync}=require('fs');cpSync('../web/dist','./www',{recursive:true,force:true})\" && cap sync ios"
   },
   "devDependencies": {
@@ -17,6 +18,8 @@
     "@capacitor/ios": "^7.0.0"
   },
   "dependencies": {
+    "@capacitor-community/speech-recognition": "^7.0.1",
+    "@capgo/capacitor-native-biometric": "^8.4.5",
     "@sentry/capacitor": "^4.0.0"
   }
 }

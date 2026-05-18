@@ -39,6 +39,13 @@ export interface Env extends DrainEnv, FlushEnv {
 
   // Service binding to the APNs Worker (configured in wrangler.toml).
   APNS_PUSH: Fetcher;
+
+  // F2 — shared secret gating the manual HTTP trigger routes (/run,
+  // /drain, /flush-notifications, /weekly-review, /body-correlations).
+  // Without it anyone could force-trigger a drain and amplify cost.
+  // Set via `wrangler secret put CRON_TRIGGER_SECRET`. Mirrors
+  // apps/api's REGISTER_SHARED_SECRET pattern.
+  CRON_TRIGGER_SECRET: string;
 }
 
 const DRAIN_SCHEDULE = '*/5 * * * *';
@@ -130,11 +137,42 @@ export default {
 // Replaces the hand-rolled `if (url.pathname …)` chain. All routes are POST;
 // any other method or unknown path falls through to `notFound()` — identical
 // to the previous `req.method !== 'POST'` guard.
+//
+// F2 SECURITY: every trigger route is gated by a shared-secret bearer
+// header (`Authorization: Bearer <CRON_TRIGGER_SECRET>`). These routes
+// force drains / heavy passes — unauthenticated they were a cost-
+// amplification vector (anyone could spam /drain). The `requireSecret`
+// guard runs first as an itty middleware: it returns a 401 Response
+// (short-circuiting the route) when the secret is missing or wrong, and
+// fails CLOSED when CRON_TRIGGER_SECRET itself is unset. Same pattern as
+// apps/api/src/worker.ts · REGISTER_SHARED_SECRET.
 
 const fetchRouter = Router<Request, [Env, ExecutionContext]>();
 
+/**
+ * itty middleware: when it returns a Response the route handler is
+ * skipped. Returns 401 unless the request carries the exact
+ * `Authorization: Bearer <CRON_TRIGGER_SECRET>` header. Fail-closed when
+ * the secret is unconfigured.
+ *
+ * The full `(req, env, ctx)` signature is declared deliberately: itty
+ * infers a route's handler arg-tuple from its FIRST handler, so a 2-arg
+ * middleware would erase `ExecutionContext` from the route handlers that
+ * follow it.
+ */
+function requireSecret(req: Request, env: Env, _ctx: ExecutionContext): Response | void {
+  const auth = req.headers.get('authorization') ?? '';
+  if (
+    !env.CRON_TRIGGER_SECRET ||
+    !auth.startsWith('Bearer ') ||
+    auth.slice('Bearer '.length) !== env.CRON_TRIGGER_SECRET
+  ) {
+    return json({ error: 'unauthorized' }, 401);
+  }
+}
+
 fetchRouter
-  .post('/run', (_req, env, ctx) => {
+  .post('/run', requireSecret, (_req, env, ctx) => {
     ctx.waitUntil(safe('manual-run', async () => {
       await runPatternDetection(env);
       await runPeriodPrediction(env);
@@ -144,21 +182,21 @@ fetchRouter
   })
   // Manual trigger for the notification delivery drain — runs it once
   // synchronously and returns the stats (useful for ops + local dev).
-  .post('/flush-notifications', async (_req, env) => {
+  .post('/flush-notifications', requireSecret, async (_req, env) => {
     const stats = await flushNotificationQueue(env);
     return json({ ok: true, ...stats });
   })
   // Manual trigger for body weekly review.
-  .post('/weekly-review', (_req, env, ctx) => {
+  .post('/weekly-review', requireSecret, (_req, env, ctx) => {
     ctx.waitUntil(safe('manual-weekly-review', () => runBodyWeeklyReview(env)));
     return json({ queued: true }, 202);
   })
   // Manual trigger for body-correlation registry pass.
-  .post('/body-correlations', (_req, env, ctx) => {
+  .post('/body-correlations', requireSecret, (_req, env, ctx) => {
     ctx.waitUntil(safe('manual-body-correlations', () => runBodyCorrelations(env)));
     return json({ queued: true }, 202);
   })
-  .post('/drain', async (_req, env) => {
+  .post('/drain', requireSecret, async (_req, env) => {
     const stats = await drainEnrichQueue(env);
     return json({ ok: true, ...stats });
   })

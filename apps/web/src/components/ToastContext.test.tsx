@@ -11,7 +11,7 @@
  * lifetime of the provider.
  */
 
-import React, { act, useState } from 'react';
+import { act, useState } from 'react';
 import { describe, it, expect } from 'vitest';
 import { createRoot, type Root } from 'react-dom/client';
 import { ToastProvider, useToast } from './ToastContext';

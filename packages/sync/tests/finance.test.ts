@@ -76,6 +76,9 @@ function makeFakeApi() {
           return { ok: true, status: 204, data: null };
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
         }) as any,
+        // sync never calls rpc — present only to satisfy the rest interface.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        rpc: vi.fn(async () => ({ ok: true, status: 200, data: [] })) as any,
       },
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       auth: { signUp: vi.fn() as any, signInWithPassword: vi.fn() as any, refresh: vi.fn() as any, signOut: vi.fn() as any },

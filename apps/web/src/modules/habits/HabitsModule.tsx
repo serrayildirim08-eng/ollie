@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect, useRef } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import type { Habit, HabitCompletion } from '@ollie/logic/habits';
 import { useStoreSlice } from '../../store';
 import { ModuleHelp } from '../../components/ModuleHelp';
@@ -348,13 +348,47 @@ export function HabitsModule({ onBack }: { onBack: () => void }) {
       paddingTop: 'env(safe-area-inset-top)',
       paddingBottom: 'env(safe-area-inset-bottom)',
     }}>
+      {/* Phone-stack: the desktop two-column hero/ledger collapses to a
+          single vertical column below 760px so it fits an iPhone. The
+          masthead gets left clearance for the fixed back button, and the
+          dense 3-column habit rows reflow so cue/meta drop below the name. */}
+      <style>{`
+        @media (max-width: 760px) {
+          .habits-main { display: flex !important; flex-direction: column !important; }
+          .habits-divider { width: 100% !important; height: 1px !important; align-self: stretch !important; }
+          .habits-hero { padding: 32px 24px 28px 24px !important; }
+          .habits-ledger-pane { padding: 28px 24px 28px 24px !important; }
+          .habits-masthead {
+            padding-top: 52px !important;
+          }
+          .habit-row {
+            grid-template-columns: 32px 1fr !important;
+            row-gap: 10px !important;
+            column-gap: 14px !important;
+          }
+          .habit-row > .habit-meta {
+            grid-column: 1 / -1 !important;
+            align-items: flex-start !important;
+            min-width: 0 !important;
+          }
+          .habit-row .habit-name {
+            font-size: 26px !important;
+          }
+          /* long names step down a tier on phones so they wrap to fewer
+             lines and never crowd the row (P4 cosmetic, iter 3) */
+          .habit-row .habit-name-long {
+            font-size: 20px !important;
+            letter-spacing: -0.01em !important;
+          }
+        }
+      `}</style>
       {/* Back */}
       <button
         type="button"
         onClick={onBack}
         aria-label="back to dashboard"
         style={{
-          position: 'fixed', top: 20, left: 24, zIndex: 40,
+          position: 'fixed', top: 'calc(20px + env(safe-area-inset-top))', left: 24, zIndex: 40,
           background: 'none', border: 'none', padding: '6px 8px',
           fontFamily: "'DM Mono', monospace", fontSize: 10, fontWeight: 500,
           letterSpacing: '0.26em', color: INK, opacity: 0.7,
@@ -365,20 +399,21 @@ export function HabitsModule({ onBack }: { onBack: () => void }) {
       </button>
 
       {/* Help */}
-      <div style={{ position: 'fixed', top: 20, right: 24, zIndex: 40 }}>
+      <div style={{ position: 'fixed', top: 'calc(20px + env(safe-area-inset-top))', right: 24, zIndex: 40 }}>
         <ModuleHelp moduleId="habits" />
       </div>
 
       {/* Masthead */}
-      <header style={{
+      <header className="habits-masthead" style={{
         flexShrink: 0,
-        padding: '20px 40px 16px 90px',
+        padding: '20px 24px 16px 24px',
         display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+        flexWrap: 'wrap', gap: 12,
         borderBottom: `1px solid ${HAIRLINE}`,
         position: 'relative', zIndex: 2,
       }}>
         <div style={{
-          display: 'flex', gap: 20, alignItems: 'baseline',
+          display: 'flex', gap: 14, alignItems: 'baseline',
           fontFamily: "'DM Mono', monospace", fontSize: 10, fontWeight: 500,
           letterSpacing: '0.32em', color: INK, textTransform: 'uppercase',
         }}>
@@ -387,7 +422,7 @@ export function HabitsModule({ onBack }: { onBack: () => void }) {
           <span style={{ color: MUTED }}>volume 01</span>
         </div>
         <div style={{
-          display: 'flex', gap: 20, alignItems: 'baseline',
+          display: 'flex', gap: 14, alignItems: 'baseline',
           fontFamily: "'DM Mono', monospace", fontSize: 10, fontWeight: 500,
           letterSpacing: '0.32em', color: MUTED, textTransform: 'uppercase',
         }}>
@@ -399,15 +434,15 @@ export function HabitsModule({ onBack }: { onBack: () => void }) {
         </div>
       </header>
 
-      {/* Main: 40% hero / 60% ledger */}
-      <main style={{
+      {/* Main: 40% hero / 60% ledger — stacks on phones (see <style> above) */}
+      <main className="habits-main" style={{
         flex: 1, minHeight: 0,
         display: 'grid',
         gridTemplateColumns: 'minmax(360px, 38%) 1px minmax(0, 1fr)',
         position: 'relative', zIndex: 1,
       }}>
         {/* Left: hero */}
-        <section style={{
+        <section className="habits-hero" style={{
           padding: '46px 40px 40px 90px',
           display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
           minHeight: 0,
@@ -421,7 +456,7 @@ export function HabitsModule({ onBack }: { onBack: () => void }) {
 
             <div style={{
               fontFamily: "'Inter Tight', sans-serif", fontWeight: 600,
-              fontSize: 220, color: INK, letterSpacing: '-0.06em',
+              fontSize: 'clamp(120px, 40vw, 220px)', color: INK, letterSpacing: '-0.06em',
               lineHeight: 0.82, fontVariantNumeric: 'tabular-nums',
             }}>{String(dayNum).padStart(2, '0')}</div>
 
@@ -467,10 +502,10 @@ export function HabitsModule({ onBack }: { onBack: () => void }) {
         </section>
 
         {/* Divider */}
-        <div style={{ width: 1, background: HAIRLINE, alignSelf: 'stretch' }} />
+        <div className="habits-divider" style={{ width: 1, background: HAIRLINE, alignSelf: 'stretch' }} />
 
         {/* Right: ledger */}
-        <section style={{
+        <section className="habits-ledger-pane" style={{
           padding: '44px 56px 28px 56px',
           display: 'flex', flexDirection: 'column',
           minHeight: 0, position: 'relative',
@@ -541,15 +576,21 @@ export function HabitsModule({ onBack }: { onBack: () => void }) {
                         fontVariantNumeric: 'tabular-nums', textAlign: 'left',
                       }}>{String(idx + 1).padStart(2, '0')}</div>
 
-                      {/* name + strikethrough */}
-                      <div style={{ position: 'relative', display: 'inline-block', justifySelf: 'start', maxWidth: '100%' }}>
-                        <div style={{
-                          fontFamily: "'Inter Tight', sans-serif", fontWeight: 500,
-                          fontSize: 34, color: checked ? MUTED : INK,
-                          letterSpacing: '-0.02em', lineHeight: 1,
-                          textTransform: 'uppercase',
-                          transition: 'color 400ms ease',
-                        }}>{h.name ?? ''}</div>
+                      {/* name + strikethrough — minWidth:0 lets this grid cell
+                          shrink below its content so long names wrap instead of
+                          overflowing the 402px phone row (P4 cosmetic, iter 3) */}
+                      <div style={{ position: 'relative', justifySelf: 'start', minWidth: 0, maxWidth: '100%' }}>
+                        <div
+                          className={`habit-name${(h.name ?? '').length > 16 ? ' habit-name-long' : ''}`}
+                          style={{
+                            fontFamily: "'Inter Tight', sans-serif", fontWeight: 500,
+                            fontSize: 34, color: checked ? MUTED : INK,
+                            letterSpacing: '-0.02em', lineHeight: 1.05,
+                            textTransform: 'uppercase',
+                            overflowWrap: 'anywhere', wordBreak: 'break-word',
+                            transition: 'color 400ms ease',
+                          }}
+                        >{h.name ?? ''}</div>
                         <div
                           aria-hidden="true"
                           style={{
@@ -562,7 +603,7 @@ export function HabitsModule({ onBack }: { onBack: () => void }) {
                       </div>
 
                       {/* cue + meta */}
-                      <div style={{
+                      <div className="habit-meta" style={{
                         display: 'flex', flexDirection: 'column',
                         alignItems: 'flex-end', gap: 6, minWidth: 180,
                       }}>

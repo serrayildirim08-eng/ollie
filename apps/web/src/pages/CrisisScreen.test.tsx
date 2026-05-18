@@ -11,7 +11,7 @@
  *      @ollie/events, no fetch reference in the file
  */
 
-import React, { act } from 'react';
+import { act } from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';

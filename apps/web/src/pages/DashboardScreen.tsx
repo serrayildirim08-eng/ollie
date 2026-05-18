@@ -361,8 +361,39 @@ export function DashboardScreen({ onNavigate, onBrainDump, stats }: DashboardScr
         </FrostedCard>
 
         {/* ── Brain dump — inline, above cluster grid ───────────────────── */}
+        {/* The archive link sits with the input it belongs to: the input
+            writes dump entries, this opens the dump stream-archive view.
+            Without it the #/module/dump screen is unreachable in the PWA. */}
         <div style={{ marginBottom: 24 }}>
           <InlineBrainDump onSubmit={onBrainDump} />
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'flex-end',
+              marginTop: 8,
+            }}
+          >
+            <button
+              type="button"
+              aria-label="open dump archive"
+              onClick={() => onNavigate('module', 'dump')}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                padding: '4px 0',
+                minHeight: 32,
+                fontFamily: "'DM Mono', monospace",
+                fontSize: 10,
+                letterSpacing: '0.16em',
+                textTransform: 'uppercase',
+                color: 'rgba(255,255,255,0.65)',
+                textShadow: '0 1px 6px rgba(0,0,0,0.4)',
+                cursor: 'pointer',
+              }}
+            >
+              archive
+            </button>
+          </div>
         </div>
 
         {/* ── 4-cluster grid ───────────────────────────────────────────── */}

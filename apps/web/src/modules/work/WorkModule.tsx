@@ -775,7 +775,10 @@ export function WorkModule({ onBack }: WorkModuleProps) {
         style={{
           maxWidth: 920,
           margin: '0 auto',
-          padding: '44px clamp(24px, 5vw, 56px) 120px',
+          // Top clears the notch; bottom clears the brain-dump bar +
+          // home indicator (120px bar reserve + safe-area inset).
+          padding:
+            'calc(44px + env(safe-area-inset-top, 0px)) clamp(24px, 5vw, 56px) calc(120px + env(safe-area-inset-bottom, 0px))',
         }}
       >
         {/* ── breadcrumb nav ──────────────────────────────────────────── */}
