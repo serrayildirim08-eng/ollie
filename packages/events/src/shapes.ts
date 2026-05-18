@@ -29,7 +29,6 @@ export const SHAPES: Record<string, ShapeSpec> = {
   'braindump:routed':          { route_path: 'string', item_count: 'number', modules: 'array', idempotency_key: 'string', ts: 'number' },
   'braindump:routing_failed':  { raw: 'string', reason: 'string', ts: 'number' },
   'void:inventory:refill':     { productType: 'string', quantity: 'number', source: 'string' },
-  'void:cycle:started':        { ts: 'number', source: 'string' },
   'pets:care_logged':          { pet_id: 'string', task: 'string', source: 'string', occurred_at: 'number' },
   'void:reminder:scheduled':   { id: 'string', fireAt: 'number', message: 'string', module: 'string', source: 'string' },
   'void:crisis:detected':      { text: 'string', matchedLine: 'string', ts: 'number' },

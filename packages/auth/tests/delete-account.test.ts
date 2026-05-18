@@ -36,6 +36,8 @@ function makeFakeApi(): OllieAPI {
         upsert: vi.fn(async () => ({ ok: true, status: 201, data: null })) as any,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         delete: vi.fn() as any,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        rpc: vi.fn() as any,
       },
       auth: {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any

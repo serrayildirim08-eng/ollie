@@ -113,7 +113,16 @@ function TimeTracker() {
   };
 
   return (
-    <div style={{ position: 'absolute', bottom: 96, right: 32, zIndex: 10 }}>
+    <div
+      style={{
+        position: 'absolute',
+        // Clear the bottom brain-dump bar AND the floating MicButton
+        // (which sits at ~78px + safe-area). The pill stacks above both.
+        bottom: 'calc(150px + env(safe-area-inset-bottom, 0px))',
+        right: 24,
+        zIndex: 14,
+      }}
+    >
       {!active ? (
         <button
           type="button"

@@ -37,14 +37,26 @@ function makeFakeApi(state: FakeApiState): OllieAPI {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         get: vi.fn(async (table: string, opts: any) => {
           if (table === 'profiles') {
-            // Lookup by userId (post-auth) or by email (new-device path).
+            // Post-auth lookup by userId only. The email (new-device)
+            // path now goes through the profile_recovery_lookup RPC —
+            // see the `rpc` mock below (F1 fix, 2026-05-19).
             const byId = String(opts?.params?.id ?? '').match(/eq\.(.+)/)?.[1];
-            const byEmail = String(opts?.params?.email ?? '').match(/eq\.(.+)/)?.[1];
-            const key = byId ?? byEmail;
-            if (key && state.profileLookup[key]) {
-              return { ok: true, status: 200, data: [state.profileLookup[key]] };
+            if (byId && state.profileLookup[byId]) {
+              return { ok: true, status: 200, data: [state.profileLookup[byId]] };
             }
             return { ok: true, status: 200, data: [] };
+          }
+          return { ok: true, status: 200, data: [] };
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        }) as any,
+        // F1 fix: new-device recovery resolves credentials via this
+        // SECURITY DEFINER RPC instead of an enumerable anon table GET.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        rpc: vi.fn(async (fn: string, args: any) => {
+          if (fn === 'profile_recovery_lookup') {
+            const email = String(args?.p_email ?? '').toLowerCase();
+            const hit = email ? state.profileLookup[email] : undefined;
+            return { ok: true, status: 200, data: hit ? [hit] : [] };
           }
           return { ok: true, status: 200, data: [] };
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -297,6 +309,45 @@ describe('auth · signIn', () => {
     // Even on the recovered path, a wrong passphrase fails LOCALLY at
     // decrypt — Supabase auth is never contacted.
     expect(fakeState.signInCalls.length).toBe(0);
+  });
+
+  it('F1: new-device recovery uses the profile_recovery_lookup RPC, never an enumerable profiles GET', async () => {
+    const passphrase = 'correct-horse-battery-staple-x';
+    const email = 'serra@example.com';
+
+    const authA = createAuthClient({ store, api: makeFakeApi(fakeState), now: () => 1000 });
+    await authA.signUp({
+      email, passphrase, passphraseConfirm: passphrase,
+      acknowledged_unrecoverable: true,
+    });
+    const uploaded = fakeState.upsertedProfiles[0] as { salt: string; encrypted_server_pw: string };
+
+    const storeB = createStore(createMemoryAdapter());
+    fakeState.profileLookup[email] = {
+      salt: uploaded.salt,
+      encrypted_server_pw: uploaded.encrypted_server_pw,
+    };
+    fakeState.signInCalls.length = 0;
+
+    const apiB = makeFakeApi(fakeState);
+    const authB = createAuthClient({ store: storeB, api: apiB, now: () => 2000 });
+    const r = await authB.signIn({ email, passphrase });
+
+    expect(r.ok).toBe(true);
+    // The RPC was called with the lowercased email…
+    expect(apiB.supabase.rest.rpc).toHaveBeenCalledWith(
+      'profile_recovery_lookup',
+      { p_email: email },
+      expect.anything(),
+    );
+    // …and the email path NEVER did a profiles table GET (the F1 hole).
+    const getCalls = (apiB.supabase.rest.get as ReturnType<typeof vi.fn>).mock.calls;
+    const profilesGetByEmail = getCalls.some((call: unknown[]) => {
+      const table = call[0];
+      const opts = call[1] as { params?: Record<string, string> } | undefined;
+      return table === 'profiles' && typeof opts?.params?.email === 'string';
+    });
+    expect(profilesGetByEmail).toBe(false);
   });
 
   it('passes decrypted server password (NOT the passphrase) to Supabase', async () => {

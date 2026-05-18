@@ -24,3 +24,23 @@ export function getStage(activeDays: number): Stage {
   if (activeDays >= 7) return 'sapling';
   return 'seedling';
 }
+
+/**
+ * v1 water thresholds for Burhan's stage (GARDEN_GAME_DESIGN.md §5 +
+ * decision #8 — Burhan runs on the water economy). Each unit is one
+ * deliberate "water ollie" pour, so thresholds are gentle compared to
+ * the active-day scale above. Append-only; tunable in the balance phase.
+ *
+ *   0–2   → seedling
+ *   3–7   → sapling
+ *   8–17  → young
+ *   18–39 → mature
+ *   40+   → ancient
+ */
+export function getStageFromWater(waterPoured: number): Stage {
+  if (waterPoured >= 40) return 'ancient';
+  if (waterPoured >= 18) return 'mature';
+  if (waterPoured >= 8) return 'young';
+  if (waterPoured >= 3) return 'sapling';
+  return 'seedling';
+}

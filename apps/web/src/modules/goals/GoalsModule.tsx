@@ -2790,6 +2790,7 @@ export function GoalsModule({ onBack }: GoalsModuleProps) {
             style={{
               width: '100%',
               maxWidth: 520,
+              boxSizing: 'border-box', // flex child: width:100% + padding overflows the 24px-padded overlay at ~402px without this
               background: BG,
               color: INK,
               padding: 32,
@@ -2934,6 +2935,7 @@ export function GoalsModule({ onBack }: GoalsModuleProps) {
             style={{
               width: '100%',
               maxWidth: 480,
+              boxSizing: 'border-box', // flex child: width:100% + padding overflows the 24px-padded overlay at ~402px without this
               background: BG,
               color: INK,
               padding: 32,
@@ -3069,6 +3071,7 @@ export function GoalsModule({ onBack }: GoalsModuleProps) {
             style={{
               width: '100%',
               maxWidth: 460,
+              boxSizing: 'border-box', // flex child: width:100% + padding overflows the 24px-padded overlay at ~402px without this
               background: BG,
               color: INK,
               padding: 32,

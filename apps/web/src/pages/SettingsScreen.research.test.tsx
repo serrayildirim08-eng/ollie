@@ -15,7 +15,7 @@
  * '@ollie/store/react' which vitest can't resolve in this workspace shape.
  */
 
-import React, { act } from 'react';
+import { act } from 'react';
 import {
   describe,
   it,

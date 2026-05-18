@@ -19,7 +19,7 @@ function makeFakeApi(handler: (method: string, url: string, body: unknown) => { 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     anthropic: { proxyUrl: null, route: vi.fn() as any },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    supabase: { url: null, anonKey: null, rest: { get: vi.fn() as any, upsert: vi.fn() as any, delete: vi.fn() as any }, auth: { signUp: vi.fn() as any, signInWithPassword: vi.fn() as any, refresh: vi.fn() as any, signOut: vi.fn() as any } },
+    supabase: { url: null, anonKey: null, rest: { get: vi.fn() as any, upsert: vi.fn() as any, delete: vi.fn() as any, rpc: vi.fn() as any }, auth: { signUp: vi.fn() as any, signInWithPassword: vi.fn() as any, refresh: vi.fn() as any, signOut: vi.fn() as any } },
   };
 }
 

@@ -1252,7 +1252,12 @@ function AuditEntryLink({ onOpen }: { onOpen: () => void }) {
 
 // ─── FinanceModule ────────────────────────────────────────────────────────────
 
-export function FinanceModule() {
+export interface FinanceModuleProps {
+  /** Back affordance — rendered in the module's own header. */
+  onBack?: () => void;
+}
+
+export function FinanceModule({ onBack }: FinanceModuleProps = {}) {
   // ── store slices ──────────────────────────────────────────────────────────
   const [records]  = useStoreSlice<FinanceRecord[]>('finance', 'records', []);
   const [goals, setGoals] = useStoreSlice<StoredGoal[]>('finance', 'goals', []);
@@ -1776,6 +1781,31 @@ export function FinanceModule() {
           boxSizing: 'border-box',
         }}
       >
+        {/* Back affordance — single, in the module's own header. */}
+        {onBack && (
+          <button
+            type="button"
+            onClick={onBack}
+            aria-label="back to dashboard"
+            style={{
+              background: 'transparent',
+              border: 'none',
+              padding: '4px 8px 4px 0',
+              marginBottom: 20,
+              fontFamily: "'DM Mono', monospace",
+              fontSize: 13,
+              color: T.muted,
+              cursor: 'pointer',
+              letterSpacing: '0.04em',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+            }}
+          >
+            <span aria-hidden="true" style={{ fontSize: 15 }}>‹</span> back
+          </button>
+        )}
+
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 48 }}>
           <div>

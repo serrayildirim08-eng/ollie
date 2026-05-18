@@ -300,6 +300,23 @@ export function createOllieAPI(cfg: OllieApiConfig = {}) {
             headers: { ...supabaseHeaders(), ...(opts.headers ?? {}) },
           });
         },
+        /**
+         * Call a Postgres function via PostgREST's RPC surface
+         * (`POST /rest/v1/rpc/<fn>`). `args` becomes the JSON request body —
+         * named arguments map 1:1 to the function's parameter names.
+         *
+         * Used for SECURITY DEFINER functions that must be reachable with
+         * only the anon key but without granting table-level SELECT — e.g.
+         * `profile_recovery_lookup` for the new-device sign-in path. Pass
+         * `authJwt` when the function should run as an authed user.
+         */
+        rpc<T>(fn: string, args: Record<string, unknown> = {}, opts: RequestOptions = {}): Promise<OllieApiResult<T>> {
+          return request<T>('POST', supabaseRestUrl(`/rest/v1/rpc/${fn}`), {
+            ...opts,
+            body: args,
+            headers: { ...supabaseHeaders(), ...(opts.headers ?? {}) },
+          });
+        },
         upsert<T>(table: string, rows: unknown, opts: RequestOptions = {}): Promise<OllieApiResult<T>> {
           return request<T>('POST', supabaseRestUrl(table), {
             ...opts,

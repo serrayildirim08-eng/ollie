@@ -1,0 +1,1 @@
+import{j as s}from"./vendor-react-BDtLAsR5.js";function b({children:r,style:o,className:a,as:d="div"}){return s.jsx(d,{className:a,style:{background:"rgba(255, 255, 255, 0.6)",backdropFilter:"blur(16px)",WebkitBackdropFilter:"blur(16px)",border:"1px solid rgba(255, 255, 255, 0.25)",borderRadius:"20px",boxShadow:"var(--sh-md)",...o},children:r})}export{b as F};
