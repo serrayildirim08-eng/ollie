@@ -75,6 +75,12 @@ function makeSpyingSupabaseApi(captured: CapturedCall[], opts: { userId?: string
           record('rest.delete', args);
           return Promise.resolve({ ok: true, status: 200, data: null });
         }) as unknown as OllieAPI['supabase']['rest']['delete'],
+        rpc: vi.fn((...args: unknown[]) => {
+          // Recorded so the passphrase-leak assertion also covers the
+          // profile_recovery_lookup RPC (new-device sign-in path).
+          record('rest.rpc', args);
+          return Promise.resolve({ ok: true, status: 200, data: [] });
+        }) as unknown as OllieAPI['supabase']['rest']['rpc'],
       },
       auth: {
         signUp: vi.fn((...args: unknown[]) => {

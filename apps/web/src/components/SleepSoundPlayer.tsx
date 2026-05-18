@@ -13,7 +13,7 @@
  * the outer container because it is spec-required, but the sleep palette overrides tint.
  */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { FrostedCard } from './FrostedCard';
 
 // ─── lazy Howler import ───────────────────────────────────────────────────────

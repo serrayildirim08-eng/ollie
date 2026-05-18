@@ -105,9 +105,12 @@ export function MicButton({ onTranscript, source = 'mic-button', style }: MicBut
     <div
       style={{
         position: 'fixed',
-        right: 20,
-        bottom: 90,
-        zIndex: 12,
+        right: 16,
+        // Sit clear above the bottom-fixed BrainDumpInput bar AND the
+        // iPhone home indicator. ~78px is the brain-dump bar height;
+        // env() adds the home-indicator inset on top.
+        bottom: 'calc(78px + env(safe-area-inset-bottom, 0px))',
+        zIndex: 41,
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'flex-end',

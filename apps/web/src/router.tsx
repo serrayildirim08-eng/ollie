@@ -26,7 +26,7 @@
  * so a sign-out from SettingsScreen flips the gate the layout reads.
  */
 
-import React, { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import {
   createHashRouter,
   RouterProvider,

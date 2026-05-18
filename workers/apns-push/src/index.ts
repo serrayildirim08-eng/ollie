@@ -116,7 +116,11 @@ export default {
     try {
       jwt = await getApnsJwt(env);
     } catch (err) {
-      return json({ error: 'jwt_sign_failed', detail: String(err) }, 500);
+      // F4 SECURITY: never return the raw error `detail` to the caller —
+      // a p8-parse / crypto failure message can disclose key-handling
+      // internals. Log it server-side only; the caller gets a generic code.
+      console.error('[apns-push] jwt sign failed:', err);
+      return json({ error: 'jwt_sign_failed' }, 500);
     }
 
     const topic = body.topic ?? env.APPLE_BUNDLE_ID;

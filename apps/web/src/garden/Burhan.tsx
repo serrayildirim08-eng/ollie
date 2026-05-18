@@ -1,10 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { useGLTF, Clone } from '@react-three/drei';
-import { useStoreSlice } from '../store';
-import type { BurhanState } from '@ollie/logic/burhan';
 import { fixMeshyMaterials } from './fixMaterials';
-import { getStage, type Stage } from '@ollie/garden';
+import { getStageFromWater, type Stage } from '@ollie/garden';
+import { useGarden } from './gardenStore';
 
 useGLTF.preload('/assets/burhan/seedling.glb');
 useGLTF.preload('/assets/burhan/young.glb');
@@ -22,16 +21,11 @@ const STAGES: Record<Stage, { file: string; y: number }> = {
   ancient:  { file: '/assets/burhan/burhan-v1.glb', y: PILE_PEAK + 0.817 },
 };
 
-function computeActiveDays(events: { ts: number }[]): number {
-  const days = new Set<string>();
-  for (const e of events) days.add(new Date(e.ts).toISOString().slice(0, 10));
-  return days.size;
-}
-
 export function Burhan() {
-  const [burhanState] = useStoreSlice<BurhanState>('burhan', 'state', { events: [] });
-  const activeDays = useMemo(() => computeActiveDays(burhanState.events), [burhanState.events]);
-  const stage = getStage(activeDays);
+  // Decision #8: Burhan grows on the water economy — its stage is driven
+  // by the cumulative water the player has poured into it, never decays.
+  const garden = useGarden();
+  const stage = getStageFromWater(garden.burhanWater);
 
   const { scene } = useGLTF(STAGES[stage].file);
   const controls = useThree((s) => s.controls) as { getAzimuthalAngle?: () => number; setAzimuthalAngle?: (a: number) => void; update?: () => void } | null;

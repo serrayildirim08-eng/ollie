@@ -4,6 +4,74 @@ Serra runs these. I (backend) do NOT run `wrangler deploy` for you.
 
 ---
 
+## ⚠️ 2026-05-19 · RE-AUDIT FIXES — DO THESE FIRST (security-critical)
+
+Three items here. The migration is a 🔴 HIGH-severity security fix —
+apply it before beta.
+
+### A. Supabase migration — F1 anon `profiles` hole (🔴 HIGH)
+
+`20260518000001_profiles_anon_email_lookup.sql` shipped an RLS policy
+(`profiles_select_anon_recovery ... using (salt is not null)`) with NO
+row scoping. With the anon key, anyone could
+`GET /rest/v1/profiles?select=id,email,salt,encrypted_server_pw` and dump
+EVERY user's email + credential material (email harvest + offline
+brute-force surface).
+
+A new corrective migration drops that policy + the anon grants and
+replaces the new-device-recovery path with a `SECURITY DEFINER` RPC that
+only resolves ONE row by a known email (no enumeration):
+
+```
+supabase db push
+```
+
+…or apply via the Supabase SQL editor, in order:
+
+- `supabase/migrations/20260519000001_profiles_anon_rpc_fix.sql`
+
+History is NOT rewritten — `20260518000001` stays applied; this new
+migration corrects it on top. No new secret, no worker change for this
+item. The web auth client change (`packages/auth` → calls the RPC) ships
+in the same code release; deploy code + migration together.
+
+Smoke check after apply:
+1. `GET /rest/v1/profiles?select=id,email` with the anon key → must now
+   return `401`/`permission denied` (no longer an enumerable list).
+2. `POST /rest/v1/rpc/profile_recovery_lookup` with `{ "p_email":
+   "<a real signed-up email>" }` and the anon key → returns exactly one
+   row `{ id, salt, encrypted_server_pw }`.
+3. New-device sign-in in the app still works (it now uses that RPC).
+
+### B. New worker secret — `CRON_TRIGGER_SECRET` (F2)
+
+The `ollie-cron` worker's manual HTTP routes (`/run`, `/drain`,
+`/flush-notifications`, `/weekly-review`, `/body-correlations`) were
+unauthenticated — anyone could force a drain (cost amplification). They
+are now gated by a shared-secret bearer header.
+
+```
+cd workers/cron
+wrangler secret put CRON_TRIGGER_SECRET
+# paste a fresh random 32+ char secret (e.g. `openssl rand -hex 32`)
+wrangler deploy
+```
+
+The gate fails CLOSED: until this secret is set, ALL five trigger routes
+return `401` (the scheduled cron triggers are unaffected — they don't go
+through HTTP). Callers must send `Authorization: Bearer <CRON_TRIGGER_SECRET>`.
+
+### C. Redeploy `apns-push` (F4 — no new secret)
+
+`workers/apns-push` no longer returns the raw JWT-sign error `detail` to
+the caller (info-disclosure). Logged server-side only. Just redeploy:
+
+```
+cd workers/apns-push && wrangler deploy
+```
+
+---
+
 ## 1. Supabase migrations (if not already applied)
 
 ```

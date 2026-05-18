@@ -294,6 +294,8 @@ export function PetsModule() {
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'flex-end',
+            flexWrap: 'wrap',
+            gap: 16,
             paddingBottom: 20,
             borderBottom: '1px solid rgba(20,19,15,0.18)',
             marginBottom: 40,
@@ -303,7 +305,7 @@ export function PetsModule() {
             <h1
               style={{
                 fontFamily: "'Fraunces', serif",
-                fontSize: 36,
+                fontSize: 'clamp(26px, 7vw, 36px)',
                 fontWeight: 500,
                 color: '#14130F',
                 margin: 0,
@@ -313,7 +315,7 @@ export function PetsModule() {
               keeper's notebook
             </h1>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
             <p
               style={{
                 fontFamily: "'DM Mono', monospace",

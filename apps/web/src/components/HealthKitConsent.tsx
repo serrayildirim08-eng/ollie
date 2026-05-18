@@ -26,7 +26,7 @@
  * the rest of `shared.*` settings.
  */
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
   HK_AUTH_GRANTED,
   HK_AUTH_UNSUPPORTED,
