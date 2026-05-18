@@ -27,6 +27,7 @@ import { createGoalsOrchestrator } from './goals';
 import { createBurhanOrchestrator } from './burhan';
 import { createMedicationOrchestrator } from './medication';
 import { createResearchOrchestrator } from './research';
+import { createMatterRoutingOrchestrator } from './matter-routing';
 
 export type { Orchestrator } from './types';
 export { createCycleOrchestrator } from './cycle';
@@ -84,6 +85,16 @@ export type {
   DispatchOptions,
   FinanceSlice,
 } from './braindump-dispatch';
+export {
+  createMatterRoutingOrchestrator,
+  runMatterRoutingPass,
+  collectRoutableDumps,
+} from './matter-routing';
+export type {
+  MatterRoutingOptions,
+  MatterRoutingPassResult,
+  LooseDumpRef,
+} from './matter-routing';
 
 export interface RootOrchestrator extends Orchestrator {
   cycle: ReturnType<typeof createCycleOrchestrator>;
@@ -100,6 +111,7 @@ export interface RootOrchestrator extends Orchestrator {
   goals: ReturnType<typeof createGoalsOrchestrator>;
   burhan: ReturnType<typeof createBurhanOrchestrator>;
   medication: ReturnType<typeof createMedicationOrchestrator>;
+  matterRouting: ReturnType<typeof createMatterRoutingOrchestrator>;
 }
 
 export interface RootOrchestratorOptions {
@@ -155,6 +167,8 @@ export function createOrchestrator(
   const medicationOrch = createMedicationOrchestrator(store, {
     scheduleNotification: opts.scheduleNotification,
   });
+  // WORK-VISION Phase 2: batches dumps → matters (deterministic, no AI).
+  const matterRoutingOrch = createMatterRoutingOrchestrator(store);
 
   return {
     cycle: cycleOrch,
@@ -171,6 +185,7 @@ export function createOrchestrator(
     goals: goalsOrch,
     burhan: burhanOrch,
     medication: medicationOrch,
+    matterRouting: matterRoutingOrch,
 
     init() {
       cycleOrch.init();
@@ -187,6 +202,7 @@ export function createOrchestrator(
       goalsOrch.init();
       burhanOrch.init();
       medicationOrch.init();
+      matterRoutingOrch.init();
     },
 
     teardown() {
@@ -204,6 +220,7 @@ export function createOrchestrator(
       goalsOrch.teardown();
       burhanOrch.teardown();
       medicationOrch.teardown();
+      matterRoutingOrch.teardown();
     },
   };
 }
