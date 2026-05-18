@@ -14,7 +14,7 @@
  * the unlock flow + the public `maskMoney()` helper used module-wide.
  */
 
-import React, { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { unlock as biometricUnlock, isBiometricSupported } from '../../lib/biometric';
 import { useStoreSlice } from '../../store';
 

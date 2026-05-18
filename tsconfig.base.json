@@ -13,15 +13,17 @@
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
     "noUnusedParameters": true,
+    "noUnusedLocals": true,
     "jsx": "react-jsx"
 
     // ── Strict-family flags evaluated 2026-05-18 (audit B3-3) ──────────────
     // Enabled above: noUnusedParameters — repo was clean (2 trivial fixes).
+    // Enabled 2026-05-19: noUnusedLocals — fallout was the expected stray
+    //   `import React` lines (mechanical, apps/web only).
     // Deferred (fallout too large for a hygiene pass / collides with the
     // in-flight garden-game branch — each needs its own dedicated sprint):
     //   noUncheckedIndexedAccess   — 2198 errors across 16 packages
     //   exactOptionalPropertyTypes — 197 errors across 13 packages
-    //   noUnusedLocals             — 31 stray `import React`, 10 in-flight files
     //   noImplicitOverride         — 6 errors, all in garden-pod files
   }
 }

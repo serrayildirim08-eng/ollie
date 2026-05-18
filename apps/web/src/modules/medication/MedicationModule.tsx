@@ -37,7 +37,14 @@ const labelStyle: React.CSSProperties = {
 
 const KINDS: MedicationKind[] = ['vitamin', 'supplement', 'prescription', 'otc'];
 
-export function MedicationModule() {
+export interface MedicationModuleProps {
+  /** Return to the dashboard. Required so the iPhone PWA (no hardware
+   *  Back) always has an explicit exit, matching every sibling takeover
+   *  module (body, admin, dump, finance, goals, …). */
+  onBack: () => void;
+}
+
+export function MedicationModule({ onBack }: MedicationModuleProps) {
   const [items, setItems] = useStoreSlice<MedicationItem[]>('medication', 'items', []);
   const [adherence] = useStoreSlice<Record<string, AdherenceReport | null>>('medication', 'adherence', {});
   const [drafting, setDrafting] = useState(false);
@@ -91,6 +98,14 @@ export function MedicationModule() {
     <div style={{ minHeight: '100vh', overflowX: 'hidden', paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
     <div style={{ maxWidth: 800, margin: '0 auto', padding: '40px 24px 120px' }}>
       <header style={{ marginBottom: 32 }}>
+        <button
+          type="button"
+          onClick={onBack}
+          aria-label="back to dashboard"
+          style={backBtnStyle}
+        >
+          ← dashboard
+        </button>
         <h1 style={{ fontFamily: "'DM Serif Display', serif", fontSize: 32, fontWeight: 400, margin: 0 }}>
           medication
         </h1>
@@ -256,4 +271,19 @@ const inputStyle: React.CSSProperties = {
   border: `1px solid ${T.border}`,
   borderRadius: 12,
   background: 'rgba(255,255,255,0.5)',
+};
+
+const backBtnStyle: React.CSSProperties = {
+  display: 'block',
+  background: 'none',
+  border: 'none',
+  padding: 0,
+  marginBottom: 20,
+  minHeight: 44,
+  fontFamily: "'DM Mono', monospace",
+  fontSize: 10,
+  letterSpacing: '0.22em',
+  textTransform: 'uppercase',
+  color: T.muted,
+  cursor: 'pointer',
 };

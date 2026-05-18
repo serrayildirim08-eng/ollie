@@ -1560,7 +1560,7 @@ export function AdminModule({ onBack }: AdminModuleProps) {
       {/* ── A5 firehose modal ──────────────────────────────────────────── */}
       {firehose && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(17,17,17,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, zIndex: 100 }} role="dialog" aria-modal="true" aria-label="firehose dump">
-          <div style={{ background: PAPER, color: INK, padding: 32, maxWidth: 520, width: '100%', maxHeight: '85vh', overflowY: 'auto', border: `1px solid ${HAIRLINE}`, borderRadius: 2 }}>
+          <div style={{ background: PAPER, color: INK, padding: 32, maxWidth: 520, width: '100%', boxSizing: 'border-box', maxHeight: '85vh', overflowY: 'auto', border: `1px solid ${HAIRLINE}`, borderRadius: 2 }}>
             <div style={{ ...LABEL, paddingBottom: 10 }}>firehose dump</div>
             <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 24, color: INK, letterSpacing: '-0.01em', lineHeight: 1.2, paddingBottom: 12 }}>firehose dump.</div>
             <div style={{ fontFamily: "'Inter Tight',sans-serif", fontSize: 14, color: MUTED, lineHeight: 1.5, paddingBottom: 20 }}>{firehose.candidates.length} candidate admin items detected. select to add:</div>
@@ -1594,7 +1594,7 @@ export function AdminModule({ onBack }: AdminModuleProps) {
         const cur = (items ?? []).find((x) => x?.id === burstIds[burstIdx]);
         return (
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(17,17,17,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, zIndex: 100 }} role="dialog" aria-modal="true" aria-label="burst session">
-            <div style={{ background: PAPER, color: INK, padding: 32, maxWidth: 520, width: '100%', border: `1px solid ${HAIRLINE}`, borderRadius: 2 }}>
+            <div style={{ background: PAPER, color: INK, padding: 32, maxWidth: 520, width: '100%', boxSizing: 'border-box', border: `1px solid ${HAIRLINE}`, borderRadius: 2 }}>
               {!cur ? (
                 <>
                   <div style={{ ...LABEL, paddingBottom: 16 }}>burst</div>

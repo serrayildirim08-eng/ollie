@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { FrostedCard } from './FrostedCard';
 
 export interface BrainDumpInputProps {
@@ -43,9 +43,15 @@ export function BrainDumpInput({ onSubmit, placeholder, module }: BrainDumpInput
         bottom: 0,
         left: 0,
         width: '100%',
-        padding: '16px 24px 28px',
-        zIndex: 'var(--z-overlay)' as unknown as number,
+        // Bottom padding clears the iPhone home indicator via
+        // env(safe-area-inset-bottom); the 16px is the visual gap above it.
+        padding: '14px 16px calc(14px + env(safe-area-inset-bottom, 0px))',
+        // Reserve the right edge so the floating MicButton (right:16)
+        // never overlaps the input/enter button on a ~390px screen.
+        paddingRight: 'calc(16px + 64px)',
+        zIndex: 40,
         boxSizing: 'border-box',
+        pointerEvents: 'none',
       }}
     >
       <FrostedCard
@@ -55,6 +61,11 @@ export function BrainDumpInput({ onSubmit, placeholder, module }: BrainDumpInput
           gap: '12px',
           padding: '6px 8px 6px 20px',
           borderRadius: '16px',
+          pointerEvents: 'auto',
+          // Near-opaque so mid-scroll module content doesn't bleed
+          // through the fixed bottom bar (FrostedCard's default 0.6 is
+          // too sheer over busy module pages). Blur stays for depth.
+          background: 'rgba(250, 249, 246, 0.94)',
         }}
       >
         <input

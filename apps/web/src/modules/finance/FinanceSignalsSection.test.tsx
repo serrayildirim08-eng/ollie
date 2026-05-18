@@ -19,7 +19,7 @@
  *     7. does NOT render it when finance.staleSubs is empty
  */
 
-import React, { act } from 'react';
+import { act } from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createRoot, type Root } from 'react-dom/client';
 import type { RecurringPattern, StaleSubscription } from '@ollie/logic/finance';

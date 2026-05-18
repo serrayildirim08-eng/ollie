@@ -1,4 +1,3 @@
-import React from 'react';
 import type { CareLogEntry } from '@ollie/logic/pets';
 
 interface PetCareStripProps {

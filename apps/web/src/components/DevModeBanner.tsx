@@ -35,9 +35,13 @@ export function DevModeBanner() {
       aria-label="dev mode banner"
       style={{
         position: 'fixed',
-        bottom: 12,
-        left: 12,
-        zIndex: 10000,
+        // Top-center, below the notch / Dynamic Island. The old
+        // bottom-left placement collided with the bottom-fixed
+        // BrainDumpInput bar + MicButton on iPhone.
+        top: 'calc(6px + env(safe-area-inset-top, 0px))',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        zIndex: 60,
         display: 'inline-flex',
         alignItems: 'center',
         gap: 10,

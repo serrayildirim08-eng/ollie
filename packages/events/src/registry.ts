@@ -19,7 +19,6 @@ export const REGISTRY: Registry = {
   // ─── inventory & cycle ──────────────────────────────────────────
   'void:inventory:refill':         { payload: '{ productType: string, absorbency?: string, quantity: number, source: "grocery" | "manual" | "braindump" }' },
   'void:inventory:updated':        { payload: '{ productType: string, count: number, capacity: number }' },
-  'void:cycle:started':            { payload: '{ ts: number, source: "user" | "braindump" | "import" }' },
   'void:cycle:closed':             { payload: '{ cycleStartTs: number, cycleEndTs: number, cycleLengthDays: number }' },
 
   // ─── crisis pathway ─────────────────────────────────────────────
@@ -125,7 +124,6 @@ export const REGISTRY: Registry = {
   'habits:fresh_start_crash':          { payload: '{ confidence: string, ts: number }' },
   'habits:identity_framing':           { payload: '{ confidence: string, ts: number }' },
   'habits:body_vs_cognitive':          { payload: '{ confidence: string, ts: number }' },
-  'habits:drift':                      { payload: '{ habit_id: string, drop_pct: number, ts: number }' },
   'habits:friction_signature':         { payload: '{ habit_id: string, worst_day: string, ts: number }' },
   'habits:sleep_coupling':             { payload: '{ confidence: string, ts: number }' },
   'habits:rebirth_pattern':            { payload: '{ rebirths_n: number, ts: number }' },

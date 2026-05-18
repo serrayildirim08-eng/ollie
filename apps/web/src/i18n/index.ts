@@ -142,7 +142,15 @@ i18next.use(initReactI18next).init({
 
 export const i18n = i18next;
 
-/** Variables for `${0}` / named `${token}` interpolation. */
+/**
+ * Variables for `${0}` / named `${token}` interpolation.
+ *
+ * Object-keyed only. A `string[]` is intentionally NOT assignable here:
+ * its `length: number` / array methods violate the `string | number`
+ * index-signature value constraint, so the old positional-array VOID
+ * signature is rejected at compile time. Positional callers pass an
+ * explicit object: `{ '0': first, '1': second }`.
+ */
 export type InterpolationVars = Record<string, string | number>;
 
 /**
@@ -166,8 +174,18 @@ export function interpolate(template: string, vars?: InterpolationVars): string 
  *
  * @param locale active locale; unknown locales fall back to `en`.
  * @param path   dotted key path, e.g. `cycle.record.title`.
- * @param vars   optional interpolation vars. Numeric `${0}` tokens map to
- *               keys `'0'`, `'1'`, … ; named tokens map by name.
+ * @param vars   optional interpolation vars — an OBJECT keyed by token
+ *               name. A `${0}` token in the JSON is filled by the entry
+ *               under key `'0'`; a named `${user}` token by key `user`.
+ *               i18next spreads this object straight into its `t()` opts.
+ *
+ *               NOTE: this is object-vars-only by design. The old VOID
+ *               `getString` accepted a positional `string[]` and mapped
+ *               index→`${0}`; passing an array here would spread as
+ *               `{0: 'a', 1: 'b', length: 2}` and is therefore NOT
+ *               supported. The `InterpolationVars` type enforces this at
+ *               compile time. Positional callers must pass `{ '0': 'a',
+ *               '1': 'b' }` explicitly.
  *
  * Backward-compatible with the pre-i18next signature: `getString(locale,
  * path)` still works. On a total miss the dotted path is returned (same

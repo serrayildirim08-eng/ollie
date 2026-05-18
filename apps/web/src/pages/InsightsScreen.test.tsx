@@ -9,7 +9,7 @@
  *   5. completed-goal status_at within the week surfaces a goals row
  */
 
-import React, { act } from 'react';
+import { act } from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createRoot, type Root } from 'react-dom/client';
 

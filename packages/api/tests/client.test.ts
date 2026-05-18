@@ -56,6 +56,34 @@ describe('client · basic', () => {
     await api.supabase.rest.upsert('encrypted_state', [{ id: 'x' }]);
     expect(seenPrefer).toContain('resolution=merge-duplicates');
   });
+
+  it('rpc POSTs to /rest/v1/rpc/<fn> with the args as the JSON body', async () => {
+    let seenUrl = '';
+    let seenMethod = '';
+    let seenBody = '';
+    let seenApiKey = '';
+    const api = createOllieAPI({
+      supabaseUrl: 'https://x.supabase.co',
+      supabaseAnonKey: 'anon',
+      fetchImpl: makeFetch((url, init) => {
+        seenUrl = url;
+        seenMethod = init?.method ?? '';
+        seenBody = typeof init?.body === 'string' ? init.body : '';
+        seenApiKey = (init?.headers as Record<string, string>)?.apikey ?? '';
+        return res([{ id: 'u1', salt: 's', encrypted_server_pw: 'c' }]);
+      }),
+    });
+    const r = await api.supabase.rest.rpc<Array<{ id: string }>>(
+      'profile_recovery_lookup',
+      { p_email: 'serra@example.com' },
+    );
+    expect(seenMethod).toBe('POST');
+    expect(seenUrl).toBe('https://x.supabase.co/rest/v1/rpc/profile_recovery_lookup');
+    expect(JSON.parse(seenBody)).toEqual({ p_email: 'serra@example.com' });
+    expect(seenApiKey).toBe('anon');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.data[0].id).toBe('u1');
+  });
 });
 
 describe('client · error envelopes', () => {

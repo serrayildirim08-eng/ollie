@@ -11,7 +11,7 @@
  *   - feedback link has correct mailto href
  */
 
-import React, { act } from 'react';
+import { act } from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createRoot, type Root } from 'react-dom/client';
 import { emit, _clearAllHandlers } from '@ollie/events';

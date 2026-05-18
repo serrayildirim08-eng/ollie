@@ -89,7 +89,10 @@ const styles = {
     background: 'var(--bone)',
     color: 'var(--ink)',
     fontFamily: 'var(--font-system)',
-    padding: '32px 24px 96px',
+    // Top/bottom padding folds in the iPhone safe areas so the header
+    // clears the notch and content clears the home indicator.
+    padding:
+      'calc(32px + env(safe-area-inset-top, 0px)) 24px calc(96px + env(safe-area-inset-bottom, 0px))',
   } as React.CSSProperties,
   wrap: {
     maxWidth: '560px',

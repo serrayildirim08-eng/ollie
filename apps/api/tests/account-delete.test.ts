@@ -97,6 +97,7 @@ describe('runAccountDelete · happy path', () => {
         plaid_inbox: { status: 200, body: [] },
         plaid_items: { status: 200, body: [{ id: 'p1' }] },
         scheduled_jobs: { status: 200, body: [{ id: 's1' }, { id: 's2' }] },
+        push_tokens: { status: 200, body: [{ id: 'tok-1' }] },
         profiles: { status: 200, body: [{ id: 'user-123' }] },
       },
       adminDeleteResult: { status: 204 },
@@ -110,6 +111,9 @@ describe('runAccountDelete · happy path', () => {
     expect(r.deleted_rows.encrypted_state).toBe(2);
     expect(r.deleted_rows.finance_records).toBe(42);
     expect(r.deleted_rows.plaid_inbox).toBe(0);
+    // F3: push_tokens is now explicitly cascaded + counted for the audit.
+    expect(r.deleted_tables).toContain('push_tokens');
+    expect(r.deleted_rows.push_tokens).toBe(1);
     expect(r.auth_user_deleted).toBe(true);
 
     // Order: verify call → cascade DELETEs (in USER_SCOPED_TABLES order)

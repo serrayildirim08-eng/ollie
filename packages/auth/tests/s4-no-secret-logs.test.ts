@@ -95,6 +95,8 @@ describe('auth · S4 · profile upload failure logs no secrets', () => {
           }) as any,
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           delete: vi.fn() as any,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          rpc: vi.fn() as any,
         },
         /* eslint-disable @typescript-eslint/no-explicit-any */
         auth: {
