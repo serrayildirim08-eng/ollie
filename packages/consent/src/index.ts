@@ -110,9 +110,9 @@ export function defaultConsent(now: number = Date.now()): ConsentState {
 //
 // `consent.state` is now the single source of truth. The helpers below
 // read it synchronously (App.tsx boot gate, research-stream, sync, the
-// Plaid + HealthKit defense-in-depth gates are all synchronous) and lazily
-// SEED it from the legacy System-A keys the first time a returning user is
-// read, so an existing `necessary: true` is never lost during the cutover.
+// HealthKit defense-in-depth gate are all synchronous) and lazily SEED it
+// from the legacy System-A keys the first time a returning user is read,
+// so an existing `necessary: true` is never lost during the cutover.
 
 /** Legacy System-A store coordinates (pre-consolidation). */
 const LEGACY_NECESSARY_MODULE = 'shared';

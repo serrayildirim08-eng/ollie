@@ -2,7 +2,7 @@
  * @ollie/capacitor-healthkit · public surface
  *
  * Read-only HealthKit integration for ollie's body + sleep modules.
- * Mirrors the @ollie/plaid pattern:
+ * Pattern:
  *   - branded types lock the auth surface at the type level
  *   - runtime detection so web/SSR no-op safely
  *   - normalization is pure + testable

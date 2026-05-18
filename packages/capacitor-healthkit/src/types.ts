@@ -1,7 +1,7 @@
 /**
  * @ollie/capacitor-healthkit · narrow types
  *
- * Why this file exists (mirrors @ollie/plaid/src/types.ts):
+ * Why this file exists:
  *   The underlying Capacitor plugin (@capgo/capacitor-health) ships a
  *   wide API for HealthKit + Android Health Connect. We narrow to the
  *   exact metrics ollie consumes today (steps, heart rate, sleep,
@@ -68,7 +68,7 @@ export const HEALTHKIT_READ_TYPES = [
 export type HealthKitDataType = (typeof HEALTHKIT_READ_TYPES)[number];
 
 /**
- * Branded sample id — Plaid pattern. HealthKit's HKQuantitySample UUID
+ * Branded sample id. HealthKit's HKQuantitySample UUID
  * is the source of truth; we brand it so cross-record joins can't
  * accidentally pair a step sample with a sleep id.
  */
