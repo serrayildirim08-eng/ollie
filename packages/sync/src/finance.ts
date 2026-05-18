@@ -178,15 +178,11 @@ export interface FinanceSyncClient {
   /**
    * Encrypt + enqueue a single record for upsert into finance_records.
    *
-   * Used by the Plaid inbox drain (see ./plaid-drain.ts) to land
-   * webhook-delivered transactions into the user-encrypted store
-   * without round-tripping through `store.set('finance', …)`.
+   * Lands a finance record into the user-encrypted store without
+   * round-tripping through `store.set('finance', …)`.
    *
-   * Errors propagate so the caller can decide whether to ack the
-   * staging row.
-   *
-   * TODO(serra): wire `setInterval(drainPlaidInbox, 60_000)` from
-   * account-boot.ts once Plaid env URLs are stable.
+   * Errors propagate so the caller can decide how to handle a failed
+   * write.
    */
   upsertRecord(
     row: SyncableFinanceRow,
@@ -607,7 +603,7 @@ export function createFinanceSyncClient(initialDeps: FinanceSyncDeps): FinanceSy
     running = false;
   }
 
-  // ── Public single-record upsert (used by plaid-drain) ─────────────────
+  // ── Public single-record upsert ───────────────────────────────────────
   // Encrypt the row with the user's key, enqueue, and request a drain.
   // We deliberately do NOT route through `store.set('finance', …)` for
   // two reasons:
@@ -615,17 +611,16 @@ export function createFinanceSyncClient(initialDeps: FinanceSyncDeps): FinanceSy
   //      also pull the row into the in-memory FinanceModule arrays
   //      (records[]). That's the right end-state, but the LWW reconcile
   //      via syncIn() on the next page-load handles it cleanly without
-  //      the drain having to know the FinanceRecord shape.
-  //   2. Keeps the drain free of any store-shape coupling — if the
-  //      module store schema changes, the drain still works.
+  //      the caller having to know the FinanceRecord shape.
+  //   2. Keeps the upsert free of any store-shape coupling — if the
+  //      module store schema changes, it still works.
   async function upsertRecord(
     row: SyncableFinanceRow,
     recordType: FinanceRecordType = 'transaction',
   ): Promise<void> {
     if (!isEnabled()) {
-      // Sync is opt-out — caller (plaid-drain) should treat this as a
-      // hard fail so the staging row is NOT acked. The next session
-      // with sync enabled will drain.
+      // Sync is opt-out — caller should treat this as a hard fail. The
+      // next session with sync enabled will drain the outbound queue.
       throw new Error('finance sync disabled (consent or settings)');
     }
     if (!row || typeof row !== 'object' || !row.id) {

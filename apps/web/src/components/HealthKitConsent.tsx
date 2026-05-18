@@ -2,7 +2,7 @@
  * apps/web · HealthKitConsent
  *
  * Optional Apple Health connect button shown on the onboarding screen
- * (between Plaid Link and the Work-Time question) and later in Settings.
+ * (before the Work-Time question) and later in Settings.
  *
  * BLOCKED-EXTERNAL pre-Apple-Developer-approval. Until then:
  *   - On web / non-iOS: this component returns null. The user never
@@ -11,10 +11,10 @@
  *     `requestPermissions()` returns HK_AUTH_UNSUPPORTED — we surface
  *     a calm "not available on this device" line and the user moves on.
  *
- * Consent gate: same defense-in-depth as PlaidLinkButton. Even though
- * the master consent (canonical `@ollie/consent` necessary flag) is
- * enforced at app entry, we double-check here so an accidental render
- * somewhere else also respects the gate.
+ * Consent gate: defense-in-depth. Even though the master consent
+ * (canonical `@ollie/consent` necessary flag) is enforced at app entry,
+ * we double-check here so an accidental render somewhere else also
+ * respects the gate.
  *
  * Persisted state (after the user finishes the auth sheet):
  *   shared.healthkit.connected_at   number | null   (unix ms when granted)
