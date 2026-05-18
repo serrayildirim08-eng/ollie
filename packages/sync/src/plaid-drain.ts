@@ -87,6 +87,7 @@
  */
 
 import type { FinanceSyncClient } from './finance';
+import { safeErrSummary } from './retry';
 
 // ──────────────────────────────────────────────────────────────────────────
 // Public types
@@ -369,7 +370,7 @@ export async function drainPlaidInbox(deps: PlaidDrainDeps): Promise<PlaidDrainR
         reason: 'invalid_shape',
         detail: v.reason,
       });
-      // eslint-disable-next-line no-console
+       
       console.warn('[plaid-drain] invalid row shape — leaving staged for inspection', {
         id,
         reason: v.reason,
@@ -411,7 +412,7 @@ export async function drainPlaidInbox(deps: PlaidDrainDeps): Promise<PlaidDrainR
         reason: 'upsert_failed',
         detail: stringifyErr(err),
       });
-      // eslint-disable-next-line no-console
+       
       console.warn('[plaid-drain] upsert failed — leaving staged for retry', row.id);
     }
   }
@@ -459,11 +460,11 @@ export async function drainPlaidInbox(deps: PlaidDrainDeps): Promise<PlaidDrainR
 // helpers
 // ──────────────────────────────────────────────────────────────────────────
 
+// SECURITY (S4): collapse a thrown value to a SAFE summary. The previous
+// implementation did `JSON.stringify(err)` on arbitrary objects, which
+// could serialize a fetch/Supabase error's embedded Request (headers with
+// `Authorization: Bearer <jwt>` / `apikey`, or an encrypted-payload body).
+// Delegate to the shared sweeper in retry.ts.
 function stringifyErr(err: unknown): string {
-  if (err instanceof Error) return err.message;
-  try {
-    return JSON.stringify(err);
-  } catch {
-    return String(err);
-  }
+  return safeErrSummary(err);
 }

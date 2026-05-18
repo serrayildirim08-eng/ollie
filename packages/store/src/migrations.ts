@@ -51,28 +51,21 @@ export function writeMeta(adapter: StorageAdapter, meta: StoreMeta): void {
  * restore each key and DO NOT bump the meta version, so the next
  * boot retries the migration with the snapshot still present.
  *
- * Naive listKeys: walk `adapter.length` if the adapter exposes it,
- * else fall back to a known module list.
+ * Audit item #14: this previously poked at adapter-shape-specific
+ * methods (`length`/`key`/`_dump`) that the memory adapter did not
+ * implement, so the snapshot was silently EMPTY for every non-browser
+ * adapter and the rollback restored nothing. It now uses the
+ * `getAllKeys()` method that is part of the StorageAdapter contract and
+ * implemented by both adapters.
  */
 function snapshotVoidNamespace(adapter: StorageAdapter): { key: string; value: string }[] {
   const snap: { key: string; value: string }[] = [];
-  // The browserAdapter passes localStorage through; it has a `length`
-  // and `key(i)` accessor. The memoryAdapter exposes `_dump()` in
-  // tests. We detect both shapes.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const a = adapter as any;
-  if (typeof a.length === 'number' && typeof a.key === 'function') {
-    for (let i = 0; i < a.length; i++) {
-      const k = a.key(i) as string | null;
-      if (!k || !k.startsWith('void.state.')) continue;
-      const v = adapter.getItem(k);
-      if (v != null) snap.push({ key: k, value: v });
-    }
-  } else if (typeof a._dump === 'function') {
-    const dump = a._dump() as Record<string, string>;
-    for (const [k, v] of Object.entries(dump)) {
-      if (k.startsWith('void.state.')) snap.push({ key: k, value: v });
-    }
+  for (const k of adapter.getAllKeys()) {
+    if (!k.startsWith('void.state.')) continue;
+    // Don't snapshot prior snapshots — they are large and self-referential.
+    if (k.startsWith('void.state._backup.pre_migration.')) continue;
+    const v = adapter.getItem(k);
+    if (v != null) snap.push({ key: k, value: v });
   }
   return snap;
 }
@@ -83,15 +76,35 @@ function restoreSnapshot(adapter: StorageAdapter, snap: { key: string; value: st
   }
 }
 
+/**
+ * Outcome of a `runMigrations` call (audit item #14).
+ *
+ * Replaces the `globalThis.__ollie_migration_failed` magic global —
+ * callers now get a typed result they can branch on. `failedVersion`
+ * is the migration number that threw (undefined when `ok` is true).
+ */
+export interface MigrationResult {
+  /** True when no migration threw (or none were applicable). */
+  ok: boolean;
+  /** Schema version after the run (unchanged from current on failure). */
+  version: number;
+  /** True when this run actually executed at least one migration callback. */
+  ran: boolean;
+  /** The migration version that threw, when `ok` is false. */
+  failedVersion?: number;
+  /** Number of void.state.* keys captured in the pre-migration snapshot. */
+  snapshotKeyCount: number;
+}
+
 export function runMigrations(
   adapter: StorageAdapter,
   migrations: MigrationMap = NO_MIGRATIONS,
-): void {
+): MigrationResult {
   const meta = readMeta(adapter);
   const currentVersion = meta.version ?? 0;
   if (currentVersion >= STORE_VERSION) {
     writeMeta(adapter, { ...meta, version: STORE_VERSION, lastOpenedAt: Date.now() });
-    return;
+    return { ok: true, version: STORE_VERSION, ran: false, snapshotKeyCount: 0 };
   }
 
   // Pre-migration snapshot. Stored as a single blob keyed by ts so we
@@ -108,27 +121,34 @@ export function runMigrations(
     console.warn('[@ollie/store] pre-migration snapshot failed; continuing carefully', err);
   }
 
-  let migrationFailed = false;
+  let failedVersion: number | undefined;
+  let ran = false;
   for (let v = currentVersion + 1; v <= STORE_VERSION; v++) {
     const migrate = migrations[v];
     if (!migrate) continue;
+    ran = true;
     try {
       migrate(adapter);
     } catch (err) {
       console.error(`[@ollie/store] migration ${v} failed; rolling back to snapshot`, err);
-      migrationFailed = true;
+      failedVersion = v;
       restoreSnapshot(adapter, snap);
       break;
     }
   }
 
-  if (migrationFailed) {
-    // Do NOT bump meta version. Surface so the host app can show a
-    // user-visible message.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const g: any = typeof globalThis !== 'undefined' ? globalThis : {};
-    g.__ollie_migration_failed = true;
-    return;
+  if (failedVersion !== undefined) {
+    // Do NOT bump meta version — the next boot retries the migration with
+    // the snapshot still present. The host app branches on the returned
+    // MigrationResult to surface a user-visible message (this replaces
+    // the old `globalThis.__ollie_migration_failed` magic global).
+    return {
+      ok: false,
+      version: currentVersion,
+      ran,
+      failedVersion,
+      snapshotKeyCount: snap.length,
+    };
   }
 
   writeMeta(adapter, {
@@ -136,19 +156,17 @@ export function runMigrations(
     lastOpenedAt: Date.now(),
     migratedAt: Date.now(),
   });
+  return { ok: true, version: STORE_VERSION, ran, snapshotKeyCount: snap.length };
 }
 
 function pruneOldSnapshots(adapter: StorageAdapter, keep: number): void {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const a = adapter as any;
-  const keys: string[] = [];
-  if (typeof a.length === 'number' && typeof a.key === 'function') {
-    for (let i = 0; i < a.length; i++) {
-      const k = a.key(i) as string | null;
-      if (k && k.startsWith('void.state._backup.pre_migration.')) keys.push(k);
-    }
-  }
-  keys.sort();
+  // Uses getAllKeys() (audit item #14) so pruning works on every adapter,
+  // not just localStorage. Snapshot keys embed Date.now() so a lexical
+  // sort is also chronological.
+  const keys = adapter
+    .getAllKeys()
+    .filter((k) => k.startsWith('void.state._backup.pre_migration.'))
+    .sort();
   while (keys.length > keep) {
     const old = keys.shift();
     if (old) {

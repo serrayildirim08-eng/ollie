@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@ollie/worker-http": "workspace:*",
     "plaid": "42.2.0"
   },
   "devDependencies": {

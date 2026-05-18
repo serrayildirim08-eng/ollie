@@ -46,6 +46,7 @@
  *   txns currently in flight, not the whole history.
  */
 
+import { Router, json, notFound, newRequestId } from '@ollie/worker-http';
 import { createPlaidClient } from '../../../packages/plaid/src/client';
 import { syncTransactionsCursor } from '../../../packages/plaid/src/transactions';
 import { createLinkToken, exchangePublicToken } from '../../../packages/plaid/src/link';
@@ -61,41 +62,30 @@ export interface Env {
   PLAID_SECRET: string;
   SUPABASE_URL: string;
   SUPABASE_SERVICE_ROLE: string;
+  SUPABASE_ANON_KEY: string; // public anon key — used to verify user JWTs
   PLAID_INBOX_ENCRYPTION_KEY: string; // base64-encoded 32 bytes
 
   // Bindings
   PLAID_KEY_KV: KVNamespace;
 }
 
+// itty-router declarative routing — replaces the hand-rolled
+// `if (method && pathname)` chain. Behaviour is identical: same paths,
+// same methods, same 404 fallthrough.
+const router = Router<Request, [Env]>();
+
+router
+  .get('/health', (_req, env) => json({ ok: true, env: env.PLAID_ENV }))
+  .post('/link/token/create', (req, env) => handleLinkTokenCreate(req, env))
+  .post('/exchange', (req, env) => handleExchange(req, env))
+  .post('/webhook', (req, env) => handleWebhook(req, env))
+  .post('/inbox/drain', (req, env) => handleInboxDrain(req, env))
+  .post('/inbox/ack', (req, env) => handleInboxAck(req, env))
+  .all('*', () => notFound());
+
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
-    const url = new URL(req.url);
-
-    if (req.method === 'GET' && url.pathname === '/health') {
-      return json({ ok: true, env: env.PLAID_ENV });
-    }
-
-    if (req.method === 'POST' && url.pathname === '/link/token/create') {
-      return handleLinkTokenCreate(req, env);
-    }
-
-    if (req.method === 'POST' && url.pathname === '/exchange') {
-      return handleExchange(req, env);
-    }
-
-    if (req.method === 'POST' && url.pathname === '/webhook') {
-      return handleWebhook(req, env);
-    }
-
-    if (req.method === 'POST' && url.pathname === '/inbox/drain') {
-      return handleInboxDrain(req, env);
-    }
-
-    if (req.method === 'POST' && url.pathname === '/inbox/ack') {
-      return handleInboxAck(req, env);
-    }
-
-    return json({ error: 'not_found' }, 404);
+    return router.fetch(req, env);
   },
 
   /**
@@ -148,7 +138,8 @@ async function handleLinkTokenCreate(req: Request, env: Env): Promise<Response> 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return json({ error: 'unauthorized' }, 401);
   }
-  const sub = parseJwtSub(authHeader.slice('Bearer '.length));
+  // Verify the JWT with Supabase — never trust a self-decoded `sub`.
+  const sub = await verifyJwt(env, authHeader.slice('Bearer '.length));
   if (!sub) return json({ error: 'invalid_jwt' }, 401);
 
   let body: LinkTokenRequestBody;
@@ -209,17 +200,15 @@ async function handleExchange(req: Request, env: Env): Promise<Response> {
     return json({ error: 'plaid_not_configured' }, 503);
   }
 
-  // The caller MUST present a valid Supabase user JWT — we use it to
-  // assert the userId field in the body matches. This worker never
-  // accepts an unauthenticated /exchange call. The JWT is verified
-  // by Supabase REST when we use it on the client's behalf (defense
-  // in depth: validate `sub` here against `body.userId`).
+  // The caller MUST present a valid Supabase user JWT. We verify it with
+  // Supabase Auth (GET /auth/v1/user) and use the user id Supabase returns
+  // — never a self-decoded claim — then assert it matches body.userId.
+  // This worker never accepts an unauthenticated /exchange call.
   const authHeader = req.headers.get('authorization');
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return json({ error: 'unauthorized' }, 401);
   }
-  const userJwt = authHeader.slice('Bearer '.length);
-  const sub = parseJwtSub(userJwt);
+  const sub = await verifyJwt(env, authHeader.slice('Bearer '.length));
   if (!sub) return json({ error: 'invalid_jwt' }, 401);
 
   let body: ExchangeRequestBody;
@@ -419,7 +408,8 @@ async function handleInboxDrain(req: Request, env: Env): Promise<Response> {
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return json({ error: 'unauthorized' }, 401);
   }
-  const sub = parseJwtSub(authHeader.slice('Bearer '.length));
+  // Verify the JWT with Supabase — never trust a self-decoded `sub`.
+  const sub = await verifyJwt(env, authHeader.slice('Bearer '.length));
   if (!sub) return json({ error: 'invalid_jwt' }, 401);
 
   let body: InboxDrainRequestBody;
@@ -516,7 +506,8 @@ async function handleInboxAck(req: Request, env: Env): Promise<Response> {
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return json({ error: 'unauthorized' }, 401);
   }
-  const sub = parseJwtSub(authHeader.slice('Bearer '.length));
+  // Verify the JWT with Supabase — never trust a self-decoded `sub`.
+  const sub = await verifyJwt(env, authHeader.slice('Bearer '.length));
   if (!sub) return json({ error: 'invalid_jwt' }, 401);
 
   let body: InboxAckRequestBody;
@@ -560,6 +551,34 @@ interface SelectResult<T> {
   rows: T[];
 }
 
+/**
+ * SECURITY (S8): log a failed Supabase/PostgREST call SERVER-SIDE only.
+ *
+ * PostgREST error bodies disclose table/column/constraint names. The
+ * plaid-sync handlers already return GENERIC codes to the client
+ * (`select_failed`, `delete_failed`, …) so the body never reaches the
+ * caller — but the raw body was still being dumped, unbounded and
+ * uncorrelated, into the worker log. Route it through one helper that
+ * bounds the text and tags it with a request id for support correlation.
+ */
+async function logUpstreamFailure(
+  op: string,
+  table: string,
+  resp: Response,
+): Promise<void> {
+  const requestId = newRequestId();
+  let detail: string;
+  try {
+    detail = (await resp.text()).slice(0, 2000);
+  } catch {
+    detail = '<unreadable body>';
+  }
+  console.error(
+    `[plaid-sync] upstream-error op=${op} table=${table} ` +
+      `status=${resp.status} request_id=${requestId} detail=${detail}`,
+  );
+}
+
 async function supabaseSelect<T>(env: Env, table: string, query: string): Promise<SelectResult<T>> {
   if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE) {
     return { ok: false, rows: [] };
@@ -574,7 +593,7 @@ async function supabaseSelect<T>(env: Env, table: string, query: string): Promis
     },
   });
   if (!r.ok) {
-    console.error('[plaid-sync] supabaseSelect failed', r.status, await r.text());
+    await logUpstreamFailure('select', table, r);
     return { ok: false, rows: [] };
   }
   const rows = (await r.json()) as T[];
@@ -596,7 +615,7 @@ async function supabaseInsert(env: Env, table: string, rows: unknown[]): Promise
     body: JSON.stringify(rows),
   });
   if (!r.ok) {
-    console.error('[plaid-sync] supabaseInsert failed', table, r.status, await r.text());
+    await logUpstreamFailure('insert', table, r);
     return false;
   }
   return true;
@@ -623,7 +642,7 @@ async function supabaseUpdate(
     body: JSON.stringify(patch),
   });
   if (!r.ok) {
-    console.error('[plaid-sync] supabaseUpdate failed', table, r.status, await r.text());
+    await logUpstreamFailure('update', table, r);
     return false;
   }
   return true;
@@ -648,7 +667,7 @@ async function supabaseDelete(
     },
   });
   if (!r.ok) {
-    console.error('[plaid-sync] supabaseDelete failed', table, r.status, await r.text());
+    await logUpstreamFailure('delete', table, r);
     return false;
   }
   return true;
@@ -777,22 +796,39 @@ export async function _serverUnwrap(
 // ──────────────────────────────────────────────────────────────────────────
 // tiny helpers
 // ──────────────────────────────────────────────────────────────────────────
+// `json()` is the shared helper from @ollie/worker-http (imported above).
 
-function json(obj: unknown, status = 200): Response {
-  return new Response(JSON.stringify(obj), {
-    status,
-    headers: { 'content-type': 'application/json' },
-  });
-}
-
-function parseJwtSub(jwt: string): string | null {
+/**
+ * Verify a Supabase user JWT by asking Supabase Auth who it belongs to.
+ *
+ *   GET /auth/v1/user
+ *   Authorization: Bearer <user-jwt>
+ *   apikey: <anon-key>
+ *
+ * We trust ONLY the user id Supabase returns — never a self-decoded `sub`
+ * claim. A forged or expired token gets a non-2xx from Supabase and we
+ * return null, which every caller treats as a 401. This worker holds the
+ * service-role key, so RLS does not protect these endpoints — this check
+ * IS the gate.
+ *
+ * Same pattern as workers/ai-proxy/src/invites.ts · verifyJwt and
+ * apps/api/src/account-delete.ts · verifyJwtAndExtractUserId.
+ */
+async function verifyJwt(env: Env, jwt: string): Promise<string | null> {
+  if (!jwt) return null;
+  if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) return null;
+  const url = `${env.SUPABASE_URL.replace(/\/$/, '')}/auth/v1/user`;
   try {
-    const parts = jwt.split('.');
-    if (parts.length !== 3) return null;
-    const claims = JSON.parse(
-      atob(parts[1].replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((parts[1].length + 3) % 4)),
-    ) as { sub?: string };
-    return typeof claims.sub === 'string' ? claims.sub : null;
+    const resp = await fetch(url, {
+      method: 'GET',
+      headers: {
+        apikey: env.SUPABASE_ANON_KEY,
+        authorization: `Bearer ${jwt}`,
+      },
+    });
+    if (!resp.ok) return null;
+    const data = (await resp.json()) as { id?: string };
+    return typeof data.id === 'string' && data.id ? data.id : null;
   } catch {
     return null;
   }

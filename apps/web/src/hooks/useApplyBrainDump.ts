@@ -13,7 +13,6 @@ import { useCallback } from 'react';
 import { detectCrisis } from '@ollie/logic/crisis';
 import { extract } from '@ollie/logic/dissection';
 import { emit } from '@ollie/events';
-import * as appEvents from '@ollie/events';
 import { getString, type Locale } from '../i18n';
 import { store as appStore, useStoreSlice } from '../store';
 import { chipFly } from '../components/ChipFly';
@@ -53,7 +52,11 @@ const COUNTRY_TO_HOTLINE_KEY: Record<string, string> = {
 export function useApplyBrainDump(): (text: string, fromRect?: DOMRect) => Promise<void> {
   const toast = useToast();
   const [settings] = useStoreSlice<{ locale?: string; country?: string }>('shared', 'settings', {});
-  const locale = (settings?.locale ?? 'en') as Locale;
+  // Raw, untyped locale string straight from the store. `Locale` is en|es
+  // only, but the persisted value may carry other tags (e.g. 'tr') — keep
+  // the raw form for the reminder parser, which still understands tr.
+  const rawLocale = settings?.locale ?? 'en';
+  const locale = rawLocale as Locale;
   // F3 (Sprint 5): no hardcoded TR fallback. If country is null/unset
   // we fall through to crisis.hotline_INTL below (global directory).
   // Onboarding now sets this via browser-locale detection + manual picker.
@@ -79,7 +82,7 @@ export function useApplyBrainDump(): (text: string, fromRect?: DOMRect) => Promi
       // ── 1b. Reminder intercept ────────────────────────────────────────────
       // If the text contains a time phrase, create a reminder. Both paths can
       // coexist: a reminder is added AND normal routing continues below.
-      const reminderLocale = (settings?.locale ?? 'en') === 'tr' ? 'tr' : 'en';
+      const reminderLocale = rawLocale === 'tr' ? 'tr' : 'en';
       const parsed = parseReminder(text, Date.now(), reminderLocale);
       if (parsed) {
         reminderScheduler.add(parsed);
@@ -151,6 +154,6 @@ export function useApplyBrainDump(): (text: string, fromRect?: DOMRect) => Promi
         });
       }
     },
-    [toast, locale, country],
+    [toast, locale, rawLocale, country],
   );
 }

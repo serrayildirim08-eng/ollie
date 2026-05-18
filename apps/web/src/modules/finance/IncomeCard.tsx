@@ -120,7 +120,7 @@ export function IncomeCard({ records, now, masked, $fmt }: IncomeCardProps) {
   if (freq.frequency === 'random' && freq.evidence.n_events >= 3) {
     subtitle = getString(locale, 'finance.income.subtitle_irregular');
   } else if (isVariable && freq.frequency !== 'random') {
-    subtitle = getString(locale, 'finance.income.subtitle_variable').replace('${0}', freq.frequency);
+    subtitle = getString(locale, 'finance.income.subtitle_variable', { 0: freq.frequency });
   }
 
   const deltaColor = delta.positive ? INCOME_DELTA_POS : INCOME_DELTA_NEG;

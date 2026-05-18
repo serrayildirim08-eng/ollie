@@ -16,7 +16,7 @@
 
 import type { Goal, GoalCategory } from './types';
 
-const DAY_MS = 86_400_000;
+import { DAY_MS } from '../util';
 
 /** Statuses that count as a finished, celebrate-worthy goal. */
 const ACHIEVED_STATUSES = new Set(['done', 'completed']);

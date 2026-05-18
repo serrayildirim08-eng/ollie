@@ -21,7 +21,8 @@
  */
 
 import React, { useEffect, useRef, useState } from 'react';
-import { passphraseStrength } from '@ollie/crypto';
+import { passphraseStrength, CRYPTO_PARAMS } from '@ollie/crypto';
+import type { PassphraseStrength } from '@ollie/crypto';
 import type { AuthClient } from '@ollie/auth';
 import {
   validateInvite,
@@ -272,8 +273,27 @@ function ErrorLine({ message }: { message: string }) {
   );
 }
 
+// Empty-passphrase placeholder so the meter has something to render
+// before the (lazy-loaded, async) zxcvbn estimate resolves.
+const EMPTY_STRENGTH: PassphraseStrength = { score: 0, band: 'weak', notes: [] };
+
 function StrengthMeter({ passphrase }: { passphrase: string }) {
-  const s = passphraseStrength(passphrase);
+  // passphraseStrength is async now (zxcvbn is lazy-loaded). Resolve it in
+  // an effect and keep the latest result in state. A request id guards
+  // against an earlier slow resolve overwriting a newer one.
+  const [s, setS] = useState<PassphraseStrength>(EMPTY_STRENGTH);
+  useEffect(() => {
+    if (!passphrase) {
+      setS(EMPTY_STRENGTH);
+      return;
+    }
+    let live = true;
+    void passphraseStrength(passphrase).then((result) => {
+      if (live) setS(result);
+    });
+    return () => { live = false; };
+  }, [passphrase]);
+
   const barColor =
     s.band === 'great' ? 'var(--accent)'
       : s.band === 'strong' ? 'var(--accent)'
@@ -382,7 +402,7 @@ function SignUpScreen({
 
   useEffect(() => { emailRef.current?.focus(); }, []);
 
-  const passLongEnough = pass.length >= 16;
+  const passLongEnough = pass.length >= CRYPTO_PARAMS.MIN_PASSPHRASE_LENGTH;
   const passMatches = pass.length > 0 && pass === confirm;
   const inviteFilled = !inviteRequired || inviteCode.trim().length > 0;
   const canSubmit =

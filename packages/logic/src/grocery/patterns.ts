@@ -19,7 +19,7 @@ import type {
 } from './types';
 import { ALIAS_TABLE } from './data';
 
-const DAY_MS = 86_400_000;
+import { DAY_MS } from '../util';
 
 function resolveNow(history: GroceryHistory | null, opts: GroceryOpts): number {
   if (history && typeof history.now === 'number') return history.now;
@@ -229,9 +229,9 @@ export function detectPatterns(
   opts: GroceryOpts = {},
 ): GroceryPattern[] {
   const out: GroceryPattern[] = [];
-  try { const a = detectExpirationDrift(history, opts); if (a) out.push(a); } catch (_) { /* pass */ }
-  try { const b = detectStockoutCascade(history, opts); if (b) out.push(b); } catch (_) { /* pass */ }
-  try { const c = detectStaleListItems(history, opts); if (c) out.push(c); } catch (_) { /* pass */ }
-  try { const d = detectShoppingCadence(history, opts); if (d) out.push(d); } catch (_) { /* pass */ }
+  try { const a = detectExpirationDrift(history, opts); if (a) out.push(a); } catch { /* pass */ }
+  try { const b = detectStockoutCascade(history, opts); if (b) out.push(b); } catch { /* pass */ }
+  try { const c = detectStaleListItems(history, opts); if (c) out.push(c); } catch { /* pass */ }
+  try { const d = detectShoppingCadence(history, opts); if (d) out.push(d); } catch { /* pass */ }
   return out;
 }

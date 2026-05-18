@@ -25,10 +25,6 @@ function tx(date: string, amount: number, merchant: string, extra: Partial<Finan
   };
 }
 
-function addDays(iso: string, n: number): string {
-  const t = Date.parse(iso) + n * DAY;
-  return new Date(t).toISOString().slice(0, 10);
-}
 
 describe('finance/pattern-detection · subscription', () => {
   it('detects monthly Canva at $20 for 3 months', () => {

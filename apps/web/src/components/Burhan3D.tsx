@@ -1,6 +1,7 @@
-import { Component, Suspense, lazy, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Component, Suspense, lazy, useMemo, type ReactNode } from 'react';
 import { BurhanTree, LifeEventLayer } from './BurhanTree';
 import { positionFor, type BurhanEvent } from '@ollie/logic/burhan';
+import { useReducedMotion, usePageVisible } from '../hooks/useReducedMotion';
 
 const Burhan3DCanvas = lazy(() => import('./Burhan3DCanvas'));
 
@@ -17,35 +18,6 @@ export interface Burhan3DProps {
    * Append-only — Burhan never decays.
    */
   lifeEvents?: BurhanEvent[];
-}
-
-function useReducedMotion(): boolean {
-  const [reduced, setReduced] = useState(() => {
-    if (typeof window === 'undefined' || !window.matchMedia) return false;
-    return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  });
-  useEffect(() => {
-    if (typeof window === 'undefined' || !window.matchMedia) return;
-    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
-    const onChange = (e: MediaQueryListEvent) => setReduced(e.matches);
-    mq.addEventListener('change', onChange);
-    return () => mq.removeEventListener('change', onChange);
-  }, []);
-  return reduced;
-}
-
-function usePageVisible(): boolean {
-  const [visible, setVisible] = useState(() => {
-    if (typeof document === 'undefined') return true;
-    return !document.hidden;
-  });
-  useEffect(() => {
-    if (typeof document === 'undefined') return;
-    const onChange = () => setVisible(!document.hidden);
-    document.addEventListener('visibilitychange', onChange);
-    return () => document.removeEventListener('visibilitychange', onChange);
-  }, []);
-  return visible;
 }
 
 function Fallback2D({ height, lifeEvents }: { height: number; lifeEvents?: BurhanEvent[] }) {

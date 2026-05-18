@@ -4,7 +4,7 @@
  * Three schedules now:
  *   - `0 3 * * *`  — daily intelligence layer (pattern / period / subscription
  *                    detection). Stubs today.
- *   - `*​/5 * * * *` — drain the brain-dump enrichment queue (KV → Anthropic
+ *   - `every 5 min` — drain the brain-dump enrichment queue (KV → Anthropic
  *                    Haiku 4.5 → Supabase raw_dumps + enriched_signals). See
  *                    drain.ts. ALSO drains the notification delivery queue
  *                    (scheduled_jobs → APNs). See flush-notifications.ts.
@@ -21,7 +21,13 @@
  *       NOT a stub — it is the live server-side notification delivery path.
  */
 
-import { drainEnrichQueue, type DrainEnv } from './drain';
+import { Router, json, notFound } from '@ollie/worker-http';
+import {
+  drainEnrichQueue,
+  handleEnrichQueueBatch,
+  type DrainEnv,
+  type QueuedDump,
+} from './drain';
 import { flushNotificationQueue, type FlushEnv } from './flush-notifications';
 
 export interface Env extends DrainEnv, FlushEnv {
@@ -101,65 +107,62 @@ export default {
    *   curl -X POST https://<worker>/drain        # drain queue once
    */
   async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-    const url = new URL(req.url);
-    if (req.method !== 'POST') {
-      return notFound();
-    }
+    return fetchRouter.fetch(req, env, ctx);
+  },
 
-    if (url.pathname === '/run') {
-      ctx.waitUntil(safe('manual-run', async () => {
-        await runPatternDetection(env);
-        await runPeriodPrediction(env);
-        await runSubscriptionDetection(env);
-      }));
-      return new Response(JSON.stringify({ queued: true }), {
-        status: 202,
-        headers: { 'content-type': 'application/json' },
-      });
-    }
-
-    // Manual trigger for the notification delivery drain — runs it once
-    // synchronously and returns the stats (useful for ops + local dev):
-    //   curl -X POST https://<worker>/flush-notifications
-    if (url.pathname === '/flush-notifications') {
-      const stats = await flushNotificationQueue(env);
-      return new Response(JSON.stringify({ ok: true, ...stats }), {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-      });
-    }
-
-    // Manual trigger for body weekly review:
-    //   curl -X POST https://<worker>/weekly-review
-    if (url.pathname === '/weekly-review') {
-      ctx.waitUntil(safe('manual-weekly-review', () => runBodyWeeklyReview(env)));
-      return new Response(JSON.stringify({ queued: true }), {
-        status: 202,
-        headers: { 'content-type': 'application/json' },
-      });
-    }
-
-    // Manual trigger for body-correlation registry pass:
-    //   curl -X POST https://<worker>/body-correlations
-    if (url.pathname === '/body-correlations') {
-      ctx.waitUntil(safe('manual-body-correlations', () => runBodyCorrelations(env)));
-      return new Response(JSON.stringify({ queued: true }), {
-        status: 202,
-        headers: { 'content-type': 'application/json' },
-      });
-    }
-
-    if (url.pathname === '/drain') {
-      const stats = await drainEnrichQueue(env);
-      return new Response(JSON.stringify({ ok: true, ...stats }), {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-      });
-    }
-
-    return notFound();
+  /**
+   * Cloudflare Queues consumer (item #4). Invoked with a batch of
+   * brain-dump enrichment messages when the [[queues.consumers]] binding
+   * in wrangler.toml is configured. The Queue owns retry/backoff + DLQ, so
+   * this replaces the every-5-min KV-prefix scan in drainEnrichQueue.
+   *
+   * This handler is a no-op cost until the queue is provisioned — see
+   * DEPLOY_TODO.md §"Item #4". The 5-min `scheduled()` enrich-drain stays
+   * wired as a belt-and-braces fallback; once the Queue is confirmed live
+   * it can be removed.
+   */
+  async queue(batch: MessageBatch<QueuedDump>, env: Env): Promise<void> {
+    await handleEnrichQueueBatch(batch, env);
   },
 };
+
+// ─── manual-trigger HTTP routing (itty-router) ─────────────────────────────────
+// Replaces the hand-rolled `if (url.pathname …)` chain. All routes are POST;
+// any other method or unknown path falls through to `notFound()` — identical
+// to the previous `req.method !== 'POST'` guard.
+
+const fetchRouter = Router<Request, [Env, ExecutionContext]>();
+
+fetchRouter
+  .post('/run', (_req, env, ctx) => {
+    ctx.waitUntil(safe('manual-run', async () => {
+      await runPatternDetection(env);
+      await runPeriodPrediction(env);
+      await runSubscriptionDetection(env);
+    }));
+    return json({ queued: true }, 202);
+  })
+  // Manual trigger for the notification delivery drain — runs it once
+  // synchronously and returns the stats (useful for ops + local dev).
+  .post('/flush-notifications', async (_req, env) => {
+    const stats = await flushNotificationQueue(env);
+    return json({ ok: true, ...stats });
+  })
+  // Manual trigger for body weekly review.
+  .post('/weekly-review', (_req, env, ctx) => {
+    ctx.waitUntil(safe('manual-weekly-review', () => runBodyWeeklyReview(env)));
+    return json({ queued: true }, 202);
+  })
+  // Manual trigger for body-correlation registry pass.
+  .post('/body-correlations', (_req, env, ctx) => {
+    ctx.waitUntil(safe('manual-body-correlations', () => runBodyCorrelations(env)));
+    return json({ queued: true }, 202);
+  })
+  .post('/drain', async (_req, env) => {
+    const stats = await drainEnrichQueue(env);
+    return json({ ok: true, ...stats });
+  })
+  .all('*', () => notFound());
 
 // ─── tasks (stubs) ─────────────────────────────────────────────────────────────
 
@@ -246,9 +249,4 @@ async function safe(label: string, fn: () => Promise<void>): Promise<void> {
   }
 }
 
-function notFound(): Response {
-  return new Response(JSON.stringify({ error: 'not_found' }), {
-    status: 404,
-    headers: { 'content-type': 'application/json' },
-  });
-}
+// `notFound()` is the shared helper from @ollie/worker-http (imported above).

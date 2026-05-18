@@ -1,0 +1,21 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // Electron main + preload are hand-written plain CommonJS .js files.
+    // allowJs pulls them into the program so `pnpm -r typecheck` parses
+    // them (catches syntax / structural breakage). checkJs is OFF on
+    // purpose: deep type-checking un-annotated Electron JS produces large
+    // fallout (implicit-any across every callback, an electron-updater
+    // dep that is loaded lazily and not type-installed) that belongs to a
+    // separate "type the desktop shell" task, not infra hygiene. Flip
+    // checkJs on once main.js/preload.js are annotated or ported to TS.
+    "allowJs": true,
+    "checkJs": false,
+    "noEmit": true,
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "types": ["node", "electron"],
+    "lib": ["ES2022"]
+  },
+  "include": ["main.js", "preload.js"]
+}

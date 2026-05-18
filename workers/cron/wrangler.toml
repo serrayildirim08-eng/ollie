@@ -42,6 +42,26 @@ service = "ollie-apns-push"
 binding = "AI_PROXY"
 service = "ollie-ai-proxy"
 
+# ─── Cloudflare Queues consumer (item #4) — COMMENTED OUT, see DEPLOY_TODO ──────
+# This worker consumes the brain-dump enrichment queue. The block is left
+# commented: an uncommented consumer binding pointing at a queue that does
+# not exist makes `wrangler deploy` FAIL. Until the queue is provisioned the
+# 5-min `scheduled()` enrich-drain (KV-scan) keeps running unchanged.
+#
+# To enable (see DEPLOY_TODO.md §"Item #4 — Cloudflare Queues"):
+#   1. wrangler queues create ollie-enrich-queue   (if not already done)
+#   2. wrangler queues create ollie-enrich-dlq
+#   3. uncomment the block below, AND the [[queues.producers]] block in
+#      workers/ai-proxy/wrangler.toml
+#   4. deploy ai-proxy, then cron
+#
+[[queues.consumers]]
+queue = "ollie-enrich-queue"
+max_batch_size = 25
+max_batch_timeout = 30
+max_retries = 12
+dead_letter_queue = "ollie-enrich-dlq"
+
 # ─── secrets (set with `wrangler secret put`) ──────────────────────────────────
 # SUPABASE_URL                — https://<ref>.supabase.co
 # SUPABASE_SERVICE_ROLE       — server-only key, NEVER in client env.
@@ -50,6 +70,11 @@ service = "ollie-ai-proxy"
 #                               it scans scheduled_jobs + push_tokens across
 #                               all users, bypassing RLS.
 # SUPABASE_SERVICE_ROLE_KEY   — alias kept for the daily-stub handlers
+# APNS_INTERNAL_SECRET        — shared secret presented to the apns-push
+#                               worker's /push endpoint. MUST equal the
+#                               value set on ollie-apns-push as
+#                               APNS_INTERNAL_SECRET. Without it the
+#                               notification drain gets 401 from /push.
 #
 # Note: ANTHROPIC_API_KEY is NOT needed here — the drain handler routes through
 # ai-proxy/v1/messages which holds the Anthropic key. One key to rotate.

@@ -45,6 +45,17 @@ import {
   NotificationPrimer,
   hasSeenNotificationPrimer,
 } from './components/NotificationPrimer';
+import { AppLockGate } from './components/AppLockGate';
+import {
+  APP_LOCK_SLICE,
+  APP_LOCK_LOCKED_KEY,
+  isAppLockEnabled,
+  unlockApp,
+  markBackgrounded,
+  relockIfIdle,
+  seedColdBootLock,
+} from './lib/app-lock';
+import { store } from './store';
 import { AuthFlow } from './components/AuthFlow';
 import { ConsentScreen } from './components/ConsentScreen';
 import { ConsentStep } from './screens/onboarding/ConsentStep';
@@ -206,9 +217,118 @@ function GatedLayout() {
       <ChipFlyHost />
       <Day30Prompt />
       <NotificationPrimerGate />
+      <AppLockController />
       <RoutedMicButton />
       {!SUPABASE_CONFIGURED && <DevModeBanner />}
     </>
+  );
+}
+
+/**
+ * App-lock gate.
+ *
+ * The optional "soft lock" that covers the whole app UI with a biometric
+ * (Face ID / fingerprint) re-entry screen. OFF by default — the user
+ * opts in from Settings → security. See lib/app-lock.ts for the honest
+ * framing: the user is already signed in, this is a privacy curtain, not
+ * auth, and disabling it loses nothing.
+ *
+ * Mounted only inside the all-gates-passed branch of `GatedLayout`, so it
+ * never fights the auth / consent / onboarding screens — those come first.
+ *
+ * WHEN IT LOCKS
+ *   - cold boot: `seedColdBootLock()` on mount draws the curtain if the
+ *     feature is enabled. `app_lock.locked` is persisted, so a tab killed
+ *     while locked also boots locked.
+ *   - resume after idle: when the page goes to the background (web
+ *     `visibilitychange` → hidden, or Capacitor `App` appStateChange →
+ *     inactive) the moment is timestamped; on the next foreground a gap
+ *     past RELOCK_AFTER_MS re-locks via `relockIfIdle()`.
+ *
+ * The `locked` flag is the single source of truth; this component
+ * subscribes to it so a lock from a background event re-renders the gate.
+ */
+function AppLockController() {
+  const { auth } = useAppServices();
+
+  // Seed cold-boot lock state ONCE, synchronously, before first paint —
+  // so an enabled lock comes up covering the UI, not flashing it first.
+  const [locked, setLocked] = useState<boolean>(() => seedColdBootLock());
+
+  // Mirror the store flag: background events (below) flip `app_lock.locked`
+  // directly, so subscribe and re-render when it changes from anywhere.
+  useEffect(() => {
+    const unsub = store.subscribeKey<boolean>(
+      APP_LOCK_SLICE,
+      APP_LOCK_LOCKED_KEY,
+      (next) => setLocked(Boolean(next)),
+    );
+    return () => { try { unsub(); } catch { /* noop */ } };
+  }, []);
+
+  // Background / resume wiring. Web uses `visibilitychange`; Capacitor
+  // emits `appStateChange` (isActive false/true). Both funnel to the same
+  // two actions: timestamp on leave, `relockIfIdle` on return.
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+
+    function onLeave() { markBackgrounded(); }
+    function onReturn() { relockIfIdle(); }
+
+    function onVisibility() {
+      if (document.visibilityState === 'hidden') onLeave();
+      else onReturn();
+    }
+    document.addEventListener('visibilitychange', onVisibility);
+
+    // Capacitor native resume — dynamic import keeps Capacitor optional
+    // (mirrors BackButtonBridge). No-op on web/desktop.
+    let removeNative: (() => void) | undefined;
+    let cancelled = false;
+    const dynImport = new Function('s', 'return import(s)') as (
+      s: string,
+    ) => Promise<{ App?: unknown }>;
+    dynImport('@capacitor/app')
+      .then((mod) => {
+        const App = mod?.App as
+          | {
+              addListener: (
+                e: string,
+                cb: (d: { isActive: boolean }) => void,
+              ) => Promise<{ remove: () => void }>;
+            }
+          | undefined;
+        if (!App?.addListener || cancelled) return;
+        App.addListener('appStateChange', ({ isActive }) => {
+          if (isActive) onReturn();
+          else onLeave();
+        }).then((handle) => {
+          if (cancelled) handle.remove();
+          else removeNative = handle.remove;
+        });
+      })
+      .catch(() => { /* Capacitor absent — web/desktop, no-op */ });
+
+    return () => {
+      cancelled = true;
+      document.removeEventListener('visibilitychange', onVisibility);
+      removeNative?.();
+    };
+  }, []);
+
+  // The feature can be flipped off from Settings while the curtain is up;
+  // honour that here so a just-disabled lock doesn't trap the user.
+  if (!isAppLockEnabled()) return null;
+  if (!locked) return null;
+
+  return (
+    <AppLockGate
+      auth={auth}
+      onUnlocked={() => {
+        unlockApp();
+        setLocked(false);
+      }}
+    />
   );
 }
 

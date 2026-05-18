@@ -7,10 +7,14 @@
     "dev": "pnpm --filter @ollie/web dev",
     "build": "pnpm --filter @ollie/web build",
     "typecheck": "pnpm -r typecheck",
-    "scan:banned": "node tools/scan-banned-phrases.cjs",
-    "scan:banned:test": "node tools/banned-phrases.test.cjs",
-    "pretest": "node tools/banned-phrases.test.cjs && node tools/scan-banned-phrases.cjs",
+    "lint": "eslint .",
+    "format": "prettier --check .",
+    "format:write": "prettier --write .",
+    "scan:banned:json": "node tools/scan-banned-json.cjs",
+    "scan:banned:test": "node tools/banned-phrases.test.cjs && node --test \"tools/eslint-plugin-ollie/rules/*.test.cjs\"",
+    "pretest": "node tools/banned-phrases.test.cjs && node tools/scan-banned-json.cjs",
     "test": "pnpm -r test",
+    "test:coverage": "pnpm -r run test --coverage",
     "ios:sync": "pnpm --filter @ollie/ios sync",
     "ios:open": "pnpm --filter @ollie/ios open",
     "ios:run": "pnpm --filter @ollie/ios run",
@@ -21,7 +25,14 @@
     "electron:build:all": "pnpm --filter @ollie/desktop build:all"
   },
   "devDependencies": {
-    "typescript": "^5.6.0"
+    "@eslint/js": "^10.0.1",
+    "@vitest/coverage-v8": "^2.1.9",
+    "eslint": "^10.4.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.6.0",
+    "prettier": "^3.8.3",
+    "typescript": "^5.6.0",
+    "typescript-eslint": "^8.59.3"
   },
   "packageManager": "pnpm@11.0.9",
   "engines": {

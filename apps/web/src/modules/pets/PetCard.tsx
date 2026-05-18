@@ -600,7 +600,7 @@ export function PetCard({
         <button
           type="button"
           onClick={() => {
-            // eslint-disable-next-line no-alert
+             
             if (confirm(`archive ${pet.name}? they stay in the log, you just stop being reminded.`)) {
               onArchive(pet.id);
             }

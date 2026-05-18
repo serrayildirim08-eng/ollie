@@ -41,6 +41,7 @@ import {
   decryptData,
 } from '@ollie/crypto';
 import type { EncryptedPayload } from '@ollie/crypto';
+import { createDebouncer, createBackoffScheduler, safeErrSummary } from './retry';
 
 // ──────────────────────────────────────────────────────────────────────────
 // Public types
@@ -208,8 +209,11 @@ export function createFinanceSyncClient(initialDeps: FinanceSyncDeps): FinanceSy
 
   let running = false;
   let unsubs: Array<() => void> = [];
-  const debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
-  let drainTimer: ReturnType<typeof setTimeout> | null = null;
+  // Per-store-key debounce + a single backoff-scheduled drain — shared
+  // ./retry helper. The drain scheduler adds exponential backoff and a
+  // max-attempt cap so a forever-failing server stops being retried.
+  const diffDebouncer = createDebouncer<string>(DEBOUNCE_MS);
+  const drainScheduler = createBackoffScheduler(() => drainOnce());
   // Local snapshot per store key — used to compute add/update/delete
   // diffs on each subscription tick (the store fires with the new
   // value; we keep the previous to detect deletions).
@@ -317,22 +321,18 @@ export function createFinanceSyncClient(initialDeps: FinanceSyncDeps): FinanceSy
   }
 
   function debouncedDiff(storeKey: string, recordType: FinanceRecordType): void {
-    const existing = debounceTimers.get(storeKey);
-    if (existing) clearTimeout(existing);
-    const t = setTimeout(() => {
-      debounceTimers.delete(storeKey);
+    diffDebouncer.schedule(storeKey, () => {
       void diffAndEnqueue(storeKey, recordType)
         .then(() => scheduleDrain())
         .catch((err) => {
-          console.error('[sync/finance] diffAndEnqueue failed', storeKey, err);
+          // SECURITY (S4): safe summary only — the error may carry a row.
+          console.error('[sync/finance] diffAndEnqueue failed', storeKey, safeErrSummary(err));
         });
-    }, DEBOUNCE_MS);
-    debounceTimers.set(storeKey, t);
+    });
   }
 
   // ── drain queue → Supabase ─────────────────────────────────────────────
   async function drainOnce(): Promise<void> {
-    drainTimer = null;
     if (!isEnabled()) return;
     if (!isOnlineFn()) return;
 
@@ -366,8 +366,8 @@ export function createFinanceSyncClient(initialDeps: FinanceSyncDeps): FinanceSy
           try { events.emit('sync:auth_expired', { ts: nowFn() }); }
           catch { /* registry warn ok */ }
         } else {
-          // Leave queue intact, retry with backoff.
-          scheduleDrain(2_000);
+          // Leave queue intact, retry with exponential backoff (capped).
+          drainScheduler.scheduleRetry();
         }
         return;
       }
@@ -392,8 +392,8 @@ export function createFinanceSyncClient(initialDeps: FinanceSyncDeps): FinanceSy
           catch { /* registry warn ok */ }
           return;
         }
-        // leave the delete in queue, retry later
-        scheduleDrain(2_000);
+        // leave the delete in queue, retry with exponential backoff (capped)
+        drainScheduler.scheduleRetry();
         return;
       }
     }
@@ -403,6 +403,9 @@ export function createFinanceSyncClient(initialDeps: FinanceSyncDeps): FinanceSy
       next.deletes = next.deletes.filter((d) => !shippedIds.has(d.id));
       writeQueue(next);
     }
+
+    // Full drain succeeded → clear the failure counter so backoff resets.
+    drainScheduler.reset();
 
     try {
       events.emit('sync:finance_outbound_flushed', {
@@ -414,14 +417,7 @@ export function createFinanceSyncClient(initialDeps: FinanceSyncDeps): FinanceSy
   }
 
   function scheduleDrain(delayMs = 0): void {
-    if (drainTimer) return;
-    drainTimer = setTimeout(() => {
-      void drainOnce().catch((err) => {
-        console.error('[sync/finance] drainOnce failed', err);
-        drainTimer = null;
-        scheduleDrain(5_000);
-      });
-    }, delayMs);
+    drainScheduler.schedule(delayMs);
   }
 
   // ── inbound: pull rows updated since cursor, decrypt, apply ────────────
@@ -469,7 +465,9 @@ export function createFinanceSyncClient(initialDeps: FinanceSyncDeps): FinanceSy
         decryptedByType.set(row.record_type, list);
       } catch (err) {
         // Fail-closed: skip the row, never write garbage to the store.
-        console.warn('[sync/finance] decrypt failed for row', row.id, err);
+        // SECURITY (S4): a decrypt error can carry ciphertext/plaintext —
+        // log a safe summary only.
+        console.warn('[sync/finance] decrypt failed for row', row.id, safeErrSummary(err));
       }
     }
 
@@ -594,15 +592,17 @@ export function createFinanceSyncClient(initialDeps: FinanceSyncDeps): FinanceSy
     }
 
     scheduleDrain();
-    return syncIn().catch((err) => console.warn('[sync/finance] initial syncIn failed', err));
+    return syncIn().catch((err) =>
+      console.warn('[sync/finance] initial syncIn failed:', safeErrSummary(err)),
+    );
   }
 
   function stop(): void {
     for (const u of unsubs) { try { u(); } catch { /* noop */ } }
     unsubs = [];
-    for (const t of debounceTimers.values()) clearTimeout(t);
-    debounceTimers.clear();
-    if (drainTimer) { clearTimeout(drainTimer); drainTimer = null; }
+    diffDebouncer.cancelAll();
+    drainScheduler.cancel();
+    drainScheduler.reset();
     snapshots.clear();
     running = false;
   }

@@ -8,18 +8,15 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   detectRecurring,
-  predictNextDue,
+  detectSubscriptionStale,
   savingsGoalProgress,
   trackADHDTaxEvents,
-  detectSubscriptionStale,
   upcomingBills,
   safeToSpend,
-  detectPatterns,
 } from '@ollie/logic/finance';
 import type {
   FinanceRecord,
   PatternCard,
-  RecurringPattern,
   SavingsGoal,
   UpcomingBill,
   ADHDTaxSummary,
@@ -30,6 +27,7 @@ import type {
   CycleSpendingPatternCard,
   SavingsTotals,
   RecurringCandidate,
+  RecurringPattern,
 } from '@ollie/logic/finance';
 import { buildSavingsCardCopy } from '@ollie/logic/finance';
 import { mkId } from '../../lib/mkId';
@@ -171,11 +169,13 @@ interface StoredTransaction {
   return_status?: string | null;
 }
 
-interface FinanceSettings {
+export interface FinanceSettings {
   show_cross_cycle_correlation?: boolean;
   show_cross_sleep_correlation?: boolean;
   recurring_maturity_minocc?: number;
   buffer_pct?: number;
+  stale_subscription_threshold_days?: number;
+  dismissed_stale_pattern_ids?: string[];
 }
 
 interface CycleCorrelation {
@@ -195,6 +195,30 @@ interface SleepCorrelation {
 interface PostPaydaySpikesStore {
   spikes: Array<{ id?: string; [key: string]: unknown }>;
   window_days?: number;
+}
+
+/**
+ * Stale-subscription bridge selector.
+ *
+ * Wraps `detectSubscriptionStale` so the result can flow into the
+ * `finance.staleSubs` store key that FinanceSignalsSection reads. The web
+ * module has no braindump corpus, so `dumps` is empty — staleness is decided
+ * purely by last-seen date, which is detectSubscriptionStale's documented
+ * fallback for an empty mention list. Threshold + dismissals come from
+ * finance.settings (defaults: 90 days, none dismissed).
+ */
+export function computeStaleSubs(
+  recurring: RecurringPattern[] | null | undefined,
+  settings: FinanceSettings | null | undefined,
+  now: number,
+): StaleSubscription[] {
+  return detectSubscriptionStale(
+    recurring ?? [],
+    [],
+    settings?.dismissed_stale_pattern_ids ?? [],
+    settings?.stale_subscription_threshold_days ?? 90,
+    now,
+  );
 }
 
 // ─── preset bill shelf ───────────────────────────────────────────────────────
@@ -1038,7 +1062,7 @@ function FinanceNoticed() {
 
 // ─── FinanceSignalsSection ────────────────────────────────────────────────────
 
-function FinanceSignalsSection({ masked = false }: { masked?: boolean }) {
+export function FinanceSignalsSection({ masked = false }: { masked?: boolean }) {
   const [financeSettings] = useStoreSlice<FinanceSettings>('finance', 'settings', {});
   const [cycleCorrelation] = useStoreSlice<CycleCorrelation | null>('finance', 'cycleCorrelation', null);
   const [sleepCorrelation] = useStoreSlice<SleepCorrelation | null>('finance', 'sleepCorrelation', null);
@@ -1244,6 +1268,11 @@ export function FinanceModule() {
   // orchestrator-derived
   const [derivedSafeToSpend] = useStoreSlice<SpendBand | null>('finance', 'safeToSpend', null);
 
+  // finance.staleSubs — read by FinanceSignalsSection. The web client also
+  // computes it locally from the current recurring patterns so the "quiet
+  // subscriptions" signal works even before an orchestrator pass runs.
+  const [, setStaleSubs] = useStoreSlice<StaleSubscription[]>('finance', 'staleSubs', []);
+
   // ── Sprint 6 · impulse pause + privacy mode ──────────────────────────────
   const [pendingPauses, setPendingPauses] = useStoreSlice<PendingPause[]>('finance', 'pendingPauses', []);
   const [savedByPause, setSavedByPause]   = useStoreSlice<{ count: number; total: number }>('finance', 'savedByPause', { count: 0, total: 0 });
@@ -1273,7 +1302,16 @@ export function FinanceModule() {
   }, [privacy, tick]);
 
   // Derived: are money figures currently hidden?
-  const masked = useMemo(() => isMaskedNow(privacy, Date.now()), [privacy, tick]);
+  // `tick` IS load-bearing here even though it is not referenced in the
+  // memo body: the once-a-minute tick is what re-evaluates `Date.now()`
+  // so the auto-relock window can expire without user interaction. The
+  // lint rule flags `tick` as "unnecessary" because it cannot see the
+  // implicit time dependency — keep it.
+  const masked = useMemo(
+    () => isMaskedNow(privacy, Date.now()),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [privacy, tick],
+  );
   // Bound formatter used everywhere a $-figure would be rendered.
   const $fmt = useCallback((n: number | null | undefined): string => {
     return maskMoney(masked, fmtMoney(n));
@@ -1302,9 +1340,11 @@ export function FinanceModule() {
     [records, now],
   );
 
+  // Subscriptions/bills not mentioned in `threshold` days, derived from the
+  // same recurring patterns the rest of the module uses. See computeStaleSubs.
   const staleSubs: StaleSubscription[] = useMemo(
-    () => detectSubscriptionStale(detected.recurring, [], [] as string[], 90, now),
-    [detected.recurring, now],
+    () => computeStaleSubs(detected.recurring, settings, now),
+    [detected.recurring, settings, now],
   );
 
   const goalProgressList = useMemo(
@@ -1326,6 +1366,14 @@ export function FinanceModule() {
     },
     [derivedSafeToSpend, records, now, settings],
   );
+
+  // Publish the locally-derived staleSubs to the store so FinanceSignalsSection
+  // (a sibling component reading `finance.staleSubs`) can surface the "quiet
+  // subscriptions" signal. Without this write the key stays empty and the
+  // panel never renders.
+  useEffect(() => {
+    setStaleSubs(staleSubs);
+  }, [staleSubs, setStaleSubs]);
 
   const haveIncomeSignal =
     computedSafeToSpend != null &&
@@ -1408,7 +1456,7 @@ export function FinanceModule() {
 
   const billsMonthly = useMemo(
     () => bills.reduce((s, b) => s + monthlyEquivalent(b), 0),
-    [bills], // eslint-disable-line react-hooks/exhaustive-deps
+    [bills],  
   );
   const subsMonthly = useMemo(
     () => subs.reduce((s, x) => s + (x.period === 'yearly' ? (+x.amount || 0) / 12 : (+x.amount || 0)), 0),

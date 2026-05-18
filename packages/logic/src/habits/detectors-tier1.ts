@@ -11,10 +11,8 @@ import type {
   HabitsHistory,
   HabitsOpts,
   HabitSignal,
-  Habit,
-  HabitCompletion,
 } from './types';
-import { mean, dayKey, buildDayCompletionMap } from './helpers';
+import { mean, buildDayCompletionMap } from './helpers';
 
 // ─── detectExternalizationRequirement ────────────────────────────────
 

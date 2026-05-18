@@ -392,7 +392,7 @@ export function WindDownChecklist({ nowFn }: WindDownChecklistProps): React.Reac
             color: C.inkSoft,
           }}
         >
-          {getString(locale, 'body.wind_down.subtitle').replace('${0}', String(items.length))}
+          {getString(locale, 'body.wind_down.subtitle', { 0: items.length })}
         </span>
         <button
           type="button"
@@ -452,10 +452,10 @@ export function WindDownChecklist({ nowFn }: WindDownChecklistProps): React.Reac
                 disabled={!isNext}
                 aria-label={
                   isDone
-                    ? getString(locale, 'body.wind_down.aria_done').replace('${0}', item.label)
+                    ? getString(locale, 'body.wind_down.aria_done', { 0: item.label })
                     : isNext
-                    ? getString(locale, 'body.wind_down.aria_mark_done').replace('${0}', item.label)
-                    : getString(locale, 'body.wind_down.aria_locked').replace('${0}', item.label)
+                    ? getString(locale, 'body.wind_down.aria_mark_done', { 0: item.label })
+                    : getString(locale, 'body.wind_down.aria_locked', { 0: item.label })
                 }
                 aria-pressed={isDone}
                 aria-disabled={!isNext}

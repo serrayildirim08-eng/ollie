@@ -10,6 +10,12 @@
  * astrology, dump, journal, dissection, predict) land in follow-up phases.
  */
 
+// Shared internal primitives — single source of truth for statistical
+// helpers (stats) and small utilities like DAY_MS / day-keys / Levenshtein
+// (util). Consolidated from ~6× and ~16× duplication respectively.
+export * as stats from './stats';
+export * as util from './util';
+
 export * as cycle from './cycle';
 export * as products from './products';
 export * as corrections from './corrections';

@@ -414,6 +414,11 @@ export function HabitsModule({ onBack }: { onBack: () => void }) {
     return out;
   }, [habitsArr]);
 
+  // `isCheckedToday` is a render-scoped fn whose only inputs are its `h`
+  // argument and `todayKey`; both are already covered by the deps below.
+  // Adding the fn itself would just break memoization (new ref each render)
+  // without changing the result.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const doneToday   = useMemo(() => habitsArr.filter((h) => isCheckedToday(h)).length, [habitsArr, todayKey]);
   const totalCount  = habitsArr.length;
 

@@ -1,7 +1,7 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
 import { Toast } from './Toast';
-import { _useToastState } from './ToastContext';
+import { useToastState } from './ToastContext';
 
 /**
  * ToastHost — mounts at App root.
@@ -9,7 +9,7 @@ import { _useToastState } from './ToastContext';
  * Reads from ToastContext; never holds its own state.
  */
 export function ToastHost() {
-  const { toasts, close } = _useToastState();
+  const { toasts, close } = useToastState();
 
   if (toasts.length === 0) return null;
 

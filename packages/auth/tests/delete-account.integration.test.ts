@@ -33,19 +33,17 @@ function makeFakeApi(): OllieAPI {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         delete: vi.fn() as any,
       },
+      /* eslint-disable @typescript-eslint/no-explicit-any -- auth-adapter test mocks */
       auth: {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         signUp: vi.fn(async () => ({
           ok: true, status: 200,
           data: { user: { id: 'user-1' }, session: { access_token: 'jwt-token', refresh_token: 'rt' } },
         })) as any,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         signInWithPassword: vi.fn() as any,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         refresh: vi.fn() as any,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         signOut: vi.fn() as any,
       },
+      /* eslint-enable @typescript-eslint/no-explicit-any */
     },
   };
 }

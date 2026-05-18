@@ -10,7 +10,7 @@
 import { pearson } from '../math';
 import type { Habit, HabitCompletion, SleepRecord } from '../../habits/types';
 
-const DAY_MS = 86_400_000;
+import { DAY_MS, resolveNow } from '../../util';
 const DEFAULT_LOOKBACK_DAYS = 21;
 const DEFAULT_TARGET_HOURS = 7.5;
 
@@ -116,7 +116,7 @@ export function correlateSleepDebtAndHabits(
   habits: readonly Habit[] | undefined | null,
   opts?: CorrelateSleepDebtHabitsOpts,
 ): SleepDebtHabitsResult {
-  const now = opts?.now ?? Date.now();
+  const now = resolveNow(opts?.now);
   const lookback = opts?.lookbackDays ?? DEFAULT_LOOKBACK_DAYS;
   const minN = opts?.minSampleSize ?? 14;
   const thresholdRho = opts?.thresholdRho ?? 0.30;
@@ -164,7 +164,7 @@ export function correlateSleepDebtAndHabits(
     return { correlation: r, sampleSize: n, copy: '', ts: now };
   }
 
-  let copy = '';
+  let copy: string;
   if (r < 0) {
     const weeks = Math.max(1, Math.round(n / 7));
     copy = `habit completion drops as sleep debt climbs · ${weeks} week${weeks === 1 ? '' : 's'} of data`;
