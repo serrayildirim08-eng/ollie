@@ -25,7 +25,6 @@ import {
   detectPatterns,
   tagResearchLoops,
   monthOverMonthDelta,
-  computeMonthlyOutflow,
   DAY_MS,
   isoDate,
   detectSavingsTransfers,
@@ -1626,7 +1625,9 @@ describe('encryptExport', () => {
     const json = await encryptExport('hello,world', 'my-passphrase', fakeCrypto);
     const env = JSON.parse(json);
     expect(env.v).toBe(1);
-    expect(env.alg).toBe('AES-GCM-256+PBKDF2-SHA256-100k');
+    // S7: alg tag no longer hard-codes the iteration count; the count
+    // lives in the `kdf_iterations` field instead.
+    expect(env.alg).toBe('AES-GCM-256+PBKDF2-SHA256');
     expect(typeof env.salt).toBe('string');
     expect(typeof env.iv).toBe('string');
     expect(typeof env.ciphertext).toBe('string');
@@ -1636,5 +1637,41 @@ describe('encryptExport', () => {
   it('honours a custom contentType', async () => {
     const json = await encryptExport('x', 'pw', fakeCrypto, { contentType: 'application/pdf' });
     expect(JSON.parse(json).contentType).toBe('application/pdf');
+  });
+
+  // S7: the envelope records the PBKDF2 iteration count so a decrypter
+  // reproduces the key after the global default changes.
+  it('stamps kdf_iterations into the envelope (default 600k)', async () => {
+    const json = await encryptExport('hello', 'my-passphrase', fakeCrypto);
+    expect(JSON.parse(json).kdf_iterations).toBe(600_000);
+  });
+
+  it('derives the key with the iteration count it records', async () => {
+    let derivedWith: number | undefined;
+    const spyCrypto: CryptoPrimitives = {
+      ...fakeCrypto,
+      deriveKey: async (_pp, _salt, iterations) => {
+        derivedWith = iterations;
+        return {} as CryptoKey;
+      },
+    };
+    const json = await encryptExport('hello', 'my-passphrase', spyCrypto);
+    expect(derivedWith).toBe(600_000);
+    expect(JSON.parse(json).kdf_iterations).toBe(derivedWith);
+  });
+
+  it('honours an explicit kdfIterations override on the primitives', async () => {
+    let derivedWith: number | undefined;
+    const legacyCrypto: CryptoPrimitives = {
+      ...fakeCrypto,
+      kdfIterations: 100_000,
+      deriveKey: async (_pp, _salt, iterations) => {
+        derivedWith = iterations;
+        return {} as CryptoKey;
+      },
+    };
+    const json = await encryptExport('hello', 'my-passphrase', legacyCrypto);
+    expect(derivedWith).toBe(100_000);
+    expect(JSON.parse(json).kdf_iterations).toBe(100_000);
   });
 });

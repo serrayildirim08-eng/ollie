@@ -125,17 +125,32 @@ describe('handleIngestEvent · Supabase forward', () => {
     expect(init.body).toBe(JSON.stringify(row));
   });
 
-  it('returns 502 + surfaces Supabase error body on non-2xx', async () => {
+  // S8: on a non-2xx Supabase response the worker must NOT echo the
+  // PostgREST error body (it discloses column/constraint names). The
+  // caller gets a generic code + a request id; the detail is logged
+  // server-side only.
+  it('returns 502 with a GENERIC error code — does NOT leak the PostgREST body', async () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     fetchSpy.mockResolvedValue(new Response('column "foo" does not exist', { status: 400 }));
     const resp = await handleIngestEvent(
       makeReq({ table: 'session_events', row: { foo: 'bar' } }),
       ENV,
     );
     expect(resp.status).toBe(502);
-    const body = await resp.json() as { ok: boolean; error: string; status: number };
-    expect(body.ok).toBe(false);
-    expect(body.status).toBe(400);
-    expect(body.error).toContain('column "foo"');
+    const body = await resp.json() as Record<string, unknown>;
+    // Generic, schema-free body.
+    expect(body.error).toBe('ingest_failed');
+    expect(typeof body.request_id).toBe('string');
+    // The PostgREST column-name detail must NOT reach the caller.
+    const serialized = JSON.stringify(body);
+    expect(serialized).not.toContain('column "foo"');
+    expect(serialized).not.toContain('does not exist');
+
+    // ...but the detail IS in the server-side log, tagged with the id.
+    const logLine = errSpy.mock.calls.flat().map(String).join(' ');
+    expect(logLine).toContain('column "foo" does not exist');
+    expect(logLine).toContain(String(body.request_id));
+    errSpy.mockRestore();
   });
 
   it('returns 500 when Supabase env is missing', async () => {

@@ -1,6 +1,5 @@
 import React, { useMemo, useState } from 'react';
 import { FrostedCard } from '../components/FrostedCard';
-import { BrainDumpInput } from '../components/BrainDumpInput';
 import { Burhan3D } from '../components/Burhan3D';
 import { useStoreSlice } from '../store';
 import { lastN, type BurhanState } from '@ollie/logic/burhan';

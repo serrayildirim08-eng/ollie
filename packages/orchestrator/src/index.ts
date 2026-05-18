@@ -26,9 +26,9 @@ import { createWorkOrchestrator } from './work';
 import { createGoalsOrchestrator } from './goals';
 import { createBurhanOrchestrator } from './burhan';
 import { createMedicationOrchestrator } from './medication';
-import { createResearchOrchestrator } from './research';
 
 export type { Orchestrator } from './types';
+export { appendCapped, DEFAULT_DEDUP_CAP } from './dedup-store';
 export { createCycleOrchestrator } from './cycle';
 export { createPetsOrchestrator } from './pets';
 export { createBodyOrchestrator } from './body';

@@ -6,10 +6,9 @@
  * @ollie/plaid for the working pattern.
  */
 
-export interface TrueLayerClientConfig {
-  // TODO: env: 'sandbox' | 'production'
-  // TODO: clientId, secret
-}
+// TODO: env: 'sandbox' | 'production'
+// TODO: clientId, secret
+export type TrueLayerClientConfig = Record<string, unknown>;
 
 export function createTrueLayerClient(_cfg: TrueLayerClientConfig): never {
   throw new Error('@ollie/truelayer: not implemented (scaffold only). See packages/plaid/.');

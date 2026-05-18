@@ -14,11 +14,20 @@
  * Voice: lowercase labels, sage active, DM Mono caps headers.
  */
 
-import React, { useEffect, useState } from 'react';
-import { useAuth, SignIn, SignUp } from '@clerk/react';
+import React, { useEffect, useRef, useState } from 'react';
 import { passphraseStrength, CRYPTO_PARAMS } from '@ollie/crypto';
 import type { PassphraseStrength } from '@ollie/crypto';
-import type { VaultClient } from '@ollie/auth';
+import type { AuthClient } from '@ollie/auth';
+import {
+  validateInvite,
+  claimInvite,
+  readPendingInviteCode,
+  clearPendingInviteCode,
+  isBetaInviteRequired,
+} from '../lib/invite';
+import { deriveUserHash } from '../lib/user-hash';
+
+type Mode = 'fork' | 'signup' | 'signin' | 'forgot';
 
 export interface AuthFlowProps {
   /** The passphrase-derived encryption vault. */
@@ -276,11 +285,14 @@ function ErrorLine({ message }: { message: string }) {
   );
 }
 
-// Empty-passphrase placeholder so the meter renders before the (lazy,
-// async) zxcvbn estimate resolves.
+// Empty-passphrase placeholder so the meter has something to render
+// before the (lazy-loaded, async) zxcvbn estimate resolves.
 const EMPTY_STRENGTH: PassphraseStrength = { score: 0, band: 'weak', notes: [] };
 
 function StrengthMeter({ passphrase }: { passphrase: string }) {
+  // passphraseStrength is async now (zxcvbn is lazy-loaded). Resolve it in
+  // an effect and keep the latest result in state. A request id guards
+  // against an earlier slow resolve overwriting a newer one.
   const [s, setS] = useState<PassphraseStrength>(EMPTY_STRENGTH);
   useEffect(() => {
     if (!passphrase) {
@@ -424,7 +436,7 @@ function SetPassphraseScreen({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
-  const passLongEnough = pass.length >= 16;
+  const passLongEnough = pass.length >= CRYPTO_PARAMS.MIN_PASSPHRASE_LENGTH;
   const passMatches = pass.length > 0 && pass === confirm;
   const canSubmit = passLongEnough && passMatches && ack && !submitting;
 

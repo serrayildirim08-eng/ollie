@@ -220,6 +220,331 @@ return `{success: false, reason: 'rate_limit', retry_after}`. UI shows
 
 ---
 
+## 8. Worker auth security fixes (2026-05-17) — REQUIRED before this ships
+
+Three authentication holes in the Cloudflare Workers were fixed. The code
+is done, but the workers will NOT function correctly until you set the
+new secrets below and redeploy. Run each `wrangler secret put` from inside
+the named worker directory; it will prompt you to paste the value.
+
+### S1 · plaid-sync — verify the bank-data JWT
+
+The plaid-sync worker now verifies every user JWT against Supabase
+instead of trusting a self-decoded token. It needs the Supabase anon key.
+
+```
+cd workers/plaid-sync
+wrangler secret put SUPABASE_ANON_KEY
+# paste the SAME anon key the web app uses
+# (Supabase dashboard → Settings → API → "anon public" key)
+```
+
+If this secret is missing, ALL authed plaid endpoints (/link/token/create,
+/exchange, /inbox/drain, /inbox/ack) reject every request with 401 — bank
+linking and inbox sync stop working. So this is mandatory, not optional.
+
+### S2 · ai-proxy — authenticate the telemetry endpoints
+
+`/ingest-event`, `/label` and `/enrich-dump` now require a valid Supabase
+user JWT. `SUPABASE_ANON_KEY` is already set on ai-proxy from the invite
+work (Step 7) — confirm it is present:
+
+```
+cd workers/ai-proxy
+wrangler secret list      # SUPABASE_ANON_KEY must be in the list
+```
+
+If it is NOT listed:
+
+```
+wrangler secret put SUPABASE_ANON_KEY
+```
+
+Frontend note: the web app callers now send `Authorization: Bearer <jwt>`
+on these three endpoints. No env change is needed for that — it ships in
+the same web build. Just make sure the web app is redeployed alongside
+the worker so old clients (no header) don't get 401s. Old clients will
+simply fail telemetry silently (best-effort) until they update.
+
+### S3 · apns-push — lock down the internal /push endpoint
+
+The apns-push `/push` endpoint is now gated by a shared secret. Generate
+ONE secret and set the SAME value on BOTH workers:
+
+```
+# 1. generate the secret once and copy it:
+openssl rand -hex 32
+
+# 2. set it on apns-push:
+cd workers/apns-push
+wrangler secret put APNS_INTERNAL_SECRET
+# paste the value from step 1
+
+# 3. set the SAME value on cron:
+cd workers/cron
+wrangler secret put APNS_INTERNAL_SECRET
+# paste the EXACT same value
+```
+
+If the two values do not match, the cron notification drain gets 401
+from /push and no server-side notifications are delivered.
+
+### Redeploy after setting the secrets
+
+```
+cd workers/plaid-sync && wrangler deploy
+cd workers/apns-push  && wrangler deploy
+cd workers/cron       && wrangler deploy
+cd workers/ai-proxy   && wrangler deploy
+```
+
+Deploy order matters slightly: apns-push before cron (so the service
+binding resolves against a worker that already enforces the secret).
+
+### Smoke check
+
+- Bank link: open Atelier, link a sandbox bank — should still work.
+- Notifications: trigger `POST /flush-notifications` on the cron worker;
+  a due job should reach `sent`, not stick on `pending` with `apns-401`.
+- Telemetry: a signed-in user's brain dump should still land in
+  `raw_dumps` (verify per Step 5). A logged-out / no-JWT POST to
+  `/ingest-event` should now return 401.
+
+---
+
+## Backend cleanup sprint (2026-05-18) — worker deploy steps
+
+The "reinvented wheel" cleanup added two worker changes that need a deploy
+to take effect. The repo is SAFE to deploy as-is right now — both changes
+fall back to the existing behaviour until you complete the steps below.
+A routine `wrangler deploy` of any worker will NOT break.
+
+### Item #5 — native Rate Limiting (SAFE, deploy picks it up automatically)
+
+The racy KV-counter rate limiter is replaced by Cloudflare's native
+Rate Limiting binding. The `[[ratelimits]]` blocks are ALREADY UNCOMMENTED
+in `workers/ai-proxy/wrangler.toml` and `workers/apns-push/wrangler.toml`
+— this binding is **declarative**: Cloudflare provisions it on deploy, no
+`wrangler` CLI resource step is needed.
+
+Steps:
+1. Make sure Wrangler is ≥ 4.36 (`wrangler --version`).
+2. `wrangler deploy` ai-proxy and apns-push as normal.
+3. That's it — the workers prefer the native limiter and fall back to the
+   old KV counter only if the binding is somehow absent. Once confirmed
+   live you may delete the `RATE_KV` namespace + binding (optional).
+
+namespace_ids used: 2001 (AI), 2002 (telemetry), 2003 (apns push). These
+are arbitrary positive integers, unique per account — change only if they
+collide with an existing limiter.
+
+### Item #4 — Cloudflare Queues for the brain-dump enrichment queue
+
+The hand-rolled `q:enrich:*` KV queue migrates to a native Cloudflare
+Queue (native retry/backoff + a real DLQ). The producer/consumer bindings
+are deliberately **COMMENTED OUT** in `workers/ai-proxy/wrangler.toml` and
+`workers/cron/wrangler.toml` — an uncommented binding pointing at a queue
+that does not exist makes `wrangler deploy` FAIL. Until you run the steps
+below the workers keep using the KV queue (the code falls back when the
+`ENRICH_QUEUE` binding is undefined). Nothing breaks if you never do this.
+
+Steps (run in order):
+1. Create the queue and its dead-letter queue:
+   ```
+   wrangler queues create ollie-enrich-queue
+   wrangler queues create ollie-enrich-dlq
+   ```
+2. In `workers/ai-proxy/wrangler.toml` uncomment the `[[queues.producers]]`
+   block (binding `ENRICH_QUEUE`, queue `ollie-enrich-queue`).
+3. In `workers/cron/wrangler.toml` uncomment the `[[queues.consumers]]`
+   block (queue `ollie-enrich-queue`, dead_letter_queue `ollie-enrich-dlq`).
+4. Deploy in this order: `wrangler deploy` ai-proxy, then cron.
+5. Smoke check: a signed-in user's brain dump should still land in
+   `raw_dumps` + `enriched_signals` (now via the Queue instead of the
+   5-min KV scan). Check the cron worker's logs for `[queue:enrich]`.
+6. Once the Queue path is confirmed healthy, the 5-min `scheduled()`
+   enrich-drain in `workers/cron/src/index.ts` can be removed — it is
+   currently kept as a belt-and-braces fallback.
+
+If you decide NOT to migrate to Queues, no action is needed — leave the
+blocks commented and the KV path keeps running.
+
+---
+
+## Practice-bug audit fixes (2026-05-18) — worker deploy steps
+
+Three audit fixes touch worker code. None is dangerous to deploy; the repo
+is consistent as-is. Deploy steps below.
+
+### Item #1 — double-delivery cron decommissioned (apps/api / ollie-notifications)
+
+`apps/api` (`ollie-notifications`) ran a per-minute cron that scanned
+`scheduled_jobs` and delivered pushes — the SAME table `workers/cron`
+(`ollie-cron`) drains every 5 min. Running both = duplicate pushes + a
+broken daily cap. Fix: the `[triggers]` block in `apps/api/wrangler.toml`
+is removed and `scheduled()` is now an inert no-op.
+
+- VERIFIED: `ollie-notifications` is **NOT currently deployed**
+  (`wrangler deployments list --name ollie-notifications` → "Worker does
+  not exist on your account"). So **no redeploy is required** — there is
+  no live cron to stop.
+- IF you ever deploy `ollie-notifications` (it is still a valid HTTP
+  worker for `/register-token`, `/send`, `/account/delete`): deploy the
+  updated `wrangler.toml` so the cron trigger does not arm. Never run the
+  apps/api cron and `flushNotificationQueue` at the same time.
+
+### Item #12 — drain.ts raw_dumps idempotency (workers/cron / ollie-cron)
+
+`insertRawDump` is now an UPSERT on the `id` primary key
+(`on_conflict=id`, `prefer=resolution=merge-duplicates`). A retry after a
+crash between the raw write and the `enriched_signals` write no longer
+creates a duplicate `raw_dumps` row. Applies to BOTH active paths
+(`drainEnrichQueue` KV-scan and `handleEnrichQueueBatch` Queues consumer).
+
+- DB requirement: `raw_dumps.id` must be the PRIMARY KEY (or carry a
+  UNIQUE constraint) for PostgREST `on_conflict=id` to resolve. It already
+  is — no migration needed. If a future schema change drops that, the
+  upsert silently degrades to a plain insert.
+- Deploy: routine `wrangler deploy` of `ollie-cron`.
+
+### Item #13 — countSentToday fail-closed (workers/cron / ollie-cron)
+
+The daily-notification-cap count query previously returned `0` on any
+error → the cap was silently disabled for every user during a Supabase
+blip. It now returns a sentinel; `processJob` leaves the job `pending`
+(retried next 5-min tick) instead of delivering against an unknown budget.
+Repeated failures still flip the job to `failed` via the normal retry cap,
+so it cannot retry forever.
+
+- Deploy: routine `wrangler deploy` of `ollie-cron`. No secrets, no
+  schema, no new bindings. Bundled with the Item #12 deploy.
+
+Summary: **deploy `ollie-cron` once** to pick up #12 + #13. #1 needs no
+deploy (worker not live).
+
+---
+
+## New-device sign-in migration (2026-05-18) — Supabase only, Serra-runnable
+
+The "sign in from a new device" auth flow is code-complete in
+`packages/auth/src/index.ts`, but it stays broken in prod until ONE
+migration is applied. No worker deploy, no secrets, no env change.
+
+### Why
+
+On a new device the app has no local salt, so it asks Supabase for the
+non-secret `salt` + `encrypted_server_pw` (keyed by email) using only the
+anon key. Today `profiles` blocks anon entirely, so the request fails and
+the user is stuck on "import a backup". This migration opens a narrow,
+column-limited anon read for exactly those recovery columns.
+
+Safe because: a salt is non-secret by design, and `encrypted_server_pw`
+is ciphertext that is useless without the user's passphrase — and the
+passphrase never leaves the device. Anon can read ONLY 4 columns
+(`id, email, salt, encrypted_server_pw`); everything else stays hidden.
+
+### Apply
+
+Apply this one migration in order via `supabase db push`, or paste it in
+the Supabase dashboard SQL editor:
+
+- `supabase/migrations/20260518000001_profiles_anon_email_lookup.sql`
+
+(Additive only — it does not touch existing rows or the authenticated-user
+policies. The `email` column + index already exist from an earlier
+migration, so they are not re-created.)
+
+### Verify (1 min, in the Supabase SQL editor)
+
+```sql
+-- anon must have column-level SELECT on exactly these 4 columns:
+SELECT grantee, column_name, privilege_type
+FROM information_schema.column_privileges
+WHERE table_name = 'profiles' AND grantee = 'anon';
+-- expect 4 rows: id, email, salt, encrypted_server_pw  (SELECT)
+
+-- the anon policy must exist:
+SELECT policyname, roles, cmd
+FROM pg_policies
+WHERE tablename = 'profiles' AND policyname = 'profiles_select_anon_recovery';
+-- expect 1 row, roles = {anon}, cmd = SELECT
+```
+
+### Smoke test (real new-device path)
+
+1. Sign up / sign in once on device A (so a `profiles` row with `salt` +
+   `encrypted_server_pw` + `email` exists).
+2. On device B (or a fresh incognito profile with cleared localStorage),
+   sign in with the SAME email + passphrase. It should succeed — the
+   client recovers the salt from Supabase (`recovered_from_server`).
+3. With a WRONG passphrase on device B it must still fail with
+   "wrong passphrase" — recovery does not bypass the passphrase.
+
+### Rollback
+
+If anything looks wrong, `supabase/rollbacks/20260518000001_profiles_anon_email_lookup.down.sql`
+re-locks `profiles` to the anon-gets-nothing state.
+
+---
+
+## Security audit medium fixes (2026-05-18) — S8 worker deploy steps
+
+The S4–S8 medium-severity security fixes are code-complete. Four of the
+five (S4 secret-log leakage, S5 stale consent cache, S6 credential wipe,
+S7 PBKDF2 iteration count) are **client/package-only** — they ship in the
+normal web/desktop build, NO worker deploy needed.
+
+**S8 — PostgREST error bodies no longer leak to callers — touches the
+workers and DOES need a `wrangler deploy` to go live.**
+
+### What changed (S8)
+
+Workers used to return raw upstream error bodies to the caller
+(`detail: errText`). PostgREST error bodies disclose table, column, and
+constraint names — an information-disclosure vector. Now:
+
+- `workers/ai-proxy` — `/generate-invite`, `/claim-invite`, `/label`,
+  `/ingest-event` return a GENERIC body `{ error, request_id }`. The full
+  upstream detail is logged SERVER-SIDE only (`console.error`, visible in
+  `wrangler tail`), tagged with the same `request_id` for support
+  correlation.
+- `workers/plaid-sync` — the `supabaseSelect/Insert/Update/Delete` helpers
+  no longer dump the raw, unbounded PostgREST body into the worker log;
+  the body is bounded to 2 KB and tagged with a `request_id`. (plaid-sync
+  already returned generic codes to the client — no client-facing change.)
+- New shared helper `upstreamError()` in `@ollie/worker-http`.
+
+### Deploy steps (Serra-runnable)
+
+NO new secrets, NO new bindings. Just redeploy the two affected workers:
+
+```
+cd workers/ai-proxy   && wrangler deploy
+cd workers/plaid-sync && wrangler deploy
+```
+
+Safe to deploy independently and in any order — there is no cross-worker
+contract change. Old web clients keep working: the response still has an
+`error` field they branch on; only the `detail`/`status` extras are gone.
+
+### Smoke check (S8)
+
+1. Force a Supabase error you can observe — e.g. POST `/ingest-event` with
+   a row that violates a column constraint.
+2. The HTTP response body must be `{ "error": "ingest_failed",
+   "request_id": "..." }` — NO table/column/constraint names, NO `detail`.
+3. `wrangler tail ollie-ai-proxy` must show the full PostgREST detail
+   server-side, on a line carrying the SAME `request_id` the caller got.
+
+### Frontend note
+
+The web app does not consume the removed `detail`/`status` fields, so no
+web change is required for S8. If any caller surfaced `detail` in a UI
+string (none found in this repo), it would now show the generic code —
+acceptable, and the `request_id` can be surfaced to users for support.
+
+---
+
 ## Out of scope here (deferred post-beta)
 
 - Cold-storage rotation cron.

@@ -65,7 +65,10 @@ function fakeAnthropicResponse(): Response {
 const ENV_BASE = {
   SUPABASE_URL: 'https://example.supabase.co',
   SUPABASE_SERVICE_ROLE: 'service-role-fake',
-  AI_PROXY: { fetch: async (_input: any, _init?: any) => fakeAnthropicResponse() } as any,
+  // Minimal Fetcher stub — only `.fetch` is exercised by drainEnrichQueue.
+  AI_PROXY: {
+    fetch: async (_input: unknown, _init?: unknown) => fakeAnthropicResponse(),
+  } as unknown as Fetcher,
 };
 
 describe('drainEnrichQueue · happy path', () => {

@@ -52,6 +52,60 @@ describe('parseReminder', () => {
     const b = parseReminder('in 1 hour', NOW + 1);
     expect(a!.id).not.toBe(b!.id);
   });
+
+  // ─── #1 chrono-node: explicit time must survive ─────────────────────────────
+  // Regression: the old pattern table dropped the time from "next friday at
+  // 6pm" and resolved to 09:00. chrono-node keeps the 18:00.
+  describe('explicit-time regression (chrono-node)', () => {
+    it('"next friday at 6pm" resolves to 18:00, not 09:00', () => {
+      const r = parseReminder('call mom next friday at 6pm', NOW);
+      expect(r).not.toBeNull();
+      const d = new Date(r!.datetime);
+      expect(d.getHours()).toBe(18);
+      expect(d.getMinutes()).toBe(0);
+      expect(d.getDay()).toBe(5); // Friday
+      expect(r!.datetime).toBeGreaterThan(NOW);
+    });
+
+    it('"next monday at 7:30am" keeps both hour and minute', () => {
+      const r = parseReminder('standup next monday at 7:30am', NOW);
+      expect(r).not.toBeNull();
+      const d = new Date(r!.datetime);
+      expect(d.getHours()).toBe(7);
+      expect(d.getMinutes()).toBe(30);
+      expect(d.getDay()).toBe(1); // Monday
+    });
+
+    it('"tomorrow at 6pm" keeps the explicit time', () => {
+      const r = parseReminder('vet tomorrow at 6pm', NOW);
+      expect(r).not.toBeNull();
+      const d = new Date(r!.datetime);
+      expect(d.getHours()).toBe(18);
+    });
+  });
+
+  // ─── #1 hour/minute bounds validation ───────────────────────────────────────
+  describe('clock-time bounds validation', () => {
+    it('rejects "99:88" — out-of-range hours and minutes', () => {
+      expect(parseReminder('remind me at 99:88', NOW)).toBeNull();
+    });
+
+    it('rejects "25:00" — out-of-range hours', () => {
+      expect(parseReminder('meeting at 25:00', NOW)).toBeNull();
+    });
+
+    it('rejects "12:75" — out-of-range minutes', () => {
+      expect(parseReminder('lunch at 12:75', NOW)).toBeNull();
+    });
+
+    it('still accepts a valid edge time "23:59"', () => {
+      const r = parseReminder('wrap up at 23:59', NOW);
+      expect(r).not.toBeNull();
+      const d = new Date(r!.datetime);
+      expect(d.getHours()).toBe(23);
+      expect(d.getMinutes()).toBe(59);
+    });
+  });
 });
 
 // ─── scheduler ───────────────────────────────────────────────────────────────

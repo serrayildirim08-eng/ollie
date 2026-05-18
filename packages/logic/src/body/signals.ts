@@ -84,7 +84,7 @@ export interface BodySignalsOpts {
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
-const DAY_MS = 86_400_000;
+import { DAY_MS } from '../util';
 
 const SLEEP_SOURCE: PatternSource = {
   citation: 'Lim & Dinges 2010, Psychol Bull — A meta-analysis of the impact of short-term sleep deprivation on cognitive variables',
@@ -103,12 +103,6 @@ function dayKeyOf(ts: number): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-/** Parse a YYYY-MM-DD night_of to a noon-epoch ts. */
-function nightOfToTs(nightOf: string): number | null {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(nightOf)) return null;
-  const d = new Date(nightOf + 'T12:00:00');
-  return isNaN(d.getTime()) ? null : d.getTime();
-}
 
 /** Completion ratio of a focus session, clamped to [0, 1.5]. */
 function completionRatio(s: SignalFocusSession): number {

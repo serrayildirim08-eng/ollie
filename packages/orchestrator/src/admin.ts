@@ -43,16 +43,9 @@ import type {
   AdminTask,
   DumpEntry,
   AdminHistory,
-  OpenLoopSignal,
   PhoneTaskSignal,
-  RenewalCueSignal,
-  StaleBallSignal,
-  Last5PctSignal,
   PaperworkSplitSignal,
   PaperworkSplitExistingSignal,
-  FirehoseDumpSignal,
-  DeferChainSignal,
-  TwoMinuteTaskSignal,
   RecurringPatternSignal,
 } from '@ollie/logic/admin';
 import type { Orchestrator } from './types';

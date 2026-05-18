@@ -8,6 +8,8 @@ import { _clearAllHandlers, on, emit } from '@ollie/events';
 import { createFinanceOrchestrator } from '../src/finance';
 import type { FinanceRecord } from '@ollie/logic/finance';
 import type { NotificationSpec } from '@ollie/notifications';
+// @ts-expect-error — CJS tool module, no type declarations
+import { scanForBanned } from '../../../tools/banned-phrases.cjs';
 
 // Fixed wall-clock: 2026-05-09T12:00:00Z
 const NOW = new Date('2026-05-09T12:00:00Z').getTime();
@@ -854,9 +856,6 @@ describe('finance orchestrator — tax set-aside', () => {
   it('copy literal passes banned-phrase scanner', () => {
     // The exact push copy — verified against the scanner rules in banned-phrases.cjs.
     // No cheerleading, no engagement, no streak language, no exclamation.
-    const { scanForBanned } = require('../../../tools/banned-phrases.cjs') as {
-      scanForBanned: (text: string, scope: string[]) => Array<{ id: string; why: string; source: string }>;
-    };
     const title = 'tax set-aside · $500 for May. monthly nudge, not a deadline.';
     const globalHits = scanForBanned(title, []);
     const pushHits = scanForBanned(title, ['push']);

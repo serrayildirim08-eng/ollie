@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useRef, useState } from 'react';
+import React, { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
 
 export interface ToastOptions {
   module?: string;
@@ -59,12 +59,19 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 export function useToast(): { show(message: string, opts?: ToastOptions): void } {
   const ctx = useContext(ToastContext);
   if (!ctx) throw new Error('useToast must be used inside <ToastProvider>');
-  return { show: ctx.show };
+  // Audit-fix #15: previously `return { show: ctx.show }` allocated a fresh
+  // object every render. Consumers that list `toast` in a `useCallback` /
+  // `useEffect` dependency array (notably `useApplyBrainDump`) then re-ran
+  // their effects/memos on every render. `ctx.show` is itself stable (a
+  // `useCallback([])` in the provider), so memoizing the wrapper on it
+  // yields a reference that is stable for the lifetime of the provider.
+  return useMemo(() => ({ show: ctx.show }), [ctx.show]);
 }
 
-/** Internal hook for ToastHost */
-export function _useToastState() {
+/** Internal hook — read by ToastHost only. Name must start with `use`
+ *  so React's Rules of Hooks lint recognises it as a hook. */
+export function useToastState() {
   const ctx = useContext(ToastContext);
-  if (!ctx) throw new Error('_useToastState must be used inside <ToastProvider>');
+  if (!ctx) throw new Error('useToastState must be used inside <ToastProvider>');
   return { toasts: ctx._toasts, close: ctx._close };
 }

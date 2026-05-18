@@ -13,6 +13,9 @@ const FIXED_NOW = Date.UTC(2026, 4, 14, 12, 0, 0);
 
 type FetchFn = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
+/** Default test JWT getter — a stand-in for a signed-in Supabase session. */
+const getJwt = () => 'jwt-test-token';
+
 describe('postEnrichDump · happy path', () => {
   it('POSTs to <workerUrl>/enrich-dump with the correct shape', () => {
     const fetchImpl: FetchFn = vi.fn(async () =>
@@ -29,13 +32,15 @@ describe('postEnrichDump · happy path', () => {
         country: 'TR',
         locale: 'tr-TR',
       },
-      { fetchImpl, workerUrl: 'https://worker.dev', now: () => FIXED_NOW },
+      { fetchImpl, workerUrl: 'https://worker.dev', now: () => FIXED_NOW, getJwt },
     );
     const spy = fetchImpl as unknown as ReturnType<typeof vi.fn<FetchFn>>;
     expect(spy).toHaveBeenCalledTimes(1);
     const [url, init] = spy.mock.calls[0];
     expect(url).toBe('https://worker.dev/enrich-dump');
     expect(init?.method).toBe('POST');
+    const headers = init?.headers as Record<string, string>;
+    expect(headers.authorization).toBe('Bearer jwt-test-token');
     const body = JSON.parse(String(init?.body));
     expect(body).toMatchObject({
       user_hash: 'h1',
@@ -54,7 +59,7 @@ describe('postEnrichDump · happy path', () => {
     const fetchImpl: FetchFn = vi.fn(async () => new Response('{}'));
     postEnrichDump(
       { user_hash: 'h', device_id: 'd', app_version: '0.0.1', raw_text: 'x', modality: 'text', routing_module: null, country: 'INTL', locale: 'en' },
-      { fetchImpl, workerUrl: 'https://worker.dev/' },
+      { fetchImpl, workerUrl: 'https://worker.dev/', getJwt },
     );
     const spy = fetchImpl as unknown as ReturnType<typeof vi.fn<FetchFn>>;
     expect(spy.mock.calls[0][0]).toBe('https://worker.dev/enrich-dump');
@@ -89,13 +94,22 @@ describe('postEnrichDump · guards', () => {
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
+  it('no-op when getJwt returns null (no signed-in session)', () => {
+    const fetchImpl = vi.fn(async () => new Response('{}'));
+    postEnrichDump(
+      { user_hash: 'h', device_id: 'd', app_version: '0.0.1', raw_text: 'x', modality: 'text', routing_module: null, country: 'INTL', locale: 'en' },
+      { fetchImpl, workerUrl: 'https://worker.dev', getJwt: () => null },
+    );
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
   it('swallows fetch rejection silently', () => {
     const fetchImpl = vi.fn(() => Promise.reject(new Error('network down')));
     // Should not throw.
     expect(() => {
       postEnrichDump(
         { user_hash: 'h', device_id: 'd', app_version: '0.0.1', raw_text: 'x', modality: 'text', routing_module: null, country: 'INTL', locale: 'en' },
-        { fetchImpl, workerUrl: 'https://worker.dev' },
+        { fetchImpl, workerUrl: 'https://worker.dev', getJwt },
       );
     }).not.toThrow();
   });

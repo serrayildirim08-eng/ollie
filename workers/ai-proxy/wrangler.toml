@@ -11,14 +11,58 @@ compatibility_flags = ["nodejs_compat"]
 binding = "CACHE_KV"
 id = "6031aea7f9c14f96884e55ec1be527f3"
 
+# RATE_KV is the LEGACY rate-limit store. It is kept as a fallback while the
+# native Rate Limiting binding (below) rolls out — the worker prefers the
+# native limiter and only falls back to this KV counter if the binding is
+# absent. Safe to remove once the native limiter is confirmed live.
 [[kv_namespaces]]
 binding = "RATE_KV"
 id = "5e222944bc8f450cb3cca05e709e3b88"
+
+# ─── native Rate Limiting bindings (item #5) ───────────────────────────────────
+# These replace the racy KV-counter rate limiter. The binding is DECLARATIVE —
+# Cloudflare provisions it automatically on `wrangler deploy`, no `wrangler`
+# CLI resource-creation step is required (needs Wrangler ≥ 4.36).
+# `period` must be 10 or 60. namespace_id is an arbitrary positive integer,
+# unique per limiter within the account.
+#
+# AI_RATE_LIMITER   — /brain-dump + /v1/messages : 10 requests / 60s per user.
+# TELEM_RATE_LIMITER — /enrich-dump + /ingest-event + /label : 10 / 60s per user.
+[[ratelimits]]
+name = "AI_RATE_LIMITER"
+namespace_id = "2001"
+simple = { limit = 10, period = 60 }
+
+[[ratelimits]]
+name = "TELEM_RATE_LIMITER"
+namespace_id = "2002"
+simple = { limit = 10, period = 60 }
+
+# ─── Cloudflare Queues producer (item #4) — COMMENTED OUT, see DEPLOY_TODO ─────
+# The brain-dump enrichment queue migrates from the hand-rolled `q:enrich:*`
+# KV queue to a native Cloudflare Queue. This block is intentionally left
+# commented: an uncommented producer binding pointing at a queue that does
+# not exist makes `wrangler deploy` FAIL. Until the queue is provisioned the
+# worker falls back to the KV queue (env.ENRICH_QUEUE is undefined).
+#
+# To enable (see DEPLOY_TODO.md §"Item #4 — Cloudflare Queues"):
+#   1. wrangler queues create ollie-enrich-queue
+#   2. wrangler queues create ollie-enrich-dlq
+#   3. uncomment the block below, AND the [[queues.consumers]] block in
+#      workers/cron/wrangler.toml
+#   4. deploy ai-proxy, then cron
+#
+[[queues.producers]]
+binding = "ENRICH_QUEUE"
+queue = "ollie-enrich-queue"
 
 # ─── secrets (set with `wrangler secret put`) ──────────────────────────────────
 # ANTHROPIC_API_KEY       — sk-ant-… key. NEVER ship to the client.
 # SUPABASE_URL            — https://<ref>.supabase.co (used by /ingest-event)
 # SUPABASE_SERVICE_ROLE   — server-only key (used by /ingest-event + invites)
-# SUPABASE_ANON_KEY       — public anon key (used to verify user JWTs on invite endpoints)
+# SUPABASE_ANON_KEY       — public anon key. Used to verify user JWTs on the
+#                           invite endpoints AND on the telemetry endpoints
+#                           (/ingest-event, /label, /enrich-dump). REQUIRED —
+#                           those endpoints reject every request without it.
 # INVITE_BASE_URL         — optional; e.g. https://ollie.app. Defaults to ollie.app
 #                           when unset. Used in /generate-invite share_url.

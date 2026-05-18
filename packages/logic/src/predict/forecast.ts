@@ -16,7 +16,7 @@ import type {
   TierLabel,
 } from './types';
 import { ALPHA_AFTER_SHIFT, DAY_MS, TIER_COPY } from './constants';
-import { mean, recencyWeights, sampleSd, sum, toSeries } from './math';
+import { recencyWeights, sampleSd, sum, toSeries } from './math';
 import {
   detectChangePoint,
   posterior,

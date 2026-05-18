@@ -16,15 +16,28 @@
  *   POST /enrich-dump      — receive brain-dump, PII-scrub, queue in KV for
  *                            batch enrichment by the cron worker. NO upstream
  *                            Anthropic call here; UX gets zero added latency.
+ *                            AUTHED: requires a valid Supabase user JWT.
  *   POST /ingest-event     — receive retention/session/module/crisis/consent
  *                            rows and INSERT directly into Supabase via REST.
+ *                            AUTHED: requires a valid Supabase user JWT.
+ *   POST /label            — Anthropic-backed research labeling.
+ *                            AUTHED: requires a valid Supabase user JWT.
+ *
+ * Auth:
+ *   /enrich-dump, /ingest-event and /label use the service-role key, so
+ *   they require an `Authorization: Bearer <supabase-user-jwt>` header.
+ *   The JWT is verified against Supabase Auth (GET /auth/v1/user) — a
+ *   self-decoded claim is never trusted. They also share the per-user
+ *   rate limit (keyed on the verified user id).
  *
  * Features:
  *   - 5-minute KV cache keyed by sha256(canonicalised body).
- *   - 10 req/min rate limit per user (header `x-user-id` or X-Forwarded-For).
+ *   - 10 req/min rate limit per user (proxy: header `x-user-id` or
+ *     X-Forwarded-For; telemetry: verified Supabase user id).
  *   - anthropic-beta: prompt-caching-2024-07-31 is forwarded.
  */
 
+import { json } from '@ollie/worker-http';
 import { scrubPII } from './pii';
 import {
   handleEnrichDump,
@@ -37,8 +50,17 @@ import {
   handleGenerateInvite,
   handleValidateInvite,
   handleClaimInvite,
+  verifyJwt,
   type InvitesEnv,
 } from './invites';
+
+/**
+ * Cloudflare native Rate Limiting binding. `limit()` is atomic edge-side,
+ * which fixes the read-then-write race the KV counter had.
+ */
+export interface RateLimiter {
+  limit(opts: { key: string }): Promise<{ success: boolean }>;
+}
 
 export interface Env extends EnrichEnv, IngestEnv, LabelEnv, InvitesEnv {
   ANTHROPIC_API_KEY: string;
@@ -48,6 +70,11 @@ export interface Env extends EnrichEnv, IngestEnv, LabelEnv, InvitesEnv {
   SUPABASE_SERVICE_ROLE: string;
   SUPABASE_ANON_KEY: string;
   INVITE_BASE_URL?: string;
+  // Native rate-limit bindings (item #5). Optional so a deploy that hasn't
+  // picked up the wrangler.toml [[ratelimits]] blocks still type-checks and
+  // falls back to the legacy KV counter.
+  AI_RATE_LIMITER?: RateLimiter;
+  TELEM_RATE_LIMITER?: RateLimiter;
 }
 
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
@@ -65,16 +92,39 @@ export default {
       return json({ error: 'method_not_allowed' }, 405);
     }
 
-    // Telemetry endpoints — separate code path. They do their own validation
-    // and do NOT share the proxy's per-user rate limit (telemetry traffic is
-    // expected to be ~100x the proxy traffic per user).
-    if (url.pathname === '/enrich-dump') {
-      return handleEnrichDump(req, env);
-    }
-    if (url.pathname === '/ingest-event') {
-      return handleIngestEvent(req, env);
-    }
-    if (url.pathname === '/label') {
+    // Telemetry endpoints — separate code path. They use the service-role
+    // key, so they MUST be authenticated: every caller has to present a
+    // valid Supabase user JWT (`Authorization: Bearer <token>`), verified
+    // against Supabase Auth. They also share the per-user rate limit so a
+    // single account cannot poison telemetry tables or burn the Anthropic
+    // budget on /label.
+    if (
+      url.pathname === '/enrich-dump' ||
+      url.pathname === '/ingest-event' ||
+      url.pathname === '/label'
+    ) {
+      const authHeader = req.headers.get('authorization');
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return json({ error: 'unauthorized' }, 401);
+      }
+      const userId = await verifyJwt(authHeader.slice('Bearer '.length), env);
+      if (!userId) {
+        return json({ error: 'invalid_jwt' }, 401);
+      }
+      const allowed = await checkRate(
+        env.TELEM_RATE_LIMITER,
+        env.RATE_KV,
+        `rl:telemetry:${userId}`,
+      );
+      if (!allowed) {
+        return json({ error: 'rate_limited' }, 429);
+      }
+      if (url.pathname === '/enrich-dump') {
+        return handleEnrichDump(req, env);
+      }
+      if (url.pathname === '/ingest-event') {
+        return handleIngestEvent(req, env);
+      }
       return handleLabel(req, env);
     }
     if (url.pathname === '/generate-invite') {
@@ -98,7 +148,7 @@ export default {
       req.headers.get('cf-connecting-ip') ||
       'anon';
 
-    const allowed = await checkRate(env.RATE_KV, `rl:ai:${userKey}`);
+    const allowed = await checkRate(env.AI_RATE_LIMITER, env.RATE_KV, `rl:ai:${userKey}`);
     if (!allowed) {
       return json({ error: 'rate_limited' }, 429);
     }
@@ -154,7 +204,23 @@ export default {
 
 // ─── helpers ───────────────────────────────────────────────────────────────────
 
-async function checkRate(kv: KVNamespace, key: string): Promise<boolean> {
+/**
+ * Rate-limit check. Prefers the native Cloudflare Rate Limiting binding
+ * (atomic at the edge — fixes the read-then-write race the KV counter had).
+ * Falls back to the legacy KV fixed-window counter when the binding is not
+ * present, so a deploy that has not yet picked up the [[ratelimits]] config
+ * still enforces a limit.
+ */
+async function checkRate(
+  limiter: RateLimiter | undefined,
+  kv: KVNamespace,
+  key: string,
+): Promise<boolean> {
+  if (limiter) {
+    const { success } = await limiter.limit({ key });
+    return success;
+  }
+  // Legacy fallback — racy fixed-window KV counter.
   const now = Math.floor(Date.now() / 1000);
   const slot = `${key}:${Math.floor(now / RATE_WINDOW_SEC)}`;
   const raw = await kv.get(slot);
@@ -174,12 +240,7 @@ async function sha256Hex(s: string): Promise<string> {
   return hex;
 }
 
-function json(obj: unknown, status = 200): Response {
-  return new Response(JSON.stringify(obj), {
-    status,
-    headers: { 'content-type': 'application/json' },
-  });
-}
+// `json()` is the shared helper from @ollie/worker-http (imported above).
 
 // Re-export so tests can import the pure scrubber.
 export { scrubPII };

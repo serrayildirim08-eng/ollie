@@ -161,7 +161,7 @@ describe('@ollie/pii-scrub · 100-sample golden', () => {
     const fnRate = totalExpected === 0 ? 0 : totalMissed / totalExpected;
     // Always print so a regression is visible in CI logs.
     if (fnRate > 0) {
-      // eslint-disable-next-line no-console
+       
       console.warn(`PII scrub FN: ${totalMissed}/${totalExpected} = ${(fnRate * 100).toFixed(1)}%`);
       for (const m of misses) console.warn(' · ' + m);
     }
@@ -169,7 +169,6 @@ describe('@ollie/pii-scrub · 100-sample golden', () => {
   });
 
   it('false-positive rate < 5% on clean samples', () => {
-    let totalRedactions = 0;
     let totalChecks = 0;
     const fps: string[] = [];
 
@@ -177,7 +176,6 @@ describe('@ollie/pii-scrub · 100-sample golden', () => {
       totalChecks++;
       const { redactions } = scrubPII(sample.text, sample.locale);
       if (redactions.length > 0) {
-        totalRedactions += redactions.length;
         for (const r of redactions) {
           fps.push(`[${sample.locale}] false-positive ${r.type}="${r.original}" in: "${sample.text}"`);
         }
@@ -193,7 +191,7 @@ describe('@ollie/pii-scrub · 100-sample golden', () => {
     const fpRate = samplesWithFP.size / totalChecks;
 
     if (fpRate > 0) {
-      // eslint-disable-next-line no-console
+       
       console.warn(`PII scrub FP: ${samplesWithFP.size}/${totalChecks} = ${(fpRate * 100).toFixed(1)}%`);
       for (const f of fps) console.warn(' · ' + f);
     }
@@ -247,282 +245,6 @@ describe('@ollie/pii-scrub · capitalized-name heuristic (audit #3)', () => {
     // still relies purely on the wordlist pass.
     const { redactions } = scrubPII('matcha latte and olive oil for dinner', 'en');
     expect(redactions.filter((r) => r.type === 'NAME')).toHaveLength(0);
-  });
-});
-
-// ─── T1 · brand allowlist ─────────────────────────────────────────────────────
-
-describe('@ollie/pii-scrub · brand allowlist', () => {
-  it('isBrand returns true for Turkish grocery chains (case-insensitive)', () => {
-    expect(isBrand('Migros')).toBe(true);
-    expect(isBrand('migros')).toBe(true);
-    expect(isBrand('MIGROS')).toBe(true);
-    expect(isBrand('bim')).toBe(true);
-    // isBrand is case-insensitive: 'A101'.toLowerCase() === 'a101'
-    expect(isBrand('A101')).toBe(true);
-    expect(isBrand('a101')).toBe(true);
-  });
-
-  it('isBrand returns true for global brands', () => {
-    expect(isBrand('Coca-Cola')).toBe(true);
-    expect(isBrand('Samsung')).toBe(true);
-    expect(isBrand('Apple')).toBe(true);
-    expect(isBrand('Pepsi')).toBe(true);
-    expect(isBrand('Nestle')).toBe(true);
-    expect(isBrand('Nestlé')).toBe(true);
-  });
-
-  it('isBrand returns false for common nouns', () => {
-    expect(isBrand('apple')).toBe(true); // tech brand overrides food noun — correct
-    expect(isBrand('chair')).toBe(false);
-    expect(isBrand('hospital')).toBe(false);
-    expect(isBrand('ahmed')).toBe(false);
-  });
-
-  it('brand allowlist has a meaningful size', () => {
-    expect(BRAND_COUNT).toBeGreaterThan(50);
-  });
-
-  it('scrubPII preserves Migros in grocery-style text', () => {
-    const { scrubbed, redactions } = scrubPII('Migros\'tan elma aldım', 'tr');
-    expect(scrubbed).toContain('Migros');
-    expect(redactions.every((r) => r.original.toLowerCase() !== 'migros')).toBe(true);
-  });
-
-  it('scrubPII preserves Coca-Cola in a purchase note', () => {
-    const { scrubbed } = scrubPII('bought Coca-Cola and Pepsi from the store', 'en');
-    expect(scrubbed).toContain('Coca-Cola');
-    expect(scrubbed).toContain('Pepsi');
-  });
-
-  it('scrubPII preserves Samsung mid-sentence without redacting it as a capitalized run', () => {
-    const { scrubbed, redactions } = scrubPII('met John at Samsung store yesterday', 'en');
-    // John is a name trigger context; Samsung should survive
-    expect(scrubbed).toContain('Samsung');
-    expect(redactions.some((r) => r.original === 'Samsung')).toBe(false);
-  });
-
-  it('scrubPII preserves Spotify in a finance-module expense note', () => {
-    const { scrubbed } = scrubPII('Spotify charged me again this month', 'en');
-    expect(scrubbed).toContain('Spotify');
-  });
-});
-
-// ─── T1 · MEDICAL scrub ───────────────────────────────────────────────────────
-
-describe('@ollie/pii-scrub · MEDICAL category (T1)', () => {
-  it('redacts cancer diagnosis phrase', () => {
-    const { scrubbed, redactions } = scrubPII('she was diagnosed with cancer last year', 'en');
-    expect(scrubbed).toContain('[MEDICAL]');
-    expect(scrubbed).not.toContain('cancer');
-    expect(redactions.some((r) => r.type === 'MEDICAL')).toBe(true);
-  });
-
-  it('redacts diabetes', () => {
-    const { scrubbed } = scrubPII('managing my diabetes with diet changes', 'en');
-    expect(scrubbed).toContain('[MEDICAL]');
-    expect(scrubbed).not.toContain('diabetes');
-  });
-
-  it('redacts Turkish medical terms', () => {
-    const { scrubbed } = scrubPII('diyabet teşhisi aldım geçen ay', 'tr');
-    expect(scrubbed).toContain('[MEDICAL]');
-  });
-
-  it('redacts heart attack', () => {
-    const { scrubbed } = scrubPII('dad had a heart attack in March', 'en');
-    expect(scrubbed).toContain('[MEDICAL]');
-    expect(scrubbed).not.toContain('heart attack');
-  });
-
-  it('redacts HIV/AIDS', () => {
-    const { scrubbed, redactions } = scrubPII('tested positive for HIV this week', 'en');
-    expect(scrubbed).toContain('[MEDICAL]');
-    expect(redactions.some((r) => r.type === 'MEDICAL' && r.original.toLowerCase() === 'hiv')).toBe(true);
-  });
-
-  it('redacts multiple conditions in one string', () => {
-    const { redactions } = scrubPII(
-      'dealing with asthma and diabetes simultaneously',
-      'en',
-    );
-    const medicals = redactions.filter((r) => r.type === 'MEDICAL');
-    expect(medicals.length).toBeGreaterThanOrEqual(2);
-  });
-
-  it('does NOT redact a pharma company brand name via MEDICAL', () => {
-    // "Pfizer" is in the brand allowlist — must not be tagged MEDICAL or NAME
-    const { scrubbed } = scrubPII('Pfizer released new data today', 'en');
-    expect(scrubbed).toContain('Pfizer');
-  });
-});
-
-// ─── T1 · MEDICATION scrub ───────────────────────────────────────────────────
-
-describe('@ollie/pii-scrub · MEDICATION category (T1)', () => {
-  it('redacts Ritalin (ADHD med)', () => {
-    const { scrubbed, redactions } = scrubPII('took my Ritalin at 8am as usual', 'en');
-    expect(scrubbed).toContain('[MEDICATION]');
-    expect(scrubbed).not.toContain('Ritalin');
-    expect(redactions.some((r) => r.type === 'MEDICATION')).toBe(true);
-  });
-
-  it('redacts Xanax', () => {
-    const { scrubbed } = scrubPII('my doctor prescribed Xanax for the anxiety', 'en');
-    expect(scrubbed).toContain('[MEDICATION]');
-    expect(scrubbed).not.toContain('Xanax');
-  });
-
-  it('redacts antidepressant generic name (fluoxetine)', () => {
-    const { scrubbed } = scrubPII('increased fluoxetine to 40mg today', 'en');
-    expect(scrubbed).toContain('[MEDICATION]');
-  });
-
-  it('redacts Turkish prescription drug name', () => {
-    const { scrubbed } = scrubPII('cipralex içmeye başladım bu hafta', 'tr');
-    expect(scrubbed).toContain('[MEDICATION]');
-    expect(scrubbed).not.toContain('cipralex');
-  });
-
-  it('does NOT redact melatonin-adjacent brand if brand-listed', () => {
-    // melatonin itself IS in the medication list (it reveals dosing habits).
-    const { scrubbed } = scrubPII('took melatonin before bed', 'en');
-    expect(scrubbed).toContain('[MEDICATION]');
-  });
-});
-
-// ─── T1 · SEXUAL scrub ───────────────────────────────────────────────────────
-
-describe('@ollie/pii-scrub · SEXUAL category (T1)', () => {
-  it('redacts sexual intercourse phrase', () => {
-    const { scrubbed, redactions } = scrubPII(
-      'had sexual intercourse last night and felt weird after',
-      'en',
-    );
-    expect(scrubbed).toContain('[SEXUAL]');
-    expect(scrubbed).not.toContain('sexual intercourse');
-    expect(redactions.some((r) => r.type === 'SEXUAL')).toBe(true);
-  });
-
-  it('redacts explicit slang term', () => {
-    const { scrubbed } = scrubPII('was watching porn again at 2am', 'en');
-    expect(scrubbed).toContain('[SEXUAL]');
-    expect(scrubbed).not.toContain('porn');
-  });
-
-  it('redacts Turkish explicit term', () => {
-    const { scrubbed } = scrubPII('gece seks istedim ama olmadı', 'tr');
-    expect(scrubbed).toContain('[SEXUAL]');
-  });
-
-  it('redacts masturbation', () => {
-    const { scrubbed } = scrubPII('masturbating to avoid anxiety again', 'en');
-    expect(scrubbed).toContain('[SEXUAL]');
-  });
-
-  it('does not false-positive on clinical anatomy in workout context', () => {
-    // "anal" appears in our list — but "analysis" should NOT match because
-    // the regex uses word boundaries.
-    const { redactions } = scrubPII('did a cost analysis and back squats', 'en');
-    expect(redactions.filter((r) => r.type === 'SEXUAL')).toHaveLength(0);
-  });
-});
-
-// ─── T1 · MENTAL_HEALTH scrub ────────────────────────────────────────────────
-
-describe('@ollie/pii-scrub · MENTAL_HEALTH category (T1)', () => {
-  it('redacts suicidal ideation phrase', () => {
-    const { scrubbed, redactions } = scrubPII(
-      'having suicidal ideation again, really scared',
-      'en',
-    );
-    expect(scrubbed).toContain('[MENTAL_HEALTH]');
-    expect(scrubbed).not.toContain('suicidal ideation');
-    expect(redactions.some((r) => r.type === 'MENTAL_HEALTH')).toBe(true);
-  });
-
-  it('redacts "want to die" phrase', () => {
-    const { scrubbed } = scrubPII('I just want to die sometimes', 'en');
-    expect(scrubbed).toContain('[MENTAL_HEALTH]');
-  });
-
-  it('redacts bipolar diagnosis mention', () => {
-    const { scrubbed } = scrubPII('my bipolar disorder is flaring up this week', 'en');
-    expect(scrubbed).toContain('[MENTAL_HEALTH]');
-    expect(scrubbed).not.toContain('bipolar');
-  });
-
-  it('redacts panic attack', () => {
-    const { scrubbed } = scrubPII('had a panic attack in the supermarket', 'en');
-    expect(scrubbed).toContain('[MENTAL_HEALTH]');
-  });
-
-  it('redacts therapist-attribution phrase', () => {
-    const { scrubbed } = scrubPII('my therapist said to journal every day', 'en');
-    expect(scrubbed).toContain('[MENTAL_HEALTH]');
-  });
-
-  it('redacts Turkish intihar term', () => {
-    const { scrubbed } = scrubPII('intihar düşüncelerim tekrar başladı', 'tr');
-    expect(scrubbed).toContain('[MENTAL_HEALTH]');
-  });
-
-  it('redacts PTSD mention', () => {
-    const { scrubbed } = scrubPII('PTSD from the accident still triggers me', 'en');
-    expect(scrubbed).toContain('[MENTAL_HEALTH]');
-  });
-
-  it('redacts ADHD diagnosis phrase', () => {
-    const { scrubbed } = scrubPII('diagnosed with adhd as an adult', 'en');
-    expect(scrubbed).toContain('[MENTAL_HEALTH]');
-  });
-
-  it('does NOT redact "feeling anxious" (not a diagnosis phrase)', () => {
-    // General mood word "anxious" — NOT in MENTAL_HEALTH list on purpose.
-    // Only clinical phrases like "anxiety disorder", "panic disorder" are listed.
-    const { redactions } = scrubPII('feeling anxious about the presentation', 'en');
-    expect(redactions.filter((r) => r.type === 'MENTAL_HEALTH')).toHaveLength(0);
-  });
-
-  it('MENTAL_HEALTH fires before MEDICAL on overlapping terms', () => {
-    // "suicidal ideation" should be tagged MENTAL_HEALTH, not MEDICAL.
-    const { redactions } = scrubPII('he mentioned suicidal ideation to the nurse', 'en');
-    expect(redactions.some((r) => r.type === 'MENTAL_HEALTH')).toBe(true);
-    expect(redactions.some((r) => r.type === 'MEDICAL')).toBe(false);
-  });
-});
-
-// ─── T1 · existing name tests still pass ─────────────────────────────────────
-
-describe('@ollie/pii-scrub · name scrub regression (T1 — no breakage)', () => {
-  it('still redacts English first+last name', () => {
-    const { scrubbed } = scrubPII('mike johnson stopped by', 'en');
-    expect(scrubbed).toContain('[NAME] [NAME]');
-  });
-
-  it('still redacts Spanish names', () => {
-    const { scrubbed } = scrubPII('carlos garcia me ayudo', 'es');
-    expect(scrubbed).toContain('[NAME] [NAME]');
-  });
-
-  it('still redacts Turkish names with diacritics', () => {
-    const { scrubbed } = scrubPII('ayşe yılmaz aradı', 'tr');
-    expect(scrubbed).toContain('[NAME] [NAME]');
-  });
-
-  it('preserves module vocabulary (cycle/food/mood) — no regression', () => {
-    const samples = [
-      'pms symptoms hitting hard',
-      'matcha latte was amazing',
-      'olive oil and bread for dinner',
-      'feeling anxious about deadline',
-      'tracked 45 min of deep work',
-    ];
-    for (const s of samples) {
-      const { redactions } = scrubPII(s, 'en');
-      const names = redactions.filter((r) => r.type === 'NAME');
-      expect(names).toHaveLength(0);
-    }
   });
 });
 

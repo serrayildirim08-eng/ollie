@@ -182,4 +182,63 @@ describe('@ollie/store · migrations', () => {
     expect(errSpy).toHaveBeenCalled();
     errSpy.mockRestore();
   });
+
+  // ─── audit item #14 · snapshot works on the memory adapter ────────────────
+
+  it('captures a non-empty pre-migration snapshot on the memory adapter', () => {
+    // Seed void.state.* keys — the snapshot must SEE these.
+    adapter.setItem('void.state.cycle.items', '[1,2,3]');
+    adapter.setItem('void.state.finance.bills', '{"a":1}');
+    adapter.setItem('unrelated.key', 'ignored');
+
+    const result = runMigrations(adapter, { 1: () => {} });
+
+    // Before the fix this was 0 — the snapshot poked at adapter methods
+    // the memory adapter did not implement, so it silently captured
+    // nothing for every non-browser runtime.
+    expect(result.snapshotKeyCount).toBe(2);
+    expect(result.ok).toBe(true);
+  });
+
+  it('restores void.state.* keys from snapshot when a migration fails', () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    adapter.setItem('void.state.cycle.items', 'ORIGINAL');
+
+    const result = runMigrations(adapter, {
+      2: (a) => {
+        // Migration mutates data, then blows up.
+        a.setItem('void.state.cycle.items', 'CORRUPTED');
+        throw new Error('boom');
+      },
+    });
+
+    // Rollback restored the pre-migration value.
+    expect(adapter.getItem('void.state.cycle.items')).toBe('ORIGINAL');
+    expect(result.ok).toBe(false);
+    expect(result.failedVersion).toBe(2);
+    // Meta version NOT bumped — next boot retries.
+    expect(readMeta(adapter).version ?? 0).toBeLessThan(STORE_VERSION);
+    errSpy.mockRestore();
+  });
+
+  it('returns a typed MigrationResult instead of the magic global', () => {
+    // Clean global slate.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    delete (globalThis as any).__ollie_migration_failed;
+
+    const ok = runMigrations(adapter, { 1: () => {} });
+    expect(ok.ok).toBe(true);
+    expect(ok.version).toBe(STORE_VERSION);
+    expect(ok.ran).toBe(true);
+
+    // The magic global is no longer written by either branch.
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const fresh = createMemoryAdapter();
+    const failed = runMigrations(fresh, { 1: () => { throw new Error('x'); } });
+    expect(failed.ok).toBe(false);
+    expect(failed.failedVersion).toBe(1);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect((globalThis as any).__ollie_migration_failed).toBeUndefined();
+    errSpy.mockRestore();
+  });
 });

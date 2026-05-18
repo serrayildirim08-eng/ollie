@@ -45,7 +45,6 @@ import {
 import type {
   HealthKitHeartRateSample,
   HealthKitHydrationSample,
-  HealthKitRestingHRSample,
   HealthKitSleepSample,
   HealthKitStepSample,
 } from './types';

@@ -7,6 +7,31 @@
 
 import type { Action, AnswerRoute, ModuleName, Route } from './types';
 
+// ─── locale-safe lowercasing for keyword matching (audit item #9) ────────────
+//
+// This router matches BOTH English and Turkish keywords in a single pass,
+// so it cannot pick one locale for `toLowerCase()`. Plain `toLowerCase()`
+// turns capitalized Turkish "I" into dotted "i" and "İ" into "i̇" (i +
+// combining dot), so "SALI"/"YARIN" silently miss the keywords "salı"/
+// "yarın". `foldKeywordCase` folds the Turkish dotted/dotless-i pair (and
+// the other TR diacritics) to an ASCII form, then lowercases — so the
+// keyword `.includes()` comparison becomes case- AND diacritic-
+// insensitive. It is applied to BOTH sides (the input AND the keyword
+// tables, see FOLDED_KEYWORD_MAP). It is used ONLY for the generic
+// keyword-map pass; the precise cycle/product/question regexes keep the
+// plain `lower` so their Turkish-diacritic literals still match.
+const TR_FOLD: Record<string, string> = {
+  'ı': 'i', 'İ': 'i', 'I': 'i', 'ş': 's', 'Ş': 's',
+  'ç': 'c', 'Ç': 'c', 'ğ': 'g', 'Ğ': 'g',
+  'ö': 'o', 'Ö': 'o', 'ü': 'u', 'Ü': 'u',
+};
+
+function foldKeywordCase(s: string): string {
+  return s
+    .replace(/[ıİIşŞçÇğĞöÖüÜ]/g, (ch) => TR_FOLD[ch] ?? ch)
+    .toLowerCase();
+}
+
 // ─── keyword map (EN + TR) ───────────────────────────────────────────────────
 
 const KEYWORD_MAP: Record<string, readonly string[]> = {
@@ -63,6 +88,12 @@ const KEYWORD_MAP: Record<string, readonly string[]> = {
     'burkulma','yaralı','hasta','hastalık','grip','soğuk algınlığı','ateş','ağrı','acıyor','kırık','yara','baş ağrısı','migren','bulantı','ilaç','antibiyotik','alerji',
   ],
 };
+
+// Pre-folded keyword map (audit item #9). Built once at module load so the
+// generic keyword pass compares folded-input against folded-keywords.
+const FOLDED_KEYWORD_MAP: Record<string, readonly string[]> = Object.fromEntries(
+  Object.entries(KEYWORD_MAP).map(([mod, kws]) => [mod, kws.map(foldKeywordCase)]),
+);
 
 // Modules where the action is 'log' rather than 'add'.
 const LOG_MODULES = new Set<string>(['sleep', 'astrology', 'dump']);
@@ -219,11 +250,15 @@ export function fallbackRoute(text: string): Route {
   }
 
   // ── generic keyword matching (full-text, post-clause) ───────────────────
+  // Match against the diacritic-/case-folded text + folded keyword map so
+  // capitalized Turkish input ("YARIN", "SALI") is not silently missed
+  // (audit item #9).
+  const foldedText = foldKeywordCase(lower);
   const coveredByPattern = new Set(events.map(e => e.module));
-  for (const [mod, keywords] of Object.entries(KEYWORD_MAP)) {
+  for (const [mod, keywords] of Object.entries(FOLDED_KEYWORD_MAP)) {
     if (mod === 'cycle') continue;
     if (mod === 'grocery' && coveredByPattern.has('grocery')) continue;
-    if (!keywords.some(kw => lower.includes(kw))) continue;
+    if (!keywords.some(kw => foldedText.includes(kw))) continue;
     const action = LOG_MODULES.has(mod) ? 'log' : 'add';
     pushEvent({ module: mod as ModuleName, action, data: text });
   }

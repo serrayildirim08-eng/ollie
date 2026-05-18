@@ -12,7 +12,7 @@ import { computePhaseForDate } from '../../cycle';
 import type { CycleRecord } from '../../cycle/types';
 import type { FinanceRecord } from '../../finance/types';
 
-const DAY_MS = 86_400_000;
+import { DAY_MS, resolveNow } from '../../util';
 const DEFAULT_LOOKBACK_DAYS = 90;
 
 export interface LutealSpendingResult {
@@ -94,7 +94,7 @@ export function correlateLutealAndSpending(
   txns: readonly FinanceRecord[] | undefined | null,
   opts?: CorrelateLutealSpendingOpts,
 ): LutealSpendingResult {
-  const now = opts?.now ?? Date.now();
+  const now = resolveNow(opts?.now);
   const lookback = opts?.lookbackDays ?? DEFAULT_LOOKBACK_DAYS;
   const minN = opts?.minSampleSize ?? 14;
   const thresholdRho = opts?.thresholdRho ?? 0.30;
@@ -143,7 +143,7 @@ export function correlateLutealAndSpending(
     return { correlation: rho, sampleSize: n, copy: '', ts: now };
   }
 
-  let copy = '';
+  let copy: string;
   if (rho > 0) {
     const meanSpend = ys.reduce((s, y) => s + y, 0) / n;
     const rounded = Math.round(meanSpend);

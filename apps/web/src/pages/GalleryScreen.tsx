@@ -20,6 +20,7 @@
 import { useMemo } from 'react';
 import { FrostedCard } from '../components/FrostedCard';
 import { useStoreSlice } from '../store';
+import { mkId } from '../lib/mkId';
 import { getString, type Locale } from '../i18n';
 
 export interface GalleryScreenProps {
@@ -59,7 +60,8 @@ function goalTitle(g: StoredGoal): string {
 export function GalleryScreen({ onNavigate }: GalleryScreenProps) {
   const [settings] = useStoreSlice<{ locale?: string }>('shared', 'settings', {});
   const locale: Locale = settings?.locale === 'es' ? 'es' : 'en';
-  const t = (key: string) => getString(locale, `gallery.${key}`);
+  const t = (key: string, vars?: Record<string, string | number>) =>
+    getString(locale, `gallery.${key}`, vars);
 
   const [goals] = useStoreSlice<StoredGoal[]>('goals', 'items', []);
 
@@ -67,7 +69,7 @@ export function GalleryScreen({ onNavigate }: GalleryScreenProps) {
     return (goals ?? [])
       .filter((g) => g && g.status === 'done' && goalTitle(g).length > 0)
       .map((g) => ({
-        id: g.id ?? `g_${Math.random().toString(36).slice(2)}`,
+        id: g.id ?? mkId('g'),
         title: goalTitle(g),
         finishedAt: typeof g.status_at === 'number' ? g.status_at : null,
       }))
@@ -83,7 +85,7 @@ export function GalleryScreen({ onNavigate }: GalleryScreenProps) {
       for (const m of g.milestones ?? []) {
         if (typeof m?.completed_at === 'number' && (m.title ?? '').trim().length > 0) {
           out.push({
-            id: m.id ?? `m_${Math.random().toString(36).slice(2)}`,
+            id: m.id ?? mkId('m'),
             title: (m.title ?? '').trim(),
             fromGoal: parent,
             finishedAt: m.completed_at,
@@ -103,7 +105,7 @@ export function GalleryScreen({ onNavigate }: GalleryScreenProps) {
       day: 'numeric',
       year: 'numeric',
     });
-    return t('completed_on').replace('${0}', d.toLowerCase());
+    return t('completed_on', { 0: d.toLowerCase() });
   };
 
   return (
@@ -239,7 +241,7 @@ export function GalleryScreen({ onNavigate }: GalleryScreenProps) {
                   </p>
                   <p style={{ ...dateLine, marginTop: 6 }}>
                     {m.fromGoal
-                      ? `${t('from_goal').replace('${0}', m.fromGoal)} · ${fmtDate(m.finishedAt)}`
+                      ? `${t('from_goal', { 0: m.fromGoal })} · ${fmtDate(m.finishedAt)}`
                       : fmtDate(m.finishedAt)}
                   </p>
                 </div>

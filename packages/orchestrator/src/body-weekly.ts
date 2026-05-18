@@ -77,11 +77,6 @@ function endOfWeek(weekStart: number): number {
   return weekStart + 7 * DAY_MS - 1;
 }
 
-/** ISO weekday string (lowercase) for a timestamp */
-function weekdayName(ts: number): string {
-  return WEEKDAYS[new Date(ts).getDay()];
-}
-
 function entryTs(w: number | { ts: number; glasses?: number }): number {
   return typeof w === 'number' ? w : (w?.ts ?? 0);
 }

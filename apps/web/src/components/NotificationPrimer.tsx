@@ -189,8 +189,10 @@ export function NotificationPrimer({ onDone }: NotificationPrimerProps): React.R
             track actually needs you — a bill due tomorrow, a vet med, an
             appointment in the morning.
           </p>
+          {/* notif-scope-allow — copy quotes "we miss you" only to disavow it;
+              this is anti-dark-pattern priming text, not an engagement push. */}
           <p style={{ margin: '12px 0 0' }}>
-            no "we miss you", no streaks, no guilt, no nudging you back in.
+            no “we miss you”, no streaks, no guilt, no nudging you back in.
             if there's nothing for you, it stays quiet.
           </p>
         </div>

@@ -25,7 +25,6 @@
  */
 
 import { isLikelyName, isCommonCapitalizedWord, type Locale } from './wordlists';
-import { isBrand } from './brand-allowlist';
 
 export type { Locale } from './wordlists';
 
@@ -317,7 +316,29 @@ export function scrubPII(text: string, locale: Locale): ScrubResult {
     return word;
   });
 
-  // 8. Names — capitalization heuristic (catches names not in wordlist).
+  // 7b. Names — capitalization heuristic (audit item #3).
+  //
+  // The wordlist pass only catches the ~300 names per locale that are
+  // compiled in; a real name not on the list ("Tyrnauq", an uncommon
+  // surname) passed straight through to the research corpus unredacted.
+  //
+  // Heuristic: a Capitalized word is likely a person name when it is part
+  // of a Capitalized RUN of 2+ words (first + last) OR is preceded by a
+  // name-introducing trigger ("met Sarah", "from Devendra"). We do NOT
+  // flag a lone capitalized word with no such context — that is where
+  // brand names (kept on purpose) and sentence-initial words live, so the
+  // restriction keeps the false-positive rate low.
+  //
+  // Residual risk (documented, accepted for v0):
+  //   - all-lowercase names with no wordlist hit still slip through
+  //     (voice-to-text often lowercases) — wordlist remains the only net
+  //     for that path;
+  //   - a capitalized two-word brand at mid-sentence ("Crunchy Nut") can
+  //     be over-redacted — rare, and over-redaction is the safe failure
+  //     direction for a privacy gate;
+  //   - sentence-initial single names ("Sarah came over.") are missed
+  //     unless wordlisted — acceptable, single-token + sentence start is
+  //     too FP-prone to flag.
   out = applyCapitalizedNameHeuristic(out, redactions);
 
   return { scrubbed: out, redactions };
@@ -373,11 +394,7 @@ function applyCapitalizedNameHeuristic(text: string, redactions: Redaction[]): s
   // A word is a name CANDIDATE when it is a capitalized token we want to
   // consider redacting.
   const isNameWord = words.map(
-    (w) =>
-      isCapitalizedToken(w) &&
-      !CAP_NOT_NAME.has(w.toLowerCase()) &&
-      !isCommonCapitalizedWord(w) &&
-      !isBrand(w),
+    (w) => isCapitalizedToken(w) && !CAP_NOT_NAME.has(w.toLowerCase()) && !isCommonCapitalizedWord(w),
   );
   // A word is a name ANCHOR when, for run-detection, it counts as an
   // adjacent name — that is a candidate OR an already-redacted [NAME]

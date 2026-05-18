@@ -220,7 +220,7 @@ export function GroceryModule() {
     if (!raw) return;
 
     let parsed = null;
-    try { parsed = parseGroceryItem(raw); } catch (_) { /* noop */ }
+    try { parsed = parseGroceryItem(raw); } catch { /* noop */ }
 
     const overrideKey = raw.toLowerCase();
     const overrideCanon = aliasOverrides?.[overrideKey];

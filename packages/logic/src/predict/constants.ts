@@ -4,7 +4,8 @@
 
 import type { PresetKey, PriorPreset } from './types';
 
-export const DAY_MS = 86_400_000;
+// DAY_MS is re-exported from the shared util module — single definition.
+export { DAY_MS } from '../util';
 
 export const ALPHA_DEFAULT = 0.85;
 export const ALPHA_AFTER_SHIFT = 0.70;
