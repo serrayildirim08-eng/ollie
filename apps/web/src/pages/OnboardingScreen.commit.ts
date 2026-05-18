@@ -22,6 +22,7 @@ export interface PetDraft {
 export interface State {
   screen: number;
   name: string;
+  age: string;
   country: string;
   hasPets: boolean | null;
   petDrafts: PetDraft[];
@@ -44,6 +45,14 @@ export function commitAll(state: State): void {
   // Credibility audit NC4: previously these were written as flat keys
   // (`has_pets`, `consent_spending_research`) and silently lost.
   store.set('shared', 'name', state.name.trim() || null);
+  // Age — free-text numeric input. Stored as a number; null when blank or
+  // out of a plausible range (replaced the old age-range chips).
+  const ageNum = parseInt(state.age, 10);
+  store.set(
+    'shared',
+    'settings.age',
+    Number.isFinite(ageNum) && ageNum > 0 && ageNum < 120 ? ageNum : null,
+  );
   store.set('shared', 'settings.has_pets', state.hasPets ?? false);
   store.set('shared', 'settings.work_time', state.workTime || null);
   store.set('shared', 'settings.cycle_tracking', state.cycleTracking || null);

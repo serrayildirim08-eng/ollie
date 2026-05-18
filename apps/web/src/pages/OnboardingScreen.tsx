@@ -36,6 +36,7 @@ export { commitAll } from './OnboardingScreen.commit';
 
 type Action =
   | { type: 'SET_NAME'; value: string }
+  | { type: 'SET_AGE'; value: string }
   | { type: 'SET_COUNTRY'; value: string }
   | { type: 'SET_HAS_PETS'; value: boolean }
   | { type: 'ADD_PET' }
@@ -81,6 +82,8 @@ function reducer(state: State, action: Action): State {
   switch (action.type) {
     case 'SET_NAME':
       return { ...state, name: action.value };
+    case 'SET_AGE':
+      return { ...state, age: action.value };
     case 'SET_COUNTRY':
       return { ...state, country: action.value };
     case 'SET_HAS_PETS':
@@ -135,6 +138,7 @@ function reducer(state: State, action: Action): State {
 const INITIAL: State = {
   screen: 0,
   name: '',
+  age: '',
   country: detectCountryFromLocale(),
   hasPets: null,
   petDrafts: [],
@@ -361,6 +365,37 @@ function WelcomeScreen({
         onKeyDown={(e) => { if (e.key === 'Enter') onNext(); }}
         placeholder="what should i call you?"
         aria-label="your name"
+        style={{
+          fontFamily: "'DM Mono', monospace",
+          fontSize: 'var(--t-caption)',
+          padding: '14px 0',
+          border: 'none',
+          borderBottom: '1px solid var(--rule)',
+          background: 'transparent',
+          color: 'var(--ink)',
+          outline: 'none',
+          width: '100%',
+          maxWidth: '360px',
+          marginBottom: '24px',
+          letterSpacing: '0.04em',
+        }}
+      />
+
+      {/* Age — free-text numeric input (replaced the age-range chips).
+          Skippable like everything else; digits only, capped at 3. */}
+      <input
+        type="text"
+        inputMode="numeric"
+        value={state.age}
+        onChange={(e) =>
+          dispatch({
+            type: 'SET_AGE',
+            value: e.target.value.replace(/[^0-9]/g, '').slice(0, 3),
+          })
+        }
+        onKeyDown={(e) => { if (e.key === 'Enter') onNext(); }}
+        placeholder="how old are you?"
+        aria-label="your age"
         style={{
           fontFamily: "'DM Mono', monospace",
           fontSize: 'var(--t-caption)',
@@ -944,6 +979,9 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           width: '100%',
           margin: '0 auto',
           padding: '48px 32px 24px',
+          // content-box + width:100% + 64px h-padding overflowed the
+          // viewport by 64px on a 390px iPhone (no global box-sizing reset).
+          boxSizing: 'border-box',
         }}
       >
         <ScreenShell visible={state.visible} reducedMotion={prefersReduced}>
