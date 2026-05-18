@@ -11,8 +11,10 @@
  */
 
 // Shared internal primitives — single source of truth for statistical
-// helpers (stats) and small utilities like DAY_MS / day-keys / Levenshtein
-// (util). Consolidated from ~6× and ~16× duplication respectively.
+// helpers (stats) and small utilities (util): time constants (DAY_MS /
+// HOUR_MS / MINUTE_MS), calendar day-keys (dayKey local + dayKeyUTC) and
+// the capped Levenshtein edit distance. Every duplicate site across the
+// package imports from these two modules.
 export * as stats from './stats';
 export * as util from './util';
 

@@ -25,10 +25,9 @@
 
 import type { FinanceRecord } from './types';
 import { median } from '../stats';
+import { DAY_MS as DAY } from '../util';
 
 // ─── 1. SUBSCRIPTION DETECTION ────────────────────────────────────────────
-
-const DAY = 86_400_000;
 
 export type DetectedSubscriptionCadence = 'monthly' | 'quarterly' | 'yearly';
 

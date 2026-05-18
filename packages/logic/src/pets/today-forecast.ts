@@ -7,6 +7,7 @@
 import type { Pet, CareGap, SpeciesProfile, VocabTerm } from './types';
 import { TASK_DISPLAY, PREFACES } from './constants';
 import { SPECIES_VOCAB } from './species-profiles';
+import { DAY_MS } from '../util';
 
 /**
  * One-liner forecast for a pet's day.
@@ -47,9 +48,8 @@ export function pickVocabTerm(
   if (!pet) return null;
   const vocab = SPECIES_VOCAB[pet.species] ?? [];
   if (vocab.length === 0) return null;
-  const dayMs = 86_400_000;
   const weekOfYear = Math.floor(
-    (now - new Date(new Date(now).getFullYear(), 0, 1).getTime()) / (7 * dayMs),
+    (now - new Date(new Date(now).getFullYear(), 0, 1).getTime()) / (7 * DAY_MS),
   );
   let h = 0;
   const key = (pet.id ?? '') + ':' + weekOfYear;
@@ -66,9 +66,8 @@ export function pickVocabTerm(
  * Pick the weekly rotating editorial preface.
  */
 export function pickPreface(now: number): string {
-  const dayMs = 86_400_000;
   const week = Math.floor(
-    (now - new Date(new Date(now).getFullYear(), 0, 1).getTime()) / (7 * dayMs),
+    (now - new Date(new Date(now).getFullYear(), 0, 1).getTime()) / (7 * DAY_MS),
   );
   return PREFACES[((week % PREFACES.length) + PREFACES.length) % PREFACES.length];
 }

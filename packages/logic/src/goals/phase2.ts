@@ -14,6 +14,7 @@
 
 import { resolveNow, goalLabel } from './helpers';
 import { SOURCES } from './sources';
+import { DAY_MS } from '../util';
 import type {
   GoalsHistory,
   GoalsOpts,
@@ -27,8 +28,8 @@ import type {
   PacingKind,
 } from './types';
 
-const SIX_WEEKS  = 6 * 7 * 86400000;
-const SIX_MONTHS = 6 * 30 * 86400000;
+const SIX_WEEKS  = 6 * 7 * DAY_MS;
+const SIX_MONTHS = 6 * 30 * DAY_MS;
 
 const PACING_DORMANCY_DAYS: Record<PacingKind, number> = {
   sprint: 7,
@@ -135,7 +136,7 @@ export function detectResearchAsProgress(
   const now = resolveNow(history, opts);
   const windowDays = typeof o.windowDays === 'number' ? o.windowDays : 30;
   const minThinking = typeof o.minThinking === 'number' ? o.minThinking : 5;
-  const windowStart = now - windowDays * 86400000;
+  const windowStart = now - windowDays * DAY_MS;
 
   const goals = Array.isArray(history?.goals) ? history!.goals! : [];
   const sessions = Array.isArray(history?.sessions) ? history!.sessions! : [];
@@ -195,7 +196,7 @@ export function detectIdentityDrift(
   const o = opts || {};
   const now = resolveNow(history, opts);
   const windowDays = typeof o.windowDays === 'number' ? o.windowDays : 30;
-  const windowStart = now - windowDays * 86400000;
+  const windowStart = now - windowDays * DAY_MS;
 
   const goals = Array.isArray(history?.goals) ? history!.goals! : [];
   const dumps = Array.isArray(history?.dumps) ? history!.dumps! : [];
@@ -255,7 +256,7 @@ export function detectSunkCostFlag(
   const now = resolveNow(history, opts);
   const windowDays = typeof o.windowDays === 'number' ? o.windowDays : 60;
   const minRun = typeof o.minRun === 'number' ? o.minRun : 3;
-  const windowStart = now - windowDays * 86400000;
+  const windowStart = now - windowDays * DAY_MS;
 
   const goals = Array.isArray(history?.goals) ? history!.goals! : [];
   const reviews = Array.isArray(history?.reviews) ? history!.reviews! : [];
@@ -339,7 +340,7 @@ export function detectPacingBreach(
     const lastActiveTs = lastDoing.get(g.id)
       ?? (typeof g.last_activity_at === 'number' ? g.last_activity_at : null)
       ?? (typeof g.created_at === 'number' ? g.created_at : now);
-    const daysSince = Math.floor((now - lastActiveTs) / 86400000);
+    const daysSince = Math.floor((now - lastActiveTs) / DAY_MS);
     if (daysSince < maxDays) continue;
 
     const label = goalLabel(g);

@@ -6,27 +6,11 @@
 
 import type { Habit, HabitCompletion } from './types';
 
-export function dayKey(ts: number): string {
-  const d = new Date(ts);
-  return (
-    d.getFullYear() +
-    '-' +
-    String(d.getMonth() + 1).padStart(2, '0') +
-    '-' +
-    String(d.getDate()).padStart(2, '0')
-  );
-}
-
-export function dayKeyUTC(ts: number): string {
-  const d = new Date(ts);
-  return (
-    d.getUTCFullYear() +
-    '-' +
-    String(d.getUTCMonth() + 1).padStart(2, '0') +
-    '-' +
-    String(d.getUTCDate()).padStart(2, '0')
-  );
-}
+// Day-key helpers are owned by the shared `../util` module — single source
+// of truth. Re-exported here so the habits barrel API path is unchanged.
+// `dayKey` = local tz, `dayKeyUTC` = UTC; they are NOT interchangeable.
+export { dayKey, dayKeyUTC } from '../util';
+import { dayKey } from '../util';
 
 export function mean(xs: number[]): number {
   return xs.reduce((s, x) => s + x, 0) / xs.length;

@@ -13,7 +13,7 @@ import { median as medianOf } from '../../stats';
 import { OVERWHELMED_LEXICON } from '../../sleep/constants';
 import type { Habit, HabitCompletion, DumpEntry } from '../../habits/types';
 
-import { DAY_MS, resolveNow } from '../../util';
+import { DAY_MS, dayKey, resolveNow } from '../../util';
 const DEFAULT_LOOKBACK_DAYS = 30;
 
 const WORKOUT_NAME_RE =
@@ -33,13 +33,8 @@ export interface CorrelateWorkoutSkipMoodOpts {
   now?: number;
 }
 
-function localDateKey(ts: number): string {
-  const d = new Date(ts);
-  const y = d.getFullYear();
-  const mo = String(d.getMonth() + 1).padStart(2, '0');
-  const da = String(d.getDate()).padStart(2, '0');
-  return `${y}-${mo}-${da}`;
-}
+/** YYYY-MM-DD key in LOCAL tz — delegates to the shared util. */
+const localDateKey = dayKey;
 
 function buildLexiconMatcher(): (text: string) => number {
   const phrases = OVERWHELMED_LEXICON.map((p) => p.toLowerCase());
@@ -174,11 +169,11 @@ export function correlateWorkoutSkipAndMood(
   for (let t = fromTs; t <= now; t += DAY_MS) {
     const noon = new Date(t);
     noon.setHours(12, 0, 0, 0);
-    const dayKey = localDateKey(noon.getTime());
-    const dayDumps = dumpsBy.get(dayKey);
+    const dKey = localDateKey(noon.getTime());
+    const dayDumps = dumpsBy.get(dKey);
     if (!dayDumps || dayDumps.length === 0) continue;
 
-    const prevKey = dayBeforeKey(dayKey);
+    const prevKey = dayBeforeKey(dKey);
     if (prevKey == null) continue;
 
     const prevNoon = noonEpochFromDateKey(prevKey);

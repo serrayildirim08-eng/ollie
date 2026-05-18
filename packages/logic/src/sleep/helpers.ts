@@ -10,6 +10,7 @@
  */
 
 import { mean as meanCore, median as medianCore, sampleSd as sampleSdCore } from '../stats';
+import { dayKey } from '../util';
 
 /** Parse a time-of-day string ("22:30", "10pm", "2am") → minutes since midnight, or null. */
 export function parseTimeOfDay(str: string | undefined | null): number | null {
@@ -51,16 +52,12 @@ export function formatTime(minutes: number): string {
   return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
 }
 
-/** Format ms timestamp as ISO date "YYYY-MM-DD". */
+/**
+ * Format a ms timestamp as a local-time ISO date `YYYY-MM-DD`.
+ * Delegates to the shared `../util` day-key helper (single source of truth).
+ */
 export function isoDate(ms: number): string {
-  const d = new Date(ms);
-  return (
-    d.getFullYear() +
-    '-' +
-    String(d.getMonth() + 1).padStart(2, '0') +
-    '-' +
-    String(d.getDate()).padStart(2, '0')
-  );
+  return dayKey(ms);
 }
 
 /** Median of a numeric array. Returns null on empty input. */

@@ -4,10 +4,10 @@
  * Pure stat functions. No side-effects, no wall-clock reads, no I/O.
  */
 
-// DAY_MS / day-key helpers come from the shared util module — single
-// source of truth. Re-exported so finance callers keep their import path.
-import { DAY_MS, dayKey, daysBetweenKeys } from '../util';
-export { DAY_MS };
+// DAY_MS / HOUR_MS / day-key helpers come from the shared util module —
+// single source of truth. Re-exported so finance callers keep their import path.
+import { DAY_MS, HOUR_MS, dayKey, daysBetweenKeys } from '../util';
+export { DAY_MS, HOUR_MS };
 
 /** Format an epoch-ms timestamp as a local `YYYY-MM-DD` key. */
 export function isoDate(ms: number): string {

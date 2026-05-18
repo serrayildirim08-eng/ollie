@@ -12,7 +12,7 @@ import { computePhaseForDate } from '../../cycle';
 import type { CycleRecord } from '../../cycle/types';
 import type { FinanceRecord } from '../../finance/types';
 
-import { DAY_MS, resolveNow } from '../../util';
+import { DAY_MS, dayKey, resolveNow } from '../../util';
 const DEFAULT_LOOKBACK_DAYS = 90;
 
 export interface LutealSpendingResult {
@@ -29,13 +29,8 @@ export interface CorrelateLutealSpendingOpts {
   now?: number;
 }
 
-function localDateKey(ts: number): string {
-  const d = new Date(ts);
-  const y = d.getFullYear();
-  const mo = String(d.getMonth() + 1).padStart(2, '0');
-  const da = String(d.getDate()).padStart(2, '0');
-  return `${y}-${mo}-${da}`;
-}
+/** YYYY-MM-DD key in LOCAL tz — delegates to the shared util. */
+const localDateKey = dayKey;
 
 function sortedCycles(cycles: readonly CycleRecord[]): CycleRecord[] {
   return cycles
@@ -121,14 +116,14 @@ export function correlateLutealAndSpending(
     const noon = new Date(t);
     noon.setHours(12, 0, 0, 0);
     const noonMs = noon.getTime();
-    const dayKey = localDateKey(noonMs);
-    const noonEpoch = noonEpochFromDateKey(dayKey);
+    const dKey = localDateKey(noonMs);
+    const noonEpoch = noonEpochFromDateKey(dKey);
     if (noonEpoch == null) continue;
 
     const daysIn = daysIntoLuteal(sortedC, noonEpoch);
     if (daysIn == null) continue;
 
-    const spend = spendByDay.get(dayKey) ?? 0;
+    const spend = spendByDay.get(dKey) ?? 0;
     xs.push(daysIn);
     ys.push(spend);
   }
