@@ -34,6 +34,7 @@ import {
   _median,
 } from './helpers';
 import { CHRONO_BANDS } from './constants';
+import { DAY_MS } from '../util';
 
 export function deriveSleepStats(records: SleepRecord[], W = 14): SleepStats | null {
   if (!Array.isArray(records)) return null;
@@ -65,7 +66,7 @@ export function computeSleepDebt(
   const targetMin = target * 60;
   if (!Array.isArray(records) || records.length === 0)
     return { totalDeficitHours: 0, nightsCounted: 0 };
-  const cutoff = typeof now === 'number' ? now - W * 86400000 : 0;
+  const cutoff = typeof now === 'number' ? now - W * DAY_MS : 0;
   const window = records
     .filter((r) => r && !r.is_skipped && r.tst_min != null)
     .filter((r) => {

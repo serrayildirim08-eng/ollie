@@ -13,6 +13,7 @@ import type {
   HabitSignal,
 } from './types';
 import { mean, buildDayCompletionMap } from './helpers';
+import { DAY_MS, dayKey } from '../util';
 
 // ─── detectExternalizationRequirement ────────────────────────────────
 
@@ -28,7 +29,7 @@ export function detectExternalizationRequirement(
   const minHabitsPerSide = o.minHabitsPerSide ?? 3;
   const minCompletions = o.minCompletions ?? 4;
   const maxRatio = typeof o.maxRatio === 'number' ? o.maxRatio : 0.5;
-  const windowStart = now - windowDays * 86400000;
+  const windowStart = now - windowDays * DAY_MS;
 
   const arr = history.habits ?? [];
   const flatCompletions = history.completions ?? null;
@@ -119,17 +120,15 @@ export function detectLutealCollapse(
   const windowDays = o.windowDays ?? 60;
   const minLutealWindows = o.minLutealWindows ?? 2;
   const maxRatio = typeof o.maxRatio === 'number' ? o.maxRatio : 0.7;
-  const windowStart = now - windowDays * 86400000;
+  const windowStart = now - windowDays * DAY_MS;
 
   const arr = history.habits ?? [];
   const phases = history.cyclePhases ?? [];
   const flatCompletions = history.completions ?? null;
   if (arr.length === 0 || phases.length === 0) return null;
 
-  const dKey = (ts: number): string => {
-    const d = new Date(ts);
-    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-  };
+  // Local-time day key — matches the local keys used across habit detectors.
+  const dKey = dayKey;
 
   const dayPhase = new Map<string, string>();
   const ranges: Array<{ start: number; end: number; name: string }> = [];
@@ -142,11 +141,11 @@ export function detectLutealCollapse(
   for (const r of ranges) {
     const s = Math.max(r.start, windowStart);
     const e = Math.min(r.end, now);
-    for (let t = s; t <= e; t += 86400000) dayPhase.set(dKey(t), r.name);
+    for (let t = s; t <= e; t += DAY_MS) dayPhase.set(dKey(t), r.name);
   }
   if (markers.length > 0) {
     markers.sort((a, b) => a.ts - b.ts);
-    for (let t = windowStart; t <= now; t += 86400000) {
+    for (let t = windowStart; t <= now; t += DAY_MS) {
       let cur: string | null = null;
       for (const m of markers) {
         if (m.ts <= t) cur = m.phase; else break;
@@ -156,7 +155,7 @@ export function detectLutealCollapse(
   }
 
   let lutealWindows = 0, inLuteal = false;
-  for (let t = windowStart; t <= now; t += 86400000) {
+  for (let t = windowStart; t <= now; t += DAY_MS) {
     const ph = dayPhase.get(dKey(t));
     if (ph === 'luteal') {
       if (!inLuteal) { lutealWindows++; inLuteal = true; }
@@ -225,7 +224,7 @@ export function detectSensoryPreflight(
   const windowDays = o.windowDays ?? 30;
   const minClusters = o.minClusters ?? 3;
   const minLift = typeof o.minLift === 'number' ? o.minLift : 1.5;
-  const windowStart = now - windowDays * 86400000;
+  const windowStart = now - windowDays * DAY_MS;
 
   const SENSORY_RE_LOCAL = /\b(loud|hot|cold|sticky|bright|scratchy|nauseous|exhausted|overstimulated|too\s+much\s+noise)\b/i;
 
@@ -234,10 +233,8 @@ export function detectSensoryPreflight(
   const flatCompletions = history.completions ?? null;
   if (arr.length === 0 || dumps.length === 0) return null;
 
-  const dKey = (ts: number) => {
-    const d = new Date(ts);
-    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-  };
+  // Local-time day key — matches the local keys used across habit detectors.
+  const dKey = dayKey;
 
   const dayCompletions = buildDayCompletionMap(arr, flatCompletions, windowStart, now);
 
@@ -251,7 +248,7 @@ export function detectSensoryPreflight(
   if (sensoryDays.size < minClusters) return null;
 
   const allDays: string[] = [];
-  for (let t = windowStart; t <= now; t += 86400000) allDays.push(dKey(t));
+  for (let t = windowStart; t <= now; t += DAY_MS) allDays.push(dKey(t));
 
   const habitsActive = arr.length;
   const expectedDaily = habitsActive;
@@ -321,13 +318,13 @@ export function detectInterestHijack(
   const minDropRatio = typeof o.minDropRatio === 'number' ? o.minDropRatio : 0.5;
   const minNovelMentions = o.minNovelMentions ?? 3;
 
-  const recentStart = now - recentDays * 86400000;
-  const baselineStart = now - (recentDays + baselineDays) * 86400000;
+  const recentStart = now - recentDays * DAY_MS;
+  const baselineStart = now - (recentDays + baselineDays) * DAY_MS;
   const baselineEnd = recentStart - 1;
-  const novelStart = now - novelLookback * 86400000;
-  const priorStart = now - (novelLookback + 30) * 86400000;
+  const novelStart = now - novelLookback * DAY_MS;
+  const priorStart = now - (novelLookback + 30) * DAY_MS;
   const priorEnd = novelStart - 1;
-  const goalStart = now - goalLookback * 86400000;
+  const goalStart = now - goalLookback * DAY_MS;
 
   const arr = history.habits ?? [];
   const dumps = history.dumps ?? [];
@@ -445,10 +442,10 @@ export function detectStressCollapse(
   const maxAvgTstMin = typeof o.maxAvgTstMin === 'number' ? o.maxAvgTstMin : 360;
   const minDropRatio = typeof o.minDropRatio === 'number' ? o.minDropRatio : 0.7;
 
-  const stressStart = now - stressLookbackDays * 86400000;
+  const stressStart = now - stressLookbackDays * DAY_MS;
   const baselineEnd = stressStart - 1;
-  const baselineStart = baselineEnd - baselineDays * 86400000 + 1;
-  const sleepStart = now - sleepLookbackNights * 86400000;
+  const baselineStart = baselineEnd - baselineDays * DAY_MS + 1;
+  const sleepStart = now - sleepLookbackNights * DAY_MS;
 
   const DEADLINE_RE = /\b(deadline|due\s+tomorrow|due\s+today|crunch|son\s+tarih|yetiştirmem)\b/i;
 

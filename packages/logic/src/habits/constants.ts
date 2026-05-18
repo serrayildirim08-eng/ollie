@@ -3,7 +3,12 @@
  *
  * Shared regex patterns and time constants.
  * Mirrors the top of the IIFE in void-app.html ~line 19405.
+ *
+ * Day length comes from the shared `../util` module — single source of
+ * truth. Re-exported below as `DAY` so the habits barrel API is unchanged.
  */
+
+export { DAY_MS as DAY } from '../util';
 
 export const STRESS_RE = /\b(stressed?|burned?\s*out|overwhelm(?:ed|ing)?|crisis|anxious|panic(?:king)?|deadline|exhausted|spiraling)\b/i;
 export const SENSORY_RE = /\b(loud|noisy|crowded|too\s*hot|freezing|jet\s*lag|travel(?:ing|led)?|migraine|hangover|sick|fluorescent|bright\s*lights|sensory)\b/i;
@@ -13,5 +18,3 @@ export const TRAIT_RE = /\bi'?m\s+(?:not\s+(?:a|the)\s+\w+|just\s+\w+|always\s+\
 export const ACTION_RE = /\bi\s+(?:tried|sometimes|today|started|did|managed|went|made)\b/i;
 export const BODY_HABIT_RE = /\b(walk|stretch|mov|exercise|gym|workout|water|hydrate|drink|breath|cold|stand|sleep|nap|run|yoga)/i;
 export const COG_HABIT_RE = /\b(meditat|journal|plan|read|learn|study|reflect|review|writ|note|gratitude)/i;
-
-export const DAY = 86_400_000;

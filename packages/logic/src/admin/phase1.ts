@@ -34,6 +34,7 @@ import {
   SOURCES,
 } from './constants';
 import { resolveNow } from './helpers';
+import { DAY_MS } from '../util';
 
 // ─── A1 ──────────────────────────────────────────────────────────────────
 
@@ -119,7 +120,7 @@ export function scheduleRenewalCues(
     if (!t?.id) continue;
     if (t.kind !== 'renewal') continue;
     if (typeof t.expiry_ts !== 'number') continue;
-    const daysLeft = (t.expiry_ts - now) / 86_400_000;
+    const daysLeft = (t.expiry_ts - now) / DAY_MS;
     let stage: RenewalCueSignal['stage'] | null = null;
     if (daysLeft <= 0) stage = 'overdue';
     else if (daysLeft <= 7) stage = 'urgent';
@@ -179,8 +180,8 @@ export function detectStaleBall(
       const last = typeof t.last_transition_at === 'number' ? t.last_transition_at : null;
       if (last === null) continue;
       const ageMs = now - last;
-      if (ageMs <= theirsDays * 86_400_000) continue;
-      const daysOver = Math.floor(ageMs / 86_400_000);
+      if (ageMs <= theirsDays * DAY_MS) continue;
+      const daysOver = Math.floor(ageMs / DAY_MS);
       out.push({
         signal: 'admin_stale_ball',
         task_id: t.id,
@@ -197,8 +198,8 @@ export function detectStaleBall(
     if (state === 'WAITING') {
       const eta = typeof t.eta_at === 'number' ? t.eta_at : null;
       if (eta === null) continue;
-      if (now <= eta + etaGraceDays * 86_400_000) continue;
-      const daysOver = Math.floor((now - eta) / 86_400_000);
+      if (now <= eta + etaGraceDays * DAY_MS) continue;
+      const daysOver = Math.floor((now - eta) / DAY_MS);
       out.push({
         signal: 'admin_stale_ball',
         task_id: t.id,
@@ -284,8 +285,8 @@ export function detectLast5Pct(
     if (typeof t.done_at !== 'number') continue;
     if (typeof t.closed_at === 'number') continue;
     const ageMs = now - t.done_at;
-    if (ageMs <= gapDays * 86_400_000) continue;
-    const daysSince = Math.floor(ageMs / 86_400_000);
+    if (ageMs <= gapDays * DAY_MS) continue;
+    const daysSince = Math.floor(ageMs / DAY_MS);
     const label = typeof t.label === 'string' && t.label.trim() ? t.label.trim() : 'task';
     out.push({
       signal: 'admin_last_5pct',

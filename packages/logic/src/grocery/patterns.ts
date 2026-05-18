@@ -19,7 +19,7 @@ import type {
 } from './types';
 import { ALIAS_TABLE } from './data';
 
-import { DAY_MS } from '../util';
+import { DAY_MS, dayKey } from '../util';
 
 function resolveNow(history: GroceryHistory | null, opts: GroceryOpts): number {
   if (history && typeof history.now === 'number') return history.now;
@@ -197,12 +197,8 @@ export function detectShoppingCadence(
     .sort((a, b) => a - b);
   if (events.length < minEvents) return null;
 
-  const tripDays = new Set(
-    events.map(t => {
-      const d = new Date(t);
-      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    }),
-  );
+  // Local-time day keys — collapse trip timestamps to calendar days.
+  const tripDays = new Set(events.map(dayKey));
   const trips = Array.from(tripDays).sort();
   if (trips.length < 3) return null;
 

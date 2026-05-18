@@ -19,6 +19,7 @@
  */
 
 import { pearson } from './math';
+import { DAY_MS, dayKey } from '../util';
 import type { FinanceRecord } from '../finance/types';
 import type { BrainDumpEntry } from '../finance/subscription-dormancy';
 import type { SleepRecord } from '../sleep/types';
@@ -219,14 +220,8 @@ export function inferCaffeineFromTransactions(
 
 // ─── Pairing + correlation ───────────────────────────────────────────
 
-/** YYYY-MM-DD key in LOCAL tz from epoch ms. */
-function localDateKey(ms: number): string {
-  const d = new Date(ms);
-  const y = d.getFullYear();
-  const mo = String(d.getMonth() + 1).padStart(2, '0');
-  const da = String(d.getDate()).padStart(2, '0');
-  return `${y}-${mo}-${da}`;
-}
+/** YYYY-MM-DD key in LOCAL tz from epoch ms — delegates to the shared util. */
+const localDateKey = dayKey;
 
 /** Next-day key (local). */
 function nextDayKeyLocal(key: string): string | null {
@@ -283,13 +278,13 @@ function pairToNights(
     if (!c || typeof c.consumedAt !== 'number') continue;
     const date = new Date(c.consumedAt);
     const hod = date.getHours() + date.getMinutes() / 60;
-    const dayKey = localDateKey(c.consumedAt);
+    const consumedDayKey = localDateKey(c.consumedAt);
     // Consumed in the small hours (before 4am) → it actually affects
     // the previous night, not this one. Use yesterday's key.
-    let nightOf = dayKey;
+    let nightOf = consumedDayKey;
     if (hod < 4) {
-      const prev = nextDayKeyLocal(localDateKey(c.consumedAt - 86400000));
-      if (prev != null) nightOf = localDateKey(c.consumedAt - 86400000);
+      const prev = nextDayKeyLocal(localDateKey(c.consumedAt - DAY_MS));
+      if (prev != null) nightOf = localDateKey(c.consumedAt - DAY_MS);
     }
     const cur = latestPerNight.get(nightOf);
     if (cur == null || c.consumedAt > cur.entry.consumedAt) {
