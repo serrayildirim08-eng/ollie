@@ -1772,6 +1772,151 @@ function TreatmentPlansCard() {
   );
 }
 
+// ── PostureReminderCard ───────────────────────────────────────────────────────
+// Enable UI for the posture-nudge orchestrator. The orchestrator reads
+// `body.posture_settings.opt_in` — it defaults to false and never fires until
+// the user turns it on here. Once enabled, the orchestrator handles the
+// hourly work-hour window and APNs delivery; this card only owns the toggle.
+
+/** Default posture work-hour window — mirrors the orchestrator constants. */
+export const POSTURE_DEFAULT_START_HOUR = 9;
+export const POSTURE_DEFAULT_END_HOUR = 17;
+
+export interface PostureSettings {
+  opt_in?: boolean;
+  start_hour?: number;
+  end_hour?: number;
+}
+
+/**
+ * Merge a posture-settings opt_in change. Preserves any existing window and
+ * stamps defaults when none are set, so the orchestrator always reads a
+ * complete shape. Pure — exported for unit testing.
+ */
+export function nextPostureSettings(
+  prev: PostureSettings | null | undefined,
+  optIn: boolean,
+): PostureSettings {
+  const base = prev && typeof prev === 'object' ? prev : {};
+  return {
+    ...base,
+    opt_in: optIn,
+    start_hour: typeof base.start_hour === 'number' ? base.start_hour : POSTURE_DEFAULT_START_HOUR,
+    end_hour: typeof base.end_hour === 'number' ? base.end_hour : POSTURE_DEFAULT_END_HOUR,
+  };
+}
+
+function fmtHour(h: number): string {
+  const safe = ((Math.round(h) % 24) + 24) % 24;
+  return `${String(safe).padStart(2, '0')}:00`;
+}
+
+export function PostureReminderCard() {
+  const [settings, setSettings] = useStoreSlice<PostureSettings | null>(
+    'body', 'posture_settings', null,
+  );
+  const enabled = settings?.opt_in === true;
+  const startHour = typeof settings?.start_hour === 'number'
+    ? settings.start_hour : POSTURE_DEFAULT_START_HOUR;
+  const endHour = typeof settings?.end_hour === 'number'
+    ? settings.end_hour : POSTURE_DEFAULT_END_HOUR;
+
+  function toggle() {
+    setSettings(nextPostureSettings(settings, !enabled));
+  }
+
+  return (
+    <section
+      style={{
+        marginBottom: 40,
+        padding: '20px 22px',
+        background: C.paper,
+        border: `1px solid ${C.hairline}`,
+        borderRadius: 4,
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'baseline',
+          paddingBottom: 14,
+        }}
+      >
+        <div style={labelStyle}>posture reminder</div>
+        <div
+          style={{
+            fontFamily: "'DM Mono', monospace",
+            fontSize: 9,
+            letterSpacing: '0.22em',
+            color: enabled ? C.water : C.faint,
+            textTransform: 'uppercase',
+          }}
+        >
+          {enabled ? 'on' : 'off'}
+        </div>
+      </div>
+
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: 16,
+        }}
+      >
+        <div style={{ maxWidth: 420 }}>
+          <div
+            style={{
+              fontFamily: "'Inter Tight', sans-serif",
+              fontSize: 14,
+              color: C.muted,
+              lineHeight: 1.55,
+            }}
+          >
+            {enabled
+              ? `a quiet check on your shoulders, once an hour between ${fmtHour(startHour)} and ${fmtHour(endHour)}.`
+              : 'an hourly note to shift position during work hours. off by default — turn it on if it helps.'}
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={toggle}
+          role="switch"
+          aria-checked={enabled}
+          aria-label="posture reminder"
+          style={{
+            flexShrink: 0,
+            width: 52,
+            height: 30,
+            padding: 3,
+            background: enabled ? C.water : 'transparent',
+            border: `1.5px solid ${enabled ? C.water : C.hairlineHi}`,
+            borderRadius: 999,
+            cursor: 'pointer',
+            display: 'flex',
+            justifyContent: enabled ? 'flex-end' : 'flex-start',
+            alignItems: 'center',
+            transition: 'background 160ms ease, border-color 160ms ease',
+          }}
+        >
+          <span
+            aria-hidden="true"
+            style={{
+              width: 22,
+              height: 22,
+              borderRadius: '50%',
+              background: enabled ? C.bg : C.hairlineHi,
+              display: 'block',
+            }}
+          />
+        </button>
+      </div>
+    </section>
+  );
+}
+
 // ── BodyNoticed ───────────────────────────────────────────────────────────────
 
 function BodyNoticed() {
@@ -2151,6 +2296,9 @@ export function BodyModule({ onBack }: BodyModuleProps) {
 
         {/* treatment plans */}
         <TreatmentPlansCard />
+
+        {/* posture reminder — opt-in nudge */}
+        <PostureReminderCard />
 
         {/* WATER */}
         <section style={{ paddingBottom: 64 }}>
