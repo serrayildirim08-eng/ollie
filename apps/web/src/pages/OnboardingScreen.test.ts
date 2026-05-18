@@ -44,6 +44,7 @@ function baseState(overrides: Partial<State> = {}): State {
   return {
     screen: 0,
     name: '',
+    age: '',
     country: 'INTL',
     hasPets: null,
     petDrafts: [],
@@ -143,6 +144,21 @@ describe('OnboardingScreen · commitAll', () => {
   it('country falls back to INTL when blank', () => {
     commitAll(baseState({ country: '' }));
     expect(data.get('shared:settings.country')).toBe('INTL');
+  });
+
+  it('age is persisted as a number at settings.age', () => {
+    commitAll(baseState({ age: '34' }));
+    expect(data.get('shared:settings.age')).toBe(34);
+  });
+
+  it('age is null when blank', () => {
+    commitAll(baseState({ age: '' }));
+    expect(data.get('shared:settings.age')).toBeNull();
+  });
+
+  it('age is null when out of plausible range', () => {
+    commitAll(baseState({ age: '999' }));
+    expect(data.get('shared:settings.age')).toBeNull();
   });
 });
 
