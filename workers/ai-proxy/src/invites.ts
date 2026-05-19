@@ -46,6 +46,8 @@ const CODE_ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789';
 
 interface GenerateInviteRequest {
   inviter_user_hash: string;
+  /** Optional acquisition-channel tag — normalised server-side. */
+  channel?: string;
 }
 
 export async function handleGenerateInvite(req: Request, env: InvitesEnv): Promise<Response> {
@@ -76,6 +78,10 @@ export async function handleGenerateInvite(req: Request, env: InvitesEnv): Promi
     return json({ error: 'supabase_not_configured' }, 500);
   }
 
+  // Optional acquisition-channel tag for the activation funnel. Normalised
+  // here so the column stays tidy; null when absent → reads as a referral.
+  const channel = normalizeChannel(body.channel);
+
   // Generate a fresh code. Retry up to 3 times if we hit a UNIQUE collision
   // on the `code` column (vanishingly unlikely with 30^8 keyspace, but
   // worth handling — service_role inserts surface 409 on conflict via
@@ -97,6 +103,7 @@ export async function handleGenerateInvite(req: Request, env: InvitesEnv): Promi
         code,
         inviter_user_hash: body.inviter_user_hash,
         expires_at: expiresAt,
+        ...(channel ? { channel } : {}),
       }),
     });
     if (resp.ok) {
@@ -292,6 +299,25 @@ export async function checkInviteRate(kv: KVNamespace, userId: string): Promise<
 
 export function makeCode(): string {
   return `olli-${randSegment(4)}-${randSegment(4)}`;
+}
+
+/**
+ * Normalise an optional channel tag: lowercase, trim, collapse whitespace
+ * to hyphens, strip to [a-z0-9-], cap at 40 chars. Returns null when the
+ * input is missing or empty after normalising — a null channel reads as
+ * an in-app referral in the activation funnel.
+ */
+export function normalizeChannel(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const cleaned = raw
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9-]/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40);
+  return cleaned || null;
 }
 
 function randSegment(n: number): string {

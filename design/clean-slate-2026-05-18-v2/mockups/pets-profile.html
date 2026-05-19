@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Pets — Mango</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E; --umber:#A8703C;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  .safe{position:absolute;top:62px;right:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .safe svg{stroke:var(--mute)}
+  .find{position:absolute;top:62px;left:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .find svg{stroke:var(--mute)}
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  /* one pet at rest. the .who carries the pet's name. calm — no hero
+     number, no streak. the page reads like a notebook page on Mango. */
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;
+    padding:0 26px 36px}
+
+  /* the head — a soft paw-disc, the name, species + status. centred,
+     calm. margin-top clears the .who label. */
+  .head{margin-top:116px;display:flex;flex-direction:column;align-items:center}
+  .disc{width:66px;height:66px;border-radius:50%;background:#F2EEDF;
+    display:flex;align-items:center;justify-content:center;margin-bottom:16px}
+  .disc span{font-size:27px;font-weight:700;color:var(--ink);letter-spacing:-.02em}
+  .name{font-size:30px;font-weight:300;color:var(--ink);letter-spacing:-.025em}
+  .sub{margin-top:7px;font-size:13px;color:var(--mute);font-weight:500;
+    letter-spacing:.01em}
+  .sub .s{color:var(--line);margin:0 7px}
+
+  /* the adoptversary line — only present on the day. a warm umber line,
+     gentle, never a confetti banner. */
+  .anniv{margin-top:14px;background:#FBF1E7;border:1px solid #E8D6BE;
+    border-radius:14px;padding:11px 16px;display:flex;align-items:center;gap:9px}
+  .anniv .adot{width:7px;height:7px;border-radius:50%;background:var(--umber);
+    flex-shrink:0}
+  .anniv span{font-size:13px;color:var(--umber);font-weight:600;
+    letter-spacing:-.01em}
+
+  /* a section label */
+  .sect{margin-top:34px;font-size:11px;color:var(--mute);font-weight:600;
+    letter-spacing:.08em;text-transform:uppercase}
+
+  /* the 30-day care strip — the tailored visual, scaled up. 30 dots,
+     a soft week-tick under every 7th, a quiet caption. */
+  .stripwrap{margin-top:14px}
+  .strip{display:flex;gap:4px;align-items:center}
+  .sd{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+  .sd.on{background:var(--sage)}
+  .sd.off{background:var(--line)}
+  .stripcap{margin-top:10px;font-size:12px;color:var(--mute);font-weight:400;
+    letter-spacing:-.005em}
+  .stripcap b{color:var(--ink);font-weight:600}
+
+  /* recent observations — quiet hairline rows, last 3 */
+  .obs{margin-top:14px;display:flex;flex-direction:column}
+  .ob{border-top:1px solid var(--line);padding:14px 0}
+  .obs .ob:last-child{border-bottom:1px solid var(--line)}
+  .obhead{display:flex;align-items:baseline;gap:8px}
+  .obtxt{font-size:14px;color:var(--ink);font-weight:500;letter-spacing:-.01em;
+    flex:1;line-height:1.4}
+  .obwhen{font-size:12px;color:var(--mute);font-weight:500;flex-shrink:0}
+  .obtags{margin-top:7px;display:flex;flex-wrap:wrap;gap:6px}
+  .obtag{font-size:11px;color:var(--mute);font-weight:600;background:#F2EEDF;
+    border-radius:8px;padding:3px 8px;letter-spacing:.01em}
+
+  /* milestones — calm sage-dot lines, the firsts */
+  .miles{margin-top:14px;display:flex;flex-direction:column}
+  .mile{border-top:1px solid var(--line);padding:13px 0;display:flex;
+    align-items:flex-start;gap:11px}
+  .miles .mile:last-child{border-bottom:1px solid var(--line)}
+  .mile .mdot{width:7px;height:7px;border-radius:50%;background:var(--sage);
+    flex-shrink:0;margin-top:5px}
+  .mile .mbody{flex:1}
+  .mline{font-size:14px;color:var(--ink);font-weight:500;letter-spacing:-.01em}
+  .mwhen{margin-top:3px;font-size:12px;color:var(--mute);font-weight:400}
+
+  /* the calm footer drill — observe / log care for this pet */
+  .drill{margin-top:30px;display:flex;flex-direction:column}
+  .drow{border-top:1px solid var(--line);padding:17px 2px;display:flex;
+    align-items:center}
+  .drill .drow:last-child{border-bottom:1px solid var(--line)}
+  .dk{font-size:14px;color:var(--ink);font-weight:500;letter-spacing:-.01em;flex:1}
+  .chev{stroke:var(--mute);flex-shrink:0}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+  <div class="find">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/>
+    </svg>
+  </div>
+  <div class="safe">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.5-7 10-7 10z"/>
+    </svg>
+  </div>
+
+  <div class="who">
+    <span>Mango</span>
+  </div>
+
+  <div class="scroll">
+    <div class="head">
+      <div class="disc"><span>M</span></div>
+      <div class="name">Mango</div>
+      <div class="sub">guinea pig<span class="s">·</span>solo<span class="s">·</span>since may 2024</div>
+
+      <!-- the adoptversary line — present because today is the day -->
+      <div class="anniv">
+        <span class="adot"></span>
+        <span>2 years with Mango today</span>
+      </div>
+    </div>
+
+    <!-- the 30-day care strip — the tailored visual, scaled up -->
+    <div class="sect">last 30 days of care</div>
+    <div class="stripwrap">
+      <div class="strip">
+        <span class="sd on"></span><span class="sd on"></span><span class="sd off"></span>
+        <span class="sd on"></span><span class="sd on"></span><span class="sd on"></span>
+        <span class="sd off"></span><span class="sd on"></span><span class="sd on"></span>
+        <span class="sd on"></span><span class="sd off"></span><span class="sd on"></span>
+        <span class="sd on"></span><span class="sd on"></span><span class="sd on"></span>
+        <span class="sd off"></span><span class="sd on"></span><span class="sd on"></span>
+        <span class="sd on"></span><span class="sd on"></span><span class="sd off"></span>
+        <span class="sd on"></span><span class="sd on"></span><span class="sd on"></span>
+        <span class="sd on"></span><span class="sd off"></span><span class="sd on"></span>
+        <span class="sd on"></span><span class="sd off"></span><span class="sd off"></span>
+      </div>
+      <div class="stripcap">care logged <b>23 of 30 days</b> &middot; a soft dot
+        is a day with care, a gap is just a gap</div>
+    </div>
+
+    <!-- recent observations — last 3 -->
+    <div class="sect">recent observations</div>
+    <div class="obs">
+      <div class="ob">
+        <div class="obhead">
+          <span class="obtxt">eating well, very chatty at feed time. weight 1.04 kg.</span>
+          <span class="obwhen">2 days ago</span>
+        </div>
+        <div class="obtags">
+          <span class="obtag">good appetite</span>
+          <span class="obtag">vocal</span>
+          <span class="obtag">weight 1.04kg</span>
+        </div>
+      </div>
+      <div class="ob">
+        <div class="obhead">
+          <span class="obtxt">a bit quiet, stayed in the hide most of the morning.</span>
+          <span class="obwhen">6 days ago</span>
+        </div>
+        <div class="obtags">
+          <span class="obtag">low activity</span>
+          <span class="obtag">hiding</span>
+        </div>
+      </div>
+      <div class="ob">
+        <div class="obhead">
+          <span class="obtxt">popcorned around the run after floor time.</span>
+          <span class="obwhen">11 days ago</span>
+        </div>
+        <div class="obtags">
+          <span class="obtag">playful</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- milestones — the firsts -->
+    <div class="sect">milestones</div>
+    <div class="miles">
+      <div class="mile">
+        <span class="mdot"></span>
+        <div class="mbody">
+          <div class="mline">first popcorn recorded</div>
+          <div class="mwhen">11 days ago</div>
+        </div>
+      </div>
+      <div class="mile">
+        <span class="mdot"></span>
+        <div class="mbody">
+          <div class="mline">first hand-fed parsley</div>
+          <div class="mwhen">3 weeks ago</div>
+        </div>
+      </div>
+      <div class="mile">
+        <span class="mdot"></span>
+        <div class="mbody">
+          <div class="mline">came home</div>
+          <div class="mwhen">2 years ago today</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- the calm drill footer -->
+    <div class="drill">
+      <div class="drow">
+        <span class="dk">log care for Mango</span>
+        <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+      <div class="drow">
+        <span class="dk">record an observation</span>
+        <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

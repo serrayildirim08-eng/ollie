@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Throw</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --sage:#5B8C7E;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  /* safe dot — only fixed chrome */
+  .safe{position:absolute;top:62px;right:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .safe svg{stroke:var(--mute)}
+
+  .stage{flex:1;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;padding:0 40px}
+
+  /* the one thing: the input */
+  .field{width:100%;min-height:118px;background:#fff;border:1px solid var(--line);
+    border-radius:26px;box-shadow:0 12px 30px rgba(42,38,34,.05);
+    padding:26px 24px;display:flex;align-items:flex-start}
+  .ghost{font-size:21px;color:var(--mute);line-height:1.4;letter-spacing:-.01em}
+
+  /* mic — the only other affordance */
+  .mic{margin-top:54px;width:80px;height:80px;border-radius:50%;
+    background:var(--ink);display:flex;align-items:center;justify-content:center;
+    box-shadow:0 14px 34px rgba(42,38,34,.22)}
+  .mic svg{stroke:var(--paper)}
+  .pulse{position:absolute;width:80px;height:80px;border-radius:50%;
+    border:2px solid var(--ink);opacity:0;animation:p 3.4s ease-out infinite}
+  @keyframes p{0%{transform:scale(1);opacity:.3}100%{transform:scale(1.9);opacity:0}}
+  .micwrap{margin-top:54px;position:relative;display:flex;align-items:center;justify-content:center}
+  .micwrap .mic{margin-top:0}
+
+  /* position dots — bottom, no words */
+  .dots{position:absolute;bottom:38px;left:0;right:0;display:flex;
+    gap:9px;justify-content:center}
+  .dots i{width:6px;height:6px;border-radius:50%;background:var(--line);display:block}
+  .dots i.on{background:var(--ink);width:22px;border-radius:3px}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="safe">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.5-7 10-7 10z"/>
+    </svg>
+  </div>
+
+  <div class="stage">
+    <div class="field"><span class="ghost">throw a thought&#8230;</span></div>
+    <div class="micwrap">
+      <div class="pulse"></div>
+      <div class="mic">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke-width="1.8">
+          <rect x="9" y="2" width="6" height="12" rx="3"/>
+          <path d="M5 11a7 7 0 0 0 14 0M12 18v4"/>
+        </svg>
+      </div>
+    </div>
+  </div>
+
+  <div class="dots"><i class="on"></i><i></i><i></i></div>
+</div>
+</body>
+</html>

@@ -157,6 +157,7 @@ html { font-size: 17px; }   /* anchor · same across all breakpoints */
     right: auto;
     transform: translateX(-50%);
     width: min(720px, 80vw);
+    box-sizing: border-box; /* width includes the 14px 20px padding — no overflow */
     border-radius: 12px;
     padding: 14px 20px;
   }

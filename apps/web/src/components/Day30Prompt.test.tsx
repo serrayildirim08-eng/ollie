@@ -133,7 +133,7 @@ describe('Day30Prompt · dismiss', () => {
 describe('Day30Prompt · crisis suppression', () => {
   it('does not show when void:crisis:detected fired before d30_returned', () => {
     mount();
-    fire('void:crisis:detected', { text: 'test', matchedLine: 'test', ts: Date.now() });
+    fire('void:crisis:detected', { ts: Date.now() });
     fire('void:retention:d30_returned', { installed_at: 0, returned_at: 1, days: 30 });
     expect(container.querySelector('[role="dialog"]')).toBeNull();
   });

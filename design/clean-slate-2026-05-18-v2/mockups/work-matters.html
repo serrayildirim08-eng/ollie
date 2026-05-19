@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Matters</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E; --umber:#A8703C;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  .safe{position:absolute;top:62px;right:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .safe svg{stroke:var(--mute)}
+  .find{position:absolute;top:62px;left:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .find svg{stroke:var(--mute)}
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  /* work — the matter LIST. the "work" submodule, reached by drilling
+     the work page's work card. all my cases at a glance: a calm list,
+     each matter a row — name + a one-line status + the nearest date.
+     the matter that needs you sits up top, gently warm. */
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;
+    padding:0 26px 36px}
+
+  /* a quiet sub-line under the .who label — the count, the calm framing.
+     margin-top clears the absolutely-positioned .who label. */
+  .lede{margin-top:116px;display:flex;flex-direction:column;align-items:center;
+    gap:6px;margin-bottom:30px}
+  .ledecount{font-size:15px;color:var(--ink);font-weight:500;letter-spacing:-.01em}
+  .ledecount b{font-weight:600}
+  .ledesub{font-size:13px;color:var(--mute);font-weight:500;letter-spacing:.01em}
+
+  /* the matter rows — a calm list. each row carries a matter mark,
+     the matter name, a one-line "where it stands", and the nearest date.
+     generous vertical air. tap a row → the matter's briefing. */
+  .matters{display:flex;flex-direction:column}
+  .matter{border-top:1px solid var(--line);padding:20px 2px 21px;
+    display:flex;gap:14px}
+  .matter:last-child{border-bottom:1px solid var(--line)}
+
+  /* the matter mark — a small file glyph in the gutter. ink-quiet for a
+     calm matter; warm umber-filled for the one that needs you. */
+  .mk{width:30px;flex-shrink:0;display:flex;align-items:flex-start;
+    justify-content:center;padding-top:2px}
+  .mk svg{stroke-width:1.6;stroke-linejoin:round;fill:none}
+
+  .body{flex:1;min-width:0;display:flex;flex-direction:column;gap:5px}
+  .top{display:flex;align-items:baseline;gap:8px}
+  .name{font-size:16px;color:var(--ink);font-weight:600;letter-spacing:-.012em;
+    flex-shrink:0}
+  .kind{font-size:12px;color:var(--mute);font-weight:500;letter-spacing:.01em}
+  .stands{font-size:13.5px;color:var(--mute);font-weight:500;
+    letter-spacing:-.01em;line-height:1.45}
+  /* the date sits on its own quiet line — soonest reads warm */
+  .when{font-size:12.5px;color:var(--mute);font-weight:600;letter-spacing:.01em;
+    margin-top:1px}
+  .chev{stroke:var(--mute);flex-shrink:0;align-self:center;margin-left:4px}
+
+  /* the matter that needs you — drawn gently warm. mark filled umber,
+     a soft umber wash behind the row, the date in umber. NOT loud —
+     a warm tint, the way an urgent file sits a little forward. */
+  .matter.due{background:linear-gradient(90deg,#F6E9D8 0%,rgba(246,233,216,0) 92%);
+    border-radius:14px;margin:0 -8px;padding-left:10px;padding-right:10px}
+  .matter.due .mk svg{stroke:var(--umber)}
+  .matter.due .name{color:var(--ink)}
+  .matter.due .stands{color:#7A5A3A}
+  .matter.due .when{color:var(--umber)}
+  /* the urgent row has no top rule — the wash is its frame */
+  .matter.due{border-top:none}
+  .matter.due+.matter{border-top:none}
+
+  /* a quiet next-step line on the warm matter — what actually needs
+     doing, drawn as a soft umber phrase. */
+  .next{display:flex;align-items:center;gap:7px;margin-top:3px}
+  .next .ndot{width:5px;height:5px;border-radius:50%;background:var(--umber);
+    flex-shrink:0}
+  .next span{font-size:12.5px;color:var(--umber);font-weight:600;
+    letter-spacing:-.01em}
+
+  /* the closing note — how matters get made. matters are created by
+     CONFIRMATION, not a + button. a quiet sage line states it. */
+  .made{margin-top:28px;display:flex;align-items:flex-start;gap:9px;
+    padding:0 2px}
+  .made .mdot{width:6px;height:6px;border-radius:50%;background:var(--sage);
+    flex-shrink:0;margin-top:4px}
+  .made span{font-size:13px;color:var(--ink);font-weight:500;
+    letter-spacing:-.01em;line-height:1.5}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+  <div class="find">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/>
+    </svg>
+  </div>
+  <div class="safe">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.5-7 10-7 10z"/>
+    </svg>
+  </div>
+
+  <div class="who">
+    <span>matters</span>
+  </div>
+
+  <div class="scroll">
+    <!-- the calm lede — the count + the framing line -->
+    <div class="lede">
+      <div class="ledecount"><b>5 matters</b> · 3 need you</div>
+      <div class="ledesub">all your cases, where they stand</div>
+    </div>
+
+    <div class="matters">
+
+      <!-- the matter that needs you — drawn warm, sits up top.
+           mark umber, soft umber wash, a next-step line. -->
+      <div class="matter due">
+        <div class="mk">
+          <svg width="20" height="20" viewBox="0 0 24 24">
+            <path d="M4 6h6l2 2h8v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1z"/>
+          </svg>
+        </div>
+        <div class="body">
+          <div class="top">
+            <span class="name">Yılmaz</span>
+            <span class="kind">E-2 visa</span>
+          </div>
+          <div class="stands">filing window opens Thursday — waiting on the
+            signed commercial lease before it can go out.</div>
+          <div class="when">files in 3 days · Thu May 21</div>
+          <div class="next">
+            <span class="ndot"></span>
+            <span>chase the lease from the landlord</span>
+          </div>
+        </div>
+        <svg class="chev" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+
+      <!-- the rest — calm matters, quiet ink rows -->
+      <div class="matter">
+        <div class="mk">
+          <svg width="20" height="20" viewBox="0 0 24 24" stroke="var(--mute)">
+            <path d="M4 6h6l2 2h8v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1z"/>
+          </svg>
+        </div>
+        <div class="body">
+          <div class="top">
+            <span class="name">Okafor</span>
+            <span class="kind">H-1B</span>
+          </div>
+          <div class="stands">RFE response is drafted — needs your read-through
+            before it's sent back.</div>
+          <div class="when">respond by May 30</div>
+        </div>
+        <svg class="chev" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+
+      <div class="matter">
+        <div class="mk">
+          <svg width="20" height="20" viewBox="0 0 24 24" stroke="var(--mute)">
+            <path d="M4 6h6l2 2h8v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1z"/>
+          </svg>
+        </div>
+        <div class="body">
+          <div class="top">
+            <span class="name">Park</span>
+            <span class="kind">O-1</span>
+          </div>
+          <div class="stands">two recommendation letters still out — the rest
+            of the evidence packet is in.</div>
+          <div class="when">no hard date yet</div>
+        </div>
+        <svg class="chev" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+
+      <div class="matter">
+        <div class="mk">
+          <svg width="20" height="20" viewBox="0 0 24 24" stroke="var(--mute)">
+            <path d="M4 6h6l2 2h8v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1z"/>
+          </svg>
+        </div>
+        <div class="body">
+          <div class="top">
+            <span class="name">Reyes</span>
+            <span class="kind">green card</span>
+          </div>
+          <div class="stands">quiet — interview is scheduled, nothing needs
+            doing until the prep week.</div>
+          <div class="when">interview Jun 14</div>
+        </div>
+        <svg class="chev" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+
+      <div class="matter">
+        <div class="mk">
+          <svg width="20" height="20" viewBox="0 0 24 24" stroke="var(--mute)">
+            <path d="M4 6h6l2 2h8v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1z"/>
+          </svg>
+        </div>
+        <div class="body">
+          <div class="top">
+            <span class="name">Demir</span>
+            <span class="kind">L-1</span>
+          </div>
+          <div class="stands">approved and closed — kept here so the file
+            stays findable.</div>
+          <div class="when">closed Apr 9</div>
+        </div>
+        <svg class="chev" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+
+    </div>
+
+    <!-- how matters get made — no + button. a quiet sage line states it. -->
+    <div class="made">
+      <span class="mdot"></span>
+      <span>matters aren't added by hand — when a name keeps coming up in
+        what you throw, ollie asks if it's one.</span>
+    </div>
+
+  </div>
+</div>
+</body>
+</html>

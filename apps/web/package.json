@@ -15,6 +15,7 @@
     "@capacitor-community/speech-recognition": "^7.0.1",
     "@capacitor/app": "^8.1.0",
     "@capgo/capacitor-native-biometric": "^8.4.5",
+    "@clerk/react": "^6.6.4",
     "@ollie/api": "workspace:*",
     "@ollie/auth": "workspace:*",
     "@ollie/backup": "workspace:*",

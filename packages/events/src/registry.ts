@@ -22,8 +22,10 @@ export const REGISTRY: Registry = {
   'void:cycle:closed':             { payload: '{ cycleStartTs: number, cycleEndTs: number, cycleLengthDays: number }' },
 
   // ─── crisis pathway ─────────────────────────────────────────────
-  // Fired before routing; downstream pipeline must not process crisis text.
-  'void:crisis:detected':        { payload: '{ text: string, matchedLine: string, ts: number }' },
+  // Fired before routing. Carries NO content — only a timestamp — so crisis
+  // text never enters the event bus or the retention bridge. Day30Prompt
+  // listens to this to suppress its prompt for the rest of the session.
+  'void:crisis:detected':        { payload: '{ ts: number }' },
 
   // ─── brain dump spine ───────────────────────────────────────────
   'void:braindump:submitted':      { payload: '{ v: 2, items: Array<{module,text,intent,extracted?,confidence,horizon?}>, raw: string, ts: number, idempotency_key: string, route_path: string }  // legacy v:1 shape: { id, text, moduleContext, ts } only on bypassed entrypoints' },
@@ -234,6 +236,13 @@ export const REGISTRY: Registry = {
   'auth:signed_in':                    { payload: '{ user_id: string, ts: number }' },
   'auth:signed_out':                   { payload: '{ ts: number }' },
   'auth:decryption_failed':            { payload: '{ reason: string, ts: number }' },
+
+  // ─── encryption vault (Clerk migration · 2026-05-19) ────────────
+  // The passphrase-derived vault (@ollie/auth). Emitted on key derivation
+  // (create/unlock) and on lock/reset. Payload is metadata only — never
+  // the passphrase or the derived key.
+  'vault:unlocked':                    { payload: '{ ts: number }' },
+  'vault:locked':                      { payload: '{ ts: number }' },
 
   // ─── Sprint 2 / Group C · research stream ───────────────────────
   'research:event_queued':             { payload: '{ event_id: string, ts: number }' },

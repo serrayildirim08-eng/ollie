@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Medication — adherence log</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  /* swipe-down handle dismisses — same return gesture everywhere */
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;
+    padding:0 26px 36px}
+
+  /* the lead — one calm line */
+  .lead{margin-top:116px;font-size:22px;font-weight:300;color:var(--ink);
+    letter-spacing:-.02em}
+  .lead b{font-weight:500}
+  .sub{margin-top:6px;font-size:13px;color:var(--mute);font-weight:500}
+
+  /* TODAY — a calm per-med view of today's logged doses. each med is one
+     quiet block: a color dot + name, then its doses for today as a small
+     row of marks. taken = sage filled with the time; due-but-not = open
+     ink ring; manual = a quiet dash. NO red, never alarmist. */
+  .sect{margin-top:34px;font-size:11px;color:var(--mute);font-weight:600;
+    letter-spacing:.08em;text-transform:uppercase}
+
+  .day{margin-top:14px;display:flex;flex-direction:column}
+  .dmed{border-top:1px solid var(--line);padding:16px 2px}
+  .dmed:last-child{border-bottom:1px solid var(--line)}
+  .dhead{display:flex;align-items:center;gap:11px}
+  .ddot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+  .dname{font-size:15px;color:var(--ink);font-weight:600;letter-spacing:-.01em}
+  .dname .k{color:var(--mute);font-weight:500;font-size:12px}
+  /* the doses-for-today row — each a slim pill */
+  .slots{margin-top:11px;display:flex;flex-wrap:wrap;gap:8px}
+  .slot{display:flex;align-items:center;gap:7px;border:1px solid var(--line);
+    background:#fff;border-radius:13px;padding:6px 11px}
+  .sdot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+  .sdot.taken{background:var(--sage)}
+  .sdot.due{border:1.6px solid var(--mute);width:8px;height:8px}
+  .slot .st{font-size:12px;color:var(--ink);font-weight:600;letter-spacing:.01em}
+  .slot .sw{font-size:12px;color:var(--mute);font-weight:500}
+  .slot.taken{background:#F3F0E6}
+  /* the manual-only note for a med with no schedule */
+  .dnote{margin-top:11px;font-size:12px;color:var(--mute);font-weight:400}
+  .dnote b{color:var(--ink);font-weight:600}
+
+  /* THE FORTNIGHT REPORT — the 14-day adherence, stated as ONE plain line
+     per med. "logged X of Y" — factual, never a streak, never a grade.
+     a quiet "pattern, not medical" framing sits under the whole block. */
+  .report{margin-top:14px;display:flex;flex-direction:column}
+  .rrow{border-top:1px solid var(--line);padding:15px 2px;display:flex;
+    align-items:baseline;gap:10px}
+  .rrow:last-child{border-bottom:1px solid var(--line)}
+  .rdot{width:9px;height:9px;border-radius:50%;flex-shrink:0;
+    align-self:center}
+  .rname{font-size:14px;color:var(--ink);font-weight:600;letter-spacing:-.01em;
+    flex-shrink:0}
+  /* the X of Y line — ink, plain, the report itself */
+  .rline{font-size:14px;color:var(--ink);font-weight:500;letter-spacing:-.01em;
+    flex:1;text-align:right}
+  .rline b{font-weight:600}
+  .rline .k{color:var(--mute);font-weight:500}
+
+  /* the framing note — sage, calm, screen-only. states plainly that this
+     is a pattern, not a medical reading, and is never pushed. */
+  .frame{margin-top:22px;display:flex;align-items:flex-start;gap:10px;
+    padding:15px 16px;background:#F0F3F0;border-radius:16px}
+  .frame .fdot{width:7px;height:7px;border-radius:50%;background:var(--sage);
+    flex-shrink:0;margin-top:5px}
+  .frame span{font-size:13px;color:#5A6B5F;font-weight:400;line-height:1.55}
+  .frame b{color:var(--ink);font-weight:600}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+
+  <div class="who">
+    <span>adherence log</span>
+  </div>
+
+  <div class="scroll">
+    <div class="lead"><b>what was taken</b></div>
+    <div class="sub">today &middot; the last fortnight</div>
+
+    <!-- TODAY — a calm per-med view of today's doses -->
+    <div class="sect">today</div>
+    <div class="day">
+
+      <div class="dmed">
+        <div class="dhead">
+          <span class="ddot" style="background:#C9923E"></span>
+          <span class="dname">methylphenidate <span class="k">· 10mg</span></span>
+        </div>
+        <div class="slots">
+          <div class="slot taken">
+            <span class="sdot taken"></span>
+            <span class="st">8:00am</span><span class="sw">— 8:02am</span>
+          </div>
+          <div class="slot">
+            <span class="sdot due"></span>
+            <span class="st">2:00pm</span><span class="sw">— due</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="dmed">
+        <div class="dhead">
+          <span class="ddot" style="background:#5B8C7E"></span>
+          <span class="dname">vitamin d <span class="k">· 1000 IU</span></span>
+        </div>
+        <div class="slots">
+          <div class="slot taken">
+            <span class="sdot taken"></span>
+            <span class="st">9:00am</span><span class="sw">— 9:14am</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="dmed">
+        <div class="dhead">
+          <span class="ddot" style="background:#8C7BB0"></span>
+          <span class="dname">magnesium <span class="k">· 200mg</span></span>
+        </div>
+        <div class="dnote">manual log only — <b>not logged today</b>.</div>
+      </div>
+
+    </div>
+
+    <!-- THE FORTNIGHT REPORT — one plain "logged X of Y" line per med -->
+    <div class="sect" style="margin-top:34px">the last 14 days</div>
+    <div class="report">
+
+      <div class="rrow">
+        <span class="rdot" style="background:#C9923E"></span>
+        <span class="rname">methylphenidate</span>
+        <span class="rline"><span class="k">logged</span> <b>24 of 28</b></span>
+      </div>
+
+      <div class="rrow">
+        <span class="rdot" style="background:#5B8C7E"></span>
+        <span class="rname">vitamin d</span>
+        <span class="rline"><span class="k">logged</span> <b>11 of 14</b></span>
+      </div>
+
+      <div class="rrow">
+        <span class="rdot" style="background:#8C7BB0"></span>
+        <span class="rname">magnesium</span>
+        <span class="rline"><span class="k">logged</span> <b>6 times</b> <span class="k">· manual</span></span>
+      </div>
+
+    </div>
+
+    <!-- the framing note — sage, calm, screen-only -->
+    <div class="frame">
+      <span class="fdot"></span>
+      <span>this is a <b>pattern, not a medical reading</b>. a missed log
+        isn't a missed dose, and a missed dose isn't a failure. it stays
+        on this screen — ollie never sends it to you.</span>
+    </div>
+  </div>
+</div>
+</body>
+</html>

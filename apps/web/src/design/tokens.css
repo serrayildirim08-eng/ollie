@@ -10,6 +10,12 @@ html {
 
 body {
   margin: 0;
+  /* The app is a single-column mobile layout on every platform — it
+   * must never scroll horizontally. This also clips position:fixed
+   * panels parked off-screen-right (e.g. the Sleep "the rest" drawer
+   * when closed), which would otherwise be revealed by iOS rubber-band
+   * horizontal scroll. Audit 2026-05-18. */
+  overflow-x: hidden;
 }
 
 /* ───────────────────────────────────────────────────────────────────── */

@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Cycle — first run</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  .safe{position:absolute;top:62px;right:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .safe svg{stroke:var(--mute)}
+  .find{position:absolute;top:62px;left:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .find svg{stroke:var(--mute)}
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;
+    padding:0 26px 36px}
+
+  /* the cold state — the ring is still present, never a blank page.
+     but with no history the ring shows no luteal arc, no ovulation
+     point, no travelling marker: just the calm track and a single
+     small marker at the start, "day 1". the prediction is honest. */
+  .hero{margin-top:116px;display:flex;flex-direction:column;align-items:center}
+  .ringwrap{position:relative;width:236px;height:236px;display:flex;
+    align-items:center;justify-content:center}
+  .ringwrap svg{position:absolute;display:block}
+  .rcentre{display:flex;flex-direction:column;align-items:center}
+  .rday{font-size:46px;font-weight:300;color:var(--ink);letter-spacing:-.03em;
+    line-height:1}
+  .rphase{margin-top:5px;font-size:13px;color:var(--mute);font-weight:600;
+    letter-spacing:.06em;text-transform:uppercase}
+
+  /* the honest prediction line — calm, never a blank, never a fake date.
+     a small sage dot marks it as a "still learning" note. */
+  .learn{margin-top:24px;display:flex;align-items:flex-start;gap:9px;
+    max-width:280px}
+  .learn .ldot{width:7px;height:7px;border-radius:50%;background:var(--sage);
+    flex-shrink:0;margin-top:6px}
+  .learn span{font-size:14px;color:var(--ink);font-weight:500;letter-spacing:-.01em;
+    line-height:1.45;text-align:left}
+  .learn b{font-weight:600}
+
+  /* a quiet confidence meter — how warm the predictions are. 1 of ~3
+     cycles in: the bar is barely filled, sage. honest, not a deficit. */
+  .conf{margin-top:22px;display:flex;flex-direction:column;align-items:center;
+    gap:8px}
+  .confbar{width:150px;height:4px;border-radius:3px;background:var(--line);
+    position:relative;overflow:hidden}
+  .confbar div{position:absolute;left:0;top:0;bottom:0;width:22%;
+    border-radius:3px;background:var(--sage)}
+  .conflbl{font-size:12px;color:var(--mute);font-weight:500;letter-spacing:.02em}
+
+  /* one amber button — log today. the way the ring warms up. */
+  .log{margin:30px auto 0;height:50px;border-radius:25px;background:var(--accent);
+    display:flex;align-items:center;justify-content:center;gap:8px;padding:0 24px;
+    box-shadow:0 12px 28px rgba(201,146,62,.32)}
+  .log svg{stroke:#fff}
+  .log span{font-size:16px;font-weight:600;color:#fff;letter-spacing:-.01em}
+
+  /* the drill rows — present but calm-empty. pill log + history read
+     their cold form; no clinical-flag row (nothing observed yet). */
+  .rows{margin-top:50px;display:flex;flex-direction:column}
+  .row{border-top:1px solid var(--line);padding:18px 2px;display:flex;
+    align-items:center}
+  .row:last-child{border-bottom:1px solid var(--line)}
+  .rk{font-size:13px;color:var(--mute);font-weight:600;letter-spacing:.01em;
+    flex-shrink:0}
+  .rsep{color:var(--line);margin:0 8px;font-size:13px}
+  .rv{font-size:14px;color:var(--mute);font-weight:400;letter-spacing:-.01em;flex:1}
+  .chev{stroke:var(--line);flex-shrink:0;margin-left:8px}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+  <div class="find">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/>
+    </svg>
+  </div>
+  <div class="safe">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.5-7 10-7 10z"/>
+    </svg>
+  </div>
+
+  <div class="who">
+    <span>cycle</span>
+  </div>
+
+  <div class="scroll">
+    <div class="hero">
+      <!-- the ring, present but cold: calm track only, no luteal arc,
+           no ovulation point. a single small marker rides at day 3. -->
+      <div class="ringwrap">
+        <svg class="cyc" width="236" height="236" viewBox="0 0 236 236">
+          <circle cx="118" cy="118" r="100" fill="none"
+            stroke="#EAE2D4" stroke-width="9"/>
+          <!-- the day-3 marker — quiet, amber, no arc behind it yet. -->
+          <circle cx="178.5" cy="38.4" r="7" fill="#C9923E"/>
+          <circle cx="178.5" cy="38.4" r="7" fill="none"
+            stroke="#FAF6EF" stroke-width="3"/>
+        </svg>
+        <div class="rcentre">
+          <div class="rday">3</div>
+          <div class="rphase">menstrual</div>
+        </div>
+      </div>
+
+      <div class="learn">
+        <span class="ldot"></span>
+        <span><b>still learning your cycle.</b> a couple more and
+          predictions warm up — for now ollie won't guess a date.</span>
+      </div>
+
+      <div class="conf">
+        <div class="confbar"><div></div></div>
+        <div class="conflbl">1 cycle logged · warming up</div>
+      </div>
+
+      <div class="log">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="2.4">
+          <path d="M12 5v14M5 12h14"/>
+        </svg>
+        <span>log today</span>
+      </div>
+    </div>
+
+    <div class="rows">
+      <div class="row">
+        <span class="rk">pill log</span><span class="rsep">·</span>
+        <span class="rv">start logging when you're ready</span>
+        <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+      <div class="row">
+        <span class="rk">history</span><span class="rsep">·</span>
+        <span class="rv">no closed cycles yet</span>
+        <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+      <div class="row">
+        <span class="rk">partner-ask</span><span class="rsep">·</span>
+        <span class="rv">tell someone what you need</span>
+        <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

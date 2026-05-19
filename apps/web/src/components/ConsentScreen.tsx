@@ -43,14 +43,25 @@ function Shell({ children }: { children: React.ReactNode }) {
   return (
     <main
       style={{
-        minHeight: '100vh',
+        // The app has no global box-sizing reset (see tokens.css), so a
+        // width + padding combo must opt into border-box here.
+        boxSizing: 'border-box',
+        // `dvh` sizes to the real visible area on iPhone; `100vh` overshoots.
+        minHeight: '100dvh',
+        width: '100%',
+        maxWidth: '100vw',
+        overflowX: 'hidden',
         background: 'var(--bone)',
         color: 'var(--ink)',
         fontFamily: 'var(--font-system)',
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'center',
-        padding: '48px 32px',
+        // Safe-area insets so content clears the iPhone status bar / notch
+        // and the home indicator.
+        padding:
+          'calc(48px + env(safe-area-inset-top)) calc(32px + env(safe-area-inset-right)) ' +
+          'calc(48px + env(safe-area-inset-bottom)) calc(32px + env(safe-area-inset-left))',
       }}
     >
       <div style={{ maxWidth: '420px', width: '100%', margin: '0 auto' }}>
@@ -131,6 +142,7 @@ function PrimaryBtn({
         padding: '14px 32px',
         minHeight: '48px',
         width: '100%',
+        boxSizing: 'border-box',
         border: `1px solid ${disabled ? 'var(--rule)' : 'var(--ink)'}`,
         borderRadius: '24px',
         background: disabled ? 'transparent' : 'var(--ink)',

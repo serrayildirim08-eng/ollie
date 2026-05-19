@@ -1,60 +1,30 @@
 /**
- * AuthFlow — sign-up + sign-in surface for ollie (Sprint 5 · F2)
+ * AuthFlow — sign-in surface for ollie (Clerk migration · Phase 1 2026-05-19)
  *
- * One component, three modes:
- *   - fork      : first-launch picker — sign up OR log in
- *   - signup    : email + passphrase (+ strength meter) + confirm + ack checkbox
- *   - signin    : email + passphrase (pre-filled from localStorage)
- *   - forgot    : single explainer screen — passphrase is unrecoverable by design
+ * Two layers, in order:
+ *   1. IDENTITY — Clerk. `<SignIn>` / `<SignUp>` prebuilt components handle
+ *      email + password + verification. Clerk owns "who is signed in".
+ *   2. ENCRYPTION — the passphrase vault (@ollie/auth). After Clerk sign-in
+ *      the user sets (first time) or enters (returning) a passphrase that
+ *      derives the local AES key. The passphrase NEVER leaves the device
+ *      and is unrelated to the Clerk password.
+ *
+ * Only when BOTH pass does `onAuthenticated()` fire — GatedLayout's Gate 1.
  *
  * Voice: lowercase labels, sage active, DM Mono caps headers.
- * Pattern A (F1): passphrase NEVER leaves the device.
- *
- * Wired into App.tsx at the root: unauthenticated users hit AuthFlow
- * before HomeScreen.
- *
- * Consent rewrite (Sprint 6): AuthFlow now just hands off via
- * onAuthenticated() — App.tsx gates the post-auth flow on
- * shared.consent.necessary. Fresh sign-ups have it unset (false),
- * so they land on ConsentScreen before onboarding. Returning sign-in
- * users with consent.necessary === true skip straight through.
  */
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { useAuth, SignIn, SignUp } from '@clerk/react';
 import { passphraseStrength, CRYPTO_PARAMS } from '@ollie/crypto';
 import type { PassphraseStrength } from '@ollie/crypto';
-import type { AuthClient } from '@ollie/auth';
-import {
-  validateInvite,
-  claimInvite,
-  readPendingInviteCode,
-  clearPendingInviteCode,
-  isBetaInviteRequired,
-} from '../lib/invite';
-import { deriveUserHash } from '../lib/user-hash';
-
-type Mode = 'fork' | 'signup' | 'signin' | 'forgot';
+import type { VaultClient } from '@ollie/auth';
 
 export interface AuthFlowProps {
-  auth: AuthClient;
+  /** The passphrase-derived encryption vault. */
+  vault: VaultClient;
+  /** Fired once Clerk sign-in AND vault unlock have both completed. */
   onAuthenticated: () => void;
-}
-
-const EMAIL_LS_KEY = 'auth.email_for_login';
-// Store keys live at `void.state.<mod>.v<STORE_VERSION>` as a JSON blob
-// holding the whole module's state — not flat per-key entries.
-// See packages/store/src/store.ts:21.
-const SHARED_LS_KEY = 'void.state.shared.v5';
-
-function readPrefilledEmail(): string {
-  try {
-    if (typeof localStorage === 'undefined') return '';
-    const raw = localStorage.getItem(SHARED_LS_KEY);
-    if (!raw) return '';
-    const parsed = JSON.parse(raw) as Record<string, unknown> | null;
-    const value = parsed && typeof parsed === 'object' ? parsed[EMAIL_LS_KEY] : null;
-    return typeof value === 'string' ? value : '';
-  } catch { return ''; }
 }
 
 // ─── shared atoms ────────────────────────────────────────────────────────────
@@ -63,14 +33,22 @@ function Shell({ children }: { children: React.ReactNode }) {
   return (
     <main
       style={{
-        minHeight: '100vh',
+        // No global box-sizing reset (see tokens.css) — opt into border-box
+        // here so the h-padding doesn't overflow the viewport.
+        boxSizing: 'border-box',
+        minHeight: '100dvh',
+        width: '100%',
+        maxWidth: '100vw',
+        overflowX: 'hidden',
         background: 'var(--bone)',
         color: 'var(--ink)',
         fontFamily: 'var(--font-system)',
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'center',
-        padding: '48px 32px',
+        padding:
+          'calc(48px + env(safe-area-inset-top)) calc(32px + env(safe-area-inset-right)) ' +
+          'calc(48px + env(safe-area-inset-bottom)) calc(32px + env(safe-area-inset-left))',
       }}
     >
       <div style={{ maxWidth: '420px', width: '100%', margin: '0 auto' }}>
@@ -152,7 +130,6 @@ function Label({ htmlFor, children }: { htmlFor: string; children: React.ReactNo
 
 function Field({
   id,
-  type,
   value,
   onChange,
   autoFocus,
@@ -160,7 +137,6 @@ function Field({
   ariaLabel,
 }: {
   id: string;
-  type: 'email' | 'password' | 'text';
   value: string;
   onChange: (v: string) => void;
   autoFocus?: boolean;
@@ -170,7 +146,7 @@ function Field({
   return (
     <input
       id={id}
-      type={type}
+      type="password"
       value={value}
       autoFocus={autoFocus}
       autoComplete={autoComplete}
@@ -181,6 +157,7 @@ function Field({
         fontSize: 'var(--t-caption)',
         padding: '12px 0',
         width: '100%',
+        boxSizing: 'border-box',
         border: 'none',
         borderBottom: '1px solid var(--rule)',
         background: 'transparent',
@@ -213,6 +190,7 @@ function PrimaryBtn({
         padding: '14px 32px',
         minHeight: '48px',
         width: '100%',
+        boxSizing: 'border-box',
         border: `1px solid ${disabled ? 'var(--rule)' : 'var(--ink)'}`,
         borderRadius: '24px',
         background: disabled ? 'transparent' : 'var(--ink)',
@@ -240,6 +218,7 @@ function GhostBtn({ label, onClick }: { label: string; onClick: () => void }) {
         padding: '14px 32px',
         minHeight: '48px',
         width: '100%',
+        boxSizing: 'border-box',
         border: '1px solid var(--rule)',
         borderRadius: '24px',
         background: 'transparent',
@@ -249,6 +228,30 @@ function GhostBtn({ label, onClick }: { label: string; onClick: () => void }) {
         letterSpacing: 'var(--ls-caps)',
         textTransform: 'uppercase',
         cursor: 'pointer',
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+function TextLink({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        background: 'none',
+        border: 'none',
+        color: 'var(--ink-faint)',
+        fontFamily: 'var(--font-mono)',
+        fontSize: 'var(--t-meta)',
+        letterSpacing: 'var(--ls-caps-small)',
+        textTransform: 'uppercase',
+        cursor: 'pointer',
+        padding: '8px 0',
+        display: 'block',
+        margin: '16px auto 0',
       }}
     >
       {label}
@@ -273,14 +276,11 @@ function ErrorLine({ message }: { message: string }) {
   );
 }
 
-// Empty-passphrase placeholder so the meter has something to render
-// before the (lazy-loaded, async) zxcvbn estimate resolves.
+// Empty-passphrase placeholder so the meter renders before the (lazy,
+// async) zxcvbn estimate resolves.
 const EMPTY_STRENGTH: PassphraseStrength = { score: 0, band: 'weak', notes: [] };
 
 function StrengthMeter({ passphrase }: { passphrase: string }) {
-  // passphraseStrength is async now (zxcvbn is lazy-loaded). Resolve it in
-  // an effect and keep the latest result in state. A request id guards
-  // against an earlier slow resolve overwriting a newer one.
   const [s, setS] = useState<PassphraseStrength>(EMPTY_STRENGTH);
   useEffect(() => {
     if (!passphrase) {
@@ -352,7 +352,7 @@ function StrengthMeter({ passphrase }: { passphrase: string }) {
   );
 }
 
-// ─── Fork screen ─────────────────────────────────────────────────────────────
+// ─── Clerk identity layer ────────────────────────────────────────────────────
 
 function ForkScreen({
   onChoose,
@@ -364,8 +364,8 @@ function ForkScreen({
       <CapHeader>ollie</CapHeader>
       <Headline>welcome.</Headline>
       <Sub>
-        ollie sorts what's in your head and keeps it private. everything stays encrypted on
-        your device — including from us.
+        ollie sorts what&apos;s in your head. sign in, then set a passphrase that
+        encrypts your data on this device.
       </Sub>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
         <PrimaryBtn label="create account" onClick={() => onChoose('signup')} />
@@ -375,71 +375,67 @@ function ForkScreen({
   );
 }
 
-// ─── Sign-up screen ──────────────────────────────────────────────────────────
+/**
+ * Clerk sign-in / sign-up. The prebuilt `<SignIn>` / `<SignUp>` components
+ * own the whole email + password + verification flow. `routing="virtual"`
+ * keeps them self-contained — no URL routing — which suits the hash-routed
+ * Capacitor shell. On success Clerk flips `useAuth().isSignedIn`, which
+ * re-renders AuthFlow into the passphrase stage.
+ */
+function ClerkAuthScreen() {
+  const [mode, setMode] = useState<'fork' | 'signup' | 'signin'>('fork');
 
-function SignUpScreen({
-  auth,
-  onAuthenticated,
-  onBack,
+  if (mode === 'fork') {
+    return <ForkScreen onChoose={setMode} />;
+  }
+
+  return (
+    <Shell>
+      <CapHeader>{mode === 'signup' ? 'create account' : 'log in'}</CapHeader>
+      <div style={{ display: 'flex', justifyContent: 'center' }}>
+        {mode === 'signup' ? (
+          <SignUp forceRedirectUrl="/" />
+        ) : (
+          <SignIn forceRedirectUrl="/" />
+        )}
+      </div>
+      <div style={{ marginTop: '20px' }}>
+        <GhostBtn label="back" onClick={() => setMode('fork')} />
+      </div>
+    </Shell>
+  );
+}
+
+// ─── encryption-vault layer ──────────────────────────────────────────────────
+
+/** First-time passphrase setup → vault.create(). */
+function SetPassphraseScreen({
+  vault,
+  onDone,
+  onSignOut,
 }: {
-  auth: AuthClient;
-  onAuthenticated: () => void;
-  onBack: () => void;
+  vault: VaultClient;
+  onDone: () => void;
+  onSignOut: () => void;
 }) {
-  const [email, setEmail] = useState(readPrefilledEmail());
   const [pass, setPass] = useState('');
   const [confirm, setConfirm] = useState('');
   const [ack, setAck] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
-  // Task 22 — invite gate. Pre-fills from sessionStorage when a deep
-  // link landed the user here (handled in main.tsx and the Capacitor
-  // deep-link handler). BETA_INVITE_REQUIRED = true blocks sign-up
-  // without a valid code.
-  const inviteRequired = isBetaInviteRequired();
-  const [inviteCode, setInviteCode] = useState<string>(() => readPendingInviteCode() ?? '');
-  const emailRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => { emailRef.current?.focus(); }, []);
 
   const passLongEnough = pass.length >= CRYPTO_PARAMS.MIN_PASSPHRASE_LENGTH;
   const passMatches = pass.length > 0 && pass === confirm;
-  const inviteFilled = !inviteRequired || inviteCode.trim().length > 0;
-  const canSubmit =
-    !!email && passLongEnough && passMatches && ack && inviteFilled && !submitting;
+  const canSubmit = passLongEnough && passMatches && ack && !submitting;
 
   async function submit() {
     if (!canSubmit) return;
     setSubmitting(true);
     setError('');
-
-    // Step 1 — validate invite (only when required). On failure, block
-    // with dry copy and do NOT call auth.signUp.
-    if (inviteRequired) {
-      const trimmed = inviteCode.trim();
-      const v = await validateInvite(trimmed);
-      if (!v.ok) {
-        setError(v.message);
-        setSubmitting(false);
-        return;
-      }
-      if (v.valid === false) {
-        setError('code expired or already used. ask your friend for a new one.');
-        setSubmitting(false);
-        return;
-      }
-    }
-
-    // Step 2 — sign-up.
     try {
-      const r = await auth.signUp({
-        email: email.trim(),
-        passphrase: pass,
-        passphraseConfirm: confirm,
-        acknowledged_unrecoverable: ack,
-      });
+      const r = await vault.create(pass);
       if (!r.ok) {
-        setError(r.message || 'sign-up failed');
+        setError(r.message || 'could not set passphrase');
         setSubmitting(false);
         return;
       }
@@ -448,71 +444,26 @@ function SignUpScreen({
       setSubmitting(false);
       return;
     }
-
-    // Step 3 — claim invite. Fire-and-forget for UX, but log the
-    // failure so a backend miss is visible. Auth is already complete;
-    // a claim miss does NOT block the user from entering the app.
-    if (inviteRequired && inviteCode.trim().length > 0) {
-      try {
-        const hash = await deriveUserHash(email.trim());
-        const claim = await claimInvite(inviteCode.trim(), hash);
-        if (claim.ok && claim.success) {
-          clearPendingInviteCode();
-        } else if (!claim.ok) {
-          console.warn('[invite] claim failed:', claim.message);
-        }
-      } catch (err) {
-        console.warn('[invite] claim threw:', err);
-      }
-    }
-
-    onAuthenticated();
+    onDone();
   }
 
   return (
     <Shell>
-      <CapHeader>create account</CapHeader>
-      <Headline>your data. anonymized. opt-in only.</Headline>
+      <CapHeader>set your passphrase</CapHeader>
+      <Headline>one passphrase. yours only.</Headline>
       <Sub>
-        the passphrase below protects your login. research data is anonymized and opt-in —
-        off-switch in settings any time. we can't reset this passphrase. write it down.
+        this passphrase encrypts your data on this device — separate from your
+        login. we can&apos;t reset it. write it down.
       </Sub>
 
-      <form
-        onSubmit={(e) => { e.preventDefault(); void submit(); }}
-        noValidate
-      >
-        {inviteRequired && (
-          <>
-            <Label htmlFor="invite">invite code</Label>
-            <Field
-              id="invite"
-              type="text"
-              value={inviteCode}
-              onChange={setInviteCode}
-              autoComplete="off"
-              ariaLabel="invite code"
-            />
-          </>
-        )}
-
-        <Label htmlFor="email">email</Label>
-        <Field
-          id="email"
-          type="email"
-          value={email}
-          onChange={setEmail}
-          autoComplete="email"
-          ariaLabel="email"
-        />
-
+      <form onSubmit={(e) => { e.preventDefault(); void submit(); }} noValidate>
         <Label htmlFor="passphrase">passphrase</Label>
         <Field
           id="passphrase"
-          type="password"
           value={pass}
           onChange={setPass}
           autoComplete="new-password"
+          autoFocus
           ariaLabel="passphrase"
         />
         <StrengthMeter passphrase={pass} />
@@ -520,7 +471,6 @@ function SignUpScreen({
         <Label htmlFor="confirm">confirm passphrase</Label>
         <Field
           id="confirm"
-          type="password"
           value={confirm}
           onChange={setConfirm}
           autoComplete="new-password"
@@ -534,7 +484,7 @@ function SignUpScreen({
             letterSpacing: 'var(--ls-caps-small)',
             textTransform: 'uppercase',
             margin: '-12px 0 16px',
-          }}>passphrases don't match</p>
+          }}>passphrases don&apos;t match</p>
         )}
 
         <label
@@ -564,47 +514,48 @@ function SignUpScreen({
 
         <ErrorLine message={error} />
 
-        <PrimaryBtn label={submitting ? 'creating…' : 'create account'} type="submit" disabled={!canSubmit} />
-
-        <div style={{ marginTop: '16px' }}>
-          <GhostBtn label="back" onClick={onBack} />
-        </div>
+        <PrimaryBtn
+          label={submitting ? 'setting…' : 'set passphrase'}
+          type="submit"
+          disabled={!canSubmit}
+        />
       </form>
+      <TextLink label="not you? sign out" onClick={onSignOut} />
     </Shell>
   );
 }
 
-// ─── Sign-in screen ──────────────────────────────────────────────────────────
-
-function SignInScreen({
-  auth,
-  onAuthenticated,
-  onBack,
-  onForgot,
+/** Returning user → vault.unlock(). */
+function UnlockScreen({
+  vault,
+  onDone,
+  onSignOut,
 }: {
-  auth: AuthClient;
-  onAuthenticated: () => void;
-  onBack: () => void;
-  onForgot: () => void;
+  vault: VaultClient;
+  onDone: () => void;
+  onSignOut: () => void;
 }) {
-  const [email, setEmail] = useState(readPrefilledEmail());
   const [pass, setPass] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
-  const canSubmit = !!email && pass.length > 0 && !submitting;
+  const canSubmit = pass.length > 0 && !submitting;
 
   async function submit() {
     if (!canSubmit) return;
     setSubmitting(true);
     setError('');
     try {
-      const r = await auth.signIn({ email: email.trim(), passphrase: pass });
+      const r = await vault.unlock(pass);
       if (r.ok) {
-        onAuthenticated();
-      } else {
-        setError(r.message || 'sign-in failed');
+        onDone();
+        return;
       }
+      setError(
+        r.code === 'wrong-passphrase'
+          ? 'wrong passphrase'
+          : r.message || 'could not unlock',
+      );
     } catch (e) {
       setError((e as Error).message || 'something went wrong');
     } finally {
@@ -614,111 +565,85 @@ function SignInScreen({
 
   return (
     <Shell>
-      <CapHeader>log in</CapHeader>
+      <CapHeader>unlock</CapHeader>
       <Headline>welcome back.</Headline>
-      <Sub>
-        your data unlocks locally with your passphrase.
-      </Sub>
+      <Sub>enter your passphrase to unlock your data on this device.</Sub>
 
       <form onSubmit={(e) => { e.preventDefault(); void submit(); }} noValidate>
-        <Label htmlFor="email">email</Label>
-        <Field
-          id="email"
-          type="email"
-          value={email}
-          onChange={setEmail}
-          autoComplete="email"
-          autoFocus={!email}
-          ariaLabel="email"
-        />
-
         <Label htmlFor="passphrase">passphrase</Label>
         <Field
           id="passphrase"
-          type="password"
           value={pass}
           onChange={setPass}
           autoComplete="current-password"
-          autoFocus={!!email}
+          autoFocus
           ariaLabel="passphrase"
         />
 
-        <button
-          type="button"
-          onClick={onForgot}
-          style={{
-            background: 'none',
-            border: 'none',
-            color: 'var(--ink-faint)',
-            fontFamily: 'var(--font-mono)',
-            fontSize: 'var(--t-meta)',
-            letterSpacing: 'var(--ls-caps-small)',
-            textTransform: 'uppercase',
-            cursor: 'pointer',
-            padding: '0 0 24px',
-            display: 'block',
-          }}
-        >
-          forgot passphrase?
-        </button>
-
         <ErrorLine message={error} />
 
-        <PrimaryBtn label={submitting ? 'logging in…' : 'log in'} type="submit" disabled={!canSubmit} />
-
-        <div style={{ marginTop: '16px' }}>
-          <GhostBtn label="back" onClick={onBack} />
-        </div>
+        <PrimaryBtn
+          label={submitting ? 'unlocking…' : 'unlock'}
+          type="submit"
+          disabled={!canSubmit}
+        />
       </form>
+      <TextLink label="not you? sign out" onClick={onSignOut} />
     </Shell>
   );
 }
 
-// ─── Forgot explainer ────────────────────────────────────────────────────────
+/**
+ * The encryption stage — shown once Clerk reports the user signed in.
+ * Picks set-passphrase (first time on this device) vs unlock (a vault
+ * already exists). If the vault is somehow already unlocked, hand off
+ * immediately.
+ */
+function PassphraseGate({
+  vault,
+  onUnlocked,
+  onSignOut,
+}: {
+  vault: VaultClient;
+  onUnlocked: () => void;
+  onSignOut: () => void;
+}) {
+  const exists = vault.state().exists;
 
-function ForgotScreen({ onBack }: { onBack: () => void }) {
+  useEffect(() => {
+    if (vault.state().unlocked) onUnlocked();
+    // run-once: a mid-session unlock state is what we're guarding for.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return exists ? (
+    <UnlockScreen vault={vault} onDone={onUnlocked} onSignOut={onSignOut} />
+  ) : (
+    <SetPassphraseScreen vault={vault} onDone={onUnlocked} onSignOut={onSignOut} />
+  );
+}
+
+// ─── root ────────────────────────────────────────────────────────────────────
+
+function LoadingShell() {
   return (
     <Shell>
-      <CapHeader>passphrase recovery</CapHeader>
-      <Headline>there isn't one.</Headline>
-      <Sub>
-        your passphrase is unrecoverable by design. it never reaches our servers — only the
-        derived encryption key, only in your browser's memory.
-      </Sub>
-      <Sub>
-        if you've truly lost it, you'd need to start fresh: create a new account. previous
-        data stays encrypted but unreadable without the original passphrase.
-      </Sub>
-      <GhostBtn label="back to log in" onClick={onBack} />
+      <CapHeader>ollie</CapHeader>
     </Shell>
   );
 }
 
-// ─── Root component ──────────────────────────────────────────────────────────
+export function AuthFlow({ vault, onAuthenticated }: AuthFlowProps) {
+  const { isLoaded, isSignedIn, signOut } = useAuth();
 
-export function AuthFlow({ auth, onAuthenticated }: AuthFlowProps) {
-  const [mode, setMode] = useState<Mode>(() => {
-    // Returning users with a stored email default to log-in. Fresh
-    // installs see the fork screen.
-    return readPrefilledEmail() ? 'signin' : 'fork';
-  });
+  if (!isLoaded) return <LoadingShell />;
+  if (!isSignedIn) return <ClerkAuthScreen />;
 
-  switch (mode) {
-    case 'signup':
-      return <SignUpScreen auth={auth} onAuthenticated={onAuthenticated} onBack={() => setMode('fork')} />;
-    case 'signin':
-      return (
-        <SignInScreen
-          auth={auth}
-          onAuthenticated={onAuthenticated}
-          onBack={() => setMode('fork')}
-          onForgot={() => setMode('forgot')}
-        />
-      );
-    case 'forgot':
-      return <ForgotScreen onBack={() => setMode('signin')} />;
-    case 'fork':
-    default:
-      return <ForkScreen onChoose={setMode} />;
-  }
+  return (
+    <PassphraseGate
+      vault={vault}
+      onUnlocked={onAuthenticated}
+      onSignOut={() => { void signOut(); }}
+    />
+  );
 }

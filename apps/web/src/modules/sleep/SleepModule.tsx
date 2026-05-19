@@ -870,7 +870,7 @@ export function SleepModule({ onBack }: SleepModuleProps) {
           <div style={{
             position: 'fixed', left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
             background: C.bone, border: `1px solid ${C.rule}`, padding: '36px 40px',
-            width: 'min(640px, 92vw)', zIndex: 90,
+            width: 'min(640px, 92vw)', boxSizing: 'border-box', zIndex: 90,
             boxShadow: '0 32px 80px rgba(20,20,15,0.10)',
           }}
             role="dialog"
@@ -948,7 +948,7 @@ export function SleepModule({ onBack }: SleepModuleProps) {
       <aside
         style={{
           position: 'fixed', top: 0, right: 0,
-          width: 'clamp(360px, 42vw, 600px)', height: '100vh',
+          width: 'clamp(360px, 42vw, 600px)', height: '100vh', boxSizing: 'border-box',
           background: C.bone, borderLeft: `1px solid ${C.rule}`,
           transform: drawerOpen ? 'translateX(0)' : 'translateX(100%)',
           transition: 'transform 480ms cubic-bezier(0.2,0,0,1)',
@@ -1024,7 +1024,7 @@ export function SleepModule({ onBack }: SleepModuleProps) {
             onClick={() => { setDrawerOpen(false); setSurveyOpen(true); }}
             style={{
               display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
-              width: '100%', textAlign: 'left', background: 'none', cursor: 'pointer',
+              width: '100%', boxSizing: 'border-box', textAlign: 'left', background: 'none', cursor: 'pointer',
               border: 'none', borderBottom: `1px solid ${C.rule}`,
               padding: '14px 4px', fontFamily: COURIER,
             }}
@@ -1049,7 +1049,7 @@ export function SleepModule({ onBack }: SleepModuleProps) {
             onClick={() => { setDrawerOpen(false); setEpworthOpen(true); }}
             style={{
               display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
-              width: '100%', textAlign: 'left', background: 'none', cursor: 'pointer',
+              width: '100%', boxSizing: 'border-box', textAlign: 'left', background: 'none', cursor: 'pointer',
               border: 'none', borderBottom: `1px solid ${C.rule}`,
               padding: '14px 4px', fontFamily: COURIER,
             }}

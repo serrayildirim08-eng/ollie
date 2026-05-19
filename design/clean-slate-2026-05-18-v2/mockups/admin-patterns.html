@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Admin — see the rest</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;
+    padding:0 26px 40px}
+
+  /* the framing line — this is a "see the rest" reflective surface.
+     calm reading, never a charts wall. it sets the whole tone. */
+  .intro{margin-top:116px}
+  .ititle{font-size:22px;font-weight:300;color:var(--ink);letter-spacing:-.02em;
+    line-height:1.3}
+  .ititle b{font-weight:500}
+  .isub{margin-top:10px;font-size:14px;color:var(--mute);font-weight:400;
+    line-height:1.5}
+
+  /* the patterns — grouped quietly under small section labels. each
+     group is a calm cluster of ONE-LINE observations. a sage dot rides
+     each line. NO charts, NO badges, NO counts. it reads like a journal. */
+  .group{margin-top:30px}
+  .gk{font-size:11px;color:var(--mute);font-weight:600;letter-spacing:.08em;
+    text-transform:uppercase;margin-bottom:4px}
+
+  .pat{border-top:1px solid var(--line);padding:16px 0}
+  .group .pat:last-child{border-bottom:1px solid var(--line)}
+  .phead{display:flex;align-items:flex-start;gap:11px}
+  .pdot{width:7px;height:7px;border-radius:50%;background:var(--sage);
+    flex-shrink:0;margin-top:6px}
+  .ptext{flex:1}
+  .pline{font-size:15px;color:var(--ink);font-weight:500;letter-spacing:-.01em;
+    line-height:1.4}
+  /* the soft sub-line — the gentle reframe, never a verdict */
+  .pframe{margin-top:4px;font-size:13px;color:var(--mute);font-weight:400;
+    line-height:1.45}
+  /* the quiet citation tag — a barely-there source line, italic mute */
+  .pcite{margin-top:6px;font-size:11px;color:var(--mute);font-weight:500;
+    font-style:italic;letter-spacing:.01em;opacity:.85}
+
+  /* the closing note — restates this surface is screen-only, never pushed */
+  .foot{margin-top:26px;display:flex;gap:10px;align-items:flex-start}
+  .foot svg{stroke:var(--mute);flex-shrink:0;margin-top:1px}
+  .foot span{font-size:12px;color:var(--mute);font-weight:400;line-height:1.5}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+
+  <div class="who">
+    <span>see the rest</span>
+  </div>
+
+  <div class="scroll">
+    <div class="intro">
+      <div class="ititle"><b>what ollie noticed</b> in how you handle admin</div>
+      <div class="isub">none of this needs doing today. it's here to read
+        when you're curious — quiet patterns, not instructions.</div>
+    </div>
+
+    <!-- GROUP 1 — what's still costing you (open loops, EF match) -->
+    <div class="group">
+      <div class="gk">what's still costing you</div>
+
+      <div class="pat">
+        <div class="phead">
+          <span class="pdot"></span>
+          <div class="ptext">
+            <div class="pline">you said "i should sort the lease" — but never a when or where</div>
+            <div class="pframe">an intention with no plan keeps running in the background. it's the openness, not the task, that tires you.</div>
+            <div class="pcite">A1 · open loop — Masicampo &amp; Baumeister, 2011</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pat">
+        <div class="phead">
+          <span class="pdot"></span>
+          <div class="ptext">
+            <div class="pline">the passport call is a tier-5 task, and right now you're in a crash window</div>
+            <div class="pframe">that's a mismatch, not a failure — a tier-1 task (one tap) would land. the call will keep till you're at flow.</div>
+            <div class="pcite">A11 · activation-cost match — Barkley, 2012</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- GROUP 2 — where things stall -->
+    <div class="group">
+      <div class="gk">where things stall</div>
+
+      <div class="pat">
+        <div class="phead">
+          <span class="pdot"></span>
+          <div class="ptext">
+            <div class="pline">"file taxes" has been deferred 6 times now</div>
+            <div class="pframe">six defers is a signal, not laziness — something about it is structurally hard. naming the block is the move: phone? form? a conversation?</div>
+            <div class="pcite">A6 · defer-chain — Steel, 2007</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pat">
+        <div class="phead">
+          <span class="pdot"></span>
+          <div class="ptext">
+            <div class="pline">you scheduled "sort the filing cabinet" three weeks in a row, and did it none of them</div>
+            <div class="pframe">scheduling and doing are not the same thing. a recurring slot that never fires isn't a plan — it's a place the task hides.</div>
+            <div class="pcite">A15 · schedule-drift — Gollwitzer, 1999</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pat">
+        <div class="phead">
+          <span class="pdot"></span>
+          <div class="ptext">
+            <div class="pline">the visa form is filled — but it's been 8 days and never marked closed</div>
+            <div class="pframe">the last 5% — the mailing, the sending — is its own task. done isn't closed until the loop is fully shut.</div>
+            <div class="pcite">A12 · last-five-percent — Allen, 2001</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- GROUP 3 — what you already worked out -->
+    <div class="group">
+      <div class="gk">what you already worked out</div>
+
+      <div class="pat">
+        <div class="phead">
+          <span class="pdot"></span>
+          <div class="ptext">
+            <div class="pline">last time the registration came up, you decided to renew online, not by mail</div>
+            <div class="pframe">you've solved this before — no need to re-decide it from scratch. the call you made still holds.</div>
+            <div class="pcite">A13 · decision recall — Vohs et al., 2008</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pat">
+        <div class="phead">
+          <span class="pdot"></span>
+          <div class="ptext">
+            <div class="pline">last march you renewed the car registration — that time of year again</div>
+            <div class="pframe">a yearly rhythm ollie spotted from your own history. it'll surface, ready to go, before it's late.</div>
+            <div class="pcite">A10 · recurring-annual — Einstein &amp; McDaniel, 2005</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="foot">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="1.8">
+        <circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>
+      </svg>
+      <span>ollie notices patterns — it does not judge. these reflective
+        ones — schedule-drift, the open loops — are deliberately never sent
+        as a notification; they wait here for when you want them.</span>
+    </div>
+  </div>
+</div>
+</body>
+</html>

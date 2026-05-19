@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Money — first run</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  .safe{position:absolute;top:62px;right:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .safe svg{stroke:var(--mute)}
+  .find{position:absolute;top:62px;left:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .find svg{stroke:var(--mute)}
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+  .eye{margin-left:3px;width:26px;height:26px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center}
+  .eye svg{stroke:var(--mute)}
+
+  .scroll{flex:1;display:flex;flex-direction:column;padding:0 26px 36px}
+
+  /* FIRST RUN — same face, never a blank page. the hero shows a calm
+     glance-line instead of a number; the rows show quiet invitations,
+     not zeros. opening it still tells you exactly what to do next. */
+  /* margin-top clears the absolutely-positioned .who label (top:104 + ~30) */
+  .hero{margin-top:116px;display:flex;flex-direction:column;align-items:center}
+  .lead{font-size:13px;color:var(--mute);font-weight:500;letter-spacing:.02em}
+  /* the empty hero — one calm line where the number will be */
+  .empty{margin-top:18px;font-size:25px;font-weight:300;color:var(--ink);
+    letter-spacing:-.018em;text-align:center;line-height:1.4;max-width:240px}
+  .sub{margin-top:14px;font-size:13px;color:var(--mute);font-weight:500;
+    text-align:center}
+
+  /* the one amber button — log the first spend */
+  .spend{margin:32px auto 0;height:50px;border-radius:25px;background:var(--accent);
+    display:flex;align-items:center;justify-content:center;gap:8px;padding:0 26px;
+    box-shadow:0 12px 28px rgba(201,146,62,.32)}
+  .spend svg{stroke:#fff}
+  .spend span{font-size:16px;font-weight:600;color:#fff}
+
+  /* the 5 rows stay — same grammar, glance-lines read the empty form */
+  .rows{margin-top:54px;display:flex;flex-direction:column}
+  .row{border-top:1px solid var(--line);padding:19px 2px;display:flex;
+    align-items:baseline}
+  .row:last-child{border-bottom:1px solid var(--line)}
+  .rk{font-size:13px;color:var(--mute);font-weight:600;flex-shrink:0}
+  .rsep{color:var(--line);margin:0 8px;font-size:13px}
+  /* the empty glance-line — a quiet invitation, italic-soft, never "0" */
+  .rv{font-size:14px;color:var(--mute);font-weight:400;letter-spacing:-.005em;flex:1}
+  .chev{stroke:var(--line);margin-left:8px;align-self:center}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+  <div class="find">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/>
+    </svg>
+  </div>
+  <div class="safe">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.5-7 10-7 10z"/>
+    </svg>
+  </div>
+
+  <div class="who">
+    <span>money</span>
+    <div class="eye">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke-width="1.7">
+        <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/>
+        <circle cx="12" cy="12" r="3"/>
+      </svg>
+    </div>
+  </div>
+
+  <div class="scroll">
+    <div class="hero">
+      <div class="lead">safe to spend</div>
+      <div class="empty">a few spends and ollie can work this out</div>
+      <div class="sub">nothing logged yet</div>
+      <div class="spend">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>
+        <span>log your first spend</span>
+      </div>
+    </div>
+
+    <div class="rows">
+      <div class="row">
+        <span class="rk">bills</span><span class="rsep">·</span>
+        <span class="rv">add the ones you know</span>
+        <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+      </div>
+      <div class="row">
+        <span class="rk">income</span><span class="rsep">·</span>
+        <span class="rv">ollie watches this on its own</span>
+        <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+      </div>
+      <div class="row">
+        <span class="rk">subscriptions</span><span class="rsep">·</span>
+        <span class="rv">none picked up yet</span>
+        <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+      </div>
+      <div class="row">
+        <span class="rk">savings</span><span class="rsep">·</span>
+        <span class="rv">name something to save toward</span>
+        <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+      </div>
+      <div class="row">
+        <span class="rk">adhd tax</span><span class="rsep">·</span>
+        <span class="rv">nothing here — that's fine</span>
+        <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Pets — add</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E; --umber:#A8703C;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  /* swipe-down handle dismisses — same return gesture everywhere */
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;
+    padding:0 26px 36px}
+
+  /* the lead — one calm line */
+  .lead{margin-top:116px;font-size:22px;font-weight:300;color:var(--ink);
+    letter-spacing:-.02em}
+  .lead b{font-weight:500}
+
+  /* THE NAME FIELD — one quiet underlined line, never a big box. ink. */
+  .field{margin-top:28px;border-bottom:1.5px solid var(--ink);padding-bottom:11px;
+    display:flex;align-items:baseline;gap:2px}
+  .field span{font-size:21px;color:var(--ink);font-weight:500;letter-spacing:-.01em}
+  .field .caret{width:2px;height:22px;background:var(--accent);
+    display:inline-block;margin-left:1px;border-radius:1px}
+
+  /* a section label */
+  .sect{margin-top:32px;font-size:11px;color:var(--mute);font-weight:600;
+    letter-spacing:.08em;text-transform:uppercase}
+  .sect .opt{color:var(--line);font-weight:500;text-transform:none;
+    letter-spacing:.01em;margin-left:7px}
+
+  /* species — the 10-species picker. a calm wrap of soft pills, each with
+     a tiny line glyph. one tap. selected = amber fill. */
+  .species{margin-top:14px;display:flex;flex-wrap:wrap;gap:8px}
+  .sp{border:1px solid var(--line);background:#fff;border-radius:14px;
+    padding:8px 12px 8px 10px;display:flex;align-items:center;gap:7px}
+  .sp svg{stroke:var(--ink);fill:none;stroke-width:1.6;stroke-linecap:round;
+    stroke-linejoin:round;flex-shrink:0}
+  .sp span{font-size:13px;font-weight:500;color:var(--ink);letter-spacing:-.01em}
+  .sp.on{border-color:var(--accent);background:var(--accent)}
+  .sp.on svg{stroke:#fff}
+  .sp.on span{color:#fff;font-weight:600}
+
+  /* the species cadence preview — a calm sage line, what ollie will track */
+  .cue{margin-top:14px;display:flex;align-items:flex-start;gap:9px}
+  .cue .cdot{width:7px;height:7px;border-radius:50%;background:var(--sage);
+    flex-shrink:0;margin-top:5px}
+  .cue span{font-size:13px;color:var(--mute);font-weight:400;line-height:1.5}
+  .cue b{color:var(--ink);font-weight:600}
+
+  /* nickname — a quiet underlined line, optional */
+  .line{margin-top:14px;border-bottom:1px solid var(--line);padding-bottom:11px;
+    display:flex;align-items:baseline;gap:2px}
+  .line span{font-size:17px;color:var(--ink);font-weight:500;letter-spacing:-.01em}
+  .line span.ph{color:var(--mute);font-weight:400}
+  .line .caret{width:2px;height:18px;background:var(--accent);
+    display:inline-block;margin-left:1px;border-radius:1px}
+
+  /* notes — a soft multi-line note area, still calm, no chrome box */
+  .notes{margin-top:14px;border-bottom:1px solid var(--line);padding-bottom:13px}
+  .notes p{font-size:15px;color:var(--mute);font-weight:400;line-height:1.55;
+    letter-spacing:-.005em}
+  .notes p .caret{width:2px;height:16px;background:var(--accent);
+    display:inline-block;margin-left:1px;border-radius:1px;
+    vertical-align:-2px}
+
+  /* save — full-width amber, the one commit */
+  .save{margin-top:36px;height:52px;border-radius:26px;background:var(--accent);
+    display:flex;align-items:center;justify-content:center;gap:8px;
+    box-shadow:0 12px 28px rgba(201,146,62,.32)}
+  .save svg{stroke:#fff}
+  .save span{font-size:16px;font-weight:600;color:#fff;letter-spacing:-.01em}
+  /* the saved confirmation — dry, lowercase, period */
+  .saved{margin-top:16px;text-align:center;font-size:13px;color:var(--sage);
+    font-weight:600;letter-spacing:.01em}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+
+  <div class="who">
+    <span>add a pet</span>
+  </div>
+
+  <div class="scroll">
+    <div class="lead"><b>who's joining the notebook</b></div>
+
+    <!-- the name field — one quiet underlined line -->
+    <div class="field">
+      <span>Mango</span><span class="caret"></span>
+    </div>
+
+    <!-- species — the 10-species picker -->
+    <div class="sect">species</div>
+    <div class="species">
+      <div class="sp on">
+        <svg width="15" height="15" viewBox="0 0 24 24"><ellipse cx="12" cy="14" rx="7" ry="6"/><circle cx="12" cy="7" r="3.4"/></svg>
+        <span>guinea pig</span>
+      </div>
+      <div class="sp">
+        <svg width="15" height="15" viewBox="0 0 24 24"><ellipse cx="12" cy="15" rx="6" ry="5"/><circle cx="12" cy="8" r="3.2"/><path d="M9.5 5.5L8.5 1M14.5 5.5L15.5 1"/></svg>
+        <span>rabbit</span>
+      </div>
+      <div class="sp">
+        <svg width="15" height="15" viewBox="0 0 24 24"><circle cx="12" cy="13" r="6.5"/><path d="M7 8L5 4l4 2M17 8l2-4-4 2"/></svg>
+        <span>cat</span>
+      </div>
+      <div class="sp">
+        <svg width="15" height="15" viewBox="0 0 24 24"><circle cx="12" cy="13" r="6.5"/><path d="M6 9L4 6M18 9l2-3"/><path d="M11 16h2"/></svg>
+        <span>dog</span>
+      </div>
+      <div class="sp">
+        <svg width="15" height="15" viewBox="0 0 24 24"><circle cx="12" cy="13" r="6"/><circle cx="9" cy="8" r="2"/><circle cx="15" cy="8" r="2"/></svg>
+        <span>hamster</span>
+      </div>
+      <div class="sp">
+        <svg width="15" height="15" viewBox="0 0 24 24"><ellipse cx="11" cy="13" rx="6" ry="5"/><circle cx="11" cy="7" r="2.8"/><path d="M16 14c3 1 5 4 5 7"/></svg>
+        <span>rat</span>
+      </div>
+      <div class="sp">
+        <svg width="15" height="15" viewBox="0 0 24 24"><path d="M4 14c3-2 5-2 8-2s5 0 8 2"/><circle cx="6" cy="14" r="2.5"/><path d="M12 12V8M16 12V9"/></svg>
+        <span>bearded dragon</span>
+      </div>
+      <div class="sp">
+        <svg width="15" height="15" viewBox="0 0 24 24"><path d="M5 13c3-2 6-2 9-1s5 3 5 6"/><circle cx="6" cy="12" r="2.3"/><path d="M11 12V8"/></svg>
+        <span>leopard gecko</span>
+      </div>
+      <div class="sp">
+        <svg width="15" height="15" viewBox="0 0 24 24"><ellipse cx="11" cy="12" rx="5" ry="6"/><path d="M16 12l5-3-1 5M9 8l-2-3"/></svg>
+        <span>parakeet</span>
+      </div>
+      <div class="sp">
+        <svg width="15" height="15" viewBox="0 0 24 24"><ellipse cx="10" cy="12" rx="5" ry="4"/><path d="M15 12l5-4v8z"/><circle cx="8" cy="11" r="1"/></svg>
+        <span>betta fish</span>
+      </div>
+    </div>
+    <div class="cue">
+      <span class="cdot"></span>
+      <span>ollie keeps the <b>guinea-pig cadences</b> — hay daily, a cage
+        clean weekly, a vet check yearly. each species runs on its own.</span>
+    </div>
+
+    <!-- nickname — optional -->
+    <div class="sect">nickname<span class="opt">— optional</span></div>
+    <div class="line">
+      <span>Mango-moo</span><span class="caret"></span>
+    </div>
+
+    <!-- notes — free text, optional -->
+    <div class="sect">notes<span class="opt">— optional</span></div>
+    <div class="notes">
+      <p>rescue, a little shy with hands. likes parsley. solo &mdash; no
+        cage-mate.<span class="caret"></span></p>
+    </div>
+
+    <div class="save">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.4"><path d="M5 13l4 4 10-11"/></svg>
+      <span>add Mango</span>
+    </div>
+    <div class="saved">noted.</div>
+  </div>
+</div>
+</body>
+</html>

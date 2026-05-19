@@ -638,6 +638,7 @@ function SavingsCard() {
         onClick={() => setShowDetail((v) => !v)}
         style={{
           width: '100%',
+          boxSizing: 'border-box',
           textAlign: 'left',
           padding: '18px 20px',
           background: T.paper,
@@ -2426,6 +2427,7 @@ export function FinanceModule({ onBack }: FinanceModuleProps = {}) {
                   aria-label={`open held purchase ${p.merchant || p.category}`}
                   style={{
                     width: '100%',
+                    boxSizing: 'border-box',
                     textAlign: 'left',
                     padding: '16px 20px',
                     background: T.paper,
