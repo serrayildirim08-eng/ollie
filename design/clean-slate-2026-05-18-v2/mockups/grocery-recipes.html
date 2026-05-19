@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Grocery — feed me</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E; --umber:#A8703C;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  .safe{position:absolute;top:62px;right:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .safe svg{stroke:var(--mute)}
+  .find{position:absolute;top:62px;left:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .find svg{stroke:var(--mute)}
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  /* feed me — the recipe matcher. ONE inferred recipe at a time from
+     what's actually in the pantry, never a grid of cards. a diet filter
+     + a named-recipe search sit above it. the 3-mode switch is at the
+     top, feed me selected. v2 .who. */
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;
+    padding:0 26px 36px}
+
+  /* the 3-mode switch — feed me selected */
+  .modes{margin-top:116px;display:flex;gap:22px;padding-bottom:2px}
+  .mode{font-size:14px;color:var(--mute);font-weight:500;letter-spacing:-.01em;
+    padding-bottom:7px;border-bottom:2px solid transparent}
+  .mode.on{color:var(--ink);border-bottom-color:var(--accent);font-weight:600}
+
+  /* the named-recipe search — one quiet underlined line, not a big box */
+  .search{margin-top:24px;border-bottom:1px solid var(--line);padding-bottom:10px;
+    display:flex;align-items:center;gap:9px}
+  .search svg{stroke:var(--mute);flex-shrink:0}
+  .search span{font-size:14px;color:var(--mute);font-weight:400;letter-spacing:-.01em}
+
+  /* the diet filter — a calm wrap of soft pills, one tap. 'all' selected.
+     selected = amber fill. */
+  .diets{margin-top:16px;display:flex;flex-wrap:wrap;gap:8px}
+  .diet{border:1px solid var(--line);background:#fff;border-radius:14px;
+    padding:7px 13px;font-size:13px;font-weight:500;color:var(--ink);
+    letter-spacing:-.01em}
+  .diet.on{border-color:var(--accent);background:var(--accent);color:#fff;
+    font-weight:600}
+
+  /* the lead — frames the one inferred recipe */
+  .lead{margin-top:30px;font-size:13px;color:var(--mute);font-weight:500;
+    letter-spacing:.02em}
+
+  /* THE INFERRED RECIPE — one calm focus block. the dish name big and
+     light, a coverage line ("you have 4 of 6"), and the soft uses-soon
+     reframe. no card chrome — it sits on the paper like the admin hero. */
+  .dish{margin-top:8px;font-size:32px;font-weight:300;color:var(--ink);
+    letter-spacing:-.03em;line-height:1.1}
+  .cuis{margin-top:6px;font-size:13px;color:var(--mute);font-weight:500;
+    letter-spacing:.02em}
+
+  /* the coverage object — a calm row of ingredient pips, filled = on
+     hand, hollow = missing. a small tailored data mark, ink + line. */
+  .cover{margin-top:18px;display:flex;align-items:center;gap:10px}
+  .pips{display:flex;gap:6px}
+  .pip{width:13px;height:13px;border-radius:50%;background:var(--sage)}
+  .pip.miss{background:none;border:1.8px solid var(--line)}
+  .covtext{font-size:13px;color:var(--ink);font-weight:600;letter-spacing:-.01em}
+
+  /* the turns-soon reframe — a calm sage line. why this recipe was
+     picked: it uses pantry things about to expire. */
+  .soon{margin-top:13px;display:flex;align-items:flex-start;gap:9px}
+  .soon .sdot{width:7px;height:7px;border-radius:50%;background:var(--sage);
+    flex-shrink:0;margin-top:5px}
+  .soon span{font-size:13px;color:var(--ink);font-weight:500;line-height:1.5;
+    letter-spacing:-.01em}
+  .soon b{color:var(--umber);font-weight:600}
+
+  /* the ingredient split — have vs missing, two quiet sub-lists.
+     each ingredient one calm line; have ones carry a sage tick, missing
+     ones a hollow mute mark. */
+  .ings{margin-top:24px}
+  .igk{font-size:11px;color:var(--mute);font-weight:600;letter-spacing:.08em;
+    text-transform:uppercase;margin-bottom:2px}
+  .ig{border-top:1px solid var(--line);padding:12px 2px;display:flex;
+    align-items:center;gap:12px}
+  .ings .ig:last-of-type{border-bottom:1px solid var(--line)}
+  .igmk{width:16px;height:16px;border-radius:50%;flex-shrink:0;
+    display:flex;align-items:center;justify-content:center}
+  .ig.have .igmk{background:var(--sage)}
+  .ig.have .igmk svg{stroke:#fff}
+  .ig.miss .igmk{border:1.8px solid var(--line)}
+  .igname{flex:1;font-size:14px;color:var(--ink);font-weight:500;
+    letter-spacing:-.01em}
+  .ig.miss .igname{color:var(--mute)}
+  /* a soon-tag — rides an ingredient that's about to expire */
+  .igtag{font-size:11px;color:var(--umber);font-weight:600;letter-spacing:.02em}
+
+  /* one amber action — add the 2 missing to the shopping list */
+  .act{margin-top:26px;height:50px;border-radius:25px;background:var(--accent);
+    display:flex;align-items:center;justify-content:center;gap:8px;padding:0 22px;
+    box-shadow:0 12px 28px rgba(201,146,62,.32)}
+  .act svg{stroke:#fff}
+  .act span{font-size:15px;font-weight:600;color:#fff;letter-spacing:-.01em}
+
+  /* a quiet next-suggestion line — there's another recipe behind this one */
+  .next{margin-top:22px;display:flex;align-items:center;gap:8px;padding:2px}
+  .next svg{stroke:var(--mute)}
+  .next span{font-size:13px;color:var(--mute);font-weight:500;letter-spacing:-.01em}
+  .next b{color:var(--ink);font-weight:600}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+  <div class="find">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/>
+    </svg>
+  </div>
+  <div class="safe">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.5-7 10-7 10z"/>
+    </svg>
+  </div>
+
+  <div class="who">
+    <span>feed me</span>
+  </div>
+
+  <div class="scroll">
+
+    <!-- the 3-mode switch — feed me selected -->
+    <div class="modes">
+      <span class="mode">shop</span>
+      <span class="mode">pantry</span>
+      <span class="mode on">feed me</span>
+    </div>
+
+    <!-- named-recipe search -->
+    <div class="search">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+        <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/>
+      </svg>
+      <span>look up a dish &mdash; shakshuka, mercimek &ccedil;orbas&#305;&hellip;</span>
+    </div>
+
+    <!-- the diet filter -->
+    <div class="diets">
+      <span class="diet on">all</span>
+      <span class="diet">vegetarian</span>
+      <span class="diet">vegan</span>
+      <span class="diet">mediterranean</span>
+      <span class="diet">turkish</span>
+    </div>
+
+    <!-- THE INFERRED RECIPE — one at a time, from the pantry -->
+    <div class="lead">from what's in your pantry right now</div>
+    <div class="dish">spinach &amp; feta omelette</div>
+    <div class="cuis">mediterranean &middot; about 15 minutes</div>
+
+    <!-- the coverage object — 4 of 6 ingredients on hand -->
+    <div class="cover">
+      <div class="pips">
+        <span class="pip"></span><span class="pip"></span>
+        <span class="pip"></span><span class="pip"></span>
+        <span class="pip miss"></span><span class="pip miss"></span>
+      </div>
+      <span class="covtext">you have 4 of 6</span>
+    </div>
+
+    <!-- the turns-soon reframe — why ollie picked this one -->
+    <div class="soon">
+      <span class="sdot"></span>
+      <span>picked because it uses <b>2 things that turn soon</b> &mdash;
+        the spinach due today, the eggs this week.</span>
+    </div>
+
+    <!-- the ingredient split -->
+    <div class="ings">
+      <div class="igk">in your pantry</div>
+      <div class="ig have">
+        <span class="igmk"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke-width="3.4"><path d="M5 13l4 4 10-11"/></svg></span>
+        <span class="igname">spinach</span>
+        <span class="igtag">turns today</span>
+      </div>
+      <div class="ig have">
+        <span class="igmk"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke-width="3.4"><path d="M5 13l4 4 10-11"/></svg></span>
+        <span class="igname">eggs</span>
+        <span class="igtag">soon</span>
+      </div>
+      <div class="ig have">
+        <span class="igmk"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke-width="3.4"><path d="M5 13l4 4 10-11"/></svg></span>
+        <span class="igname">olive oil</span>
+        <span class="igtag"></span>
+      </div>
+      <div class="ig have">
+        <span class="igmk"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke-width="3.4"><path d="M5 13l4 4 10-11"/></svg></span>
+        <span class="igname">salt</span>
+        <span class="igtag"></span>
+      </div>
+    </div>
+
+    <div class="ings" style="margin-top:18px">
+      <div class="igk">you'd need</div>
+      <div class="ig miss">
+        <span class="igmk"></span>
+        <span class="igname">feta cheese</span>
+      </div>
+      <div class="ig miss">
+        <span class="igmk"></span>
+        <span class="igname">fresh dill</span>
+      </div>
+    </div>
+
+    <!-- one amber action — add the 2 missing to the list -->
+    <div class="act">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>
+      <span>add the 2 missing to the list</span>
+    </div>
+
+    <!-- a quiet next-suggestion -->
+    <div class="next">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      <span>next idea &mdash; <b>lentil soup</b>, you have 5 of 6</span>
+    </div>
+  </div>
+</div>
+</body>
+</html>

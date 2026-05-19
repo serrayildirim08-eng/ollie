@@ -281,7 +281,7 @@ describe('retention · server bridge', () => {
       { trackTable },
       () => ({ user_hash: 'h', device_id: 'd', country: 'INTL', locale: 'en', app_version: '0' }),
     );
-    bridged('void:crisis:detected', { text: 'something' });
+    bridged('void:crisis:detected', { ts: T0 });
     expect(trackTable).not.toHaveBeenCalled();
   });
 

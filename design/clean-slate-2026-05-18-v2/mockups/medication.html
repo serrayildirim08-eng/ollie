@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Medication</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  .safe{position:absolute;top:62px;right:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .safe svg{stroke:var(--mute)}
+  .find{position:absolute;top:62px;left:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .find svg{stroke:var(--mute)}
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  /* medication is a submodule reached by drilling the body page's medication
+     card. the face: ONE focus = the NEXT DOSE. a big take-circle (mirrors
+     habits' tap-circle), the dose name, quiet dots for the day's doses.
+     dry, factual voice — "noted." not "great job". NO streaks. centred
+     .who label, v2. */
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;
+    padding:0 26px 36px}
+
+  /* THE HERO — the next dose. a small lead, the med name large, then the
+     big take-circle. everything else is air. margin-top clears the
+     absolutely-positioned .who label. */
+  .hero{margin-top:116px;display:flex;flex-direction:column;align-items:center}
+  .lead{font-size:13px;color:var(--mute);font-weight:500;letter-spacing:.02em}
+  .lead b{color:var(--ink);font-weight:600}
+  .medname{margin-top:9px;font-size:34px;font-weight:300;color:var(--ink);
+    letter-spacing:-.025em;line-height:1.05;text-align:center}
+  .meddose{margin-top:6px;font-size:13px;color:var(--mute);font-weight:500;
+    letter-spacing:.01em}
+
+  /* the take-circle — habits' tap-circle scaled for one dose. a calm ink
+     outline ring, the dose time inside, a small "tap when taken" cue. a
+     soft amber edge marks it as the live action — never a streak target. */
+  .takewrap{margin-top:30px;display:flex;flex-direction:column;align-items:center}
+  .take{width:164px;height:164px;border-radius:50%;border:2.4px solid var(--accent);
+    background:#FCF6EA;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;gap:3px;box-shadow:0 14px 34px rgba(201,146,62,.24)}
+  .take .tt{font-size:30px;font-weight:300;color:var(--ink);letter-spacing:-.02em;
+    line-height:1}
+  .take .tc{font-size:11px;color:var(--accent);font-weight:600;letter-spacing:.05em;
+    text-transform:uppercase}
+
+  /* the day's dose dots — one per scheduled dose. taken = sage filled,
+     the live one = amber ring, ahead = faint ink line. a quiet count line
+     under. NO streak, NO running total to beat. */
+  .doses{margin-top:24px;display:flex;align-items:center;gap:13px}
+  .dd{width:13px;height:13px;border-radius:50%}
+  .dd.done{background:var(--sage)}
+  .dd.now{border:2.2px solid var(--accent);box-shadow:0 4px 12px rgba(201,146,62,.24)}
+  .dd.ahead{border:1.6px solid var(--line)}
+  .dcount{margin-top:13px;font-size:14px;color:var(--ink);font-weight:500;
+    letter-spacing:-.01em}
+  .dcount .k{color:var(--mute);font-weight:500}
+
+  /* below the hero, with air — the calm list of the user's meds. each is
+     one quiet line: a small color dot · name · kind · dose · schedule.
+     not a card, not a checkbox grid — a notebook list. */
+  .list{margin-top:46px;display:flex;flex-direction:column}
+  .listk{font-size:11px;color:var(--mute);font-weight:600;letter-spacing:.08em;
+    text-transform:uppercase;margin-bottom:4px}
+  .med{border-top:1px solid var(--line);padding:16px 2px;display:flex;
+    align-items:center;gap:12px}
+  .mdot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+  .mbody{flex:1;display:flex;flex-direction:column;gap:3px;min-width:0}
+  .mname{font-size:15px;color:var(--ink);font-weight:600;letter-spacing:-.01em}
+  .mname .kind{color:var(--mute);font-weight:500;font-size:12px;
+    text-transform:lowercase;letter-spacing:.02em}
+  .mmeta{font-size:12px;color:var(--mute);font-weight:500;letter-spacing:.01em}
+  /* a med already done for today wears a quiet sage tick at the end */
+  .mtick{flex-shrink:0}
+  .mtick svg{stroke:var(--sage)}
+  .mwhen{flex-shrink:0;font-size:12px;color:var(--mute);font-weight:500}
+
+  /* the add row — one quiet amber ghost line */
+  .add{border-top:1px solid var(--line);border-bottom:1px solid var(--line);
+    padding:16px 2px;display:flex;align-items:center;gap:9px}
+  .add svg{stroke:var(--accent)}
+  .add span{font-size:14px;color:var(--accent);font-weight:600;letter-spacing:-.01em}
+
+  /* one calm drill row — the adherence log */
+  .rows{margin-top:24px;display:flex;flex-direction:column}
+  .row{border-top:1px solid var(--line);border-bottom:1px solid var(--line);
+    padding:18px 2px;display:flex;align-items:center}
+  .rk{font-size:13px;color:var(--mute);font-weight:600;letter-spacing:.01em;
+    flex-shrink:0}
+  .rsep{color:var(--line);margin:0 8px;font-size:13px}
+  .rv{font-size:14px;color:var(--ink);font-weight:500;letter-spacing:-.01em;flex:1}
+  .chev{stroke:var(--mute);flex-shrink:0;margin-left:8px}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+  <div class="find">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/>
+    </svg>
+  </div>
+  <div class="safe">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.5-7 10-7 10z"/>
+    </svg>
+  </div>
+
+  <div class="who">
+    <span>medication</span>
+  </div>
+
+  <div class="scroll">
+    <div class="hero">
+      <!-- THE FOCUS — the next dose. lead, name, the big take-circle. -->
+      <div class="lead">next · <b>2:00pm</b></div>
+      <div class="medname">methylphenidate</div>
+      <div class="meddose">prescription · 10mg</div>
+
+      <div class="takewrap">
+        <!-- the take-circle — mirrors habits' tap-circle, scaled for one
+             dose. amber edge = the live action. -->
+        <div class="take">
+          <div class="tt">2:00pm</div>
+          <div class="tc">tap when taken</div>
+        </div>
+
+        <!-- the day's dose dots — 1 taken, 1 to go. no streak. -->
+        <div class="doses">
+          <span class="dd done"></span>
+          <span class="dd now"></span>
+        </div>
+        <div class="dcount"><span class="k">today —</span> 1 of 2 taken</div>
+      </div>
+    </div>
+
+    <!-- the calm list of the user's meds — a notebook list, not a grid -->
+    <div class="list">
+      <div class="listk">your meds</div>
+
+      <!-- already taken today — a quiet sage tick -->
+      <div class="med">
+        <span class="mdot" style="background:#C9923E"></span>
+        <div class="mbody">
+          <div class="mname">methylphenidate <span class="kind">· prescription</span></div>
+          <div class="mmeta">10mg · 8:00am, 2:00pm</div>
+        </div>
+        <span class="mwhen">8:02am</span>
+        <span class="mtick">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2.6"><path d="M5 13l4 4 10-11"/></svg>
+        </span>
+      </div>
+
+      <div class="med">
+        <span class="mdot" style="background:#5B8C7E"></span>
+        <div class="mbody">
+          <div class="mname">vitamin d <span class="kind">· vitamin</span></div>
+          <div class="mmeta">1000 IU · 9:00am</div>
+        </div>
+        <span class="mwhen">9:14am</span>
+        <span class="mtick">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2.6"><path d="M5 13l4 4 10-11"/></svg>
+        </span>
+      </div>
+
+      <div class="med">
+        <span class="mdot" style="background:#8C7BB0"></span>
+        <div class="mbody">
+          <div class="mname">magnesium <span class="kind">· supplement</span></div>
+          <div class="mmeta">200mg · manual log only</div>
+        </div>
+      </div>
+
+      <!-- add a medication — one quiet amber line -->
+      <div class="add">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke-width="2.4">
+          <path d="M12 5v14M5 12h14"/>
+        </svg>
+        <span>add a medication</span>
+      </div>
+    </div>
+
+    <!-- one calm drill row — the adherence log -->
+    <div class="rows">
+      <div class="row">
+        <span class="rk">adherence log</span><span class="rsep">·</span>
+        <span class="rv">what was taken, and when</span>
+        <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

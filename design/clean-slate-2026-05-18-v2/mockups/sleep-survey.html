@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Sleep — go deeper</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center;gap:34px;flex-wrap:wrap}
+
+  /* TWO phones side by side — the question shape, then the screen-only
+     scored result. the survey is calm like onboarding: one question per
+     screen; the result is sourced, banded, and NEVER pushed. */
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+  /* tiny progress dots — mirrors onboarding + the shopping check */
+  .prog{position:absolute;top:66px;left:24px;display:flex;gap:6px}
+  .prog i{width:6px;height:6px;border-radius:50%;background:var(--line);display:block}
+  .prog i.on{background:var(--ink)}
+  /* skip — calm exit. the survey is never pushed. */
+  .skip{position:absolute;top:62px;right:24px;font-size:14px;color:var(--mute);
+    font-weight:500}
+
+  .stage{flex:1;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;padding:0 42px}
+
+  /* ── PHONE A — one survey question ─────────────────────────── */
+  .glyph{width:56px;height:56px;border-radius:50%;background:#F2EEDF;
+    display:flex;align-items:center;justify-content:center;margin-bottom:32px}
+  .glyph svg{stroke:var(--sage)}
+  /* a quiet stem — plain language, no clinical jargon up front */
+  .stem{font-size:12px;color:var(--mute);font-weight:600;letter-spacing:.05em;
+    text-transform:lowercase;margin-bottom:14px}
+  /* the question — the only sentence, the Insomnia-survey item plainly put */
+  .q{font-size:23px;line-height:1.42;color:var(--ink);text-align:center;
+    letter-spacing:-.012em;font-weight:400;margin-bottom:34px;max-width:290px}
+  /* the Likert as a calm column — one tap, no slider */
+  .scale{width:100%;display:flex;flex-direction:column;gap:8px}
+  .opt{height:52px;border-radius:16px;border:1px solid var(--line);background:#fff;
+    display:flex;align-items:center;padding:0 20px;
+    box-shadow:0 6px 16px rgba(42,38,34,.04)}
+  .opt span{font-size:16px;color:var(--ink);font-weight:400}
+  .opt.on{border-color:var(--accent);background:#FCF6EA}
+  .opt.on span{font-weight:600}
+  .dot{width:18px;height:18px;border-radius:50%;border:1.8px solid var(--line);
+    margin-left:auto;flex-shrink:0}
+  .opt.on .dot{border-color:var(--accent);background:var(--accent);
+    box-shadow:inset 0 0 0 3px #fff}
+
+  /* ── PHONE B — the screen-only scored result ──────────────── */
+  .rscroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;
+    padding:0 26px 40px}
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  /* the result — a calm scored number, a quiet severity band. CLINICAL:
+     calm, sourced, never alarmist. sage + ink only — never red. */
+  .rlead{margin-top:128px;text-align:center;font-size:13px;color:var(--mute);
+    font-weight:500;letter-spacing:.02em}
+  .rname{margin-top:4px;text-align:center;font-size:15px;color:var(--ink);
+    font-weight:600;letter-spacing:-.01em}
+  .rscore{margin-top:22px;text-align:center;font-size:62px;font-weight:300;
+    color:var(--ink);letter-spacing:-.03em;line-height:1}
+  .rscore .o{font-size:24px;color:var(--mute);font-weight:300}
+
+  /* the severity band — a calm 4-segment rule, the user's band sage-filled.
+     a band LABEL underneath, plainly worded. never a colour-coded alarm. */
+  .band{margin-top:30px}
+  .bsegs{display:flex;gap:5px}
+  .bsegs i{flex:1;height:6px;border-radius:3px;background:var(--line)}
+  .bsegs i.on{background:var(--sage)}
+  .blabels{margin-top:9px;display:flex;justify-content:space-between}
+  .blabels span{font-size:10px;color:var(--mute);font-weight:600;
+    letter-spacing:.03em;text-transform:uppercase}
+  .blabels span.on{color:var(--sage)}
+  /* the band's plain reading — one calm sentence, watch/discuss framing */
+  .bread{margin-top:20px;font-size:15px;color:var(--ink);font-weight:500;
+    letter-spacing:-.01em;line-height:1.45}
+  .bread b{font-weight:600}
+
+  /* the source tag — a quiet outlined pill, sage. the only authority mark */
+  .src{display:inline-flex;align-items:center;margin-top:18px;
+    border:1px solid var(--line);border-radius:6px;padding:3px 8px;
+    font-size:10px;font-weight:600;color:var(--sage);letter-spacing:.05em;
+    text-transform:uppercase}
+
+  /* the closing note — restates it's screen-only, never a diagnosis */
+  .foot{margin-top:24px;display:flex;gap:10px;align-items:flex-start;
+    border-top:1px solid var(--line);padding-top:20px}
+  .foot svg{stroke:var(--mute);flex-shrink:0;margin-top:1px}
+  .foot span{font-size:12px;color:var(--mute);font-weight:400;line-height:1.5}
+
+  /* a calm secondary — retake. quiet, the survey is never urgent. */
+  .retake{margin-top:22px;text-align:center;font-size:13px;color:var(--mute);
+    font-weight:500}
+
+  .label{position:absolute;bottom:-30px;left:0;right:0;text-align:center;
+    font-size:13px;color:#6A604F;font-weight:600;letter-spacing:.04em}
+  .wrap{position:relative}
+</style>
+</head>
+<body>
+
+<!-- ── PHONE A — one survey question (Insomnia Check) ── -->
+<div class="wrap">
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+  <div class="prog">
+    <i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i>
+  </div>
+  <div class="skip">skip</div>
+
+  <div class="stage">
+    <div class="glyph">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-width="1.7">
+        <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z"/>
+      </svg>
+    </div>
+    <div class="stem">over the last two weeks</div>
+    <div class="q">how much trouble have you had falling asleep?</div>
+    <div class="scale">
+      <div class="opt"><span>none</span><span class="dot"></span></div>
+      <div class="opt"><span>mild</span><span class="dot"></span></div>
+      <div class="opt on"><span>moderate</span><span class="dot"></span></div>
+      <div class="opt"><span>severe</span><span class="dot"></span></div>
+      <div class="opt"><span>very severe</span><span class="dot"></span></div>
+    </div>
+  </div>
+</div>
+<div class="label">go deeper — one question per screen</div>
+</div>
+
+<!-- ── PHONE B — the screen-only scored result ── -->
+<div class="wrap">
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+  <div class="who"><span>your result</span></div>
+
+  <div class="rscroll">
+    <div class="rlead">insomnia check · 7 questions</div>
+    <div class="rname">a calm read, just for you</div>
+
+    <div class="rscore">11<span class="o"> / 28</span></div>
+
+    <!-- the severity band — 4 calm segments, the user's band sage -->
+    <div class="band">
+      <div class="bsegs">
+        <i></i><i class="on"></i><i></i><i></i>
+      </div>
+      <div class="blabels">
+        <span>none</span>
+        <span class="on">sub-threshold</span>
+        <span>moderate</span>
+        <span>severe</span>
+      </div>
+    </div>
+
+    <div class="bread">a score of <b>11</b> sits in the sub-threshold
+      range — some sleep difficulty, below the clinical line. worth
+      keeping an eye on; not a cause for alarm.</div>
+
+    <span class="src">insomnia severity index</span>
+
+    <div class="foot">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="1.8">
+        <circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>
+      </svg>
+      <span>this is a screening scale, not a diagnosis. ollie keeps it
+        here for you — it is never sent as a notification. if sleep is
+        wearing on you, it's worth raising with a clinician.</span>
+    </div>
+
+    <div class="retake">retake whenever you like</div>
+  </div>
+</div>
+<div class="label">the result — screen-only, sourced, never alarmist</div>
+</div>
+
+</body>
+</html>

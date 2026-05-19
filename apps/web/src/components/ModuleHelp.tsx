@@ -100,6 +100,9 @@ export function ModuleHelp({ moduleId, locale = 'en' }: ModuleHelpProps) {
             top: 'calc(100% + 8px)',
             right: 0,
             width: 'min(420px, 90vw)',
+            // content-box: width:90vw + 44px h-padding pushed the popover
+            // past the viewport edge on iPhone widths. Audit 2026-05-18.
+            boxSizing: 'border-box',
             padding: '20px 22px',
             background: 'var(--paper)',
             border: '1px solid var(--rule)',

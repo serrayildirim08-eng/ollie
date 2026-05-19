@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Safe</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --slate:#21262B; --slate-soft:#2C333A; --cream:#EDE7DC;
+    --mute:#9AA2A8; --sage:#88B0A0; --line:#3A424A;
+    --serif:'Newsreader',Georgia,serif; --sans:'Inter',-apple-system,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;display:flex;
+    align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--slate);position:relative;
+    overflow:hidden;display:flex;flex-direction:column;
+    box-shadow:0 30px 80px rgba(0,0,0,.4)}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--cream)}
+  .status .dots{display:flex;gap:5px}
+
+  .top{padding:8px 26px 0}
+  .close{font-size:14px;color:var(--mute)}
+
+  .body{flex:1;padding:0 30px;display:flex;flex-direction:column;
+    justify-content:center}
+  /* slow ambient glow behind the opener */
+  .glow{position:absolute;top:120px;left:50%;transform:translateX(-50%);
+    width:320px;height:320px;border-radius:50%;
+    background:radial-gradient(circle,rgba(136,176,160,.16),transparent 70%);
+    animation:pulse 7s ease-in-out infinite;pointer-events:none}
+  @keyframes pulse{0%,100%{opacity:.5;transform:translateX(-50%) scale(.9)}
+    50%{opacity:1;transform:translateX(-50%) scale(1.08)}}
+
+  .opener{font-family:var(--serif);font-size:28px;line-height:1.4;
+    color:var(--cream);position:relative;letter-spacing:-.005em}
+  .opener em{font-style:italic;color:var(--sage)}
+  .calm{font-size:15px;color:var(--mute);margin-top:14px;line-height:1.6;
+    position:relative}
+
+  .lbl{font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--mute);margin:38px 0 14px;position:relative}
+
+  /* hotline call rows */
+  .call{display:flex;align-items:center;gap:14px;background:var(--slate-soft);
+    border:1px solid var(--line);border-radius:16px;padding:16px 18px;
+    margin-bottom:10px;position:relative}
+  .call .ph{width:44px;height:44px;border-radius:50%;background:var(--sage);
+    display:flex;align-items:center;justify-content:center;font-size:19px;
+    color:var(--slate);flex:none}
+  .call .n{font-size:16px;color:var(--cream);font-weight:600}
+  .call .s{font-size:13px;color:var(--mute);margin-top:3px}
+  .call .arr{margin-left:auto;color:var(--mute);font-size:16px}
+
+  /* a known person */
+  .person{display:flex;align-items:center;gap:14px;background:transparent;
+    border:1px solid var(--line);border-radius:16px;padding:16px 18px;
+    position:relative}
+  .person .av{width:44px;height:44px;border-radius:50%;background:var(--line);
+    display:flex;align-items:center;justify-content:center;font-size:17px;
+    color:var(--cream);flex:none}
+  .person .n{font-size:16px;color:var(--cream);font-weight:600}
+  .person .s{font-size:13px;color:var(--mute);margin-top:3px}
+  .person .arr{margin-left:auto;color:var(--mute);font-size:16px}
+
+  .foot{padding:0 30px 40px;position:relative}
+  .breathe{width:100%;background:transparent;border:1px solid var(--line);
+    border-radius:16px;padding:15px;text-align:center;font-size:14px;
+    color:var(--cream);font-weight:500}
+  .foot .note{font-size:12px;color:var(--mute);text-align:center;
+    margin-top:16px;line-height:1.6}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span class="dots">􀙇 􀛨 􀋲</span></div>
+  <div class="glow"></div>
+
+  <div class="top"><span class="close">✕  back when you're ready</span></div>
+
+  <div class="body">
+    <div class="opener">serra, this looks rough.<br><em>you're not alone in it.</em></div>
+    <div class="calm">nothing here needs logging. no tracking, no questions. just people who can pick up.</div>
+
+    <div class="lbl">someone is on the line, right now</div>
+    <div class="call">
+      <div class="ph">􀌾</div>
+      <div><div class="n">988 — suicide & crisis lifeline</div><div class="s">call or text · 24/7 · free</div></div>
+      <div class="arr">›</div>
+    </div>
+    <div class="call">
+      <div class="ph">􀌾</div>
+      <div><div class="n">crisis text line</div><div class="s">text HOME to 741741</div></div>
+      <div class="arr">›</div>
+    </div>
+
+    <div class="lbl">someone you chose, earlier</div>
+    <div class="person">
+      <div class="av">M</div>
+      <div><div class="n">mom</div><div class="s">you saved her as your safe contact</div></div>
+      <div class="arr">›</div>
+    </div>
+  </div>
+
+  <div class="foot">
+    <div class="breathe">􀊰  breathe with me for a minute</div>
+    <div class="note">this screen is always one tap away, from anywhere in ollie.</div>
+  </div>
+</div>
+</body>
+</html>

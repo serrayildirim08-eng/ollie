@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import * as Sentry from '@sentry/capacitor';
 import * as SentryReact from '@sentry/react';
+import { ClerkProvider } from '@clerk/react';
 import { App } from './App';
 import { ErrorFallback } from './components/ErrorFallback';
 import { bootNotificationLayer } from './lib/push-register';
@@ -79,10 +80,22 @@ if ('serviceWorker' in navigator) {
 const root = document.getElementById('app');
 if (!root) throw new Error('#app root not found');
 
+// Clerk — identity / login layer (2026-05-19, replaces Supabase Auth).
+// Key comes from VITE_CLERK_PUBLISHABLE_KEY in .env.local. Clerk owns ONLY
+// "who is signed in" — the passphrase-derived encryption vault (@ollie/auth)
+// is a separate layer and is NOT Clerk's responsibility.
+const clerkPublishableKey =
+  (import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined) ?? '';
+if (!clerkPublishableKey) {
+  console.error('[ollie] VITE_CLERK_PUBLISHABLE_KEY missing — sign-in will fail');
+}
+
 createRoot(root).render(
   <StrictMode>
     <SentryReact.ErrorBoundary fallback={<ErrorFallback />}>
-      <App />
+      <ClerkProvider publishableKey={clerkPublishableKey} afterSignOutUrl="/">
+        <App />
+      </ClerkProvider>
     </SentryReact.ErrorBoundary>
   </StrictMode>,
 );

@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Admin — 2-min burst</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E; --umber:#A8703C;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  /* the burst is a focused session — swipe-down handle is the only way
+     out; no Find / Safe chrome competing with the one task. */
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;
+    padding:0 26px 36px}
+
+  /* the burst — ONE sub-2-min task at a time. a calm progress strip up
+     top counts the session; the current task fills the focus; tap done
+     and the next slides in. momentum, one focus, no list, no scroll. */
+
+  /* the session progress — a quiet row of pips, done filled sage, the
+     current one amber, the rest faint. 2 of 5 done. */
+  .pips{margin-top:120px;display:flex;justify-content:center;gap:9px}
+  .pip{width:9px;height:9px;border-radius:50%;background:var(--line)}
+  .pip.done{background:var(--sage)}
+  .pip.now{background:var(--accent);box-shadow:0 0 0 4px rgba(201,146,62,.16)}
+  .count{margin-top:14px;text-align:center;font-size:13px;color:var(--mute);
+    font-weight:500;letter-spacing:.02em}
+  .count b{color:var(--ink);font-weight:600}
+
+  /* the current task — the focus. a soft countdown ring around a calm
+     "~2 min" label, then the task name large under it. */
+  .focus{margin-top:54px;display:flex;flex-direction:column;align-items:center}
+  .ringwrap{position:relative;width:132px;height:132px;display:flex;
+    align-items:center;justify-content:center}
+  .ringwrap svg{position:absolute}
+  .rin{display:flex;flex-direction:column;align-items:center;gap:2px}
+  .rmin{font-size:30px;font-weight:300;color:var(--ink);letter-spacing:-.03em;
+    line-height:1}
+  .rlbl{font-size:11px;color:var(--mute);font-weight:600;letter-spacing:.07em;
+    text-transform:uppercase}
+
+  .tlead{margin-top:30px;font-size:13px;color:var(--mute);font-weight:500;
+    letter-spacing:.02em}
+  .tname{margin-top:9px;font-size:30px;font-weight:300;color:var(--ink);
+    letter-spacing:-.03em;line-height:1.18;text-align:center;max-width:300px}
+  /* a quiet one-line hint — the smallest first move */
+  .thint{margin-top:14px;font-size:13px;color:var(--mute);font-weight:400;
+    line-height:1.5;text-align:center;max-width:268px}
+
+  /* one amber button — done, next slides in */
+  .done{margin:34px auto 0;height:54px;border-radius:27px;background:var(--accent);
+    display:flex;align-items:center;justify-content:center;gap:9px;padding:0 34px;
+    box-shadow:0 12px 28px rgba(201,146,62,.32)}
+  .done svg{stroke:#fff}
+  .done span{font-size:17px;font-weight:600;color:#fff;letter-spacing:-.01em}
+
+  /* the quiet skip — a calm text line, no chrome. moves to the next. */
+  .skip{margin:18px auto 0;font-size:13px;color:var(--mute);font-weight:500;
+    letter-spacing:.01em}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+
+  <div class="who">
+    <span>2-min burst</span>
+  </div>
+
+  <div class="scroll">
+    <!-- the session progress — 2 done, 1 current, 2 waiting -->
+    <div class="pips">
+      <span class="pip done"></span>
+      <span class="pip done"></span>
+      <span class="pip now"></span>
+      <span class="pip"></span>
+      <span class="pip"></span>
+    </div>
+    <div class="count">task <b>3</b> of 5 · 2 done</div>
+
+    <!-- the current task — the one focus -->
+    <div class="focus">
+      <div class="ringwrap">
+        <svg width="132" height="132" viewBox="0 0 132 132">
+          <!-- the countdown track -->
+          <circle cx="66" cy="66" r="58" fill="none" stroke="#EAE2D4"
+            stroke-width="6"/>
+          <!-- the countdown arc — ~70% remaining, amber, rounded.
+               r=58 → circumference ≈ 364.4; 70% ≈ 255 -->
+          <circle cx="66" cy="66" r="58" fill="none" stroke="#C9923E"
+            stroke-width="6" stroke-linecap="round"
+            stroke-dasharray="255 364.4" transform="rotate(-90 66 66)"/>
+        </svg>
+        <div class="rin">
+          <div class="rmin">2</div>
+          <div class="rlbl">min</div>
+        </div>
+      </div>
+
+      <div class="tlead">do this one now</div>
+      <div class="tname">reply to the dentist's text</div>
+      <div class="thint">the smallest move: open the thread and type
+        one line back.</div>
+
+      <div class="done">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="2.4">
+          <path d="M5 13l4 4 10-11"/>
+        </svg>
+        <span>done — next</span>
+      </div>
+
+      <div class="skip">not now — skip to the next</div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

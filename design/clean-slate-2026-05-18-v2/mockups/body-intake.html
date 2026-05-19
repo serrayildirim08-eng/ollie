@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Body — intake</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;
+    padding:0 26px 36px}
+
+  /* THE HERO — the day's water as a large filling vessel. body.html's
+     glass visual, scaled way up: a tumbler outline filled to 4/8, calm
+     sage water. add / remove a glass sit either side. */
+  .hero{margin-top:116px;display:flex;flex-direction:column;align-items:center}
+
+  /* the big glass — body.html's tumbler, scaled. water is sage, rim ink. */
+  .bigglass{width:118px;height:160px}
+  .bigglass svg{display:block}
+
+  .count{margin-top:20px;font-size:46px;font-weight:300;color:var(--ink);
+    letter-spacing:-.03em;line-height:1}
+  .count .of{font-size:20px;color:var(--mute);font-weight:300;letter-spacing:-.01em}
+  .lead{margin-top:5px;font-size:13px;color:var(--mute);font-weight:500;
+    letter-spacing:.02em}
+
+  /* add / remove — one amber add, one quiet remove. the add is the act. */
+  .ctrl{margin-top:24px;display:flex;align-items:center;gap:18px}
+  .minus{width:48px;height:48px;border-radius:24px;border:1px solid var(--line);
+    background:#fff;display:flex;align-items:center;justify-content:center}
+  .minus svg{stroke:var(--mute)}
+  .add{height:50px;border-radius:25px;background:var(--accent);
+    display:flex;align-items:center;justify-content:center;gap:8px;padding:0 26px;
+    box-shadow:0 12px 28px rgba(201,146,62,.32)}
+  .add svg{stroke:#fff}
+  .add span{font-size:16px;font-weight:600;color:#fff;letter-spacing:-.01em}
+
+  /* the supplements — a calm list under a quiet section label. each row
+     is a tap-to-check line: a check circle, the name, and the reminder
+     time as a quiet trailing mark. NO calories, NO grade. */
+  .sect{margin-top:46px;font-size:11px;color:var(--mute);font-weight:600;
+    letter-spacing:.08em;text-transform:uppercase;margin-bottom:2px}
+  .supp{border-top:1px solid var(--line);padding:16px 2px;display:flex;
+    align-items:center;gap:13px}
+  .list .supp:last-child{border-bottom:1px solid var(--line)}
+  /* the check circle — empty ink ring, or a sage-filled tick when taken */
+  .ck{width:24px;height:24px;border-radius:50%;border:1.6px solid var(--line);
+    display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .ck svg{stroke:#fff;opacity:0}
+  .supp.on .ck{background:var(--sage);border-color:var(--sage)}
+  .supp.on .ck svg{opacity:1}
+  .sname{flex:1;font-size:15px;color:var(--ink);font-weight:500;
+    letter-spacing:-.01em}
+  .supp.on .sname{color:var(--mute)}
+  .swhen{font-size:12px;color:var(--mute);font-weight:500;letter-spacing:.01em}
+
+  /* add a supplement — a quiet last line, ghost row */
+  .addsupp{border-top:1px solid var(--line);padding:16px 2px;display:flex;
+    align-items:center;gap:13px}
+  .addsupp .pl{width:24px;height:24px;border-radius:50%;border:1.6px dashed var(--line);
+    display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .addsupp .pl svg{stroke:var(--mute)}
+  .addsupp span{font-size:14px;color:var(--mute);font-weight:500;
+    letter-spacing:-.01em}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+
+  <div class="who">
+    <span>intake</span>
+  </div>
+
+  <div class="scroll">
+    <div class="hero">
+      <!-- the big glass — body.html's tumbler scaled up. 4/8 = half full.
+           inner cavity y≈18..142 (h≈124); half-line ≈ 80. -->
+      <div class="bigglass">
+        <svg width="118" height="160" viewBox="0 0 118 160">
+          <clipPath id="cupbig">
+            <path d="M26 18 L92 18 L86 122 Q84.6 142 59 142 Q33.4 142 32 122 Z"/>
+          </clipPath>
+          <g clip-path="url(#cupbig)">
+            <rect x="22" y="80" width="74" height="70" fill="#5B8C7E" opacity=".88"/>
+            <line x1="22" y1="81" x2="96" y2="81" stroke="#fff" stroke-width="2.4" opacity=".5"/>
+          </g>
+          <!-- tumbler outline, rounded base -->
+          <path d="M24 14 L94 14 L87.5 122 Q86 145 59 145 Q32 145 30.5 122 Z"
+            fill="none" stroke="#2A2622" stroke-width="2.4" stroke-linejoin="round"/>
+        </svg>
+      </div>
+
+      <div class="count">4<span class="of"> of 8</span></div>
+      <div class="lead">glasses today</div>
+
+      <div class="ctrl">
+        <div class="minus">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="2.4">
+            <path d="M5 12h14"/>
+          </svg>
+        </div>
+        <div class="add">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="2.4">
+            <path d="M12 5v14M5 12h14"/>
+          </svg>
+          <span>a glass</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- supplements — a calm list, tap to check off -->
+    <div class="sect">supplements</div>
+    <div class="list">
+      <div class="supp on">
+        <div class="ck">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke-width="3"><path d="M5 13l4 4 10-11"/></svg>
+        </div>
+        <span class="sname">vitamin d</span>
+        <span class="swhen">9:00am</span>
+      </div>
+      <div class="supp on">
+        <div class="ck">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke-width="3"><path d="M5 13l4 4 10-11"/></svg>
+        </div>
+        <span class="sname">magnesium</span>
+        <span class="swhen">9:00am</span>
+      </div>
+      <div class="supp">
+        <div class="ck">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke-width="3"><path d="M5 13l4 4 10-11"/></svg>
+        </div>
+        <span class="sname">omega-3</span>
+        <span class="swhen">8:00pm</span>
+      </div>
+      <div class="addsupp">
+        <div class="pl">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>
+        </div>
+        <span>add a supplement</span>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

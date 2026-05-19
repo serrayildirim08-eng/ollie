@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Medication — first run</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  .safe{position:absolute;top:62px;right:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .safe svg{stroke:var(--mute)}
+  .find{position:absolute;top:62px;left:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .find svg{stroke:var(--mute)}
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;
+    padding:0 26px 36px}
+
+  /* the cold state — the medication FACE is still present, never blank.
+     no meds are on file yet, so the take-circle stands EMPTY: a calm
+     ink-outline ring (not the amber live edge — there's no live dose),
+     a quiet "—" inside, a faint dose-dot pair below it ghosted. the
+     hero text is honest: nothing's been added, here's the easiest first
+     step. margin-top clears the absolutely-positioned .who label. */
+  .hero{margin-top:116px;display:flex;flex-direction:column;align-items:center}
+  .lead{font-size:13px;color:var(--mute);font-weight:500;letter-spacing:.02em}
+  /* the empty headline — calm, light, no med name to show yet */
+  .medname{margin-top:9px;font-size:30px;font-weight:300;color:var(--ink);
+    letter-spacing:-.02em;line-height:1.12;text-align:center}
+  .meddose{margin-top:7px;font-size:13px;color:var(--mute);font-weight:500;
+    letter-spacing:.01em}
+
+  /* the take-circle — cold: an ink-outline ring (no amber, no live dose),
+     a quiet "—" inside, no "tap when taken" cue. it reads "waiting for
+     your first medication", never broken, never a zero. */
+  .takewrap{margin-top:30px;display:flex;flex-direction:column;align-items:center}
+  .take{width:164px;height:164px;border-radius:50%;border:2px solid var(--line);
+    background:#fff;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;gap:4px;box-shadow:0 14px 34px rgba(42,38,34,.06)}
+  .take .tt{font-size:40px;font-weight:200;color:var(--mute);letter-spacing:-.02em;
+    line-height:1}
+  .take .tc{font-size:11px;color:var(--mute);font-weight:600;letter-spacing:.05em;
+    text-transform:uppercase}
+
+  /* the dose-dots — cold: two faint dashed placeholders, a calm "not yet" */
+  .doses{margin-top:24px;display:flex;align-items:center;gap:13px}
+  .dd{width:13px;height:13px;border-radius:50%;background:transparent;
+    border:1.5px dashed var(--line)}
+
+  /* the honest invitation line — sage dot + one calm sentence. the cold
+     state explains what medication is and the easiest way in. */
+  .invite{margin-top:24px;display:flex;align-items:flex-start;gap:9px;
+    max-width:288px}
+  .invite .idot{width:7px;height:7px;border-radius:50%;background:var(--sage);
+    flex-shrink:0;margin-top:6px}
+  .invite span{font-size:14px;color:var(--ink);font-weight:500;letter-spacing:-.01em;
+    line-height:1.45;text-align:left}
+  .invite b{font-weight:600}
+
+  /* one amber button — add your first. the way the face fills. */
+  .add{margin:30px auto 0;height:50px;border-radius:25px;background:var(--accent);
+    display:flex;align-items:center;justify-content:center;gap:8px;padding:0 26px;
+    box-shadow:0 12px 28px rgba(201,146,62,.32)}
+  .add svg{stroke:#fff}
+  .add span{font-size:16px;font-weight:600;color:#fff;letter-spacing:-.01em}
+
+  /* the meds list — cold: no meds, so one quiet placeholder line in the
+     notebook-list grammar, sitting between hairlines, never a card. */
+  .list{margin-top:50px;display:flex;flex-direction:column}
+  .listk{font-size:11px;color:var(--mute);font-weight:600;letter-spacing:.08em;
+    text-transform:uppercase;margin-bottom:4px}
+  .empty{border-top:1px solid var(--line);border-bottom:1px solid var(--line);
+    padding:18px 2px;display:flex;align-items:center;gap:11px}
+  .empty .edot{width:9px;height:9px;border-radius:50%;
+    border:1.5px dashed var(--line);flex-shrink:0}
+  .empty span{font-size:14px;color:var(--mute);font-weight:400;letter-spacing:-.01em}
+
+  /* one calm drill row — the adherence log, cold form: muted, an honest
+     invitation, nothing logged yet. */
+  .rows{margin-top:24px;display:flex;flex-direction:column}
+  .row{border-top:1px solid var(--line);border-bottom:1px solid var(--line);
+    padding:18px 2px;display:flex;align-items:center}
+  .row.cold .rk{color:var(--mute)}
+  .row.cold .rv{color:var(--mute);font-weight:400}
+  .row.cold .chev{stroke:var(--line)}
+  .rk{font-size:13px;color:var(--mute);font-weight:600;letter-spacing:.01em;
+    flex-shrink:0}
+  .rsep{color:var(--line);margin:0 8px;font-size:13px}
+  .rv{font-size:14px;color:var(--ink);font-weight:500;letter-spacing:-.01em;flex:1}
+  .chev{stroke:var(--mute);flex-shrink:0;margin-left:8px}
+
+  /* a closing reassurance — dry, the medication voice, no streak, no shame */
+  .foot{margin-top:24px;text-align:center;font-size:12px;color:var(--mute);
+    font-weight:400;line-height:1.55}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+  <div class="find">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/>
+    </svg>
+  </div>
+  <div class="safe">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.5-7 10-7 10z"/>
+    </svg>
+  </div>
+
+  <div class="who">
+    <span>medication</span>
+  </div>
+
+  <div class="scroll">
+    <div class="hero">
+      <!-- the FACE, cold — present, never blank. no dose to show yet. -->
+      <div class="lead">next dose</div>
+      <div class="medname">nothing on file yet</div>
+      <div class="meddose">a med, a vitamin, a supplement — anything</div>
+
+      <div class="takewrap">
+        <!-- the take-circle — cold: an ink-outline ring, no amber edge,
+             a quiet "—" inside. waiting for the first medication. -->
+        <div class="take">
+          <div class="tt">&ndash;</div>
+          <div class="tc">nothing to take</div>
+        </div>
+
+        <!-- the dose-dots — cold: two faint dashed placeholders. -->
+        <div class="doses">
+          <span class="dd"></span>
+          <span class="dd"></span>
+        </div>
+      </div>
+
+      <!-- the honest invitation — sage dot, one calm sentence. -->
+      <div class="invite">
+        <span class="idot"></span>
+        <span>this is where your meds, vitamins and supplements live.
+          <b>add one and ollie tracks the next dose</b> — or just logs
+          what you took, no schedule needed.</span>
+      </div>
+
+      <div class="add">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="2.4">
+          <path d="M12 5v14M5 12h14"/>
+        </svg>
+        <span>add your first</span>
+      </div>
+    </div>
+
+    <!-- the meds list — cold: one quiet placeholder line in notebook grammar -->
+    <div class="list">
+      <div class="listk">your meds</div>
+      <div class="empty">
+        <span class="edot"></span>
+        <span>no medications yet — your list will gather here</span>
+      </div>
+    </div>
+
+    <!-- the adherence log — cold form, an honest invitation -->
+    <div class="rows">
+      <div class="row cold">
+        <span class="rk">adherence log</span><span class="rsep">·</span>
+        <span class="rv">nothing logged yet</span>
+        <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+    </div>
+
+    <div class="foot">no streaks, no scoring — just what you<br>take, and when, kept for you and your doctor.</div>
+  </div>
+</div>
+</body>
+</html>

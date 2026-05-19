@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Cycle — pill log</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;
+    align-items:center;padding:0 26px 36px}
+
+  /* the lead — one calm line */
+  .lead{margin-top:116px;font-size:22px;font-weight:300;color:var(--ink);
+    letter-spacing:-.02em;text-align:center}
+  .lead b{font-weight:500}
+  .sub{margin-top:6px;font-size:13px;color:var(--mute);font-weight:500}
+
+  /* THE ONE THING — the 7-day pill strip. 7 day-dots in a row, each a
+     tailored mark: a logged day is a filled sage ring with a tick; a
+     not-yet day is an open ink-line ring; future days are a faint line.
+     today is the larger amber-edged dot — tappable to log. past 3 days
+     are back-dateable (a quiet dashed under-rule says so). */
+  .strip{margin-top:54px;display:flex;align-items:flex-start;gap:0}
+  .day{display:flex;flex-direction:column;align-items:center;gap:11px;
+    width:46px}
+  .dot{width:38px;height:38px;border-radius:50%;display:flex;
+    align-items:center;justify-content:center;position:relative}
+  /* logged — sage filled, white tick */
+  .dot.logged{background:var(--sage)}
+  .dot.logged svg{stroke:#fff}
+  /* a past day, not logged but still back-dateable — open ink ring */
+  .dot.miss{border:1.6px solid var(--mute)}
+  /* today — open, larger amber edge, the tappable one */
+  .dot.today{border:2.4px solid var(--accent);
+    box-shadow:0 8px 20px rgba(201,146,62,.26)}
+  .dot.today svg{stroke:var(--accent)}
+  /* a future day — faint, untappable */
+  .dot.future{border:1.4px solid var(--line)}
+  .dlabel{font-size:11px;color:var(--mute);font-weight:600;letter-spacing:.03em}
+  .dlabel.now{color:var(--accent)}
+  /* the back-dateable rule under the first 3 days + today */
+  .reach{margin-top:7px;width:182px;height:2px;border-radius:1px;
+    background:repeating-linear-gradient(90deg,var(--line) 0 5px,transparent 5px 9px)}
+  .reachlbl{margin-top:8px;font-size:11px;color:var(--mute);font-weight:500;
+    letter-spacing:.02em}
+
+  /* one quiet state line — logged / not yet */
+  .state{margin-top:48px;display:flex;align-items:center;gap:9px}
+  .state .sdot{width:7px;height:7px;border-radius:50%;background:var(--mute)}
+  .state span{font-size:14px;color:var(--ink);font-weight:500;letter-spacing:-.01em}
+
+  /* one amber button — log today's pill */
+  .take{margin-top:24px;height:50px;border-radius:25px;background:var(--accent);
+    display:flex;align-items:center;justify-content:center;gap:8px;padding:0 26px;
+    box-shadow:0 12px 28px rgba(201,146,62,.32)}
+  .take svg{stroke:#fff}
+  .take span{font-size:16px;font-weight:600;color:#fff;letter-spacing:-.01em}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+
+  <div class="who">
+    <span>pill log</span>
+  </div>
+
+  <div class="scroll">
+    <div class="lead"><b>the last 7 days</b></div>
+    <div class="sub">combined pill · 9:00pm</div>
+
+    <!-- the 7-day strip — mon..today. logged days carry a tick;
+         today is the amber-edged tappable dot. -->
+    <div class="strip">
+      <div class="day">
+        <div class="dot logged"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2.6"><path d="M5 13l4 4 10-11"/></svg></div>
+        <span class="dlabel">thu</span>
+      </div>
+      <div class="day">
+        <div class="dot logged"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2.6"><path d="M5 13l4 4 10-11"/></svg></div>
+        <span class="dlabel">fri</span>
+      </div>
+      <div class="day">
+        <div class="dot logged"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2.6"><path d="M5 13l4 4 10-11"/></svg></div>
+        <span class="dlabel">sat</span>
+      </div>
+      <div class="day">
+        <div class="dot logged"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2.6"><path d="M5 13l4 4 10-11"/></svg></div>
+        <span class="dlabel">sun</span>
+      </div>
+      <div class="day">
+        <div class="dot miss"></div>
+        <span class="dlabel">mon</span>
+      </div>
+      <div class="day">
+        <div class="dot logged"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2.6"><path d="M5 13l4 4 10-11"/></svg></div>
+        <span class="dlabel">tue</span>
+      </div>
+      <div class="day">
+        <div class="dot today"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg></div>
+        <span class="dlabel now">today</span>
+      </div>
+    </div>
+    <div class="reach"></div>
+    <div class="reachlbl">tap a past day to back-date — up to 3 days</div>
+
+    <!-- one quiet state line -->
+    <div class="state">
+      <span class="sdot"></span>
+      <span>today — not logged yet</span>
+    </div>
+
+    <div class="take">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="2.6"><path d="M5 13l4 4 10-11"/></svg>
+      <span>log today's pill</span>
+    </div>
+  </div>
+</div>
+</body>
+</html>

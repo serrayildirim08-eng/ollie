@@ -33,40 +33,162 @@ import {
   Outlet,
   Navigate,
   useNavigate,
-  useParams,
 } from 'react-router-dom';
 
-import { useToast } from './components/ToastContext';
 import { ToastHost } from './components/ToastHost';
 import { ChipFlyHost } from './components/ChipFly';
-import { MicButton } from './components/MicButton';
 import { Day30Prompt } from './components/Day30Prompt';
 import {
   NotificationPrimer,
   hasSeenNotificationPrimer,
 } from './components/NotificationPrimer';
+import { AppLockGate } from './components/AppLockGate';
+import {
+  APP_LOCK_SLICE,
+  APP_LOCK_LOCKED_KEY,
+  isAppLockEnabled,
+  unlockApp,
+  markBackgrounded,
+  relockIfIdle,
+  seedColdBootLock,
+} from './lib/app-lock';
+import { store } from './store';
+import { useAuth } from '@clerk/react';
 import { AuthFlow } from './components/AuthFlow';
 import { ConsentScreen } from './components/ConsentScreen';
 import { ConsentStep } from './screens/onboarding/ConsentStep';
 import { OnboardingScreen } from './pages/OnboardingScreen';
 import { DevModeBanner } from './components/DevModeBanner';
 import { AppServicesProvider, useAppServices } from './app-services';
-import { SUPABASE_CONFIGURED } from './app-gates';
+import { CLERK_CONFIGURED } from './app-gates';
 
 // ─── lazy page imports ────────────────────────────────────────────────────────
 
-const HomeScreen      = lazy(() => import('./pages/HomeScreen').then(m => ({ default: m.HomeScreen })));
-const DashboardScreen = lazy(() => import('./pages/DashboardScreen').then(m => ({ default: m.DashboardScreen })));
-const GardenScreen    = lazy(() => import('./pages/GardenScreen').then(m => ({ default: m.GardenScreen })));
-const ModuleScreen    = lazy(() => import('./pages/ModuleScreen').then(m => ({ default: m.ModuleScreen })));
 const SettingsScreen  = lazy(() => import('./pages/SettingsScreen').then(m => ({ default: m.SettingsScreen })));
-const InsightsScreen  = lazy(() => import('./pages/InsightsScreen').then(m => ({ default: m.InsightsScreen })));
-const VoiceScreen     = lazy(() => import('./pages/VoiceScreen').then(m => ({ default: m.VoiceScreen })));
-const GalleryScreen   = lazy(() => import('./pages/GalleryScreen').then(m => ({ default: m.GalleryScreen })));
 const CrisisScreen    = lazy(() => import('./pages/CrisisScreen').then(m => ({ default: m.CrisisScreen })));
 
+// The clean-slate v2 app — the assembled `v2-shell`. As of the 2026-05-19
+// migration this IS the app: `GatedLayout` renders it once the four gates
+// (auth · consent · research · onboarding) pass. It composes all 12
+// `*-v2` modules behind one navigation host (capture deck · module rooms
+// · Find · Safe). The old hand-built screens are no longer routed.
+const ShellApp        = lazy(() => import('./modules/v2-shell').then(m => ({ default: m.ShellApp })));
+
+// Dev-only preview of the clean-slate v2 money rebuild. Lazy + isolated:
+// the chunk is only fetched when `/preview/money` is opened, and the route
+// is mounted OUTSIDE GatedLayout so it never affects the main app flow.
+const MoneyV2PreviewScreen = lazy(() =>
+  import('./pages/MoneyV2PreviewScreen').then(m => ({ default: m.MoneyV2PreviewScreen })),
+);
+
+// Dev-only preview of the clean-slate v2 cycle rebuild. Lazy + isolated:
+// the chunk is only fetched when `/preview/cycle` is opened, and the route
+// is mounted OUTSIDE GatedLayout so it never affects the main app flow.
+const CycleV2PreviewScreen = lazy(() =>
+  import('./pages/CycleV2PreviewScreen').then(m => ({ default: m.CycleV2PreviewScreen })),
+);
+
+// Dev-only preview of the clean-slate v2 sleep rebuild. Lazy + isolated:
+// the chunk is only fetched when `/preview/sleep` is opened, and the route
+// is mounted OUTSIDE GatedLayout so it never affects the main app flow.
+const SleepV2PreviewScreen = lazy(() =>
+  import('./pages/SleepV2PreviewScreen').then(m => ({ default: m.SleepV2PreviewScreen })),
+);
+
+// Dev-only preview of the clean-slate v2 body rebuild. Lazy + isolated:
+// the chunk is only fetched when `/preview/body` is opened, and the route
+// is mounted OUTSIDE GatedLayout so it never affects the main app flow.
+const BodyV2PreviewScreen = lazy(() =>
+  import('./pages/BodyV2PreviewScreen').then(m => ({ default: m.BodyV2PreviewScreen })),
+);
+
+// Dev-only preview of the clean-slate v2 medication rebuild. Lazy +
+// isolated: the chunk is only fetched when `/preview/medication` is opened,
+// and the route is mounted OUTSIDE GatedLayout so it never affects the
+// main app flow.
+const MedicationV2PreviewScreen = lazy(() =>
+  import('./pages/MedicationV2PreviewScreen').then(m => ({ default: m.MedicationV2PreviewScreen })),
+);
+
+// Dev-only preview of the clean-slate v2 habits rebuild. Lazy + isolated:
+// the chunk is only fetched when `/preview/habits` is opened, and the route
+// is mounted OUTSIDE GatedLayout so it never affects the main app flow.
+const HabitsV2PreviewScreen = lazy(() =>
+  import('./pages/HabitsV2PreviewScreen').then(m => ({ default: m.HabitsV2PreviewScreen })),
+);
+
+// Dev-only preview of the clean-slate v2 partner feature. Lazy + isolated:
+// the chunk is only fetched when `/preview/partner` is opened, and the route
+// is mounted OUTSIDE GatedLayout so it never affects the main app flow.
+// partner-v2 is a NEW feature with no backend — it runs over an in-module
+// local stub (see modules/partner-v2/selectors.ts for the honest-stub note).
+const PartnerV2PreviewScreen = lazy(() =>
+  import('./pages/PartnerV2PreviewScreen').then(m => ({ default: m.PartnerV2PreviewScreen })),
+);
+
+// Dev-only preview of the clean-slate v2 admin rebuild. Lazy + isolated:
+// the chunk is only fetched when `/preview/admin` is opened, and the route
+// is mounted OUTSIDE GatedLayout so it never affects the main app flow.
+const AdminV2PreviewScreen = lazy(() =>
+  import('./pages/AdminV2PreviewScreen').then(m => ({ default: m.AdminV2PreviewScreen })),
+);
+
+// Dev-only preview of the clean-slate v2 pets rebuild. Lazy + isolated:
+// the chunk is only fetched when `/preview/pets` is opened, and the route
+// is mounted OUTSIDE GatedLayout so it never affects the main app flow.
+const PetsV2PreviewScreen = lazy(() =>
+  import('./pages/PetsV2PreviewScreen').then(m => ({ default: m.PetsV2PreviewScreen })),
+);
+
+// Dev-only preview of the clean-slate v2 grocery rebuild. Lazy + isolated:
+// the chunk is only fetched when `/preview/grocery` is opened, and the route
+// is mounted OUTSIDE GatedLayout so it never affects the main app flow.
+const GroceryV2PreviewScreen = lazy(() =>
+  import('./pages/GroceryV2PreviewScreen').then(m => ({ default: m.GroceryV2PreviewScreen })),
+);
+
+// Dev-only preview of the clean-slate v2 work rebuild — the "matters"
+// concept. Lazy + isolated: the chunk is only fetched when `/preview/work`
+// is opened, and the route is mounted OUTSIDE GatedLayout so it never
+// affects the main app flow. work-v2 reads the REAL matter backend — the
+// matter container + dump→matter routing committed as 9ed51e5, via the live
+// `work` store namespace (see modules/work-v2/useWorkStore.ts).
+const WorkV2PreviewScreen = lazy(() =>
+  import('./pages/WorkV2PreviewScreen').then(m => ({ default: m.WorkV2PreviewScreen })),
+);
+
+// Dev-only preview of the clean-slate v2 goals rebuild. Lazy + isolated:
+// the chunk is only fetched when `/preview/goals` is opened, and the route
+// is mounted OUTSIDE GatedLayout so it never affects the main app flow.
+// goals-v2 reads + writes the SAME `goals.*` store the live module uses.
+const GoalsV2PreviewScreen = lazy(() =>
+  import('./pages/GoalsV2PreviewScreen').then(m => ({ default: m.GoalsV2PreviewScreen })),
+);
+
+// The ASSEMBLED clean-slate v2 app — the `v2-shell` navigation host that
+// ties all 12 `*-v2` modules into ONE navigable app: the capture deck
+// (Throw · Caught · Noticed), the 4-modules view, the module homepages,
+// and the always-on Find / Safe. Lazy + isolated: the chunk is only
+// fetched when `/preview/v2` is opened, and the route is mounted OUTSIDE
+// GatedLayout so it never affects the main app flow. The shell composes
+// the existing module apps — it rebuilds none of them — and the 12
+// individual `/preview/{module}` routes keep working unchanged.
+const V2ShellPreviewScreen = lazy(() =>
+  import('./pages/V2ShellPreviewScreen').then(m => ({ default: m.V2ShellPreviewScreen })),
+);
+
+// The preview HUB — a tappable index of every `/preview/*` surface. This
+// is the entry point that makes the v2 redesign reachable in the native
+// iOS app, where there is no URL bar to type a hash route. Lazy +
+// isolated: the chunk is only fetched when `/preview` is opened, and the
+// route is mounted OUTSIDE GatedLayout so it never affects the main app
+// flow. Serra reaches it from Settings → "preview the new design".
+const PreviewHubScreen = lazy(() =>
+  import('./pages/PreviewHubScreen').then(m => ({ default: m.PreviewHubScreen })),
+);
+
 function PageLoading() {
-  return <div style={{ minHeight: '100vh', background: 'var(--bone)' }} aria-busy="true" />;
+  return <div style={{ minHeight: '100dvh', background: 'var(--bone)' }} aria-busy="true" />;
 }
 
 // ─── Capacitor hardware back button ────────────────────────────────────────────
@@ -138,16 +260,18 @@ function BackButtonBridge() {
  * is mounted OUTSIDE this layout so it stays reachable in any app state.
  */
 function GatedLayout() {
-  const { auth, accountRef, gates } = useAppServices();
+  const { vault, gates } = useAppServices();
+  const { userId } = useAuth();
 
-  // Gate 1 — auth. A session is required before anything is encrypted.
+  // Gate 1 — Clerk sign-in + passphrase-vault unlock. AuthFlow owns both
+  // and calls markAuthed() once they have both passed.
   if (!gates.authed) {
     return (
       <>
-        <AuthFlow auth={auth} onAuthenticated={gates.markAuthed} />
+        <AuthFlow vault={vault} onAuthenticated={gates.markAuthed} />
         <ToastHost />
         <ChipFlyHost />
-        {!SUPABASE_CONFIGURED && <DevModeBanner />}
+        {!CLERK_CONFIGURED && <DevModeBanner />}
       </>
     );
   }
@@ -159,25 +283,24 @@ function GatedLayout() {
         <ConsentScreen onContinue={gates.markConsentGiven} />
         <ToastHost />
         <ChipFlyHost />
-        {!SUPABASE_CONFIGURED && <DevModeBanner />}
+        {!CLERK_CONFIGURED && <DevModeBanner />}
       </>
     );
   }
 
   // Gate 3 — research opt-in. `null` means never prompted.
   if (gates.researchOptin === null) {
-    const session = accountRef.current.auth.state().session;
     return (
       <>
         <ConsentStep
-          userId={session?.user_id ?? 'local-dev'}
+          userId={userId ?? 'local-dev'}
           source={gates.researchSource}
           initial={{ marketing: gates.marketing, research_optin: false }}
           onContinue={gates.markResearchDecided}
         />
         <ToastHost />
         <ChipFlyHost />
-        {!SUPABASE_CONFIGURED && <DevModeBanner />}
+        {!CLERK_CONFIGURED && <DevModeBanner />}
       </>
     );
   }
@@ -189,14 +312,14 @@ function GatedLayout() {
         <OnboardingScreen onComplete={gates.markOnboarded} />
         <ToastHost />
         <ChipFlyHost />
-        {!SUPABASE_CONFIGURED && <DevModeBanner />}
+        {!CLERK_CONFIGURED && <DevModeBanner />}
       </>
     );
   }
 
-  // All gates passed — render the routed screen plus the always-on
-  // hosts. MicButton is hidden on the dedicated voice route (that screen
-  // has its own capture control); the old code keyed this off `screen`.
+  // All gates passed — render the v2-shell (via the routed Outlet) plus
+  // the always-on overlays. The shell owns its own capture surface (the
+  // Throw deck), so there is no global mic button.
   return (
     <>
       <Suspense fallback={<PageLoading />}>
@@ -206,9 +329,117 @@ function GatedLayout() {
       <ChipFlyHost />
       <Day30Prompt />
       <NotificationPrimerGate />
-      <RoutedMicButton />
-      {!SUPABASE_CONFIGURED && <DevModeBanner />}
+      <AppLockController />
+      {!CLERK_CONFIGURED && <DevModeBanner />}
     </>
+  );
+}
+
+/**
+ * App-lock gate.
+ *
+ * The optional "soft lock" that covers the whole app UI with a biometric
+ * (Face ID / fingerprint) re-entry screen. OFF by default — the user
+ * opts in from Settings → security. See lib/app-lock.ts for the honest
+ * framing: the user is already signed in, this is a privacy curtain, not
+ * auth, and disabling it loses nothing.
+ *
+ * Mounted only inside the all-gates-passed branch of `GatedLayout`, so it
+ * never fights the auth / consent / onboarding screens — those come first.
+ *
+ * WHEN IT LOCKS
+ *   - cold boot: `seedColdBootLock()` on mount draws the curtain if the
+ *     feature is enabled. `app_lock.locked` is persisted, so a tab killed
+ *     while locked also boots locked.
+ *   - resume after idle: when the page goes to the background (web
+ *     `visibilitychange` → hidden, or Capacitor `App` appStateChange →
+ *     inactive) the moment is timestamped; on the next foreground a gap
+ *     past RELOCK_AFTER_MS re-locks via `relockIfIdle()`.
+ *
+ * The `locked` flag is the single source of truth; this component
+ * subscribes to it so a lock from a background event re-renders the gate.
+ */
+function AppLockController() {
+  const { vault } = useAppServices();
+
+  // Seed cold-boot lock state ONCE, synchronously, before first paint —
+  // so an enabled lock comes up covering the UI, not flashing it first.
+  const [locked, setLocked] = useState<boolean>(() => seedColdBootLock());
+
+  // Mirror the store flag: background events (below) flip `app_lock.locked`
+  // directly, so subscribe and re-render when it changes from anywhere.
+  useEffect(() => {
+    const unsub = store.subscribeKey<boolean>(
+      APP_LOCK_SLICE,
+      APP_LOCK_LOCKED_KEY,
+      (next) => setLocked(Boolean(next)),
+    );
+    return () => { try { unsub(); } catch { /* noop */ } };
+  }, []);
+
+  // Background / resume wiring. Web uses `visibilitychange`; Capacitor
+  // emits `appStateChange` (isActive false/true). Both funnel to the same
+  // two actions: timestamp on leave, `relockIfIdle` on return.
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+
+    function onLeave() { markBackgrounded(); }
+    function onReturn() { relockIfIdle(); }
+
+    function onVisibility() {
+      if (document.visibilityState === 'hidden') onLeave();
+      else onReturn();
+    }
+    document.addEventListener('visibilitychange', onVisibility);
+
+    // Capacitor native resume — dynamic import keeps Capacitor optional
+    // (mirrors BackButtonBridge). No-op on web/desktop.
+    let removeNative: (() => void) | undefined;
+    let cancelled = false;
+    const dynImport = new Function('s', 'return import(s)') as (
+      s: string,
+    ) => Promise<{ App?: unknown }>;
+    dynImport('@capacitor/app')
+      .then((mod) => {
+        const App = mod?.App as
+          | {
+              addListener: (
+                e: string,
+                cb: (d: { isActive: boolean }) => void,
+              ) => Promise<{ remove: () => void }>;
+            }
+          | undefined;
+        if (!App?.addListener || cancelled) return;
+        App.addListener('appStateChange', ({ isActive }) => {
+          if (isActive) onReturn();
+          else onLeave();
+        }).then((handle) => {
+          if (cancelled) handle.remove();
+          else removeNative = handle.remove;
+        });
+      })
+      .catch(() => { /* Capacitor absent — web/desktop, no-op */ });
+
+    return () => {
+      cancelled = true;
+      document.removeEventListener('visibilitychange', onVisibility);
+      removeNative?.();
+    };
+  }, []);
+
+  // The feature can be flipped off from Settings while the curtain is up;
+  // honour that here so a just-disabled lock doesn't trap the user.
+  if (!isAppLockEnabled()) return null;
+  if (!locked) return null;
+
+  return (
+    <AppLockGate
+      vault={vault}
+      onUnlocked={() => {
+        unlockApp();
+        setLocked(false);
+      }}
+    />
   );
 }
 
@@ -236,108 +467,46 @@ function NotificationPrimerGate() {
   return <NotificationPrimer onDone={() => setShow(false)} />;
 }
 
-/**
- * MicButton, hidden on the voice route. Reads the location hash directly
- * — equivalent to the old `screen !== 'voice'` check.
- */
-function RoutedMicButton() {
-  const { applyDump } = useAppServices();
-  const toast = useToast();
-  const onVoiceRoute =
-    typeof window !== 'undefined' && window.location.hash.startsWith('#/voice');
-  if (onVoiceRoute) return null;
-  return (
-    <MicButton
-      onTranscript={(text) => {
-        toast.show(`heard · ${text}`, { module: 'voice', ttl: 6000 });
-        applyDump(text, 'voice');
-      }}
-    />
-  );
-}
-
 // ─── route elements ───────────────────────────────────────────────────────────
 
-function HomeRoute() {
+/**
+ * The app host — the clean-slate v2 shell. Once `GatedLayout`'s four gates
+ * pass, this is the app: the assembled `v2-shell` that ties all 12 `*-v2`
+ * modules into one navigable app. `onThrow` is wired to the real brain-dump
+ * pipeline; `onSafe` opens the crisis surface; `onSettings` opens the
+ * (still hand-built) settings screen, reached from the shell's modules
+ * panel. The shell owns all in-app navigation internally.
+ */
+function ShellHostRoute() {
   const navigate = useNavigate();
   const { applyDump } = useAppServices();
   return (
-    <HomeScreen
-      onNavigate={(to) => navigate(`/${to}`)}
-      onBrainDump={(text) => applyDump(text, 'text')}
-      onCrisis={() => navigate('/crisis')}
-    />
-  );
-}
-
-function DashboardRoute() {
-  const navigate = useNavigate();
-  const { applyDump } = useAppServices();
-  return (
-    <DashboardScreen
-      onNavigate={(to, moduleId) => {
-        if (to === 'module' && moduleId) navigate(`/module/${moduleId}`);
-        else navigate(`/${to}`);
-      }}
-      onBrainDump={(text) => applyDump(text, 'text')}
-    />
-  );
-}
-
-function GardenRoute() {
-  const navigate = useNavigate();
-  return <GardenScreen onNavigate={(to) => navigate(`/${to}`)} />;
-}
-
-function ModuleRoute() {
-  const navigate = useNavigate();
-  const { applyDump } = useAppServices();
-  const { id } = useParams<{ id: string }>();
-  return (
-    <ModuleScreen
-      moduleId={id ?? ''}
-      onNavigate={(to) => navigate(`/${to}`)}
-      onBrainDump={(text) => applyDump(text, 'text')}
+    <ShellApp
+      onThrow={(text) => applyDump(text, 'text')}
+      onSafe={() => navigate('/crisis')}
+      onSettings={() => navigate('/settings')}
     />
   );
 }
 
 function SettingsRoute() {
   const navigate = useNavigate();
-  const { auth, gates } = useAppServices();
+  const { vault, gates } = useAppServices();
   return (
     <SettingsScreen
-      auth={auth}
-      onBack={() => navigate('/home')}
+      vault={vault}
+      onBack={() => navigate('/')}
       onSignedOut={() => {
-        // Drop the session flag, then route home; the auth gate in
-        // GatedLayout catches the next render and shows AuthFlow.
+        // Drop the session flag, then route to the app root; the auth
+        // gate in GatedLayout catches the next render and shows AuthFlow.
         gates.markSignedOut();
-        navigate('/home');
+        navigate('/');
       }}
+      // The "preview the new design" row — kept as a harmless escape
+      // hatch into the isolated `/preview/*` surfaces.
+      onPreview={() => navigate('/preview')}
     />
   );
-}
-
-function InsightsRoute() {
-  const navigate = useNavigate();
-  return <InsightsScreen onNavigate={() => navigate('/home')} />;
-}
-
-function VoiceRoute() {
-  const navigate = useNavigate();
-  const { applyDump } = useAppServices();
-  return (
-    <VoiceScreen
-      onNavigate={() => navigate('/home')}
-      onApply={(text) => applyDump(text, 'voice')}
-    />
-  );
-}
-
-function GalleryRoute() {
-  const navigate = useNavigate();
-  return <GalleryScreen onNavigate={() => navigate('/home')} />;
 }
 
 /**
@@ -351,7 +520,307 @@ function CrisisRoute() {
   return (
     <Suspense fallback={<PageLoading />}>
       <CrisisScreen onClose={() => navigate(-1)} />
-      {!SUPABASE_CONFIGURED && <DevModeBanner />}
+      {!CLERK_CONFIGURED && <DevModeBanner />}
+    </Suspense>
+  );
+}
+
+/**
+ * money-v2 preview route. Mounted OUTSIDE GatedLayout, like `/crisis`, so
+ * it is reachable directly as a DEV PREVIEW of the clean-slate v2 money
+ * rebuild — without going through onboarding and without appearing in any
+ * main-flow navigation. It is additive: the live finance module and the
+ * app's current navigation are untouched. The full migration is a later
+ * decision.
+ */
+function MoneyV2PreviewRoute() {
+  const navigate = useNavigate();
+  return (
+    <Suspense fallback={<PageLoading />}>
+      <MoneyV2PreviewScreen
+        onExit={() => navigate('/home')}
+        onSafe={() => navigate('/crisis')}
+      />
+      {!CLERK_CONFIGURED && <DevModeBanner />}
+    </Suspense>
+  );
+}
+
+/**
+ * cycle-v2 preview route. Mounted OUTSIDE GatedLayout, like `/crisis` and
+ * `/preview/money`, so it is reachable directly as a DEV PREVIEW of the
+ * clean-slate v2 cycle rebuild — without going through onboarding and
+ * without appearing in any main-flow navigation. It is additive: the live
+ * cycle module and the app's current navigation are untouched. The full
+ * migration is a later decision.
+ */
+function CycleV2PreviewRoute() {
+  const navigate = useNavigate();
+  return (
+    <Suspense fallback={<PageLoading />}>
+      <CycleV2PreviewScreen
+        onExit={() => navigate('/home')}
+        onSafe={() => navigate('/crisis')}
+      />
+      {!CLERK_CONFIGURED && <DevModeBanner />}
+    </Suspense>
+  );
+}
+
+/**
+ * sleep-v2 preview route. Mounted OUTSIDE GatedLayout, like `/crisis`,
+ * `/preview/money` and `/preview/cycle`, so it is reachable directly as a
+ * DEV PREVIEW of the clean-slate v2 sleep rebuild — without going through
+ * onboarding and without appearing in any main-flow navigation. It is
+ * additive: the live sleep module and the app's current navigation are
+ * untouched. The full migration is a later decision.
+ */
+function SleepV2PreviewRoute() {
+  const navigate = useNavigate();
+  return (
+    <Suspense fallback={<PageLoading />}>
+      <SleepV2PreviewScreen
+        onExit={() => navigate('/home')}
+        onSafe={() => navigate('/crisis')}
+      />
+      {!CLERK_CONFIGURED && <DevModeBanner />}
+    </Suspense>
+  );
+}
+
+/**
+ * body-v2 preview route. Mounted OUTSIDE GatedLayout, like `/crisis`,
+ * `/preview/money`, `/preview/cycle` and `/preview/sleep`, so it is
+ * reachable directly as a DEV PREVIEW of the clean-slate v2 body rebuild —
+ * without going through onboarding and without appearing in any main-flow
+ * navigation. It is additive: the live body module and the app's current
+ * navigation are untouched. The full migration is a later decision.
+ */
+function BodyV2PreviewRoute() {
+  const navigate = useNavigate();
+  return (
+    <Suspense fallback={<PageLoading />}>
+      <BodyV2PreviewScreen
+        onExit={() => navigate('/home')}
+        onSafe={() => navigate('/crisis')}
+      />
+      {!CLERK_CONFIGURED && <DevModeBanner />}
+    </Suspense>
+  );
+}
+
+/**
+ * medication-v2 preview route. Mounted OUTSIDE GatedLayout, like `/crisis`,
+ * `/preview/money`, `/preview/cycle`, `/preview/sleep` and `/preview/body`,
+ * so it is reachable directly as a DEV PREVIEW of the clean-slate v2
+ * medication rebuild — without going through onboarding and without
+ * appearing in any main-flow navigation. It is additive: the live
+ * medication module and the app's current navigation are untouched. The
+ * full migration is a later decision.
+ */
+function MedicationV2PreviewRoute() {
+  const navigate = useNavigate();
+  return (
+    <Suspense fallback={<PageLoading />}>
+      <MedicationV2PreviewScreen
+        onExit={() => navigate('/home')}
+        onSafe={() => navigate('/crisis')}
+      />
+      {!CLERK_CONFIGURED && <DevModeBanner />}
+    </Suspense>
+  );
+}
+
+/**
+ * habits-v2 preview route. Mounted OUTSIDE GatedLayout, like `/crisis`,
+ * `/preview/money`, `/preview/cycle`, `/preview/sleep`, `/preview/body` and
+ * `/preview/medication`, so it is reachable directly as a DEV PREVIEW of the
+ * clean-slate v2 habits rebuild — without going through onboarding and
+ * without appearing in any main-flow navigation. It is additive: the live
+ * habits module and the app's current navigation are untouched. The full
+ * migration is a later decision.
+ */
+function HabitsV2PreviewRoute() {
+  const navigate = useNavigate();
+  return (
+    <Suspense fallback={<PageLoading />}>
+      <HabitsV2PreviewScreen
+        onExit={() => navigate('/home')}
+        onSafe={() => navigate('/crisis')}
+      />
+      {!CLERK_CONFIGURED && <DevModeBanner />}
+    </Suspense>
+  );
+}
+
+/**
+ * partner-v2 preview route. Mounted OUTSIDE GatedLayout, like `/crisis` and
+ * the other six `/preview/*` routes, so it is reachable directly as a DEV
+ * PREVIEW of the clean-slate v2 partner system — without going through
+ * onboarding and without appearing in any main-flow navigation. It is
+ * additive: nothing in the live app is touched. partner-v2 is a NEW feature
+ * with no backend, so it runs over an in-module local stub. The full ship
+ * is a later decision.
+ */
+function PartnerV2PreviewRoute() {
+  const navigate = useNavigate();
+  return (
+    <Suspense fallback={<PageLoading />}>
+      <PartnerV2PreviewScreen
+        onExit={() => navigate('/home')}
+        onSafe={() => navigate('/crisis')}
+      />
+      {!CLERK_CONFIGURED && <DevModeBanner />}
+    </Suspense>
+  );
+}
+
+/**
+ * admin-v2 preview route. Mounted OUTSIDE GatedLayout, like `/crisis` and
+ * the other `/preview/*` routes, so it is reachable directly as a DEV
+ * PREVIEW of the clean-slate v2 admin rebuild — without going through
+ * onboarding and without appearing in any main-flow navigation. It is
+ * additive: the live admin module and the app's current navigation are
+ * untouched. The full migration is a later decision.
+ */
+function AdminV2PreviewRoute() {
+  const navigate = useNavigate();
+  return (
+    <Suspense fallback={<PageLoading />}>
+      <AdminV2PreviewScreen
+        onExit={() => navigate('/home')}
+        onSafe={() => navigate('/crisis')}
+      />
+      {!CLERK_CONFIGURED && <DevModeBanner />}
+    </Suspense>
+  );
+}
+
+/**
+ * pets-v2 preview route. Mounted OUTSIDE GatedLayout, like `/crisis` and
+ * the other `/preview/*` routes, so it is reachable directly as a DEV
+ * PREVIEW of the clean-slate v2 pets rebuild — without going through
+ * onboarding and without appearing in any main-flow navigation. It is
+ * additive: the live pets module and the app's current navigation are
+ * untouched. The full migration is a later decision.
+ */
+function PetsV2PreviewRoute() {
+  const navigate = useNavigate();
+  return (
+    <Suspense fallback={<PageLoading />}>
+      <PetsV2PreviewScreen
+        onExit={() => navigate('/home')}
+        onSafe={() => navigate('/crisis')}
+      />
+      {!CLERK_CONFIGURED && <DevModeBanner />}
+    </Suspense>
+  );
+}
+
+/**
+ * grocery-v2 preview route. Mounted OUTSIDE GatedLayout, like `/crisis` and
+ * the other `/preview/*` routes, so it is reachable directly as a DEV
+ * PREVIEW of the clean-slate v2 grocery rebuild — without going through
+ * onboarding and without appearing in any main-flow navigation. It is
+ * additive: the live grocery module and the app's current navigation are
+ * untouched. The full migration is a later decision.
+ */
+function GroceryV2PreviewRoute() {
+  const navigate = useNavigate();
+  return (
+    <Suspense fallback={<PageLoading />}>
+      <GroceryV2PreviewScreen
+        onExit={() => navigate('/home')}
+        onSafe={() => navigate('/crisis')}
+      />
+      {!CLERK_CONFIGURED && <DevModeBanner />}
+    </Suspense>
+  );
+}
+
+/**
+ * work-v2 preview route. Mounted OUTSIDE GatedLayout, like `/crisis` and
+ * the other `/preview/*` routes, so it is reachable directly as a DEV
+ * PREVIEW of the clean-slate v2 work rebuild — the "matters" concept —
+ * without going through onboarding and without appearing in any main-flow
+ * navigation. It is additive: the live work module and the app's current
+ * navigation are untouched. work-v2 reads the real matter backend (matter
+ * container + dump routing, 9ed51e5) over the live `work` store namespace.
+ * The full migration is a later decision.
+ */
+function WorkV2PreviewRoute() {
+  const navigate = useNavigate();
+  return (
+    <Suspense fallback={<PageLoading />}>
+      <WorkV2PreviewScreen
+        onExit={() => navigate('/home')}
+        onSafe={() => navigate('/crisis')}
+      />
+      {!CLERK_CONFIGURED && <DevModeBanner />}
+    </Suspense>
+  );
+}
+
+/**
+ * goals-v2 preview route. Mounted OUTSIDE GatedLayout, like `/crisis` and
+ * the other `/preview/*` routes, so it is reachable directly as a DEV
+ * PREVIEW of the clean-slate v2 goals rebuild — without going through
+ * onboarding and without appearing in any main-flow navigation. It is
+ * additive: the live goals module and the app's current navigation are
+ * untouched. goals-v2 reads + writes the same `goals.*` store the live
+ * module uses. The full migration is a later decision.
+ */
+function GoalsV2PreviewRoute() {
+  const navigate = useNavigate();
+  return (
+    <Suspense fallback={<PageLoading />}>
+      <GoalsV2PreviewScreen
+        onExit={() => navigate('/home')}
+        onSafe={() => navigate('/crisis')}
+      />
+      {!CLERK_CONFIGURED && <DevModeBanner />}
+    </Suspense>
+  );
+}
+
+/**
+ * v2-shell preview route — the ASSEMBLED clean-slate v2 app. Mounted
+ * OUTSIDE GatedLayout, like `/crisis` and the 12 single `/preview/*`
+ * routes, so the whole new design is reachable directly at `/preview/v2`
+ * without going through onboarding. The shell's Safe dot routes to the
+ * real crisis surface; the capture deck is wired to the real brain-dump
+ * pipeline via `useAppServices().applyDump` inside the screen. Additive:
+ * the live app and the 12 individual `/preview/{module}` routes are
+ * untouched.
+ */
+function V2ShellPreviewRoute() {
+  const navigate = useNavigate();
+  return (
+    <Suspense fallback={<PageLoading />}>
+      <V2ShellPreviewScreen onSafe={() => navigate('/crisis')} />
+      {!CLERK_CONFIGURED && <DevModeBanner />}
+    </Suspense>
+  );
+}
+
+/**
+ * Preview HUB route. Mounted OUTSIDE GatedLayout, like `/crisis` and the
+ * 13 `/preview/*` preview routes, so it is reachable directly. This is
+ * the route that makes the v2 redesign reachable in the native iOS app:
+ * Settings has a "preview the new design" row that navigates here, and
+ * every preview surface is one tap from this hub. A row tap pushes a real
+ * history entry, so the hardware Back button returns to the hub; the
+ * hub's own back returns to Settings.
+ */
+function PreviewHubRoute() {
+  const navigate = useNavigate();
+  return (
+    <Suspense fallback={<PageLoading />}>
+      <PreviewHubScreen
+        onOpen={(path) => navigate(path)}
+        onExit={() => navigate('/settings')}
+      />
+      {!CLERK_CONFIGURED && <DevModeBanner />}
     </Suspense>
   );
 }
@@ -366,24 +835,50 @@ function CrisisRoute() {
 export const routes = [
   // Crisis sits above the gate layout — always reachable.
   { path: '/crisis', element: <CrisisRoute /> },
+  // Dev-only v2 money preview — above the gate layout, reachable directly.
+  { path: '/preview/money', element: <MoneyV2PreviewRoute /> },
+  // Dev-only v2 cycle preview — above the gate layout, reachable directly.
+  { path: '/preview/cycle', element: <CycleV2PreviewRoute /> },
+  // Dev-only v2 sleep preview — above the gate layout, reachable directly.
+  { path: '/preview/sleep', element: <SleepV2PreviewRoute /> },
+  // Dev-only v2 body preview — above the gate layout, reachable directly.
+  { path: '/preview/body', element: <BodyV2PreviewRoute /> },
+  // Dev-only v2 medication preview — above the gate layout, reachable directly.
+  { path: '/preview/medication', element: <MedicationV2PreviewRoute /> },
+  // Dev-only v2 habits preview — above the gate layout, reachable directly.
+  { path: '/preview/habits', element: <HabitsV2PreviewRoute /> },
+  // Dev-only v2 partner preview — above the gate layout, reachable directly.
+  { path: '/preview/partner', element: <PartnerV2PreviewRoute /> },
+  // Dev-only v2 admin preview — above the gate layout, reachable directly.
+  { path: '/preview/admin', element: <AdminV2PreviewRoute /> },
+  // Dev-only v2 pets preview — above the gate layout, reachable directly.
+  { path: '/preview/pets', element: <PetsV2PreviewRoute /> },
+  // Dev-only v2 grocery preview — above the gate layout, reachable directly.
+  { path: '/preview/grocery', element: <GroceryV2PreviewRoute /> },
+  // Dev-only v2 work preview — above the gate layout, reachable directly.
+  { path: '/preview/work', element: <WorkV2PreviewRoute /> },
+  // Dev-only v2 goals preview — above the gate layout, reachable directly.
+  { path: '/preview/goals', element: <GoalsV2PreviewRoute /> },
+  // The assembled clean-slate v2 app (the v2-shell) — above the gate
+  // layout, reachable directly. The COMPLETE navigable v2 experience.
+  { path: '/preview/v2', element: <V2ShellPreviewRoute /> },
+  // The preview HUB — a tappable index of every preview surface above.
+  // Above the gate layout, reachable directly; this is the entry point
+  // for the native iOS app (no URL bar) via Settings.
+  { path: '/preview', element: <PreviewHubRoute /> },
   {
     path: '/',
     element: <GatedLayout />,
     children: [
-      { index: true, element: <Navigate to="/home" replace /> },
-      { path: 'home', element: <HomeRoute /> },
-      { path: 'dashboard', element: <DashboardRoute /> },
-      { path: 'garden', element: <GardenRoute /> },
-      { path: 'module/:id', element: <ModuleRoute /> },
+      // The app root IS the v2-shell — it owns all in-app navigation.
+      { index: true, element: <ShellHostRoute /> },
+      // Settings is still the hand-built screen, reached from the shell's
+      // modules panel; kept as a real route so deep links + Back work.
       { path: 'settings', element: <SettingsRoute /> },
-      { path: 'insights', element: <InsightsRoute /> },
-      { path: 'voice', element: <VoiceRoute /> },
-      { path: 'gallery', element: <GalleryRoute /> },
-      // The old machine had an 'onboarding' screen; onboarding is a gate,
-      // so this path just lands at home (the gate intercepts if needed).
-      { path: 'onboarding', element: <Navigate to="/home" replace /> },
-      // Unknown deep link → home, not a blank screen.
-      { path: '*', element: <Navigate to="/home" replace /> },
+      // Every old screen route (home · dashboard · garden · module ·
+      // insights · voice · gallery · onboarding) collapses into the
+      // shell — any stale deep link or in-app navigate lands at the root.
+      { path: '*', element: <Navigate to="/" replace /> },
     ],
   },
 ];
