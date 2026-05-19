@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ollie · Clean-Slate v2 — a calm notebook</title>
+<style>
+  :root{--paper:#FAF6EF;--ink:#2A2622;--mute:#9A9085;--line:#E4DCCE;--sage:#5B8C7E;--accent:#C9923E}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:-apple-system,'Segoe UI',Roboto,sans-serif;background:#E8E1D4;
+    color:var(--ink);padding:56px 40px 80px}
+  header{max-width:760px;margin:0 auto 52px}
+  .tag{font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--sage);
+    font-weight:600;margin-bottom:14px}
+  h1{font-size:38px;font-weight:300;letter-spacing:-.02em;line-height:1.18;margin-bottom:18px}
+  h1 b{font-weight:600}
+  .bet{font-size:18px;line-height:1.6;color:#5A524A;max-width:600px}
+  .rules{display:flex;gap:10px;flex-wrap:wrap;margin-top:26px}
+  .rule{background:var(--paper);border:1px solid var(--line);border-radius:999px;
+    padding:8px 16px;font-size:13px;color:#5A524A;font-weight:500}
+  .level{max-width:1340px;margin:0 auto}
+  .lvlhead{display:flex;align-items:baseline;gap:14px;margin:64px auto 30px;max-width:1340px}
+  .lvlnum{font-size:13px;font-weight:700;letter-spacing:.12em;color:var(--accent);
+    text-transform:uppercase}
+  .lvltitle{font-size:22px;font-weight:600;letter-spacing:-.01em}
+  .lvlsub{font-size:14px;color:var(--mute)}
+  .grid{display:flex;flex-wrap:wrap;gap:48px 36px;justify-content:center;
+    max-width:1340px;margin:0 auto}
+  .item{display:flex;flex-direction:column;align-items:center;gap:16px}
+  .frame{width:390px;height:844px;border-radius:46px;overflow:hidden;
+    box-shadow:0 30px 70px rgba(42,38,34,.26);border:1px solid var(--line);background:#000}
+  iframe{width:390px;height:844px;border:0;display:block}
+  .cap{text-align:center;max-width:340px}
+  .cap b{font-size:16px;font-weight:600}
+  .cap span{display:block;font-size:13px;color:var(--mute);margin-top:4px;line-height:1.5}
+  footer{max-width:760px;margin:70px auto 0;font-size:14px;color:var(--mute);
+    line-height:1.7;border-top:1px solid var(--line);padding-top:24px}
+</style>
+</head>
+<body>
+<header>
+  <div class="tag">Ollie · clean-slate v2 — revised</div>
+  <h1>empty in style.<br><b>rich in substance.</b></h1>
+  <p class="bet">A calm paper notebook, not a dashboard — and not a blank page.
+  Capture stays one-thing-per-screen. But every module page now carries real,
+  concrete info: each submodule is an <b>expandable info-card</b> that shows a
+  glanceable line of live data, expands inline for a little more, and opens a
+  detailed page on tap. Opening the app and looking is the reward — no
+  notification required.</p>
+  <div class="rules">
+    <span class="rule">calm aesthetic</span>
+    <span class="rule">concrete info, always visible</span>
+    <span class="rule">glance &rarr; expand &rarr; detail</span>
+    <span class="rule">findable, not just notified</span>
+    <span class="rule">generous air, never empty-of-meaning</span>
+  </div>
+  <div class="rules" style="margin-top:14px">
+    <span class="rule" style="background:#F2EAD9;border-color:#E0CFA8">3 levels: capture &rarr; 4 modules &rarr; module page (expandable cards) &rarr; detail page</span>
+  </div>
+</header>
+
+<!-- LEVEL 0/1 — CAPTURE -->
+<div class="lvlhead">
+  <span class="lvlnum">capture</span>
+  <span class="lvltitle">throw a thought down</span>
+  <span class="lvlsub">— the app opens here. three screens, swipe between them.</span>
+</div>
+<div class="grid">
+  <div class="item">
+    <div class="frame"><iframe src="mockups/throw.html"></iframe></div>
+    <div class="cap"><b>Throw</b><span>home. one input, one mic, nothing else. the app opens here.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/listening.html"></iframe></div>
+    <div class="cap"><b>Listening</b><span>voice capture. one breathing ring, a live waveform. zero words.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/caught.html"></iframe></div>
+    <div class="cap"><b>Caught</b><span>one card: what you threw, a checkmark, the drawer it landed in. swipe for older.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/noticed.html"></iframe></div>
+    <div class="cap"><b>Noticed</b><span>one pattern the app found, in one calm line. no feed.</span></div>
+  </div>
+</div>
+
+<!-- LEVEL 1 — THE 4 MODULES -->
+<div class="lvlhead">
+  <span class="lvlnum">level 1 · the 4 modules</span>
+  <span class="lvltitle">money · body · home · work</span>
+  <span class="lvlsub">— one swipe past capture. four calm rooms, one word each.</span>
+</div>
+<div class="grid">
+  <div class="item">
+    <div class="frame"><iframe src="mockups/modules.html"></iframe></div>
+    <div class="cap"><b>Modules</b><span>the only place all four live. one swipe right of the capture screens. tap a room to enter.</span></div>
+  </div>
+</div>
+
+<!-- LEVEL 2 — MODULE PAGES -->
+<div class="lvlhead">
+  <span class="lvlnum">level 2 · module pages</span>
+  <span class="lvltitle">expandable info-cards — a glance, then more</span>
+  <span class="lvlsub">— each submodule shows real data collapsed; expands inline; opens a detail page. one card per page is shown expanded.</span>
+</div>
+<div class="grid">
+  <div class="item">
+    <div class="frame"><iframe src="mockups/money.html"></iframe></div>
+    <div class="cap"><b>Money</b><span>the money page IS finance (one submodule). hero: safe-to-spend $312. below, 5 calm expandable area-rows. see the full Money section.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/body.html"></iframe></div>
+    <div class="cap"><b>Body</b><span>five expandable rows: cycle (a luteal pattern rides the glance, marked by a sage dot) · sleep (7h 20m, shown expanded) · body (4 of 8 glasses) · medication (next 2pm) · habits (3 of 6).</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/home.html"></iframe></div>
+    <div class="cap"><b>Home</b><span>three expandable cards, each with a tailored gutter visual: admin (a pattern rides the glance — planned 'taxes' 3×, a stacked-tasks mark, next renewal warm) · pets (per-pet care rings — Mango due, Tonti up to date) · grocery (shown expanded — torn-note lines peek the actual list). home is the most minimal module page, still a full notebook page.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/work.html"></iframe></div>
+    <div class="cap"><b>Work</b><span>two rich cards: work (the glance leads with matters — 3 need you, nearest deadline; the top 3 matters peek by name + status) · goals (calm — learn Spanish 40%). see the full Work section.</span></div>
+  </div>
+</div>
+
+<!-- LEVEL 3 — DETAIL PAGES -->
+<div class="lvlhead">
+  <span class="lvlnum">level 3 · detail pages</span>
+  <span class="lvltitle">the deeper page — one focus object, in lots of air</span>
+  <span class="lvlsub">— tapping an expanded card opens here. 5 mocked, the rest follow the same shape. Find rides this level too.</span>
+</div>
+<div class="grid">
+  <div class="item">
+    <div class="frame"><iframe src="mockups/sleep.html"></iframe></div>
+    <div class="cap"><b>sleep</b> <span style="display:inline;color:var(--mute)">· in body</span><span>last night's duration is the hero — 7h 20m, a scaled 7-night bar above it. see the full Sleep section.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/cycle.html"></iframe></div>
+    <div class="cap"><b>cycle</b> <span style="display:inline;color:var(--mute)">· in body</span><span>a large phase ring — the travelling day-14 marker, sage luteal arc. see the full Cycle section.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/habits.html"></iframe></div>
+    <div class="cap"><b>habits</b> <span style="display:inline;color:var(--mute)">· in body</span><span>one next check-in, tapped done. dots count what still waits — no grid.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/grocery.html"></iframe></div>
+    <div class="cap"><b>grocery</b> <span style="display:inline;color:var(--mute)">· in home</span><span>a 3-mode tool — shop, pantry, feed me. the torn-note shopping list is the default focus, tap a line to strike + move it to the pantry.</span></div>
+  </div>
+</div>
+
+<!-- MONEY — THE FULL MODULE -->
+<div class="lvlhead">
+  <span class="lvlnum">money · the full module</span>
+  <span class="lvltitle">the face, 5 area pages, the entry &amp; special screens</span>
+  <span class="lvlsub">— money = finance (the only submodule). the face is one number; 5 calm area-rows expand to detail pages. notifications are a restrained safety net.</span>
+</div>
+<div class="grid">
+  <div class="item">
+    <div class="frame"><iframe src="mockups/money.html"></iframe></div>
+    <div class="cap"><b>Money</b> <span style="display:inline;color:var(--mute)">· the face</span><span>hero = safe-to-spend $312, horizon line, 11 days left, one amber + spend. privacy eye top. 5 expandable area-rows, income shown open.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/money-bills.html"></iframe></div>
+    <div class="cap"><b>Bills</b> <span style="display:inline;color:var(--mute)">· L3</span><span>quiet dated list of upcoming bills, soonest amber-tinted. add-as-bill / add-as-subscription.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/money-income.html"></iframe></div>
+    <div class="cap"><b>Income</b> <span style="display:inline;color:var(--mute)">· L3</span><span>the variable-income picture: ~$3.2k/mo · irregular, a soft 6-month band, quiet / good month. lowers a freelancer's panic.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/money-subscriptions.html"></iframe></div>
+    <div class="cap"><b>Subscriptions</b> <span style="display:inline;color:var(--mute)">· L3</span><span>the audit — ONE at a time. "Netflix · $15/mo · not in your words for 6 weeks". keep / cancel. calm, never accusatory.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/money-savings.html"></iframe></div>
+    <div class="cap"><b>Savings</b> <span style="display:inline;color:var(--mute)">· L3</span><span>one saved-toward thing — a trip, $340 / $1,000 on a soft horizon line. add to savings.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/money-adhdtax.html"></iframe></div>
+    <div class="cap"><b>ADHD tax</b> <span style="display:inline;color:var(--mute)">· L3</span><span>what ADHD cost this month — $47, flat gray breakdown. never red, never shaming, no moralizing.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/money-log-spend.html"></iframe></div>
+    <div class="cap"><b>Log a spend</b><span>one number pad, one calm category line. fast — no date picker, no notes field.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/money-impulse-pause.html"></iframe></div>
+    <div class="cap"><b>Impulse pause</b><span>opt-in 24h-hold sheet — appears when a large spend resembles a recent one. an offer, not a block. neutral tone.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/money-private.html"></iframe></div>
+    <div class="cap"><b>Private mode</b><span>the Money face with every figure masked to monospace blocks. unmask = Face ID.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/money-shopping-check.html"></iframe></div>
+    <div class="cap"><b>Shopping check</b><span>optional go-deeper survey (Bergen Shopping Addiction Scale). one question per screen, like the sleep survey. never pushed.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/money-tax-setaside.html"></iframe></div>
+    <div class="cap"><b>Tax set-aside</b><span>self-employed only — one set-aside number + jurisdiction. export the ADHD tax report (PDF).</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/money-empty.html"></iframe></div>
+    <div class="cap"><b>Money — first run</b><span>the face with calm empty glance-lines ("nothing logged yet"). never a blank page.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/money-notifications.html"></iframe></div>
+    <div class="cap"><b>Notifications</b><span>the 6 approved money notifications, each on its own calm lock screen — scroll down to see the next. felt the way they're lived: one quiet push at a time, never a stacked list.</span></div>
+  </div>
+</div>
+
+<!-- CYCLE — THE FIRST BODY SUBMODULE -->
+<div class="lvlhead">
+  <span class="lvlnum">cycle · the first body submodule</span>
+  <span class="lvltitle">the phase ring, the log flows, the calm clinical surface</span>
+  <span class="lvlsub">— reached by drilling the body page's cycle card. the face is one large phase ring; calm drill rows open the log, pill, history, my-partner and a screen-only clinical surface. ceramic-quiet, ACOG-grounded, never alarmist.</span>
+</div>
+<div class="grid">
+  <div class="item">
+    <div class="frame"><iframe src="mockups/cycle.html"></iframe></div>
+    <div class="cap"><b>Cycle</b> <span style="display:inline;color:var(--mute)">· the face · L3</span><span>one large phase ring — day-14 marker travelling, sage luteal arc, ovulation point. "period likely · may 28 ± 2 days". one amber + log today. calm drill rows: pill log · history · partner-ask · a sage "worth a look" row when a flag is live.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/cycle-log.html"></iframe></div>
+    <div class="cap"><b>Log today</b><span>symptom tag chips (cramps, bloating, fatigue…), a quiet free-text note line, and a distinct amber-edged "bleeding — day 1" action that starts a new cycle. "noted." on save.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/cycle-pill.html"></iframe></div>
+    <div class="cap"><b>Pill log</b><span>the 7-day pill strip — 7 day-dots, today amber-edged and tappable, past days back-dateable up to 3. one quiet logged / not-yet state. the birth-control surface.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/cycle-history.html"></iframe></div>
+    <div class="cap"><b>History</b><span>last 5 closed cycles as calm day-length bars, mean length as one headline number, an irregular flag as one sage line. no grades, no judgement.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/cycle-flags.html"></iframe></div>
+    <div class="cap"><b>Worth a look</b> <span style="display:inline;color:var(--mute)">· clinical · screen-only</span><span>ACOG-referenced flags + softer syndrome patterns, each ONE calm line with a quiet source tag and a watch/discuss framing. sage and ink only — never red, never a diagnosis. never pushed.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/my-partner.html"></iframe></div>
+    <div class="cap"><b>My partner</b><span>the cycle face's "my partner" row opens here — the partner system. see the full Partner section below.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/cycle-cold.html"></iframe></div>
+    <div class="cap"><b>Cycle — first run</b><span>cold-confidence state: the ring is present but bare, the prediction honest ("still learning your cycle — a couple more and predictions warm up"). a sage confidence meter. never a blank page.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/cycle-notifications.html"></iframe></div>
+    <div class="cap"><b>Notifications</b><span>the 6 approved cycle pushes, each on its own calm lock screen — period heads-up, pill reminder, missed pill, fertile window, luteal gentleness, the 38-day unlogged check. a closing frame states the clinical flags are deliberately never pushed.</span></div>
+  </div>
+</div>
+
+<!-- SLEEP — THE SECOND BODY SUBMODULE -->
+<div class="lvlhead">
+  <span class="lvlnum">sleep · the second body submodule</span>
+  <span class="lvltitle">the duration hero, the log flows, the calm reflective surface</span>
+  <span class="lvlsub">— reached by drilling the body page's sleep card. the face is one focus: last night's duration. calm drill rows open wind-down, history, sounds, the go-deeper surveys, and a screen-only reflective patterns surface. clinical-calm, sourced, never alarmist, never pushed.</span>
+</div>
+<div class="grid">
+  <div class="item">
+    <div class="frame"><iframe src="mockups/sleep.html"></iframe></div>
+    <div class="cap"><b>Sleep</b> <span style="display:inline;color:var(--mute)">· the face · L3</span><span>hero = last night's duration <b>7h 20m</b>, a scaled 7-night bar above it (last night amber). two calm lines: <i>this week · 1h 10m short</i> · <i>tonight · ~7h likely</i>. one amber + log last night. calm drill rows: wind-down · history · sounds · go deeper · a sage "see the rest" row when a pattern is live → sleep-patterns.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/sleep-log.html"></iframe></div>
+    <div class="cap"><b>Log last night</b><span>the 4-button quick log (solid · ok · rough · bad) as the primary. a calm secondary — "say more — i'll parse it" — opens a free-text line that accepts <i>bed 23:48, woke 6:30, two coffees</i>, with a quiet hint of what ollie pulls out. "noted." on save.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/sleep-winddown.html"></iframe></div>
+    <div class="cap"><b>Wind-down</b><span>the 6-step bedtime ritual — phone away · water · supplement · lights low · breath/journal · into bed. a calm sequential tap-through: one step in focus (amber), the rest quiet. no streak — stated plainly.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/sleep-history.html"></iframe></div>
+    <div class="cap"><b>History</b><span>last 14 nights as a confident bar chart (body.html's bar visual, scaled up), last night amber, a faint dashed 8h reference line. the 14-night average as one headline number; shortest night + sleep debt as one calm line each. no grades.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/sleep-sounds.html"></iframe></div>
+    <div class="cap"><b>Sounds</b><span>the quiet sleep-sound player — one sound name (brown noise), a soft play disc with concentric sage rings, a soft sleep timer that fades out gently. minimal.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/sleep-survey.html"></iframe></div>
+    <div class="cap"><b>Go deeper</b> <span style="display:inline;color:var(--mute)">· clinical · screen-only</span><span>the Insomnia Check + Epworth surveys — one question per screen, calm like onboarding. a SCREEN-ONLY scored result at the end: a quiet number, a 4-segment severity band, a plain watch/discuss reading, a small sourced tag. never red, never pushed.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/sleep-patterns.html"></iframe></div>
+    <div class="cap"><b>See the rest</b> <span style="display:inline;color:var(--mute)">· reflective · screen-only</span><span>the calm home for the 24 sleep patterns ollie does NOT push — chronotype, bedtime drift, social jetlag, the DSPS pattern (pattern-not-diagnosis), the weekend-recovery illusion, the wind-down stuck-step, the cross-module links (sleep×cycle · sleep×focus · sleep×mood). each is ONE calm sage line, grouped quietly. no charts wall.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/sleep-cold.html"></iframe></div>
+    <div class="cap"><b>Sleep — first run</b><span>the few-nights state — the face present, last night's number real, but the bar shows 3 logged + 4 dashed empty slots. the forecast is honest ("a few more nights and the forecast settles"), a sage settling meter. never blank.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/sleep-notifications.html"></iframe></div>
+    <div class="cap"><b>Notifications</b><span>the 5 approved sleep pushes as iOS lock-screen frames, one per scroll-snap frame — wind-down · log last night · 3 short nights · the 4pm-coffee cost · the opt-in weekly note. a closing frame states the analysis (chronotype, DSPS, survey scores) is deliberately never pushed — screen-only.</span></div>
+  </div>
+</div>
+
+<!-- BODY — THE THIRD BODY SUBMODULE -->
+<div class="lvlhead">
+  <span class="lvlnum">body · the third body submodule</span>
+  <span class="lvltitle">three things in one — light everyday, a clinical record, a treatment tracker</span>
+  <span class="lvlsub">— reached by drilling the body-cluster page's body card. body carries water &amp; supplements (everyday), symptom episodes &rarr; doctor summary (a clinical documentation tool), and chemo / IVF / allergy courses (a serious treatment tracker) — calmly, all at once. leaf-focus rule: an open episode is the face; otherwise water is. the serious is never trivialized, the everyday is never weighed down.</span>
+</div>
+<div class="grid">
+  <div class="item">
+    <div class="frame"><iframe src="mockups/body-detail.html"></iframe></div>
+    <div class="cap"><b>Body</b> <span style="display:inline;color:var(--mute)">· the face · L3</span><span>leaf-focus: an episode is open, so the <b>episode</b> is the hero — <i>headache · day 2</i>, a small severity arc, last check-in 3 of 5. water steps quietly into the background (4 of 8, supplements 2 of 3). one amber <i>+ log onto it</i>. calm drill rows: intake · symptoms · conditions &amp; treatment · doctor summary · a posture toggle · a sage <i>see the rest</i> row.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/body-intake.html"></iframe></div>
+    <div class="cap"><b>Intake</b><span>the day's water + supplements. body.html's filling-glass visual scaled way up (4/8), an amber <i>+ a glass</i> and a quiet remove. below, supplements as a calm tap-to-check list — each with its name + reminder time. never mentions calories.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/body-symptom-log.html"></iframe></div>
+    <div class="cap"><b>Log a symptom</b><span>one symptom field, an optional 1&ndash;5 severity tap (<i>barely there &rarr; can't ignore it</i>), and a kind picker — acute / chronic / mental. a quiet sage line: when the label matches a tracked condition, ollie pre-picks <i>chronic</i>. <i>noted.</i> on save.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/body-episode.html"></iframe></div>
+    <div class="cap"><b>Episode</b><span>the active episode timeline — <i>headache · day 2</i>, the severity check-ins (1&ndash;5) drawn as a calm sparkline arc, meds logged as a quiet list. a sage-outlined <i>this one's over</i> close action shows a plain recap (days, check-ins, peak, meds) before confirming.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/body-doctor-summary.html"></iframe></div>
+    <div class="cap"><b>Doctor summary</b> <span style="display:inline;color:var(--mute)">· clinical</span><span>the episode written out plainly as a typed document — tldr, a severity-arc sparkline, meds taken, the 7 days around it. copy / download as .md. calm and factual, <b>no diagnosis language</b> — a real thing to bring to a doctor.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/body-conditions.html"></iframe></div>
+    <div class="cap"><b>Conditions &amp; treatment</b> <span style="display:inline;color:var(--mute)">· serious · handled gently</span><span>chronic conditions as a calm list of plain facts. a treatment plan (chemo / IVF / allergy course) shown with dignity — <i>cycle 3 of 6 · day 4</i>, a quiet cycle-dot map (never a % bar to beat), a sage side-effects note, a non-celebratory <i>advance</i>. serious content, never clinical-cold, never falsely cheerful.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/body-patterns.html"></iframe></div>
+    <div class="cap"><b>See the rest</b> <span style="display:inline;color:var(--mute)">· reflective · screen-only</span><span>the ~28 body detections ollie does NOT push — headache&harr;water, hyperfocus dehydration, hunger&ndash;thirst confusion, episode rhythms, the afternoon crash window, the energy envelope, and the cross-module links (body&times;cycle, body&times;sleep, body&times;work). each ONE calm sage line, grouped quietly. sage + ink only, no red, no charts wall.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/body-notifications.html"></iframe></div>
+    <div class="cap"><b>Notifications</b><span>the 6 approved body pushes as iOS lock-screen frames, one per scroll-snap frame — <i>water — a few behind</i> · <i>supplement — vitamin d</i> · <i>posture — a small reset</i> · <i>treatment — cycle 3 starts tomorrow</i> · <i>be gentle today</i> · <i>your week in body</i> (opt-in). a closing frame: the episode patterns, correlations &amp; doctor summary are deliberately screen-only, never pushed.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/body-cold.html"></iframe></div>
+    <div class="cap"><b>Body — first run</b><span>the face present, never blank — no episode open, so the focus falls to water at <i>0 of 8</i>: an empty ink-outline glass waiting to fill, a sage invitation (<i>a glass of water is the easiest first thing</i>), one amber <i>+ first glass</i>. drill rows read their calm cold form.</span></div>
+  </div>
+</div>
+
+<!-- MEDICATION — THE FOURTH BODY SUBMODULE -->
+<div class="lvlhead">
+  <span class="lvlnum">medication · the fourth body submodule</span>
+  <span class="lvltitle">the next dose, the add flow, the screen-only adherence log</span>
+  <span class="lvlsub">— reached by drilling the body page's medication card. the face is one focus: the next dose, on a big take-circle that mirrors habits' tap-circle. dry, factual voice ("noted." not "great job"). no streaks. two pushes only; the adherence report is screen-only.</span>
+</div>
+<div class="grid">
+  <div class="item">
+    <div class="frame"><iframe src="mockups/medication.html"></iframe></div>
+    <div class="cap"><b>Medication</b> <span style="display:inline;color:var(--mute)">· the face · L3</span><span>hero = the next dose — <i>methylphenidate · 2:00pm</i>, a big amber-edged take-circle, quiet dose-dots (<i>1 of 2 taken</i>). below, the meds as a calm notebook list (a sage tick on what's been taken), one amber + add a medication, one drill row → the adherence log.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/medication-add.html"></iframe></div>
+    <div class="cap"><b>Add a medication</b><span>name it once — a quiet underlined name line, an optional dose, a 2&times;2 kind picker (vitamin / supplement / prescription / otc), and a comma-separated HH:MM schedule that previews as time-chips. blank schedule = manual log only — stated honestly. "noted."</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/medication-log.html"></iframe></div>
+    <div class="cap"><b>Adherence log</b><span>what was taken, and when — today's doses per med as slim taken/due pills, then the 14-day report as one plain "logged X of Y" line each. a sage framing note: this is a pattern, not a medical reading, and is never pushed.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/medication-cold.html"></iframe></div>
+    <div class="cap"><b>Medication — first run</b><span>the face present, never blank — no meds on file, so the take-circle stands as a calm ink-outline ring with a quiet "&ndash;", a sage invitation, one amber + add your first. the meds list and adherence log read their cold form. no streak, no scoring.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/medication-notifications.html"></iframe></div>
+    <div class="cap"><b>Notifications</b><span>just 2 medication pushes as iOS lock-screen frames — <i>a dose that's due</i> · <i>a dose that's overdue</i>, both factual cues, never a scolding. a closing frame states the adherence report (the "logged X of Y" line) is deliberately screen-only.</span></div>
+  </div>
+</div>
+
+<!-- HABITS — THE FIFTH BODY SUBMODULE -->
+<div class="lvlhead">
+  <span class="lvlnum">habits · the fifth body submodule</span>
+  <span class="lvltitle">the single next check-in, the add flow, the screen-only patterns</span>
+  <span class="lvlsub">— reached by drilling the body page's habits card. the face is ONE focus: the single next check-in on a soft tap-circle. "no streaks · no shame · just today." a gap is just a gap. the 24 detectors stay screen-only; notifications are gentle cue-nudges and supportive reframes — never a "you missed".</span>
+</div>
+<div class="grid">
+  <div class="item">
+    <div class="frame"><iframe src="mockups/habits.html"></iframe></div>
+    <div class="cap"><b>Habits</b> <span style="display:inline;color:var(--mute)">· the face · L3</span><span>hero = the single next check-in — one soft tap-circle, the habit name large (<i>drink water</i>), its cue under it (<i>after coffee</i>). a 270&deg; open progress arc (a ledger, never a score), a waiting-dot row counting what's left, one amber add a habit. drill rows: all habits · a sage "see the rest" row when a pattern is live.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/habits-add.html"></iframe></div>
+    <div class="cap"><b>Add a habit</b><span>one name field, one REQUIRED cue line (<i>after coffee</i>) with a conviction note — "a habit without a cue is wishful thinking" — and a morning / anytime / evening tag. "no streak starts."</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/habits-all.html"></iframe></div>
+    <div class="cap"><b>All habits</b><span>the calm record — every habit as one quiet block, ordered morning &rarr; anytime &rarr; evening, name + cue + a MOR/ANY/EVE badge, recent days as soft sage dots and a quiet "last &middot; ...". a soft record, not a streak, not a grid wall.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/habits-patterns.html"></iframe></div>
+    <div class="cap"><b>See the rest</b> <span style="display:inline;color:var(--mute)">· reflective · screen-only</span><span>the calm home for the 24 habit detectors ollie does NOT push — what makes them stick (externalization, the keystone habit, friction days, body vs cognitive), when your week is different (luteal &amp; stress dips, sleep&times;habits, hyperfocus spillover), how a habit returns (rebirth, drift, fresh-start crash), what you tell yourself (identity framing, self-talk, sensory flags). each ONE calm sage line — "habits don't die, they cycle". sage + ink only, no red, no badges.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/habits-cold.html"></iframe></div>
+    <div class="cap"><b>Habits — first run</b><span>the face present, never blank, never a guilt-zero — ollie seeds 6 default habits (brush teeth, water, vitamin d, move, evening meds, wind down), the first held up as the next check-in. the progress arc reads 0 in mute ("the day's ahead"), a sage invitation, none done yet.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/habits-notifications.html"></iframe></div>
+    <div class="cap"><b>Notifications</b><span>5 habits pushes as iOS lock-screen frames — <i>morning, 3 small things</i> · <i>evening, 2 still waiting</i> · <i>your brain's different this week</i> (luteal reframe) · <i>a lot on — want stress mode?</i> (stress offer) · <i>your week in habits</i> (opt-in). a closing frame: there is deliberately NO "you missed" / completion-count push — only gentle cues and reframes; the 24 detectors stay screen-only.</span></div>
+  </div>
+</div>
+
+<!-- WORK — THE WORK CLUSTER, CENTRED ON MATTERS -->
+<div class="lvlhead">
+  <span class="lvlnum">work · the work cluster</span>
+  <span class="lvltitle">matters &amp; the secretary briefing</span>
+  <span class="lvlsub">— the work cluster has 2 submodules: work (reframed around <i>matters</i>) and goals. a matter is one ongoing body of work — for a lawyer, a case. the user dumps freely; ollie detects which matter a dump belongs to, learns new matters by auto-detect/user-confirm, and reconstructs each matter into a secretary's briefing. capture → organization → status inference — never a blank form.</span>
+</div>
+<div class="grid">
+  <div class="item">
+    <div class="frame"><iframe src="mockups/work.html"></iframe></div>
+    <div class="cap"><b>Work</b> <span style="display:inline;color:var(--mute)">· the cluster page · L2</span><span>two rich preview cards. the <b>work</b> card glances with matters — <i>3 matters need you · Yılmaz files Thu</i>, a stack-of-files visual (the urgent one warm), the top 3 matters peeking by name + one-line status. the <b>goals</b> card stays calm — <i>learn spanish · 40%</i>, a couple goals with soft progress bars. a sage note: "you tend to file matters the day they're due".</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/work-matters.html"></iframe></div>
+    <div class="cap"><b>Matters</b> <span style="display:inline;color:var(--mute)">· the work submodule · L3</span><span>all your cases at a glance — a calm list of matters, each a row with name + a one-line "where it stands" + the nearest date. the matter that needs you (<i>Yılmaz · E-2 · files in 3 days</i>) sits up top in a soft umber wash with a next-step line. a sage closing line states matters aren't added by hand — ollie proposes them when a name recurs.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/work-matter.html"></iframe></div>
+    <div class="cap"><b>A matter</b> <span style="display:inline;color:var(--mute)">· the secretary briefing · hero</span><span>opening a matter hands the user the file the way a good secretary would. the matter name is the header (<i>Yılmaz · E-2</i>), then six calm briefing blocks: <b>where it stands</b> (one line) · <b>latest</b> (<i>2 days ago · called USCIS</i>) · <b>done</b> (sage ticks) · <b>missing/open</b> — items ollie <i>inferred</i> from the learned E-2 matter-shape carry a distinct sage "ollie noticed" tag, set apart from items the user dumped · <b>next</b> (next action warm). a quiet "the stream · 23 dumps" drill at the bottom. a sage line: ollie pieced the briefing from 23 scattered dumps — the user filed nothing.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/work-matter-confirm.html"></iframe></div>
+    <div class="cap"><b>A matter?</b> <span style="display:inline;color:var(--mute)">· auto-detect &amp; confirm</span><span>the moment ollie noticed a recurring name. a low-key sheet over the dimmed work page — <i>"Yılmaz" keeps coming up. Is it a matter?</i> — the evidence stated plainly (6 dumps, two weeks) with three real dump excerpts peeked. one amber <i>yes, it's a matter</i> + a quiet <i>not a matter</i>. auto-detect, user-confirm — never a blank form.</span></div>
+  </div>
+</div>
+
+<!-- GOALS — THE SECOND WORK SUBMODULE -->
+<div class="lvlhead">
+  <span class="lvlnum">goals · the second work submodule</span>
+  <span class="lvltitle">the big picture — built non-shaming, for ADHD</span>
+  <span class="lvlsub">— reached by drilling the work page's goals card; the last submodule to design. goals + ADHD is a shame minefield — abandoned goals, unfinished goals — so every screen here is <b>forward and kind, never backward and blaming</b>. the face is ONE focus: one goal's progress in a soft 270° open arc, the next milestone, swipe between goals. a stalled goal gets gentle permission to drop, never a scold. no streaks, no "you haven't touched this", no grades. the reflective patterns (velocity, sunk-cost, identity-drift) stay screen-only — never pushed.</span>
+</div>
+<div class="grid">
+  <div class="item">
+    <div class="frame"><iframe src="mockups/goals.html"></iframe></div>
+    <div class="cap"><b>Goals</b> <span style="display:inline;color:var(--mute)">· the face · L3</span><span>ONE focus — the goal in focus as a soft 270° <b>open</b> progress arc (deliberately not a closed score-ring), <i>40%</i> calm inside, the goal name + the next milestone (<i>hold a 5-minute conversation · whenever it's ready</i>). swipe-dots for multiple goals. one amber <i>open this goal</i>. calm drill rows: <i>your goals · 2 more</i> · <i>a check-in</i> · a sage <i>see the rest</i> row when a pattern is live. a quiet <i>+ add a goal</i>. no streak, no time-since.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/goals-add.html"></iframe></div>
+    <div class="cap"><b>Add a goal</b><span>calm and forgiving — one quiet underlined name field (<i>doesn't have to be the final wording</i>), then the <b>6-category picker</b> (learning / career / health / finance / relationship / creative) as soft pills with line glyphs, one tap. a sage permission note states plainly a goal isn't a contract: <i>change it, park it, or let it go any time, no explaining</i>. <i>noted.</i> a quiet later-line — why / the block you see coming / a target date can come later, none required.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/goals-goal.html"></iframe></div>
+    <div class="cap"><b>A goal</b> <span style="display:inline;color:var(--mute)">· at rest</span><span>a single goal — the name as the hero, a soft ink progress bar computed from milestones (<i>2 of 5 done</i>). <b>milestones</b> as tap-to-tick rings (done = sage tick, the next one warm umber); a calm sage <b>AI: break this into steps</b> action; <b>the block you saw coming</b> — the obstacle/premortem in the user's own words in a soft quote block; a <b>Ulysses contract</b> as a note to their future self. the footer gives <i>let this goal go</i> the same calm weight as a check-in — dropping is unshamed, never a danger zone.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/goals-review.html"></iframe></div>
+    <div class="cap"><b>A check-in</b> <span style="display:inline;color:var(--mute)">· the soft review</span><span>the most carefully un-graded screen in the cluster — ONE reflective prompt (<i>when you picture this goal, does it still feel like yours?</i>), a free writing line, <b>NO score, NO percentage, NO "you're behind"</b>. two gentle tags — <i>still want it</i> / <i>carrying it from before</i> — both honest, neither wrong. a closing note: a check-in is never graded, and a goal can be let to rest.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/goals-patterns.html"></iframe></div>
+    <div class="cap"><b>See the rest</b> <span style="display:inline;color:var(--mute)">· reflective · screen-only</span><span>the calm home for the screen-only goal detections ollie does NOT push — <i>the blocks you saw coming</i> (obstacle-echo, premortem-echo — <i>the block you predicted is showing up</i>), <i>where your goals pull against each other</i> (goal-interference — <i>'save money' and 'travel more' pull against each other</i>), <i>how your goals actually move</i> (velocity, research-as-progress, identity-drift), <i>when a goal might be ready to rest</i> (sunk-cost, experiment-candidate). each ONE calm sage line + a kind reframe + a citation tag. sage + ink only, no red — a stalled goal is read as neurology, never failure.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/goals-notifications.html"></iframe></div>
+    <div class="cap"><b>Notifications</b><span>the goals pushes as iOS lock-screen frames, one per scroll-snap frame — <i>learn spanish · milestone in 3 days</i> (gentle forward nudge) · <i>a soft check-in on learn spanish?</i> (review prompt) · <i>the block you predicted for 'learn spanish' is showing up</i> (obstacle-echo) · <i>'save money' and 'travel more' are pulling against each other</i> (goal-interference) · <i>your week in goals</i> (opt-in weekly). a closing frame states the reflective patterns (velocity, sunk-cost, identity-drift) are screen-only — nothing shaming is ever pushed, and a stalled goal never lands on a lock screen as a verdict.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/goals-cold.html"></iframe></div>
+    <div class="cap"><b>Goals — first run</b><span>the face present, never blank, never a guilt-zero — where the live face has a focus goal, the cold face holds a calm empty 270° ring with a soft mute sprout glyph (<i>nothing growing yet</i>) and an honest line (<i>no goals yet — a clean slate, not a gap</i>). a sage invitation names what goals holds. one amber <i>add your first</i>. a quiet "the kinds of things that live here" example list (learn a language · run a half marathon · finish the side project) keeps the page from being barren. a closing note: starting with none isn't behind.</span></div>
+  </div>
+</div>
+
+<!-- ADMIN — THE FIRST HOME SUBMODULE -->
+<div class="lvlhead">
+  <span class="lvlnum">admin · the first home submodule</span>
+  <span class="lvltitle">a bureaucracy &amp; renewal tracker, built for ADHD executive function</span>
+  <span class="lvlsub">— reached by drilling the home page's admin card. the stuff you forget about: passport, lease, taxes, the dentist. the face is ONE focus — the next thing due, as a calm hero with its days-left. deeply instrumented: staged renewal cues, ball-state tracking (mine/theirs/waiting), a 2-minute burst, close-the-loop distinct from done. voice is deadpan, calm, never shaming, research-cited. the reflective EF detectors (schedule-drift, open loops, the tier match) stay screen-only — never pushed.</span>
+</div>
+<div class="grid">
+  <div class="item">
+    <div class="frame"><iframe src="mockups/admin.html"></iframe></div>
+    <div class="cap"><b>Admin</b> <span style="display:inline;color:var(--mute)">· the face · L3</span><span>hero = the next thing due — a renewal (<i>renew passport · 30 days left</i>), over a tailored renewal-runway visual: a flat track with the 90/30/7/0-day staged cues marked, an umber marker riding it at the 30-day stage. one amber <i>do this one</i>. below, with air, calm drill rows: <i>calls to make · 3 waiting</i> · <i>all tasks · 9 active</i> · <i>2-min burst · 5 ready</i> · a sage "see the rest" row when a pattern is live.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/admin-add.html"></iframe></div>
+    <div class="cap"><b>Add to admin</b><span>one quiet underlined title field, then calm pickers — kind (task / renewal; renewal reveals an expiry date), category (renewal / appointment / maintenance / financial / other), and optional recurrence pills (monthly → 10 years). a sage line states the staged-cue behaviour: ollie raises a renewal at 90, 30, 7, 0 days — never all at once. <i>noted.</i></span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/admin-tasks.html"></iframe></div>
+    <div class="cap"><b>All tasks</b><span>the full list — an active / done / all filter with live counts, the active segment underlined amber. each task is ONE calm row: a quiet ball-state mark (a filled ink square = MINE, an open umber square = THEIRS, an open mute square = WAITING), the title, days-left right-aligned (warm umber when due-soon). one done task peeks, struck and demoted.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/admin-task.html"></iframe></div>
+    <div class="cap"><b>A task</b> <span style="display:inline;color:var(--mute)">· detail</span><span>the task as the focus — title large, days-left + a one-sentence ball-state line under it. one amber <i>mark it done</i>; calm action rows below — <i>close the loop</i> (sage, distinct from done — "done is filled, closed is mailed and back"), <i>defer</i>, <i>whose move</i> (the ball state), <i>split it up</i> (umber — into GATHER the docs &amp; FILL the form). a documents section attaches paperwork to the task (A14 cognitive-offload).</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/admin-calls.html"></iframe></div>
+    <div class="cap"><b>Calls to make</b><span>the one ADHD-aversive thing, gathered and surfaced gently. a calm reframe up top (a call bundles initiation, a script, holding the thread — that's why they wait), then each phone task as one quiet block, oldest-waiting first (the oldest wears a warm umber wait). each carries a sage <i>ask ollie for a call script</i> cue. never a nag — "one a day is plenty."</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/admin-burst.html"></iframe></div>
+    <div class="cap"><b>2-min burst</b><span>the momentum session — steps through sub-2-min tasks ONE at a time. a quiet progress-pip strip counts the run (2 done, 1 current amber, 2 waiting); the current task fills the focus over a soft countdown ring; tap <i>done — next</i> and the next slides in. one focus, momentum, calm. no list, no scroll. a quiet text-only skip.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/admin-patterns.html"></iframe></div>
+    <div class="cap"><b>See the rest</b> <span style="display:inline;color:var(--mute)">· reflective · screen-only</span><span>the calm home for the screen-only EF detectors ollie does NOT push — A1 open-loop ("you said 'i should' but never a when"), A11 EF-tier match ("tier-5 task, you're in a crash window"), A6 defer-chain, A15 schedule-drift ("scheduling and doing are not the same thing"), A12 last-five-percent, A13 decision recall, A10 recurring-annual. each ONE calm sage line, grouped quietly, with its quiet citation tag (Masicampo, Barkley, Gollwitzer, Allen…). sage + ink only, no red.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/admin-notifications.html"></iframe></div>
+    <div class="cap"><b>Notifications</b><span>the 7 approved admin pushes as iOS lock-screen frames, one per frame — <i>passport · expires in 30 days</i> · <i>dentist · tomorrow</i> · <i>the lawyer's had your file · 16 days</i> · <i>the form's filled — did it get mailed?</i> · <i>last march you renewed the registration</i> · <i>taxes — deferred a few times, name what's blocking it</i> · <i>your week in admin</i> (opt-in). a closing frame states the reflective EF detectors (schedule-drift, open loops, the tier match) are deliberately screen-only — never on a lock screen.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/admin-cold.html"></iframe></div>
+    <div class="cap"><b>Admin — first run</b><span>the face present, never blank — a calm empty renewal-runway (faint dashed ticks, no marker), an honest line (<i>admin is empty — that's fine</i>) and a sage invitation naming what admin holds. one amber <i>add the first thing</i>. a quiet "things people put here" example list (passport · dentist · taxes) so the page is never barren; the drill rows sit in their cold form.</span></div>
+  </div>
+</div>
+
+<!-- PETS — THE SECOND HOME SUBMODULE -->
+<div class="lvlhead">
+  <span class="lvlnum">pets · the second home submodule</span>
+  <span class="lvltitle">a species-adaptive pet-care logbook &mdash; a keeper's notebook</span>
+  <span class="lvlsub">— reached by drilling the home page's pets card. a care logbook for 10 species (guinea pig, rabbit, cat, dog, hamster, rat, bearded dragon, leopard gecko, parakeet, betta fish), each with its own care cadences, behaviour tags and health-flag rules. the face is ONE focus — today's next/overdue care across all pets, as a calm hero. voice is deadpan, anti-guilt, research-cited &mdash; a missed care task is never shamed. the health flags and the behavioural patterns stay screen-only &mdash; never pushed.</span>
+</div>
+<div class="grid">
+  <div class="item">
+    <div class="frame"><iframe src="mockups/pets.html"></iframe></div>
+    <div class="cap"><b>Pets</b> <span style="display:inline;color:var(--mute)">· the face · L3</span><span>hero = the next care thing across all pets &mdash; <i>Mango · hay refill</i>, a soft paw-disc above it, a calm days-since line + a deadpan anti-guilt reframe (<i>a day over isn't a crisis</i>). one amber <i>+ log care</i>. below, the roster &mdash; each pet with a tailored 30-day care strip of soft sage dots, drill to its profile. calm rows: <i>observe</i> · <i>health</i> · a sage <i>see the rest</i> row when a pattern is live.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/pets-add.html"></iframe></div>
+    <div class="cap"><b>Add a pet</b><span>one quiet underlined name field, then the <b>10-species picker</b> &mdash; soft pills, each with a tiny line glyph. a sage line states the species cadence ollie will keep (guinea pig: hay daily, cage clean weekly, vet yearly). optional nickname + free-text notes. <i>noted.</i></span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/pets-profile.html"></iframe></div>
+    <div class="cap"><b>A pet</b> <span style="display:inline;color:var(--mute)">· the profile · at rest</span><span>one pet, calm &mdash; a soft paw-disc, name + species + solo status, the <b>adoptversary line</b> when it's the day (<i>2 years with Mango today</i>). the 30-day care strip scaled up (<i>23 of 30 days · a gap is just a gap</i>), recent observations with behaviour tags, milestones as sage-dot firsts.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/pets-log.html"></iframe></div>
+    <div class="cap"><b>Log care</b><span>which pet (a calm 2-up), then the <b>per-species quick-pick care buttons</b> &mdash; for a guinea pig: hay refill, cage clean, vet checkup, feed, floor time, fresh water, weigh-in. a sage line notes the set adapts per species. an optional note line. <i>noted.</i> &mdash; tap the same task again within a minute to undo.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/pets-observe.html"></iframe></div>
+    <div class="cap"><b>Observe</b><span>record an observation &mdash; an optional <i>weight</i> line (with the last reading), a free-text <i>what you saw</i> note, and species behaviour quick-tags (low appetite, hiding, popcorning…). a sage line states honestly that the note text feeds the health-flag engine &mdash; <i>one quiet day is just a day</i>.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/pets-health.html"></iframe></div>
+    <div class="cap"><b>Health</b> <span style="display:inline;color:var(--mute)">· welfare · screen-only</span><span>the welfare panel &mdash; health flags from observations, each ONE calm sage line: the thing noticed, the days it was observed, a species welfare note, a <i>consider a vet visit</i> framing (never a diagnosis), a quiet sourced tag (RSPCA, PDSA). a >7-day drawer holds older notes. <b>sage + ink only &mdash; never red, never alarmist.</b> a "when you have a moment" surface, never pushed.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/pets-patterns.html"></iframe></div>
+    <div class="cap"><b>See the rest</b> <span style="display:inline;color:var(--mute)">· reflective · screen-only</span><span>the calm home for the behavioural detections ollie does NOT push &mdash; P2 pet-as-co-regulator (<i>your calmest dumps land near Mango</i>), P3 care-activation barrier (<i>name the 30-second first move</i>), P4 crash-context misses (<i>care breaks first because it's the most goal-directed task</i>), P5 anthropomorphic projection (<i>pets run on present cues, not grudges &mdash; a sensitivity, not a flaw</i>). each ONE calm sage line with a citation tag. sage + ink only, no red.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/pets-notifications.html"></iframe></div>
+    <div class="cap"><b>Notifications</b><span>the approved pets pushes as iOS lock-screen frames, one per scroll-snap frame &mdash; <i>Mango · hay refill</i> (care due, deadpan, never guilt) · <i>Tonti · vet checkup &mdash; book within 2 weeks</i> (P1 vet cue) · <i>too warm for Mango today</i> (weather alert) · <i>2 years with Mango today</i> (adoptversary, warm) · <i>your week with the pets</i> (opt-in weekly). a closing frame states the health flags + behavioural patterns are deliberately screen-only &mdash; never on a lock screen.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/pets-cold.html"></iframe></div>
+    <div class="cap"><b>Pets — first run</b><span>the face present, never blank &mdash; no pets yet, so the hero holds a calm empty ink-outline paw-disc, an honest line (<i>the notebook's empty</i>) and a sage invitation (<i>a keeper's notebook &mdash; ollie carries the care cadences</i>). one amber <i>+ add your first pet</i>. a quiet "ollie knows 10 species" example list (a guinea pig, a dog, a bearded dragon) keeps the page from being barren.</span></div>
+  </div>
+</div>
+
+<!-- GROCERY — THE THIRD HOME SUBMODULE -->
+<div class="lvlhead">
+  <span class="lvlnum">grocery · the third home submodule</span>
+  <span class="lvltitle">a 3-mode grocery tool — shop · pantry · feed me</span>
+  <span class="lvlsub">— reached by drilling the home page's grocery card; the last home-cluster submodule. three modes behind one calm near-zero-chrome switch: <b>shop</b> — a torn-note shopping list with natural-language entry, tap a line to strike + move it to the pantry · <b>pantry</b> — shelf-life-aware, 3 shelves (critical ≤2d / watching ≤7d / stocked >7d), each item a fill-bar + a "N days / today" label · <b>feed me</b> — a recipe matcher, one inferred recipe at a time from what's in the pantry. the reflective detectors (interest-capture, shopping cadence, known stores) stay screen-only — never pushed; a duplicate buy surfaces in-app at check-off, not as a notification.</span>
+</div>
+<div class="grid">
+  <div class="item">
+    <div class="frame"><iframe src="mockups/grocery.html"></iframe></div>
+    <div class="cap"><b>Grocery</b> <span style="display:inline;color:var(--mute)">· the face · L3</span><span>the face — the <b>torn-note shopping list</b> as the default focus, each line plain text on a hairline rule with a soft round tick; tap a line = strike through, and it moves into the pantry with a computed shelf life (one line shown <i>got</i>, a sage <i>in pantry</i> note). a calm 3-mode switch above (<i>shop · pantry · feed me</i>, near-zero chrome, shop underlined amber). one amber <i>+ add</i>. below: a <i>recently bought</i> drill row + a sage <i>see the rest</i> observation row.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/grocery-pantry.html"></iframe></div>
+    <div class="cap"><b>Pantry</b> <span style="display:inline;color:var(--mute)">· feed-by-shelf-life</span><span>the pantry mode — <b>3 shelves</b> by remaining shelf life: <i>critical</i> (≤2 days, warm umber) · <i>watching</i> (≤7 days, amber) · <i>stocked</i> (>7 days, mute, collapsible). each item is a calm hairline row with a <b>shelf-life fill-bar</b> (the fill colour follows the shelf) and a <i>"N days / today"</i> label. a closing note: the pantry fills on its own from list check-offs. never red, never a badge.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/grocery-recipes.html"></iframe></div>
+    <div class="cap"><b>Feed me</b> <span style="display:inline;color:var(--mute)">· the recipe matcher</span><span>the recipe matcher — <b>one inferred recipe at a time</b> from what's in the pantry (<i>spinach &amp; feta omelette · you have 4 of 6</i>, a row of filled/hollow ingredient pips), with a sage reframe naming why it was picked (<i>uses 2 things that turn soon</i>). a have/missing ingredient split, a diet filter (all · vegetarian · vegan · mediterranean · turkish), a named-recipe search line. one amber <i>add the 2 missing to the list</i> + a quiet next-idea line.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/grocery-add.html"></iframe></div>
+    <div class="cap"><b>Add an item</b><span>natural-language entry — one quiet underlined line, said the way you'd say it (<i>2 bags of basmati rice</i>). ollie reads it back in a calm <b>parse card</b>: the detected intent (add / bought / remove, warm), the item, the quantity + unit. when the word is unknown, a sage <b>teach me this item</b> block asks the user to point it at a canonical staple (rice · pasta · flour…) so the shelf life comes along. <i>on the list.</i></span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/grocery-patterns.html"></iframe></div>
+    <div class="cap"><b>See the rest</b> <span style="display:inline;color:var(--mute)">· reflective · screen-only</span><span>the calm home for the <b>screen-only</b> grocery detections ollie does <b>NOT</b> push, grouped quietly — <i>what you keep getting drawn to</i> (interest-capture / E8 — <i>3 keyboards in 3 weeks — a pattern, not a medical thing</i>), <i>your shopping rhythm</i> (shopping-cadence, stockout-cascade, stale-shopping-list), <i>where you shop</i> (known-store learning), <i>across your modules</i> (grocery×sleep, grocery×cycle). each ONE calm sage line + a soft reframe + a quiet italic citation tag (Wood &amp; Neal, Altgassen, Barkley &amp; Murphy, Gollwitzer, Kasper). sage + ink only, no red, no charts.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/grocery-notifications.html"></iframe></div>
+    <div class="cap"><b>Notifications</b><span>the approved grocery pushes as iOS lock-screen frames, one per scroll-snap frame — <i>olive oil turns soon</i> (expiration-drift) · <i>you keep rebuying milk — make it a staple?</i> (stockout-cascade) · <i>4 things have sat on the list 2 weeks</i> (stale-list) · <i>about 6 days since the last shop</i> (shopping-cadence) · <i>your week</i> (opt-in weekly). a closing frame states outright that the reflective patterns (interest-capture, cadence, known stores) are deliberately screen-only, and a duplicate buy surfaces in-app at check-off — never as a push.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/grocery-cold.html"></iframe></div>
+    <div class="cap"><b>Grocery — first run</b><span>the face present, <b>never blank</b>. the 3-mode switch is already there (shop selected), and where the live face has a torn-note list the cold face holds a calm <b>empty note-block</b> (faint hairline rules, ticks waiting), an honest line (<i>the list's empty — add the first thing</i>) and a sage invitation naming grocery as a 3-mode tool. one amber <i>+ add the first thing</i>. a quiet "the 3 ways in" example list keeps the page from being barren.</span></div>
+  </div>
+</div>
+
+<!-- PARTNER — THE LINKED-USER SYSTEM -->
+<div class="lvlhead">
+  <span class="lvlnum">partner · the linked-user system</span>
+  <span class="lvltitle">two linked Ollie users — opt-in, two-way, granular</span>
+  <span class="lvlsub">— an approved new feature. two users link via an invite; once linked it's symmetric. sharing is granular opt-in, default off. clinical flags (PCOS / endometriosis / PMDD / ACOG) are never shareable — the partner only ever sees soft state. reached from the cycle face's "my partner" row.</span>
+</div>
+<div class="grid">
+  <div class="item">
+    <div class="frame"><iframe src="mockups/my-partner.html"></iframe></div>
+    <div class="cap"><b>My partner</b> <span style="display:inline;color:var(--mute)">· the face</span><span>one calm page — the partner's name; their shared patterns as sage observation lines (low on sleep · in luteal — be gentle · a stretch of stress); your asks (last ask, a quiet history) and one amber + new ask. a quiet route to what you share back.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/partner-invite.html"></iframe></div>
+    <div class="cap"><b>Link a partner</b><span>one focus — an invite code/link, copy &amp; share. a calm 3-step sequence of what happens once they join. honest: shared patterns need Ollie on both sides; an ask alone can still go to anyone as a plain message.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/partner-ask.html"></iframe></div>
+    <div class="cap"><b>New ask</b><span>the 4-category ask flow — material · touch · labor · emotional, a few quiet chips each. ollie turns the picks into a calm note shown in a preview card before you send. (renames the old cycle-partner.)</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/partner-sharing.html"></iframe></div>
+    <div class="cap"><b>What Sam sees</b><span>the granular opt-in control — calm toggles, default off (cycle phase · sleep · stress · energy · mood). a fixed stated line that medical flags are never shareable, not even as a toggle. a live preview card showing exactly what the partner sees right now.</span></div>
+  </div>
+</div>
+
+<!-- ALWAYS-ON — FIND -->
+<div class="lvlhead">
+  <span class="lvlnum">always-on · findability</span>
+  <span class="lvltitle">find what you're looking for</span>
+  <span class="lvlsub">— a calm search dot, top-left, at every level. the answer to "the app only surfaces things via notifications."</span>
+</div>
+<div class="grid">
+  <div class="item">
+    <div class="frame"><iframe src="mockups/find.html"></iframe></div>
+    <div class="cap"><b>Find</b><span>one input. reaches the whole notebook — thrown thoughts, submodule data, grocery lines, goals. each result shows its path, so you can find it again.</span></div>
+  </div>
+</div>
+
+<!-- ALWAYS-ON + FIRST RUN -->
+<div class="lvlhead">
+  <span class="lvlnum">always-on &amp; first run</span>
+  <span class="lvltitle">the escape hatch and the front door</span>
+  <span class="lvlsub">— Safe rides every screen; onboarding sets the calm precedent.</span>
+</div>
+<div class="grid">
+  <div class="item">
+    <div class="frame"><iframe src="mockups/safe.html"></iframe></div>
+    <div class="cap"><b>Safe</b><span>crisis. full-bleed, one breathing orb, two big targets. no forms. one tap from any screen.</span></div>
+  </div>
+  <div class="item">
+    <div class="frame"><iframe src="mockups/onboarding.html"></iframe></div>
+    <div class="cap"><b>Onboarding</b><span>one question per screen, one glyph, skip. sets the precedent: one thing.</span></div>
+  </div>
+</div>
+
+<footer>
+  Revised v2. The calm aesthetic from the first v2 is kept — but empty alone
+  failed: the app leaned entirely on notifications. Now each submodule is an
+  <b>expandable info-card</b> (glance &rarr; expand inline &rarr; detail page), so
+  opening the app and looking surfaces concrete info on its own. <b>Find</b>
+  (top-left dot, every level) answers findability. Visual language —
+  warm-paper, one amber accent, type &amp; spacing — unchanged. Minimal in style,
+  rich and findable in substance.
+</footer>
+</body>
+</html>

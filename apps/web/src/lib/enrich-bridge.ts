@@ -13,7 +13,7 @@
  * an unauthenticated POST would just 401, and this is a best-effort path.
  */
 
-import { getAccount } from './account-boot';
+import { getAuthJwt } from './account-boot';
 
 interface ViteEnv {
   VITE_AI_WORKER_URL?: string;
@@ -27,11 +27,9 @@ const env: ViteEnv = (import.meta as unknown as { env?: ViteEnv }).env ?? {};
  * pre-sign-in or before bootAccount() has run.
  */
 function defaultGetJwt(): string | null {
-  try {
-    return getAccount()?.auth.state().session?.access_token ?? null;
-  } catch {
-    return null;
-  }
+  // Phase 1 (Clerk migration): no Supabase-accepted JWT — the request is
+  // skipped. Re-wired to the Clerk session token in Phase 3.
+  return getAuthJwt();
 }
 
 export interface EnrichDumpInput {

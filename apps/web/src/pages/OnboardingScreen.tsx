@@ -905,8 +905,13 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
   return (
     <div
       style={{
-        minHeight: '100vh',
-        width: '100vw',
+        // `dvh` (dynamic viewport height) — not `vh` — so the screen is
+        // sized to the ACTUAL visible area on iPhone; `100vh` overshoots
+        // past the browser chrome and pushes the progress dots off-screen.
+        // `width:100%` (not `100vw`) avoids a horizontal-overflow gutter.
+        minHeight: '100dvh',
+        width: '100%',
+        boxSizing: 'border-box',
         background: 'var(--bone)',
         display: 'flex',
         flexDirection: 'column',

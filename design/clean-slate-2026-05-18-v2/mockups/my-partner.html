@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · My partner</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  .safe{position:absolute;top:62px;right:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .safe svg{stroke:var(--mute)}
+  .find{position:absolute;top:62px;left:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .find svg{stroke:var(--mute)}
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  /* my-partner — reached from the cycle face's "my partner" drill row.
+     the face: ONE calm page = the user's quiet view of their partner.
+     centred .who label, v2. */
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;
+    padding:0 26px 36px}
+
+  /* the name — one quiet line, the whole hero. who the partner is.
+     a small linked-mark sits before it; nothing loud, no avatar grid.
+     margin-top clears the absolutely-positioned .who label. */
+  .head{margin-top:116px;display:flex;align-items:center;gap:12px}
+  .mark{width:44px;height:44px;border-radius:50%;border:1.5px solid var(--line);
+    display:flex;align-items:center;justify-content:center;flex-shrink:0;
+    background:#F2EEDF}
+  .mark span{font-size:17px;font-weight:600;color:var(--sage);letter-spacing:-.01em}
+  .htext{display:flex;flex-direction:column;gap:3px}
+  .name{font-size:24px;font-weight:300;color:var(--ink);letter-spacing:-.02em;
+    line-height:1}
+  .linked{font-size:12px;color:var(--mute);font-weight:500;letter-spacing:.01em}
+
+  /* section label — a tiny uppercase mute caption, v2 grammar */
+  .cap{margin-top:40px;font-size:11px;color:var(--mute);font-weight:600;
+    letter-spacing:.08em;text-transform:uppercase}
+
+  /* shared patterns — the body.html observation grammar. each line is a
+     soft state the partner chose to share: a sage dot riding a calm
+     sentence. NEVER a medical flag — only soft, gentle state. */
+  .obs{margin-top:14px;display:flex;flex-direction:column}
+  .ob{display:flex;align-items:flex-start;gap:11px;padding:12px 2px;
+    border-top:1px solid var(--line)}
+  .ob:last-child{border-bottom:1px solid var(--line)}
+  .odot{width:6px;height:6px;border-radius:50%;background:var(--sage);
+    flex-shrink:0;margin-top:6px}
+  .otext{font-size:14px;color:var(--ink);font-weight:500;letter-spacing:-.01em;
+    line-height:1.45}
+  .otext em{font-style:normal;color:var(--mute)}
+
+  /* a quiet honesty line under the patterns — what the partner did NOT
+     share is simply absent; ollie never invents or guesses a clinical
+     state. one mute sentence states the boundary, calmly. */
+  .honest{margin-top:14px;font-size:12px;color:var(--mute);font-weight:400;
+    line-height:1.55;letter-spacing:.005em}
+
+  /* asks — the last ask sent, a quiet history, one amber + new ask.
+     the last ask is the focus row; older asks sit smaller beneath it. */
+  .ask{margin-top:14px;border-top:1px solid var(--line);padding:15px 2px 14px;
+    display:flex;align-items:baseline;gap:0}
+  .akind{font-size:14px;color:var(--ink);font-weight:600;letter-spacing:-.01em;
+    flex-shrink:0}
+  .asep{color:var(--line);margin:0 9px;font-size:13px}
+  .awhen{font-size:13px;color:var(--mute);font-weight:500;flex:1}
+  .astate{font-size:12px;color:var(--sage);font-weight:600;letter-spacing:.02em}
+
+  /* the quiet ask history — older asks, one dim line each */
+  .past{display:flex;flex-direction:column;border-top:1px solid var(--line)}
+  .pl{padding:11px 2px;display:flex;align-items:baseline;gap:0;
+    border-bottom:1px solid var(--line)}
+  .pl .pk{font-size:13px;color:var(--mute);font-weight:500;flex-shrink:0}
+  .pl .psep{color:var(--line);margin:0 9px;font-size:12px}
+  .pl .pw{font-size:13px;color:var(--mute);font-weight:400;flex:1}
+
+  /* one amber action — + new ask. routes to partner-ask.html */
+  .new{margin-top:22px;height:50px;border-radius:25px;background:var(--accent);
+    display:flex;align-items:center;justify-content:center;gap:8px;padding:0 24px;
+    box-shadow:0 12px 28px rgba(201,146,62,.32)}
+  .new svg{stroke:#fff}
+  .new span{font-size:16px;font-weight:600;color:#fff;letter-spacing:-.01em}
+
+  /* a quiet footer link — manage what you share back. mute, no box. */
+  .manage{margin-top:26px;display:flex;align-items:center;justify-content:center;
+    gap:7px}
+  .manage svg{stroke:var(--mute)}
+  .manage span{font-size:13px;color:var(--mute);font-weight:500;
+    letter-spacing:-.005em}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+  <div class="find">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/>
+    </svg>
+  </div>
+  <div class="safe">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.5-7 10-7 10z"/>
+    </svg>
+  </div>
+
+  <div class="who">
+    <span>my partner</span>
+  </div>
+
+  <div class="scroll">
+    <!-- the partner — one quiet line. who they are. -->
+    <div class="head">
+      <div class="mark"><span>S</span></div>
+      <div class="htext">
+        <div class="name">Sam</div>
+        <div class="linked">linked since march</div>
+      </div>
+    </div>
+
+    <!-- shared patterns — soft states Sam chose to share. body.html's
+         observation grammar: sage dot + one calm sentence. never a flag. -->
+    <div class="cap">what Sam's sharing</div>
+    <div class="obs">
+      <div class="ob">
+        <span class="odot"></span>
+        <span class="otext">low on sleep this week <em>&mdash; running about an hour short</em></span>
+      </div>
+      <div class="ob">
+        <span class="odot"></span>
+        <span class="otext">in luteal <em>&mdash; be gentle</em></span>
+      </div>
+      <div class="ob">
+        <span class="odot"></span>
+        <span class="otext">a stretch of stress <em>&mdash; the last few days</em></span>
+      </div>
+    </div>
+    <div class="honest">soft states only. ollie never shares a medical flag &mdash;
+      not yours, not theirs. if Sam turns something off, it just quietly
+      isn't here.</div>
+
+    <!-- asks — the last ask sent + a quiet history + one amber + new ask -->
+    <div class="cap">your asks</div>
+    <div class="ask">
+      <span class="akind">touch</span><span class="asep">&middot;</span>
+      <span class="awhen">2 days ago</span>
+      <span class="astate">seen</span>
+    </div>
+    <div class="past">
+      <div class="pl">
+        <span class="pk">labor</span><span class="psep">&middot;</span>
+        <span class="pw">last week</span>
+      </div>
+      <div class="pl">
+        <span class="pk">emotional</span><span class="psep">&middot;</span>
+        <span class="pw">2 weeks ago</span>
+      </div>
+    </div>
+
+    <div class="new">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="2.4">
+        <path d="M12 5v14M5 12h14"/>
+      </svg>
+      <span>new ask</span>
+    </div>
+
+    <!-- a quiet route to the sharing control — manage your own side -->
+    <div class="manage">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="1.9">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/>
+      </svg>
+      <span>what Sam sees from you</span>
+    </div>
+  </div>
+</div>
+</body>
+</html>

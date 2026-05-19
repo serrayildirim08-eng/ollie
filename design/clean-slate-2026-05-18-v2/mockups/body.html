@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Body</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  .safe{position:absolute;top:62px;right:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .safe svg{stroke:var(--mute)}
+  /* find — calm second affordance, mirrors Safe on the left */
+  .find{position:absolute;top:62px;left:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .find svg{stroke:var(--mute)}
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  /* body has 5 submodules — so the body page IS a list of 5 calm
+     expandable cards. no hero number: body is not one-number like money.
+     instead each card carries a small VISUAL DATA OBJECT — a micro-chart
+     of its real data — so the page reads full and substantial, not barren. */
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;
+    padding:0 26px 36px}
+
+  /* the 5 cards. each = ONE real data line + ONE micro-visual.
+     tighter rhythm than v2: the visual gives weight, so cards sit
+     close — a full notebook page, not a scattered dashboard.
+     margin-top clears the absolutely-positioned .who label. */
+  .rows{margin-top:116px;display:flex;flex-direction:column}
+  .row{border-top:1px solid var(--line);padding:18px 2px}
+  .row:last-child{border-bottom:1px solid var(--line)}
+
+  /* card body — visual on the left, glance line on the right.
+     the visual is a fixed-width gutter so every glance line aligns. */
+  .rhead{display:flex;align-items:center;gap:14px}
+  .viz{width:54px;flex-shrink:0;display:flex;align-items:center;
+    justify-content:center}
+  .rtext{flex:1;display:flex;flex-direction:column;gap:3px;min-width:0}
+  .rk{font-size:11px;color:var(--mute);font-weight:600;letter-spacing:.06em;
+    text-transform:uppercase}
+  .rv{font-size:14px;color:var(--ink);font-weight:500;letter-spacing:-.01em}
+  .rv b{font-weight:600}
+  .chev{stroke:var(--mute);flex-shrink:0;margin-left:6px;align-self:center}
+
+  /* the observed-pattern mark — a small sage dot that rides the glance
+     line. NEVER a badge, never loud. sage is the v2 "observed" color. */
+  .obs{display:inline-flex;align-items:center;gap:7px}
+  .obs .odot{width:6px;height:6px;border-radius:50%;background:var(--sage);
+    flex-shrink:0}
+  .obs .otext{color:var(--ink);font-weight:500}
+
+  /* ---- micro-visuals — small, calm, monochrome-ish. ink + one accent.
+          sage marks an observed thing, never a loud chart. ---- */
+
+  /* cycle — a phase ring. a dot travels the circle; the luteal arc
+     is drawn in sage; current day = filled sage dot on the ring. */
+  .ring{position:relative;width:46px;height:46px}
+  .ring svg{display:block}
+  .ring .track{stroke:var(--line);stroke-width:3;fill:none}
+  .ring .luteal{stroke:var(--sage);stroke-width:3;fill:none;
+    stroke-linecap:round}
+  .ring .marker{fill:var(--sage)}
+
+  /* sleep — a confident 7-night bar chart. a week of sleep at a glance:
+     6 calm ink-line bars on a baseline rule, last night in amber.
+     wider bars + a grounding baseline give it real chart presence. */
+  .bars{display:flex;align-items:flex-end;gap:4px;height:46px;
+    padding-bottom:5px;position:relative}
+  .bars::after{content:"";position:absolute;left:0;right:0;bottom:3px;
+    height:1.5px;border-radius:1px;background:var(--line)}
+  .bars i{width:7px;background:var(--mute);border-radius:2.5px;display:block;
+    position:relative;z-index:1}
+  .bars i.now{background:var(--accent)}
+
+  /* body — a filling vessel. a rounded-bottom tumbler outline, water
+     filled to a level (4/8). the water is a calm sage-leaning tone,
+     the rim a quiet ink line. reads as "half a glass" instantly. */
+  .glass{position:relative;width:34px;height:46px}
+  .glass svg{display:block}
+  .glass .vessel{stroke:var(--ink);stroke-width:1.6;fill:none}
+  .glass .water{fill:var(--sage);opacity:.88}
+  .glass .surface{stroke:#fff;stroke-width:1;opacity:.45}
+
+  /* medication — a day timeline. one thin line from morning to night,
+     dose times as marks: taken = filled ink, next = amber ring + dot,
+     a faint 'now' tick floats above the line. communicates WHEN. */
+  .timeline{position:relative;width:50px;height:46px}
+  .timeline svg{display:block}
+  .timeline .axis{stroke:var(--line);stroke-width:2;stroke-linecap:round}
+  .timeline .taken{fill:var(--ink)}
+  .timeline .next-r{stroke:var(--accent);stroke-width:1.6;fill:var(--paper)}
+  .timeline .next-d{fill:var(--accent)}
+  .timeline .now{stroke:var(--mute);stroke-width:1.5;stroke-linecap:round}
+
+  /* habits — an open progress gauge. a ~270° arc (deliberately NOT a
+     closed ring like cycle), filled 3/6 in ink on a line-color track.
+     ledger feel: how far through today, no streak, no grid. */
+  .gauge{position:relative;width:46px;height:46px}
+  .gauge svg{display:block}
+  .gauge .gtrack{stroke:var(--line);stroke-width:3.5;fill:none;
+    stroke-linecap:round}
+  .gauge .gfill{stroke:var(--ink);stroke-width:3.5;fill:none;
+    stroke-linecap:round}
+
+  /* one row shown expanded — 2 quiet lines + an open cue.
+     detail aligns under the text column, not the visual gutter. */
+  .row.open{padding-bottom:20px}
+  .row.open .chev{transform:rotate(180deg)}
+  .det{margin-top:14px;margin-left:68px;display:flex;flex-direction:column;gap:9px}
+  .dl{display:flex;align-items:baseline;justify-content:space-between;font-size:13px}
+  .dl .k{color:var(--mute);font-weight:500}
+  .dl .v{color:var(--ink);font-weight:600}
+  .open{margin-top:14px;margin-left:68px;font-size:12px;color:var(--accent);
+    font-weight:600;letter-spacing:.02em}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+  <div class="find">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/>
+    </svg>
+  </div>
+  <div class="safe">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.5-7 10-7 10z"/>
+    </svg>
+  </div>
+
+  <div class="who">
+    <span>body</span>
+  </div>
+
+  <div class="scroll">
+    <div class="rows">
+
+      <!-- cycle — phase ring: sage luteal arc + travelling day-marker.
+           the glance line carries the observed-pattern sage dot. -->
+      <div class="row">
+        <div class="rhead">
+          <div class="viz">
+            <div class="ring">
+              <svg width="46" height="46" viewBox="0 0 46 46">
+                <!-- full cycle track -->
+                <circle class="track" cx="23" cy="23" r="18"/>
+                <!-- luteal arc — the back ~third of the circle, sage.
+                     dasharray sized to ~13/29 of circumference (~113). -->
+                <circle class="luteal" cx="23" cy="23" r="18"
+                  stroke-dasharray="50 63" stroke-dashoffset="-63"
+                  transform="rotate(-90 23 23)"/>
+                <!-- current day-14 marker, sitting on the luteal arc -->
+                <circle class="marker" cx="40.3" cy="28.4" r="4"/>
+              </svg>
+            </div>
+          </div>
+          <div class="rtext">
+            <span class="rk">cycle</span>
+            <span class="rv">day <b>14</b> · luteal</span>
+          </div>
+          <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+        </div>
+      </div>
+
+      <!-- sleep — shown EXPANDED. confident 7-night bar chart on a
+           baseline rule, last night in amber. expand reveals 2 lines. -->
+      <div class="row open">
+        <div class="rhead">
+          <div class="viz">
+            <div class="bars">
+              <i style="height:24px"></i>
+              <i style="height:32px"></i>
+              <i style="height:18px"></i>
+              <i style="height:29px"></i>
+              <i style="height:38px"></i>
+              <i style="height:22px"></i>
+              <i class="now" style="height:30px"></i>
+            </div>
+          </div>
+          <div class="rtext">
+            <span class="rk">sleep</span>
+            <span class="rv"><b>7h 20m</b> last night</span>
+          </div>
+          <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+        </div>
+        <div class="det">
+          <div class="dl"><span class="k">this week</span><span class="v">1h 10m short</span></div>
+          <div class="dl"><span class="k">tonight</span><span class="v">~7h likely</span></div>
+        </div>
+        <div class="open">open sleep &rarr;</div>
+      </div>
+
+      <!-- body — water as a filling vessel: a tumbler outline filled
+           to 4/8 (half) with a calm sage water tone. -->
+      <div class="row">
+        <div class="rhead">
+          <div class="viz">
+            <div class="glass">
+              <svg width="34" height="46" viewBox="0 0 34 46">
+                <!-- water fill, clipped to the vessel shape. 4/8 = half:
+                     the inner cavity runs y≈5..41 (h≈36); half-line ≈ 23. -->
+                <clipPath id="cup">
+                  <path d="M7.5 5 L26.5 5 L24.8 35
+                    Q24.4 41 17 41 Q9.6 41 9.2 35 Z"/>
+                </clipPath>
+                <g clip-path="url(#cup)">
+                  <rect class="water" x="6" y="23" width="22" height="20"/>
+                  <line class="surface" x1="6" y1="23.4" x2="28" y2="23.4"/>
+                </g>
+                <!-- tumbler rim + body outline, rounded base -->
+                <path class="vessel" d="M7 4 L27 4 L25.1 35
+                  Q24.6 42 17 42 Q9.4 42 8.9 35 Z"/>
+              </svg>
+            </div>
+          </div>
+          <div class="rtext">
+            <span class="rk">body</span>
+            <span class="rv"><b>4</b> of 8 glasses</span>
+          </div>
+          <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+        </div>
+      </div>
+
+      <!-- medication — a day timeline: morning→night line, the 9am
+           dose taken (ink), the 2pm dose upcoming (amber), now-tick. -->
+      <div class="row">
+        <div class="rhead">
+          <div class="viz">
+            <div class="timeline">
+              <svg width="50" height="46" viewBox="0 0 50 46">
+                <!-- the day axis, morning (left) to night (right) -->
+                <line class="axis" x1="5" y1="26" x2="45" y2="26"/>
+                <!-- 9am dose — taken, calm filled ink mark -->
+                <circle class="taken" cx="14" cy="26" r="3.4"/>
+                <!-- faint 'now' tick rising from the line, ~noon -->
+                <line class="now" x1="24" y1="26" x2="24" y2="16"/>
+                <!-- 2pm dose — next, amber ring with a dot -->
+                <circle class="next-r" cx="34" cy="26" r="4.6"/>
+                <circle class="next-d" cx="34" cy="26" r="2"/>
+              </svg>
+            </div>
+          </div>
+          <div class="rtext">
+            <span class="rk">medication</span>
+            <span class="rv">next <b>2:00pm</b> · 1 of 2</span>
+          </div>
+          <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+        </div>
+      </div>
+
+      <!-- habits — an open progress gauge: a ~270° arc filled 3/6
+           in ink on a line track. ledger feel, not a closed ring. -->
+      <div class="row">
+        <div class="rhead">
+          <div class="viz">
+            <div class="gauge">
+              <svg width="46" height="46" viewBox="0 0 46 46">
+                <!-- gauge opens at the bottom: 270° arc, gap centred
+                     downward. r=17, circumference≈106.8; 270° ≈ 80.1.
+                     start the arc at 135° (bottom-left), sweep up. -->
+                <circle class="gtrack" cx="23" cy="23" r="17"
+                  stroke-dasharray="80.1 26.7"
+                  transform="rotate(135 23 23)"/>
+                <!-- fill 3/6 = half of the 270° arc → 40.0 of 80.1 -->
+                <circle class="gfill" cx="23" cy="23" r="17"
+                  stroke-dasharray="40 66.8"
+                  transform="rotate(135 23 23)"/>
+              </svg>
+            </div>
+          </div>
+          <div class="rtext">
+            <span class="rk">habits</span>
+            <span class="rv"><b>3</b> of 6 today</span>
+          </div>
+          <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- the observed-pattern note — sage mark + one quiet line.
+         keeps the pattern-in-glance demo from v2, now under the cards. -->
+    <div style="margin-top:24px;display:flex;align-items:center;gap:8px">
+      <span style="width:6px;height:6px;border-radius:50%;background:var(--sage);flex-shrink:0"></span>
+      <span style="font-size:13px;color:var(--ink);font-weight:500;letter-spacing:-.01em">luteal &mdash; your habits may dip this week</span>
+    </div>
+
+  </div>
+</div>
+</body>
+</html>

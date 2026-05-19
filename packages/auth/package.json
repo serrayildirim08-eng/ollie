@@ -14,7 +14,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@ollie/api": "workspace:*",
     "@ollie/crypto": "workspace:*",
     "@ollie/events": "workspace:*",
     "@ollie/store": "workspace:*"

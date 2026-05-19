@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Body — conditions &amp; treatment</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;
+    padding:0 26px 36px}
+
+  /* conditions — a calm list under a quiet section label. each = one
+     plain line: the name, and a quiet "tagging episodes" trailing note.
+     no severity, no badge. a condition is just a fact you keep. */
+  .sect{margin-top:116px;font-size:11px;color:var(--mute);font-weight:600;
+    letter-spacing:.08em;text-transform:uppercase;margin-bottom:2px}
+  .sect.second{margin-top:42px}
+  .cond{border-top:1px solid var(--line);padding:16px 2px;display:flex;
+    align-items:baseline;gap:0}
+  .conds .cond:last-child{border-bottom:1px solid var(--line)}
+  .cname{flex:1;font-size:15px;color:var(--ink);font-weight:500;
+    letter-spacing:-.01em}
+  .cnote{font-size:12px;color:var(--mute);font-weight:500;letter-spacing:.01em}
+  /* the add-a-condition ghost row */
+  .addcond{border-top:1px solid var(--line);padding:16px 2px;display:flex;
+    align-items:center;gap:12px}
+  .conds .addcond{border-bottom:1px solid var(--line)}
+  .addcond .pl{width:22px;height:22px;border-radius:50%;border:1.5px dashed var(--line);
+    display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .addcond .pl svg{stroke:var(--mute)}
+  .addcond span{font-size:14px;color:var(--mute);font-weight:500;letter-spacing:-.01em}
+
+  /* a treatment plan — a calm card, handled with dignity. NOT a progress
+     bar to beat: a quiet sequence of cycle dots showing where you are.
+     warm-cream surface, sage marks. serious content, gently held. */
+  .plan{margin-top:14px;background:#fff;border:1px solid var(--line);
+    border-radius:20px;padding:20px 19px;box-shadow:0 6px 16px rgba(42,38,34,.05)}
+  .pname{font-size:17px;color:var(--ink);font-weight:600;letter-spacing:-.015em}
+  /* the position line — "cycle 3 of 6 · day 4". calm, factual, present. */
+  .ppos{margin-top:6px;font-size:13px;color:var(--mute);font-weight:500;
+    letter-spacing:.01em}
+  .ppos b{color:var(--ink);font-weight:600}
+
+  /* the cycle track — M dots in a row. done = filled sage, current =
+     amber ring + dot, ahead = quiet line-color ring. a calm map of the
+     course, never a "X% done" pressure bar. */
+  .track{margin-top:17px;display:flex;align-items:center;gap:0}
+  .seg{flex:1;display:flex;align-items:center}
+  .seg .bar{flex:1;height:2px;background:var(--line)}
+  .seg.done .bar{background:var(--sage)}
+  .node{width:18px;height:18px;border-radius:50%;display:flex;
+    align-items:center;justify-content:center;flex-shrink:0}
+  .node.done{background:var(--sage)}
+  .node.done svg{stroke:#fff}
+  .node.now{border:2px solid var(--accent);background:#FCF6EA}
+  .node.now i{width:7px;height:7px;border-radius:50%;background:var(--accent)}
+  .node.ahead{border:1.6px solid var(--line);background:#fff}
+
+  /* the cycle labels under the track — small, only every-other shown */
+  .tracklbl{margin-top:8px;display:flex;justify-content:space-between;
+    padding:0 1px}
+  .tracklbl span{font-size:10px;color:var(--mute);font-weight:600;
+    letter-spacing:.04em}
+
+  /* a calm side-effects note inside the plan — sage, quiet, optional */
+  .pside{margin-top:16px;padding-top:15px;border-top:1px solid var(--line);
+    display:flex;align-items:flex-start;gap:9px}
+  .pside .sdot{width:6px;height:6px;border-radius:50%;background:var(--sage);
+    flex-shrink:0;margin-top:5px}
+  .pside span{font-size:13px;color:var(--mute);font-weight:400;line-height:1.5}
+  .pside b{color:var(--ink);font-weight:600}
+
+  /* advance — one calm action, sage-outlined, never a celebratory amber */
+  .advance{margin-top:17px;height:46px;border-radius:23px;background:#FAF6EF;
+    border:1.5px solid var(--sage);display:flex;align-items:center;
+    justify-content:center;gap:8px}
+  .advance svg{stroke:var(--sage)}
+  .advance span{font-size:14px;font-weight:600;color:var(--sage);
+    letter-spacing:-.01em}
+
+  /* a quiet steady line under the plan — supportive, never falsely cheerful */
+  .steady{margin-top:14px;font-size:12px;color:var(--mute);font-weight:400;
+    line-height:1.55;text-align:center;padding:0 8px}
+
+  /* add-a-plan — a quiet ghost row, calm */
+  .addplan{margin-top:16px;border:1.5px dashed var(--line);border-radius:18px;
+    padding:16px;display:flex;align-items:center;justify-content:center;gap:9px}
+  .addplan svg{stroke:var(--mute)}
+  .addplan span{font-size:14px;color:var(--mute);font-weight:500;
+    letter-spacing:-.01em}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+
+  <div class="who">
+    <span>conditions &amp; treatment</span>
+  </div>
+
+  <div class="scroll">
+    <!-- conditions — a calm list of plain facts -->
+    <div class="sect">conditions you track</div>
+    <div class="conds">
+      <div class="cond">
+        <span class="cname">migraine</span>
+        <span class="cnote">tags matching episodes</span>
+      </div>
+      <div class="cond">
+        <span class="cname">seasonal allergies</span>
+        <span class="cnote">tags matching episodes</span>
+      </div>
+      <div class="addcond">
+        <div class="pl">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>
+        </div>
+        <span>add a condition</span>
+      </div>
+    </div>
+
+    <!-- treatment plans — held with dignity -->
+    <div class="sect second">treatment plan</div>
+
+    <div class="plan">
+      <div class="pname">chemotherapy</div>
+      <div class="ppos"><b>cycle 3 of 6</b> · day 4 of this cycle</div>
+
+      <!-- the cycle track — 6 nodes, 2 done, 1 current, 3 ahead -->
+      <div class="track">
+        <div class="node done">
+          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke-width="3"><path d="M5 13l4 4 10-11"/></svg>
+        </div>
+        <div class="seg done"><div class="bar"></div></div>
+        <div class="node done">
+          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke-width="3"><path d="M5 13l4 4 10-11"/></svg>
+        </div>
+        <div class="seg done"><div class="bar"></div></div>
+        <div class="node now"><i></i></div>
+        <div class="seg"><div class="bar"></div></div>
+        <div class="node ahead"></div>
+        <div class="seg"><div class="bar"></div></div>
+        <div class="node ahead"></div>
+        <div class="seg"><div class="bar"></div></div>
+        <div class="node ahead"></div>
+      </div>
+      <div class="tracklbl">
+        <span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span>
+      </div>
+
+      <!-- a quiet side-effects note -->
+      <div class="pside">
+        <span class="sdot"></span>
+        <span>nausea logged on <b>days 2&ndash;3</b> last cycle, around the
+          same point. ollie's keeping the timing for you.</span>
+      </div>
+
+      <!-- advance — a calm, non-celebratory action -->
+      <div class="advance">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke-width="2.2">
+          <path d="M5 12h14M13 6l6 6-6 6"/>
+        </svg>
+        <span>cycle 3 is done</span>
+      </div>
+
+      <div class="steady">ollie just holds the dates and the timing.
+        nothing here is a finish line — it's a map, so you always know where
+        you are.</div>
+    </div>
+
+    <!-- add another plan -->
+    <div class="addplan">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke-width="2.2"><path d="M12 5v14M5 12h14"/></svg>
+      <span>add a treatment plan</span>
+    </div>
+  </div>
+</div>
+</body>
+</html>

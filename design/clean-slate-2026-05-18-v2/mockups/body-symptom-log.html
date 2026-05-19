@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Body — log a symptom</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  /* swipe-down handle dismisses — same return gesture everywhere */
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;
+    padding:0 26px 36px}
+
+  /* the lead — one calm line */
+  .lead{margin-top:116px;font-size:22px;font-weight:300;color:var(--ink);
+    letter-spacing:-.02em}
+  .lead b{font-weight:500}
+
+  /* THE SYMPTOM FIELD — one quiet underlined line, never a big box.
+     shows what's typed; ink. */
+  .field{margin-top:30px;border-bottom:1.5px solid var(--ink);padding-bottom:11px;
+    display:flex;align-items:baseline;gap:2px}
+  .field span{font-size:21px;color:var(--ink);font-weight:500;letter-spacing:-.01em}
+  .field .caret{width:2px;height:22px;background:var(--accent);
+    display:inline-block;margin-left:1px;border-radius:1px}
+
+  /* severity — optional. 5 calm dots, tap one. selected = amber filled,
+     a small label under. quietly framed "optional". */
+  .sect{margin-top:38px;font-size:11px;color:var(--mute);font-weight:600;
+    letter-spacing:.08em;text-transform:uppercase}
+  .sect .opt{color:var(--line);font-weight:500;text-transform:none;
+    letter-spacing:.01em;margin-left:7px}
+  .sev{margin-top:15px;display:flex;align-items:center;gap:12px}
+  .sd{width:38px;height:38px;border-radius:50%;border:1.5px solid var(--line);
+    display:flex;align-items:center;justify-content:center;
+    font-size:14px;color:var(--mute);font-weight:600}
+  .sd.on{border-color:var(--accent);background:#FCF6EA;color:var(--accent)}
+  .sevlbl{margin-top:11px;display:flex;justify-content:space-between;
+    font-size:11px;color:var(--mute);font-weight:500;letter-spacing:.02em}
+
+  /* kind — acute / chronic / mental, a calm 3-tile row. one tap.
+     selected = amber edge. */
+  .kinds{margin-top:15px;display:flex;gap:9px}
+  .kt{flex:1;height:62px;border-radius:16px;border:1px solid var(--line);
+    background:#fff;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;gap:5px;box-shadow:0 6px 16px rgba(42,38,34,.04)}
+  .kt span{font-size:14px;color:var(--ink);font-weight:500;letter-spacing:-.01em}
+  .kt .kh{font-size:10px;color:var(--mute);font-weight:600;letter-spacing:.03em}
+  .kt.on{border-color:var(--accent);background:#FCF6EA}
+  .kt.on span{font-weight:600}
+
+  /* the suggestion — ollie spotted the label matches a tracked condition,
+     so it gently pre-picks "chronic". one calm sage line, never loud. */
+  .suggest{margin-top:16px;display:flex;align-items:flex-start;gap:10px}
+  .suggest .sdot{width:7px;height:7px;border-radius:50%;background:var(--sage);
+    flex-shrink:0;margin-top:5px}
+  .suggest span{font-size:13px;color:var(--mute);font-weight:400;line-height:1.5}
+  .suggest b{color:var(--ink);font-weight:600}
+
+  /* save — full-width amber, the one commit */
+  .save{margin-top:36px;height:52px;border-radius:26px;background:var(--accent);
+    display:flex;align-items:center;justify-content:center;gap:8px;
+    box-shadow:0 12px 28px rgba(201,146,62,.32)}
+  .save svg{stroke:#fff}
+  .save span{font-size:16px;font-weight:600;color:#fff;letter-spacing:-.01em}
+  /* the saved confirmation — dry, lowercase, period */
+  .saved{margin-top:16px;text-align:center;font-size:13px;color:var(--sage);
+    font-weight:600;letter-spacing:.01em}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+
+  <div class="who">
+    <span>log a symptom</span>
+  </div>
+
+  <div class="scroll">
+    <div class="lead"><b>what did the body do</b></div>
+
+    <!-- the symptom field — one quiet underlined line -->
+    <div class="field">
+      <span>migraine</span><span class="caret"></span>
+    </div>
+
+    <!-- severity — optional 1–5 tap -->
+    <div class="sect">severity<span class="opt">— optional</span></div>
+    <div class="sev">
+      <div class="sd">1</div>
+      <div class="sd">2</div>
+      <div class="sd">3</div>
+      <div class="sd on">4</div>
+      <div class="sd">5</div>
+    </div>
+    <div class="sevlbl">
+      <span>barely there</span>
+      <span>can't ignore it</span>
+    </div>
+
+    <!-- kind — acute / chronic / mental -->
+    <div class="sect" style="margin-top:36px">kind</div>
+    <div class="kinds">
+      <div class="kt">
+        <span>acute</span>
+        <span class="kh">one-off</span>
+      </div>
+      <div class="kt on">
+        <span>chronic</span>
+        <span class="kh">ongoing</span>
+      </div>
+      <div class="kt">
+        <span>mental</span>
+        <span class="kh">mood, mind</span>
+      </div>
+    </div>
+
+    <!-- ollie's quiet suggestion -->
+    <div class="suggest">
+      <span class="sdot"></span>
+      <span>&ldquo;migraine&rdquo; matches a condition you track, so ollie set
+        this to <b>chronic</b>. change it if that's not right.</span>
+    </div>
+
+    <div class="save">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.4"><path d="M5 13l4 4 10-11"/></svg>
+      <span>start the episode</span>
+    </div>
+    <div class="saved">noted.</div>
+  </div>
+</div>
+</body>
+</html>

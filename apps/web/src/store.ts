@@ -30,7 +30,7 @@ import {
   type ActiveFocus,
   type SleepSettingsLike,
 } from '@ollie/notifications/suppression';
-import { getAccount } from './lib/account-boot';
+import { getAccount, getAuthJwt, getAuthUserId } from './lib/account-boot';
 
 runMigrations(browserAdapter);
 
@@ -128,9 +128,13 @@ if (ASTROLOGY_ENABLED) {
 // a no-op because scheduleServerJob short-circuits on missing deps.
 function scheduleNotificationWrapper(spec: import('@ollie/notifications').NotificationSpec, fireAt: number): void {
   const account = getAccount();
-  if (!account?.auth) return;
-  const session = account.auth.state().session;
-  if (!session) return;
+  if (!account) return;
+  // Phase 1 (Clerk migration): server-side APNs jobs need a Supabase-
+  // accepted JWT, which we no longer mint. Cues still compute locally;
+  // the server push path re-enables in Phase 3.
+  const authJwt = getAuthJwt();
+  const userId = getAuthUserId();
+  if (!authJwt || !userId) return;
 
   // Notification suppression — quiet hours + focus-session. This wrapper is
   // the single client-side funnel for every orchestrator cue, so both rules
@@ -156,7 +160,7 @@ function scheduleNotificationWrapper(spec: import('@ollie/notifications').Notifi
   }
 
   void scheduleServerJob(
-    { api: account.api, authJwt: session.access_token, userId: session.user_id },
+    { api: account.api, authJwt, userId },
     spec,
     suppressed.fireAt,
   );

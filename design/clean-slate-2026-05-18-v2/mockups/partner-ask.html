@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · New ask</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  .safe{position:absolute;top:62px;right:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .safe svg{stroke:var(--mute)}
+  .find{position:absolute;top:62px;left:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .find svg{stroke:var(--mute)}
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  /* partner-ask — the 4-category ask flow. reached from my-partner's
+     "new ask". pick what you need across material · touch · labor ·
+     emotional; ollie turns the picks into a calm note. v2. */
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;
+    padding:0 26px 36px}
+
+  /* the lead — one calm line. ONE focus: pick what you need.
+     margin-top clears the absolutely-positioned .who label. */
+  .lead{margin-top:116px;font-size:22px;font-weight:300;color:var(--ink);
+    letter-spacing:-.02em;line-height:1.3}
+  .lead b{font-weight:500}
+  .sub{margin-top:8px;font-size:13px;color:var(--mute);font-weight:400;
+    line-height:1.5}
+
+  /* 4 categories — material · touch · labor · emotional. each is a calm
+     block: a small tailored glyph, the category word, a few quiet
+     options as chips. selected = sage fill. a few only, never a wall. */
+  .cat{margin-top:30px}
+  .chead{display:flex;align-items:center;gap:9px}
+  .cglyph{width:26px;height:26px;border-radius:8px;background:#F2EEDF;
+    display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .cglyph svg{stroke:var(--sage)}
+  .cname{font-size:11px;color:var(--mute);font-weight:600;letter-spacing:.08em;
+    text-transform:uppercase}
+  .chips{margin-top:12px;display:flex;flex-wrap:wrap;gap:9px}
+  .chip{border:1px solid var(--line);background:#fff;border-radius:18px;
+    padding:9px 15px;font-size:14px;font-weight:500;color:var(--ink);
+    letter-spacing:-.01em}
+  .chip.on{background:var(--sage);border-color:var(--sage);color:#fff}
+
+  /* the note preview — ollie has turned the picks into a calm sentence.
+     a quiet card so the user sees the words before they commit. */
+  .note{margin-top:34px;border:1.5px solid var(--line);border-radius:14px;
+    background:#fff;padding:16px 17px}
+  .nlabel{font-size:11px;color:var(--mute);font-weight:600;letter-spacing:.08em;
+    text-transform:uppercase}
+  .ntext{margin-top:8px;font-size:15px;color:var(--ink);font-weight:400;
+    letter-spacing:-.01em;line-height:1.5}
+  .ntext b{font-weight:600}
+
+  /* the share action — full-width amber, the one commit */
+  .share{margin-top:22px;height:52px;border-radius:26px;background:var(--accent);
+    display:flex;align-items:center;justify-content:center;gap:8px;
+    box-shadow:0 12px 28px rgba(201,146,62,.32)}
+  .share svg{stroke:#fff}
+  .share span{font-size:16px;font-weight:600;color:#fff;letter-spacing:-.01em}
+  /* a quiet line under the button — where the ask goes */
+  .to{margin-top:13px;font-size:12px;color:var(--mute);font-weight:400;
+    text-align:center;letter-spacing:.005em}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+  <div class="find">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/>
+    </svg>
+  </div>
+  <div class="safe">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.5-7 10-7 10z"/>
+    </svg>
+  </div>
+
+  <div class="who">
+    <span>new ask</span>
+  </div>
+
+  <div class="scroll">
+    <div class="lead"><b>what would help</b> right now</div>
+    <div class="sub">pick a few. ollie turns them into a calm note you
+      can send &mdash; so you don't have to find the words.</div>
+
+    <!-- material -->
+    <div class="cat">
+      <div class="chead">
+        <div class="cglyph">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="1.8">
+            <path d="M6 7h12l-1 13H7zM9 7V5a3 3 0 0 1 6 0v2"/>
+          </svg>
+        </div>
+        <span class="cname">material</span>
+      </div>
+      <div class="chips">
+        <span class="chip on">a heat pad</span>
+        <span class="chip">snacks</span>
+        <span class="chip">pick up meds</span>
+        <span class="chip">tea</span>
+      </div>
+    </div>
+
+    <!-- touch -->
+    <div class="cat">
+      <div class="chead">
+        <div class="cglyph">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="1.8">
+            <path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.5-7 10-7 10z"/>
+          </svg>
+        </div>
+        <span class="cname">touch</span>
+      </div>
+      <div class="chips">
+        <span class="chip">a hug</span>
+        <span class="chip on">just sit close</span>
+        <span class="chip">space, no touch</span>
+        <span class="chip">back rub</span>
+      </div>
+    </div>
+
+    <!-- labor -->
+    <div class="cat">
+      <div class="chead">
+        <div class="cglyph">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="1.8">
+            <path d="M3 21h18M5 21V9l7-5 7 5v12M9 21v-6h6v6"/>
+          </svg>
+        </div>
+        <span class="cname">labor</span>
+      </div>
+      <div class="chips">
+        <span class="chip">take dinner</span>
+        <span class="chip on">handle the dishes</span>
+        <span class="chip">run an errand</span>
+        <span class="chip">walk the dog</span>
+      </div>
+    </div>
+
+    <!-- emotional -->
+    <div class="cat">
+      <div class="chead">
+        <div class="cglyph">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="1.8">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+          </svg>
+        </div>
+        <span class="cname">emotional</span>
+      </div>
+      <div class="chips">
+        <span class="chip on">just listen</span>
+        <span class="chip">no advice today</span>
+        <span class="chip">check in later</span>
+        <span class="chip">reassure me</span>
+      </div>
+    </div>
+
+    <!-- the note preview — ollie's calm sentence from the picks -->
+    <div class="note">
+      <span class="nlabel">ollie's note</span>
+      <p class="ntext">"a low-energy evening &mdash; a <b>heat pad</b> would
+        help, and i'd love to <b>just sit close</b>. if you can
+        <b>handle the dishes</b> tonight, that's a lot off me. mostly
+        i need you to <b>just listen</b>."</p>
+    </div>
+
+    <div class="share">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="2">
+        <path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7M16 6l-4-4-4 4M12 2v14"/>
+      </svg>
+      <span>send to Sam</span>
+    </div>
+    <div class="to">goes to Sam in Ollie &mdash; or send as a plain message to anyone</div>
+  </div>
+</div>
+</body>
+</html>

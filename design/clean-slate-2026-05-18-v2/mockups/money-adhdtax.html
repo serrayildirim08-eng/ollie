@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · ADHD Tax</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  .safe{position:absolute;top:62px;right:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .safe svg{stroke:var(--mute)}
+  .find{position:absolute;top:62px;left:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .find svg{stroke:var(--mute)}
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  .who{position:absolute;top:96px;left:26px;display:flex;align-items:center;gap:10px}
+  .who .g{width:34px;height:34px;border-radius:11px;background:#F2EEDF;
+    display:flex;align-items:center;justify-content:center}
+  .who .g svg{stroke:var(--accent)}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .stage{flex:1;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;padding:0 44px}
+
+  /* THE ONE THING — what ADHD cost this month. FLAT, informational.
+     the big number is INK, not red, not accent. no progress bar, no
+     trend arrow, no "down from last month" judgment. just: here it is.
+     it exists so a brain can see the cost without being scolded. */
+  .lead{font-size:13px;color:var(--mute);font-weight:500;letter-spacing:.02em}
+  .amount{margin-top:8px;font-size:72px;font-weight:300;color:var(--ink);
+    letter-spacing:-.04em;line-height:1}
+  .amount .c{color:var(--mute);font-weight:300}
+  .month{margin-top:11px;font-size:13px;color:var(--mute);font-weight:500}
+
+  /* the breakdown — plain lines, gray, no icons of blame, no red.
+     each is just a neutral noun + what it cost. */
+  .list{margin-top:38px;width:100%;border-top:1px solid var(--line)}
+  .row{display:flex;align-items:baseline;justify-content:space-between;
+    padding:15px 2px;border-bottom:1px solid var(--line)}
+  .what{font-size:15px;color:#7A726A;font-weight:400;letter-spacing:-.01em}
+  .cost{font-size:15px;color:#7A726A;font-weight:600;letter-spacing:-.02em}
+
+  /* one calm caption — the framing, set quietly. no moralizing. */
+  .note{margin-top:26px;font-size:13px;line-height:1.55;color:var(--mute);
+    text-align:center;max-width:260px;font-weight:500}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+  <div class="find">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/>
+    </svg>
+  </div>
+  <div class="safe">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.5-7 10-7 10z"/>
+    </svg>
+  </div>
+
+  <div class="who">
+    <div class="g">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="1.7">
+        <circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16.5h.01"/>
+      </svg>
+    </div>
+    <span>adhd tax</span>
+  </div>
+
+  <div class="stage">
+    <div class="lead">what it cost this month</div>
+    <div class="amount"><span class="c">$</span>47</div>
+    <div class="month">may, so far</div>
+
+    <div class="list">
+      <div class="row">
+        <span class="what">a late fee · credit card</span>
+        <span class="cost">$29</span>
+      </div>
+      <div class="row">
+        <span class="what">a duplicate order · charger</span>
+        <span class="cost">$14</span>
+      </div>
+      <div class="row">
+        <span class="what">re-bought · already had it</span>
+        <span class="cost">$4</span>
+      </div>
+    </div>
+
+    <div class="note">this isn't a verdict. it's just what's here, so it's not a surprise.</div>
+  </div>
+</div>
+</body>
+</html>

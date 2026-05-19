@@ -533,6 +533,7 @@ export function PetsModule() {
             width: '100%',
             maxWidth: 420,
             margin: '48px auto 0',
+            boxSizing: 'border-box',
             background: 'transparent',
             border: `1px ${addOpen ? 'solid' : 'dashed'} #7C7770`,
             color: '#14130F',

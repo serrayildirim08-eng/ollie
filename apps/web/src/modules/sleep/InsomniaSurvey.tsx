@@ -173,6 +173,9 @@ export function InsomniaSurvey({ onClose }: InsomniaSurveyProps): React.ReactEle
         style={{
           position: 'fixed', left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
           background: C.bone, border: `1px solid ${C.rule}`, padding: '36px 40px',
+          // content-box: width:92vw + 80px h-padding overflowed both
+          // viewport edges on a 390px iPhone. Audit 2026-05-18.
+          boxSizing: 'border-box',
           width: 'min(560px, 92vw)', maxHeight: '86vh', overflowY: 'auto', zIndex: 110,
           boxShadow: '0 32px 80px rgba(20,20,15,0.10)',
           fontFamily: COURIER, color: C.ink, fontWeight: 700,
@@ -257,7 +260,7 @@ export function InsomniaSurvey({ onClose }: InsomniaSurveyProps): React.ReactEle
                       background: 'none', border: 'none',
                       borderBottom: optIdx === current.options.length - 1 ? 'none' : `1px solid ${C.ruleSoft}`,
                       padding: '15px 4px', cursor: 'pointer', textAlign: 'left',
-                      fontFamily: COURIER, width: '100%',
+                      fontFamily: COURIER, width: '100%', boxSizing: 'border-box',
                     }}
                   >
                     <span

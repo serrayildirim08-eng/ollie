@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Grocery — notifications</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+
+  /* the phone is a fixed 390×844 window. inside it, a vertical reel of
+     full-height lock-screen frames — ONE notification per frame, scrolled
+     between. you never see two notifications at once. it is felt the way
+     it is lived: a calm phone you glance at, mostly empty. */
+  .phone{width:390px;height:844px;position:relative;overflow-y:auto;overflow-x:hidden;
+    box-shadow:0 30px 80px rgba(0,0,0,.32);scroll-snap-type:y mandatory;
+    -webkit-overflow-scrolling:touch}
+  .phone::-webkit-scrollbar{display:none}
+
+  /* one lock-screen frame — a full 844px of warm-paper wallpaper.
+     a soft warm gradient, not a photo, so the one notification is the
+     only thing the eye lands on. */
+  .frame{height:844px;scroll-snap-align:start;position:relative;
+    display:flex;flex-direction:column;
+    background:linear-gradient(168deg,#EFE7D7 0%,#E6DBC6 56%,#DBCDB1 100%)}
+
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:#3A342C;flex-shrink:0}
+
+  /* the lock-screen clock — quiet, sets every frame as a real iOS surface */
+  .clock{text-align:center;margin-top:30px;flex-shrink:0}
+  .clock .day{font-size:15px;color:#5A5044;font-weight:500;letter-spacing:.01em}
+  .clock .time{font-size:80px;color:#3A342C;font-weight:200;letter-spacing:-.035em;
+    line-height:1;margin-top:4px}
+
+  /* the one notification — floated low, the way a single push sits on a
+     real lock screen. all the space above and below it is deliberate air. */
+  .nwrap{flex:1;display:flex;align-items:center;justify-content:center;
+    padding:0 20px}
+  .note{width:100%;background:rgba(250,246,239,.9);border-radius:24px;
+    backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+    padding:18px 19px;box-shadow:0 10px 30px rgba(42,38,34,.13)}
+  .nhead{display:flex;align-items:center;gap:9px;margin-bottom:9px}
+  .nicon{width:24px;height:24px;border-radius:7px;background:var(--ink);
+    display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .nicon svg{stroke:var(--paper)}
+  .napp{font-size:12px;font-weight:700;color:var(--mute);letter-spacing:.04em;
+    text-transform:lowercase}
+  .nwhen{margin-left:auto;font-size:12px;color:var(--mute);font-weight:500}
+  /* the body — lowercase, dry, no exclamation. the copy is the only text. */
+  .ntitle{font-size:16px;font-weight:600;color:var(--ink);letter-spacing:-.012em;
+    line-height:1.34}
+  .nbody{font-size:14px;color:#6A6056;font-weight:400;line-height:1.42;
+    margin-top:4px}
+
+  /* a barely-there hint to scroll — one dot, fades the eye downward.
+     present on every frame except the last. */
+  .more{position:absolute;left:0;right:0;bottom:34px;display:flex;
+    flex-direction:column;align-items:center;gap:7px;opacity:.5}
+  .more svg{stroke:#6A604F}
+  .more span{font-size:11px;color:#6A604F;font-weight:500;letter-spacing:.04em}
+
+  /* the closing frame — not a notification. a calm centred note stating
+     which grocery signals deliberately never reach a lock screen. */
+  .closing{flex:1;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;padding:0 44px;text-align:center}
+  .closing .cmk{width:46px;height:46px;border-radius:50%;
+    border:1.5px solid rgba(91,140,126,.5);display:flex;align-items:center;
+    justify-content:center;margin-bottom:20px}
+  .closing .cmk svg{stroke:var(--sage)}
+  .closing .ctitle{font-size:18px;color:#3A342C;font-weight:500;
+    letter-spacing:-.015em;line-height:1.4}
+  .closing .cbody{margin-top:11px;font-size:13px;color:#6A6056;font-weight:400;
+    line-height:1.55}
+</style>
+</head>
+<body>
+<div class="phone">
+
+  <!-- 1 · expiration-drift — olive oil turns soon -->
+  <div class="frame">
+    <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+    <div class="clock">
+      <div class="day">monday, may 25</div>
+      <div class="time">8:12</div>
+    </div>
+    <div class="nwrap">
+      <div class="note">
+        <div class="nhead">
+          <div class="nicon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="1.9"><path d="M9 3h6v3l-1 3v11a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1V9L9 6z"/></svg></div>
+          <span class="napp">ollie</span>
+          <span class="nwhen">now</span>
+        </div>
+        <div class="ntitle">olive oil turns soon</div>
+        <div class="nbody">one dinner away, or it composts. just so it's not a surprise.</div>
+      </div>
+    </div>
+    <div class="more">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M6 9l6 6 6-6"/></svg>
+    </div>
+  </div>
+
+  <!-- 2 · stockout-cascade — keeps rebuying milk, make it a staple? -->
+  <div class="frame">
+    <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+    <div class="clock">
+      <div class="day">thursday, may 28</div>
+      <div class="time">5:40</div>
+    </div>
+    <div class="nwrap">
+      <div class="note">
+        <div class="nhead">
+          <div class="nicon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="1.9"><path d="M21 12a9 9 0 1 1-3-6.7M21 4v5h-5"/></svg></div>
+          <span class="napp">ollie</span>
+          <span class="nwhen">2h ago</span>
+        </div>
+        <div class="ntitle">you keep rebuying milk &mdash; make it a staple?</div>
+        <div class="nbody">a standing item runs on its own clock, so it's not yours to track.</div>
+      </div>
+    </div>
+    <div class="more">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M6 9l6 6 6-6"/></svg>
+    </div>
+  </div>
+
+  <!-- 3 · stale-shopping-list — things sat 2 weeks -->
+  <div class="frame">
+    <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+    <div class="clock">
+      <div class="day">sunday, june 7</div>
+      <div class="time">10:25</div>
+    </div>
+    <div class="nwrap">
+      <div class="note">
+        <div class="nhead">
+          <div class="nicon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg></div>
+          <span class="napp">ollie</span>
+          <span class="nwhen">sun</span>
+        </div>
+        <div class="ntitle">4 things have sat on the list 2 weeks</div>
+        <div class="nbody">clear the ones you don't actually want &mdash; the real list gets easier to read.</div>
+      </div>
+    </div>
+    <div class="more">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M6 9l6 6 6-6"/></svg>
+    </div>
+  </div>
+
+  <!-- 4 · shopping-cadence — a trip is about due -->
+  <div class="frame">
+    <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+    <div class="clock">
+      <div class="day">tuesday, june 9</div>
+      <div class="time">9:00</div>
+    </div>
+    <div class="nwrap">
+      <div class="note">
+        <div class="nhead">
+          <div class="nicon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="1.9"><path d="M4 8h16l-1.4 10.6a1 1 0 0 1-1 .9H6.4a1 1 0 0 1-1-.9L4 8z"/><path d="M8.5 8V6a3.5 3.5 0 0 1 7 0v2"/></svg></div>
+          <span class="napp">ollie</span>
+          <span class="nwhen">tue</span>
+        </div>
+        <div class="ntitle">about 6 days since the last shop &mdash; 7 on the list</div>
+        <div class="nbody">no rush. just timed to your usual rhythm, in case it's a good day.</div>
+      </div>
+    </div>
+    <div class="more">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M6 9l6 6 6-6"/></svg>
+    </div>
+  </div>
+
+  <!-- 5 · weekly note (opt-in) -->
+  <div class="frame">
+    <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+    <div class="clock">
+      <div class="day">sunday, june 14</div>
+      <div class="time">6:00</div>
+    </div>
+    <div class="nwrap">
+      <div class="note">
+        <div class="nhead">
+          <div class="nicon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="1.9"><path d="M5 4h14v16l-7-3-7 3z"/></svg></div>
+          <span class="napp">ollie</span>
+          <span class="nwhen">sun 6pm</span>
+        </div>
+        <div class="ntitle">your week &mdash; 2 shops, nothing went off</div>
+        <div class="nbody">a quiet recap. arrives only if you asked for it.</div>
+      </div>
+    </div>
+    <div class="more">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M6 9l6 6 6-6"/></svg>
+    </div>
+  </div>
+
+  <!-- closing frame — what grocery deliberately keeps off the lock screen -->
+  <div class="frame">
+    <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+    <div class="closing">
+      <div class="cmk">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="1.7">
+          <circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>
+        </svg>
+      </div>
+      <div class="ctitle">the reflective patterns stay inside the app</div>
+      <div class="cbody">the 3-keyboards kind of observation &mdash; interest-capture,
+        shopping cadence, the stores ollie's learned &mdash; never lands on a lock
+        screen. it waits on <i>see the rest</i> for when you're curious.<br><br>
+        a duplicate buy doesn't push either &mdash; it surfaces quietly in-app the
+        moment you check the item off, never as a notification.</div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

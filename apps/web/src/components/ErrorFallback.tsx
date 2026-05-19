@@ -21,7 +21,8 @@ export function ErrorFallback({ resetError }: Props): React.ReactElement {
       role="alert"
       aria-live="polite"
       style={{
-        minHeight: '100vh',
+        boxSizing: 'border-box',
+        minHeight: '100dvh',
         background: 'var(--bone)',
         color: 'var(--ink)',
         fontFamily: 'var(--font-system)',
@@ -29,7 +30,9 @@ export function ErrorFallback({ resetError }: Props): React.ReactElement {
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '2rem',
+        padding:
+          'calc(2rem + env(safe-area-inset-top)) calc(2rem + env(safe-area-inset-right)) ' +
+          'calc(2rem + env(safe-area-inset-bottom)) calc(2rem + env(safe-area-inset-left))',
         textAlign: 'left',
         gap: '1.25rem',
       }}

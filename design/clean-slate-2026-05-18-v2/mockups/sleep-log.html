@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Sleep — log last night</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  /* swipe-down handle dismisses — same return gesture everywhere */
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;
+    padding:0 26px 36px}
+
+  /* the lead — one calm line */
+  .lead{margin-top:116px;font-size:22px;font-weight:300;color:var(--ink);
+    letter-spacing:-.02em}
+  .lead b{font-weight:500}
+  .sub{margin-top:6px;font-size:13px;color:var(--mute);font-weight:500}
+
+  /* THE PRIMARY — the 4-button quick log. solid · ok · rough · bad.
+     a calm 2×2 of soft tiles, one tap. selected = amber edge. */
+  .quick{margin-top:30px;display:grid;grid-template-columns:1fr 1fr;gap:11px}
+  .qt{height:88px;border-radius:20px;border:1px solid var(--line);background:#fff;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:9px;box-shadow:0 6px 16px rgba(42,38,34,.04)}
+  .qt svg{stroke:var(--mute)}
+  .qt span{font-size:16px;color:var(--ink);font-weight:500;letter-spacing:-.01em}
+  /* one tile chosen — amber edge, the only color */
+  .qt.on{border-color:var(--accent);background:#FCF6EA}
+  .qt.on svg{stroke:var(--accent)}
+  .qt.on span{font-weight:600}
+
+  /* the calm secondary — "say more, i'll parse it". set apart with air,
+     a quiet divider line. opens a free-text line below. */
+  .ordiv{margin-top:30px;display:flex;align-items:center;gap:14px}
+  .ordiv .ln{flex:1;height:1px;background:var(--line)}
+  .ordiv span{font-size:12px;color:var(--mute);font-weight:500;letter-spacing:.04em}
+
+  .more{margin-top:22px}
+  .morek{font-size:14px;color:var(--ink);font-weight:500;letter-spacing:-.01em;
+    display:flex;align-items:center;gap:9px}
+  .morek svg{stroke:var(--sage)}
+  /* the free-text line — one quiet underline, never a big box. it shows
+     the kind of natural sentence ollie parses, as placeholder-grey. */
+  .parse{margin-top:14px;border-bottom:1px solid var(--line);padding-bottom:11px}
+  .parse span{font-size:15px;color:var(--mute);font-weight:400;letter-spacing:-.01em;
+    line-height:1.5}
+  /* a quiet hint of what ollie will pull out of that sentence */
+  .pull{margin-top:13px;display:flex;flex-wrap:wrap;gap:8px}
+  .pull i{border:1px solid var(--line);border-radius:13px;padding:5px 11px;
+    font-size:12px;color:var(--mute);font-weight:500;font-style:normal}
+  .pull i b{color:var(--ink);font-weight:600}
+
+  /* save — full-width amber, the one commit */
+  .save{margin-top:34px;height:52px;border-radius:26px;background:var(--accent);
+    display:flex;align-items:center;justify-content:center;gap:8px;
+    box-shadow:0 12px 28px rgba(201,146,62,.32)}
+  .save svg{stroke:#fff}
+  .save span{font-size:16px;font-weight:600;color:#fff;letter-spacing:-.01em}
+  /* the saved confirmation — dry, lowercase, period */
+  .saved{margin-top:16px;text-align:center;font-size:13px;color:var(--sage);
+    font-weight:600;letter-spacing:.01em}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+
+  <div class="who">
+    <span>log last night</span>
+  </div>
+
+  <div class="scroll">
+    <div class="lead"><b>how did last night feel</b></div>
+    <div class="sub">tuesday → wednesday</div>
+
+    <!-- THE PRIMARY — the 4-button quick log -->
+    <div class="quick">
+      <div class="qt">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="1.9"><circle cx="12" cy="12" r="9"/><path d="M8 13s1.5 2 4 2 4-2 4-2"/></svg>
+        <span>solid</span>
+      </div>
+      <div class="qt on">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="1.9"><circle cx="12" cy="12" r="9"/><path d="M8 14h8"/></svg>
+        <span>ok</span>
+      </div>
+      <div class="qt">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="1.9"><circle cx="12" cy="12" r="9"/><path d="M8 15s1.5-2 4-2 4 2 4 2"/></svg>
+        <span>rough</span>
+      </div>
+      <div class="qt">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="1.9"><circle cx="12" cy="12" r="9"/><path d="M8 16s1.5-3 4-3 4 3 4 3"/><path d="M9 9.5h.01M15 9.5h.01"/></svg>
+        <span>bad</span>
+      </div>
+    </div>
+
+    <div class="ordiv"><span class="ln"></span><span>or</span><span class="ln"></span></div>
+
+    <!-- the calm secondary — free-text, ollie parses it -->
+    <div class="more">
+      <div class="morek">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M4 20h16M5 16l9.5-9.5a2 2 0 0 1 3 3L8 19l-4 1z"/></svg>
+        <span>say more — i'll parse it</span>
+      </div>
+      <div class="parse">
+        <span>bed 23:48, woke 6:30, two coffees&hellip;</span>
+      </div>
+      <!-- a quiet hint of what ollie pulls out of that sentence -->
+      <div class="pull">
+        <i>bed <b>23:48</b></i>
+        <i>woke <b>6:30</b></i>
+        <i>caffeine <b>×2</b></i>
+      </div>
+    </div>
+
+    <div class="save">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.4"><path d="M5 13l4 4 10-11"/></svg>
+      <span>save</span>
+    </div>
+    <div class="saved">noted.</div>
+  </div>
+</div>
+</body>
+</html>

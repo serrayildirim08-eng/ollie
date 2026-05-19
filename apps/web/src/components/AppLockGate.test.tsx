@@ -32,7 +32,7 @@ vi.mock('../lib/biometric', () => ({
 }));
 
 import { AppLockGate } from './AppLockGate';
-import type { AuthClient } from '@ollie/auth';
+import type { VaultClient } from '@ollie/auth';
 
 let container: HTMLDivElement;
 let root: Root;
@@ -52,28 +52,20 @@ afterEach(() => {
 
 // ─── fixtures ─────────────────────────────────────────────────────────────────
 
-/** A minimal AuthClient stub — only `state()` + `signIn()` are exercised. */
-function makeAuth(signInOk: boolean): AuthClient {
+/** A minimal VaultClient stub — only `unlock()` is exercised by the gate. */
+function makeVault(unlockOk: boolean): VaultClient {
   return {
-    state: () => ({
-      session: {
-        user_id: 'u1',
-        email: 'a@b.co',
-        access_token: 't',
-        refresh_token: 'r',
-        signed_in_at: '2026-05-18T00:00:00Z',
-      },
-      unlocked: true,
-    }),
+    state: () => ({ exists: true, unlocked: true }),
     encryptionKey: () => null,
-    signUp: async () => ({ ok: false, code: 'http', message: 'unused' }),
-    signIn: async () =>
-      signInOk
-        ? { ok: true, user_id: 'u1' }
+    create: async () => ({ ok: true }),
+    unlock: async () =>
+      unlockOk
+        ? { ok: true }
         : { ok: false, code: 'wrong-passphrase', message: 'nope' },
-    signOut: async () => {},
-    deleteAccount: async () => ({ ok: false, code: 'no-endpoint', message: 'unused' }),
-  } as unknown as AuthClient;
+    lock: () => {},
+    reset: () => {},
+    strength: async () => ({ score: 0, band: 'weak', notes: [] }),
+  } as unknown as VaultClient;
 }
 
 const okUnlock = async (): Promise<BiometricResult> => ({ ok: true, method: 'webauthn' });
@@ -84,14 +76,14 @@ const unsupportedUnlock = async (): Promise<BiometricResult> => ({
 });
 
 function mount(props: {
-  auth?: AuthClient | null;
+  vault?: VaultClient | null;
   onUnlocked: () => void;
   unlockImpl?: () => Promise<BiometricResult>;
 }): void {
   act(() => {
     root.render(
       <AppLockGate
-        auth={props.auth ?? makeAuth(true)}
+        vault={props.vault === undefined ? makeVault(true) : props.vault}
         onUnlocked={props.onUnlocked}
         unlockImpl={props.unlockImpl as React.ComponentProps<typeof AppLockGate>['unlockImpl']}
       />,
@@ -99,7 +91,7 @@ function mount(props: {
   });
 }
 
-/** Let pending microtasks (the awaited unlock / signIn) settle. */
+/** Let pending microtasks (the awaited unlock) settle. */
 async function flush(): Promise<void> {
   await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
 }
@@ -195,7 +187,7 @@ describe('AppLockGate · passphrase escape hatch', () => {
   it('a correct passphrase unlocks the app', async () => {
     const onUnlocked = vi.fn();
     supported = false; // land on the passphrase field directly
-    mount({ onUnlocked, auth: makeAuth(true) });
+    mount({ onUnlocked, vault: makeVault(true) });
     const input = container.querySelector<HTMLInputElement>('#app-lock-passphrase')!;
     typeInto(input, 'correct horse battery staple');
     click(btnByText('unlock')!);
@@ -206,7 +198,7 @@ describe('AppLockGate · passphrase escape hatch', () => {
   it('a wrong passphrase keeps the curtain up with an error', async () => {
     const onUnlocked = vi.fn();
     supported = false;
-    mount({ onUnlocked, auth: makeAuth(false) });
+    mount({ onUnlocked, vault: makeVault(false) });
     const input = container.querySelector<HTMLInputElement>('#app-lock-passphrase')!;
     typeInto(input, 'wrong');
     click(btnByText('unlock')!);
@@ -215,15 +207,11 @@ describe('AppLockGate · passphrase escape hatch', () => {
     expect(container.querySelector('[role="alert"]')).not.toBeNull();
   });
 
-  it('never strands the user — no session still lifts the curtain', async () => {
+  it('never strands the user — a null vault still lifts the curtain', async () => {
     const onUnlocked = vi.fn();
     supported = false;
-    // auth present but no session — the fail-open branch must still unlock.
-    const noSession = {
-      state: () => ({ session: null, unlocked: false }),
-      signIn: async () => ({ ok: false, code: 'wrong-passphrase', message: 'x' }),
-    } as unknown as AuthClient;
-    mount({ onUnlocked, auth: noSession });
+    // No vault to verify against — the fail-open branch must still unlock.
+    mount({ onUnlocked, vault: null });
     const input = container.querySelector<HTMLInputElement>('#app-lock-passphrase')!;
     typeInto(input, 'anything');
     click(btnByText('unlock')!);

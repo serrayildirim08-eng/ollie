@@ -33,18 +33,16 @@
  */
 
 import type { LabelClient } from '@ollie/orchestrator';
-import { getAccount } from './account-boot';
+import { getAuthJwt } from './account-boot';
 
 /**
  * Default JWT source — the Supabase access token off the booted auth
  * client. Same access path as lib/invite.ts · getJwt().
  */
 function defaultGetJwt(): string | null {
-  try {
-    return getAccount()?.auth.state().session?.access_token ?? null;
-  } catch {
-    return null;
-  }
+  // Phase 1 (Clerk migration): no Supabase-accepted JWT — /label calls are
+  // skipped. Re-wired to the Clerk session token in Phase 3.
+  return getAuthJwt();
 }
 
 /**

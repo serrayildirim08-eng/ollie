@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Cycle</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  .safe{position:absolute;top:62px;right:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .safe svg{stroke:var(--mute)}
+  .find{position:absolute;top:62px;left:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .find svg{stroke:var(--mute)}
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  /* cycle is a submodule reached by drilling the body page's cycle card.
+     the face: ONE focus = a LARGE phase ring. centred .who label, v2. */
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;
+    padding:0 26px 36px}
+
+  /* THE HERO — the big phase ring. a scaled-up version of body.html's
+     cycle ring: the day-14 marker travelling, sage luteal arc, ovulation
+     point marked. the ring IS the cycle; everything else is air.
+     margin-top clears the absolutely-positioned .who label. */
+  .hero{margin-top:116px;display:flex;flex-direction:column;align-items:center}
+  .ringwrap{position:relative;width:236px;height:236px;display:flex;
+    align-items:center;justify-content:center}
+  .ringwrap svg{position:absolute;display:block}
+  /* the centre label sits inside the ring */
+  .rcentre{display:flex;flex-direction:column;align-items:center}
+  .rday{font-size:46px;font-weight:300;color:var(--ink);letter-spacing:-.03em;
+    line-height:1}
+  .rphase{margin-top:5px;font-size:13px;color:var(--mute);font-weight:600;
+    letter-spacing:.06em;text-transform:uppercase}
+
+  /* the next-period prediction line — one calm sentence under the ring */
+  .predict{margin-top:24px;font-size:14px;color:var(--ink);font-weight:500;
+    letter-spacing:-.01em;text-align:center}
+  .predict b{font-weight:600}
+  .predict .pm{color:var(--mute);font-weight:500}
+
+  /* one amber button — log today */
+  .log{margin:26px auto 0;height:50px;border-radius:25px;background:var(--accent);
+    display:flex;align-items:center;justify-content:center;gap:8px;padding:0 24px;
+    box-shadow:0 12px 28px rgba(201,146,62,.32)}
+  .log svg{stroke:#fff}
+  .log span{font-size:16px;font-weight:600;color:#fff;letter-spacing:-.01em}
+
+  /* below the hero, with air — calm drill rows. each = one tailored line.
+     tap a row → its screen. no chevron clutter, just a quiet caret. */
+  .rows{margin-top:50px;display:flex;flex-direction:column}
+  .row{border-top:1px solid var(--line);padding:18px 2px;display:flex;
+    align-items:center;gap:0}
+  .row:last-child{border-bottom:1px solid var(--line)}
+  .rk{font-size:13px;color:var(--mute);font-weight:600;letter-spacing:.01em;
+    flex-shrink:0}
+  .rsep{color:var(--line);margin:0 8px;font-size:13px}
+  .rv{font-size:14px;color:var(--ink);font-weight:500;letter-spacing:-.01em;flex:1}
+  .chev{stroke:var(--mute);flex-shrink:0;margin-left:8px}
+
+  /* the clinical-flag row — sage, calm, only present when a flag is live.
+     a small sage dot rides the line. NEVER loud, never a badge. */
+  .row.flag .rdot{width:6px;height:6px;border-radius:50%;background:var(--sage);
+    flex-shrink:0;margin-right:11px}
+  .row.flag .rv{color:var(--ink)}
+  .row.flag .rk{color:var(--sage)}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+  <div class="find">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/>
+    </svg>
+  </div>
+  <div class="safe">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.5-7 10-7 10z"/>
+    </svg>
+  </div>
+
+  <div class="who">
+    <span>cycle</span>
+  </div>
+
+  <div class="scroll">
+    <div class="hero">
+      <!-- the big phase ring. body.html's ring, scaled up.
+           geometry: r=100, centre 118,118. circumference ≈ 628.3.
+           a 29-day cycle → 1 day ≈ 21.7 units of arc. day N rides the
+           ring at angle -90° + (N/29)*360° (0 = top, clockwise).
+           luteal = days 15–29 → 14 days → ~303 units of sage.
+           ovulation point ≈ day 14.5 (bottom). today = day 14. -->
+      <div class="ringwrap">
+        <svg class="cyc" width="236" height="236" viewBox="0 0 236 236">
+          <!-- full cycle track -->
+          <circle cx="118" cy="118" r="100" fill="none"
+            stroke="#EAE2D4" stroke-width="9"/>
+          <!-- luteal arc — the back stretch of the circle, sage.
+               runs day 15 → day 29. day 15 begins 325 units along the
+               ring, so dashoffset = -325; arc length ≈ 303. -->
+          <circle cx="118" cy="118" r="100" fill="none"
+            stroke="#5B8C7E" stroke-width="9" stroke-linecap="round"
+            stroke-dasharray="303 325" stroke-dashoffset="-325"
+            transform="rotate(-90 118 118)" opacity=".85"/>
+          <!-- ovulation point — marked at day 14.5, bottom of the ring.
+               a small open ink ring, a quiet milestone, never loud. -->
+          <circle cx="118" cy="218" r="5.5" fill="none"
+            stroke="#2A2622" stroke-width="2"/>
+          <!-- the travelling day-14 marker — today. amber filled dot
+               on the ring at day 14, just shy of the ovulation point. -->
+          <circle cx="128.8" cy="217.4" r="8" fill="#C9923E"/>
+          <circle cx="128.8" cy="217.4" r="8" fill="none"
+            stroke="#FAF6EF" stroke-width="3.5"/>
+        </svg>
+        <div class="rcentre">
+          <div class="rday">14</div>
+          <div class="rphase">luteal</div>
+        </div>
+      </div>
+
+      <div class="predict">
+        <b>period likely · may 28</b><span class="pm"> ± 2 days</span>
+      </div>
+
+      <div class="log">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="2.4">
+          <path d="M12 5v14M5 12h14"/>
+        </svg>
+        <span>log today</span>
+      </div>
+    </div>
+
+    <div class="rows">
+      <!-- pill log -->
+      <div class="row">
+        <span class="rk">pill log</span><span class="rsep">·</span>
+        <span class="rv">today not logged yet</span>
+        <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+
+      <!-- history -->
+      <div class="row">
+        <span class="rk">history</span><span class="rsep">·</span>
+        <span class="rv">last 5 cycles · mean 31 days</span>
+        <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+
+      <!-- my partner — drills into the partner system (my-partner.html) -->
+      <div class="row">
+        <span class="rk">my partner</span><span class="rsep">·</span>
+        <span class="rv">what Sam's sharing · send an ask</span>
+        <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+
+      <!-- a clinical flag is live — ONE calm sage observation row.
+           only ever shown when a flag exists; routes to cycle-flags. -->
+      <div class="row flag">
+        <span class="rdot"></span>
+        <span class="rk">worth a look</span><span class="rsep">·</span>
+        <span class="rv">3 long cycles</span>
+        <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

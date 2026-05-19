@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Sleep — first run</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  .safe{position:absolute;top:62px;right:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .safe svg{stroke:var(--mute)}
+  .find{position:absolute;top:62px;left:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .find svg{stroke:var(--mute)}
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;
+    padding:0 26px 36px}
+
+  /* the cold state — the sleep FACE is still present, never blank.
+     last night's number is real (it's logged), but the visual is bare:
+     only the 3 nights logged so far, the rest of the week empty slots.
+     the forecast is honest — ollie won't guess yet. */
+  .hero{margin-top:116px;display:flex;flex-direction:column;align-items:center}
+
+  /* the 7-night bar — cold: 3 real bars, 4 empty slots. the empty
+     slots are faint dotted-outline placeholders, not zero-height bars,
+     so the chart reads "filling up", never broken. */
+  .week{display:flex;align-items:flex-end;gap:9px;height:54px;
+    padding-bottom:6px;position:relative;margin-bottom:22px}
+  .week::after{content:"";position:absolute;left:0;right:0;bottom:4px;
+    height:1.5px;border-radius:1px;background:var(--line)}
+  .week i{width:11px;background:var(--mute);border-radius:3px;display:block;
+    position:relative;z-index:1}
+  .week i.now{background:var(--accent)}
+  /* an empty slot — a faint outlined placeholder, a calm "not yet" */
+  .week i.empty{background:transparent;border:1.5px dashed var(--line);
+    height:18px}
+
+  .lead{font-size:13px;color:var(--mute);font-weight:500;letter-spacing:.02em}
+  .dur{font-size:74px;font-weight:300;color:var(--ink);letter-spacing:-.04em;
+    line-height:1;margin-top:8px}
+  .dur .u{font-size:30px;color:var(--mute);font-weight:300;letter-spacing:-.02em}
+
+  /* the honest forecast line — calm, never a fake number. a sage dot
+     marks it as a "still settling" note. */
+  .learn{margin-top:24px;display:flex;align-items:flex-start;gap:9px;
+    max-width:286px}
+  .learn .ldot{width:7px;height:7px;border-radius:50%;background:var(--sage);
+    flex-shrink:0;margin-top:6px}
+  .learn span{font-size:14px;color:var(--ink);font-weight:500;letter-spacing:-.01em;
+    line-height:1.45;text-align:left}
+  .learn b{font-weight:600}
+
+  /* a quiet confidence meter — how settled the forecast is. 3 of ~7
+     nights in: barely filled, sage. honest, not a deficit. */
+  .conf{margin-top:22px;display:flex;flex-direction:column;align-items:center;
+    gap:8px}
+  .confbar{width:150px;height:4px;border-radius:3px;background:var(--line);
+    position:relative;overflow:hidden}
+  .confbar div{position:absolute;left:0;top:0;bottom:0;width:30%;
+    border-radius:3px;background:var(--sage)}
+  .conflbl{font-size:12px;color:var(--mute);font-weight:500;letter-spacing:.02em}
+
+  /* one amber button — log last night. the way the forecast settles. */
+  .log{margin:30px auto 0;height:50px;border-radius:25px;background:var(--accent);
+    display:flex;align-items:center;justify-content:center;gap:8px;padding:0 24px;
+    box-shadow:0 12px 28px rgba(201,146,62,.32)}
+  .log svg{stroke:#fff}
+  .log span{font-size:16px;font-weight:600;color:#fff;letter-spacing:-.01em}
+
+  /* the drill rows — present but calm-cold. wind-down + sounds work now;
+     history + go-deeper read their cold form. no pattern row yet. */
+  .rows{margin-top:50px;display:flex;flex-direction:column}
+  .row{border-top:1px solid var(--line);padding:18px 2px;display:flex;
+    align-items:center}
+  .row:last-child{border-bottom:1px solid var(--line)}
+  .rk{font-size:13px;color:var(--mute);font-weight:600;letter-spacing:.01em;
+    flex-shrink:0}
+  .rsep{color:var(--line);margin:0 8px;font-size:13px}
+  .rv{font-size:14px;color:var(--ink);font-weight:500;letter-spacing:-.01em;flex:1}
+  /* a cold row — the value is a quiet invitation, muted */
+  .row.cold .rv{color:var(--mute);font-weight:400}
+  .row.cold .chev{stroke:var(--line)}
+  .chev{stroke:var(--mute);flex-shrink:0;margin-left:8px}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+  <div class="find">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/>
+    </svg>
+  </div>
+  <div class="safe">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.5-7 10-7 10z"/>
+    </svg>
+  </div>
+
+  <div class="who">
+    <span>sleep</span>
+  </div>
+
+  <div class="scroll">
+    <div class="hero">
+      <!-- the bar — cold: 3 real nights, 4 empty dashed slots. -->
+      <div class="week">
+        <i style="height:30px"></i>
+        <i style="height:24px"></i>
+        <i class="now" style="height:36px"></i>
+        <i class="empty"></i>
+        <i class="empty"></i>
+        <i class="empty"></i>
+        <i class="empty"></i>
+      </div>
+
+      <div class="lead">last night</div>
+      <div class="dur">7h<span class="u"> </span>05m</div>
+
+      <div class="learn">
+        <span class="ldot"></span>
+        <span><b>the forecast is still settling.</b> a few more nights
+          and ollie can tell you what tonight is likely to look like.</span>
+      </div>
+
+      <div class="conf">
+        <div class="confbar"><div></div></div>
+        <div class="conflbl">3 nights logged · settling</div>
+      </div>
+
+      <div class="log">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="2.4">
+          <path d="M12 5v14M5 12h14"/>
+        </svg>
+        <span>log last night</span>
+      </div>
+    </div>
+
+    <div class="rows">
+      <!-- wind-down works from night one -->
+      <div class="row">
+        <span class="rk">wind-down</span><span class="rsep">·</span>
+        <span class="rv">6 small steps before bed</span>
+        <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+
+      <!-- history — cold form -->
+      <div class="row cold">
+        <span class="rk">history</span><span class="rsep">·</span>
+        <span class="rv">3 nights so far</span>
+        <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+
+      <!-- sounds works from night one -->
+      <div class="row">
+        <span class="rk">sounds</span><span class="rsep">·</span>
+        <span class="rv">brown noise · soft sleep timer</span>
+        <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+
+      <!-- go deeper — cold form, an honest invitation -->
+      <div class="row cold">
+        <span class="rk">go deeper</span><span class="rsep">·</span>
+        <span class="rv">two short check-ins, whenever you like</span>
+        <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

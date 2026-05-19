@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Grocery</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E; --umber:#A8703C;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  .safe{position:absolute;top:62px;right:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .safe svg{stroke:var(--mute)}
+  .find{position:absolute;top:62px;left:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .find svg{stroke:var(--mute)}
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  /* grocery is a submodule reached by drilling the home page's grocery card.
+     LEAF-FOCUS RULE: the face shows the ONE thing that matters most — the
+     shopping LIST, as a calm torn-note. the 3 modes (shop · pantry · feed me)
+     sit above as a quiet near-zero-chrome switch, shop selected. v2 .who. */
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;
+    padding:0 26px 36px}
+
+  /* the 3-mode switch — NOT buttons. three calm text segments, the active
+     one underlined amber. mirrors admin-tasks' filter grammar exactly.
+     margin-top clears the absolutely-positioned .who label. */
+  .modes{margin-top:116px;display:flex;gap:22px;padding-bottom:2px}
+  .mode{font-size:14px;color:var(--mute);font-weight:500;letter-spacing:-.01em;
+    padding-bottom:7px;border-bottom:2px solid transparent}
+  .mode.on{color:var(--ink);border-bottom-color:var(--accent);font-weight:600}
+
+  /* the list lead — a calm one-liner, the running stat */
+  .lead{margin-top:26px;font-size:13px;color:var(--mute);font-weight:500;
+    letter-spacing:.02em}
+  .lead b{color:var(--ink);font-weight:600}
+
+  /* THE LIST — a torn paper note. each line is plain text on a hairline
+     rule, no card, no qty chips. a soft round tick on the left; tap a line
+     = strike through, and it moves to the pantry with a computed shelf
+     life. the list IS the focus. */
+  .list{margin-top:14px;display:flex;flex-direction:column}
+  .lrow{display:flex;align-items:center;gap:15px;padding:15px 2px;
+    border-top:1px solid var(--line)}
+  .list .lrow:last-child{border-bottom:1px solid var(--line)}
+  .tick{width:23px;height:23px;border-radius:50%;border:1.8px solid var(--line);
+    flex-shrink:0;display:flex;align-items:center;justify-content:center}
+  .tick svg{stroke:#fff;opacity:0}
+  .iname{flex:1;font-size:17px;color:var(--ink);font-weight:400;
+    letter-spacing:-.01em}
+  /* the quiet quantity — sits soft after the name, never a chip */
+  .iqty{font-size:13px;color:var(--mute);font-weight:500;flex-shrink:0;
+    letter-spacing:.01em}
+  /* a got-it line — struck, faded, the tick fills amber. it has moved
+     into the pantry; a tiny sage 'in pantry' note states where it went. */
+  .lrow.got .tick{background:var(--accent);border-color:var(--accent)}
+  .lrow.got .tick svg{opacity:1}
+  .lrow.got .iname{color:var(--mute);text-decoration:line-through;
+    text-decoration-color:var(--line)}
+  .lrow.got .iqty{color:var(--sage);font-weight:600;text-decoration:none}
+
+  /* one amber add — the natural-language entry route. floats calm under
+     the list, the one thing to do. routes to grocery-add. */
+  .add{margin-top:30px;height:50px;border-radius:25px;background:var(--accent);
+    display:flex;align-items:center;justify-content:center;gap:8px;
+    box-shadow:0 12px 28px rgba(201,146,62,.32)}
+  .add svg{stroke:#fff}
+  .add span{font-size:16px;font-weight:600;color:#fff;letter-spacing:-.01em}
+
+  /* below, with air — two calm drill rows. recently bought, and the
+     sage 'see the rest' observation row when a pattern is live. */
+  .rows{margin-top:36px;display:flex;flex-direction:column}
+  .row{border-top:1px solid var(--line);padding:18px 2px;display:flex;
+    align-items:center}
+  .rows .row:last-child{border-bottom:1px solid var(--line)}
+  .rk{font-size:13px;color:var(--mute);font-weight:600;letter-spacing:.01em;
+    flex-shrink:0}
+  .rsep{color:var(--line);margin:0 8px;font-size:13px}
+  .rv{font-size:14px;color:var(--ink);font-weight:500;letter-spacing:-.01em;flex:1}
+  .chev{stroke:var(--mute);flex-shrink:0;margin-left:8px}
+
+  /* the observed-pattern row — sage, calm, only when a pattern is live.
+     a small sage dot rides the line. routes to grocery-patterns. */
+  .row.obs .rdot{width:6px;height:6px;border-radius:50%;background:var(--sage);
+    flex-shrink:0;margin-right:11px}
+  .row.obs .rv{color:var(--ink)}
+  .row.obs .rk{color:var(--sage)}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+  <div class="find">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/>
+    </svg>
+  </div>
+  <div class="safe">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.5-7 10-7 10z"/>
+    </svg>
+  </div>
+
+  <div class="who">
+    <span>grocery</span>
+  </div>
+
+  <div class="scroll">
+
+    <!-- the 3-mode switch — shop selected, near-zero chrome -->
+    <div class="modes">
+      <span class="mode on">shop</span>
+      <span class="mode">pantry</span>
+      <span class="mode">feed me</span>
+    </div>
+
+    <!-- the shopping list — a torn-note, the default focus -->
+    <div class="lead"><b>4</b> on the list &middot; tap one when it's in the basket</div>
+
+    <div class="list">
+      <div class="lrow">
+        <span class="tick"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke-width="3"><path d="M5 13l4 4 10-11"/></svg></span>
+        <span class="iname">olive oil</span>
+        <span class="iqty">1 bottle</span>
+      </div>
+      <!-- one line already grabbed — struck, moved into the pantry -->
+      <div class="lrow got">
+        <span class="tick"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke-width="3"><path d="M5 13l4 4 10-11"/></svg></span>
+        <span class="iname">eggs</span>
+        <span class="iqty">in pantry</span>
+      </div>
+      <div class="lrow">
+        <span class="tick"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke-width="3"><path d="M5 13l4 4 10-11"/></svg></span>
+        <span class="iname">bread</span>
+        <span class="iqty"></span>
+      </div>
+      <div class="lrow">
+        <span class="tick"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke-width="3"><path d="M5 13l4 4 10-11"/></svg></span>
+        <span class="iname">milk</span>
+        <span class="iqty">2L</span>
+      </div>
+      <div class="lrow">
+        <span class="tick"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke-width="3"><path d="M5 13l4 4 10-11"/></svg></span>
+        <span class="iname">coffee beans</span>
+        <span class="iqty"></span>
+      </div>
+    </div>
+
+    <!-- one amber add — natural-language entry -->
+    <div class="add">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>
+      <span>add</span>
+    </div>
+
+    <!-- below, with air — drill rows -->
+    <div class="rows">
+      <!-- recently bought — the last things checked off into the pantry -->
+      <div class="row">
+        <span class="rk">recently bought</span><span class="rsep">·</span>
+        <span class="rv">eggs, yoghurt, spinach &mdash; last 6</span>
+        <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+
+      <!-- a pattern is live — ONE calm sage observation row.
+           only shown when a pattern exists; routes to grocery-patterns. -->
+      <div class="row obs">
+        <span class="rdot"></span>
+        <span class="rk">see the rest</span><span class="rsep">·</span>
+        <span class="rv">a few things ollie noticed about your shopping</span>
+        <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

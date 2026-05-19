@@ -198,12 +198,16 @@ function startElectron(cb: VoiceCaptureCallbacks): VoiceCaptureSession {
 
 function startCapacitor(cb: VoiceCaptureCallbacks): VoiceCaptureSession {
   let stopped = false;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const dynImport = new Function('s', 'return import(s)') as (s: string) => Promise<any>;
   (async () => {
     try {
-      const mod = await dynImport('@capacitor-community/speech-recognition');
-      const SR = mod?.SpeechRecognition;
+      // Static-specifier dynamic import — Vite bundles the plugin into its
+      // own chunk so it actually resolves at runtime in the iOS WebView.
+      // A `new Function('import(s)')` indirection hides the specifier from
+      // the bundler, so the chunk is never emitted and the import fails on
+      // device — that was the "voice doesn't work" bug.
+      const mod = await import('@capacitor-community/speech-recognition');
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const SR = (mod as any)?.SpeechRecognition;
       if (!SR) { cb.onError?.('SpeechRecognition plugin not installed'); return; }
       const perm = await SR.requestPermissions();
       if (perm?.speechRecognition !== 'granted' && perm?.permission !== 'granted') {
@@ -232,7 +236,7 @@ function startCapacitor(cb: VoiceCaptureCallbacks): VoiceCaptureSession {
     stop: () => {
       stopped = true;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      void dynImport('@capacitor-community/speech-recognition').then((m: any) => m?.SpeechRecognition?.stop?.()).catch(() => undefined);
+      void import('@capacitor-community/speech-recognition').then((m: any) => m?.SpeechRecognition?.stop?.()).catch(() => undefined);
     },
     active: () => !stopped,
   };

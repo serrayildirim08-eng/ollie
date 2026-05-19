@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Body — see the rest</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;
+    padding:0 26px 40px}
+
+  /* the framing line — a "see the rest" reflective surface. calm reading,
+     never a charts wall. sets the whole tone. */
+  .intro{margin-top:116px}
+  .ititle{font-size:22px;font-weight:300;color:var(--ink);letter-spacing:-.02em;
+    line-height:1.3}
+  .ititle b{font-weight:500}
+  .isub{margin-top:10px;font-size:14px;color:var(--mute);font-weight:400;
+    line-height:1.5}
+
+  /* the patterns — grouped quietly under small section labels. each
+     group is a calm cluster of ONE-LINE observations. a sage dot rides
+     each line. NO charts, NO badges, NO counts. it reads like a journal. */
+  .group{margin-top:30px}
+  .gk{font-size:11px;color:var(--mute);font-weight:600;letter-spacing:.08em;
+    text-transform:uppercase;margin-bottom:4px}
+
+  .pat{border-top:1px solid var(--line);padding:16px 0}
+  .group .pat:last-child{border-bottom:1px solid var(--line)}
+  .phead{display:flex;align-items:flex-start;gap:11px}
+  .pdot{width:7px;height:7px;border-radius:50%;background:var(--sage);
+    flex-shrink:0;margin-top:6px}
+  .ptext{flex:1}
+  .pline{font-size:15px;color:var(--ink);font-weight:500;letter-spacing:-.01em;
+    line-height:1.4}
+  /* the soft sub-line — the gentle reframe, never a verdict */
+  .pframe{margin-top:4px;font-size:13px;color:var(--mute);font-weight:400;
+    line-height:1.45}
+
+  /* the closing note — restates this surface is screen-only, never pushed */
+  .foot{margin-top:26px;display:flex;gap:10px;align-items:flex-start}
+  .foot svg{stroke:var(--mute);flex-shrink:0;margin-top:1px}
+  .foot span{font-size:12px;color:var(--mute);font-weight:400;line-height:1.5}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+
+  <div class="who">
+    <span>see the rest</span>
+  </div>
+
+  <div class="scroll">
+    <div class="intro">
+      <div class="ititle"><b>what ollie noticed</b> about your body</div>
+      <div class="isub">none of this needs doing today. it's here to read
+        when you're curious — quiet patterns, not instructions.</div>
+    </div>
+
+    <!-- GROUP 1 — water & interoception -->
+    <div class="group">
+      <div class="gk">water &amp; the body's signals</div>
+
+      <div class="pat">
+        <div class="phead">
+          <span class="pdot"></span>
+          <div class="ptext">
+            <div class="pline">on low-water mornings, a headache shows up 6 of 9 times</div>
+            <div class="pframe">a fairly steady link — water might be worth reaching for earlier on those days.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pat">
+        <div class="phead">
+          <span class="pdot"></span>
+          <div class="ptext">
+            <div class="pline">inside a focus session you drink about half as often</div>
+            <div class="pframe">flow can quietly switch thirst off — it's the focus, not forgetfulness.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pat">
+        <div class="phead">
+          <span class="pdot"></span>
+          <div class="ptext">
+            <div class="pline">the gap between glasses swings widely day to day</div>
+            <div class="pframe">your body may not be flagging thirst on a regular clock — an external nudge can stand in.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pat">
+        <div class="phead">
+          <span class="pdot"></span>
+          <div class="ptext">
+            <div class="pline">you often write &ldquo;hungry&rdquo; within 30 min of drinking water</div>
+            <div class="pframe">hunger and thirst signals can cross — worth a pause before deciding which it is.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- GROUP 2 — episodes -->
+    <div class="group">
+      <div class="gk">your episodes</div>
+
+      <div class="pat">
+        <div class="phead">
+          <span class="pdot"></span>
+          <div class="ptext">
+            <div class="pline">headache episodes tend to run about 2 days for you</div>
+            <div class="pframe">knowing the usual length can make day one feel less open-ended.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pat">
+        <div class="phead">
+          <span class="pdot"></span>
+          <div class="ptext">
+            <div class="pline">short-sleep nights often sit just before an episode starts</div>
+            <div class="pframe">a candidate trigger ollie keeps watching — not a certainty, just a recurring neighbour.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pat">
+        <div class="phead">
+          <span class="pdot"></span>
+          <div class="ptext">
+            <div class="pline">a cluster of symptoms — headache, fatigue, nausea — keeps recurring together</div>
+            <div class="pframe">they may be one thing wearing three names. worth mentioning as a set.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- GROUP 3 — pacing & energy -->
+    <div class="group">
+      <div class="gk">pacing &amp; your energy</div>
+
+      <div class="pat">
+        <div class="phead">
+          <span class="pdot"></span>
+          <div class="ptext">
+            <div class="pline">&ldquo;drained&rdquo; dumps cluster around 3&ndash;4pm most days</div>
+            <div class="pframe">a real afternoon dip — something to schedule around, not push through.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pat">
+        <div class="phead">
+          <span class="pdot"></span>
+          <div class="ptext">
+            <div class="pline">a long-focus day was followed by a heavier-feeling one, 4 times running</div>
+            <div class="pframe">the spend has a cost the next day — that's an energy envelope, not a failure.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pat">
+        <div class="phead">
+          <span class="pdot"></span>
+          <div class="ptext">
+            <div class="pline">movement is logged on few days lately</div>
+            <div class="pframe">not laziness — moving often just needs an extra planning step the brain skips.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- GROUP 4 — across your modules: the cross-module links -->
+    <div class="group">
+      <div class="gk">across your modules</div>
+
+      <div class="pat">
+        <div class="phead">
+          <span class="pdot"></span>
+          <div class="ptext">
+            <div class="pline">in your luteal phase, body symptoms show up more often</div>
+            <div class="pframe">body &times; cycle — that week runs differently, it isn't you slipping.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pat">
+        <div class="phead">
+          <span class="pdot"></span>
+          <div class="ptext">
+            <div class="pline">the day after a short night, symptom notes tend to spike</div>
+            <div class="pframe">body &times; sleep — the next-day weight is often the sleep, not a new problem.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pat">
+        <div class="phead">
+          <span class="pdot"></span>
+          <div class="ptext">
+            <div class="pline">on higher-caffeine days, water tends to run low</div>
+            <div class="pframe">body &times; intake — the two trade off; one quietly displaces the other.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pat">
+        <div class="phead">
+          <span class="pdot"></span>
+          <div class="ptext">
+            <div class="pline">better-hydrated days line up with steadier focus</div>
+            <div class="pframe">body &times; work — a small lever, worth knowing before a hard block.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="foot">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="1.8">
+        <circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>
+      </svg>
+      <span>ollie notices patterns — it does not diagnose. none of this
+        is ever sent as a notification; it waits here for when you want it.</span>
+    </div>
+  </div>
+</div>
+</body>
+</html>

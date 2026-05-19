@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Shopping check</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  /* swipe-down handle dismisses */
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+  /* tiny progress dots — mirrors the sleep survey + onboarding */
+  .prog{position:absolute;top:66px;left:24px;display:flex;gap:6px}
+  .prog i{width:6px;height:6px;border-radius:50%;background:var(--line);display:block}
+  .prog i.on{background:var(--ink)}
+  /* skip — no shouting, calm exit. the survey is never pushed. */
+  .skip{position:absolute;top:62px;right:24px;font-size:14px;color:var(--mute);
+    font-weight:500}
+
+  .stage{flex:1;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;padding:0 42px}
+
+  /* THE ONE THING — one survey question. mirrors onboarding's shape:
+     one glyph, one sentence, the Likert as a calm column of taps. */
+  .glyph{width:56px;height:56px;border-radius:50%;background:#F2EEDF;
+    display:flex;align-items:center;justify-content:center;margin-bottom:32px}
+  .glyph svg{stroke:var(--sage)}
+  /* a quiet stem — the survey speaks plainly, no clinical jargon up front */
+  .stem{font-size:12px;color:var(--mute);font-weight:600;letter-spacing:.05em;
+    text-transform:lowercase;margin-bottom:14px}
+  /* the question — the only sentence, the BSAS item verbatim */
+  .q{font-size:23px;line-height:1.42;color:var(--ink);text-align:center;
+    letter-spacing:-.012em;font-weight:400;margin-bottom:34px;max-width:290px}
+
+  /* the 0-4 Likert as a column — calm, one tap, no slider */
+  .scale{width:100%;display:flex;flex-direction:column;gap:8px}
+  .opt{height:52px;border-radius:16px;border:1px solid var(--line);background:#fff;
+    display:flex;align-items:center;padding:0 20px;
+    box-shadow:0 6px 16px rgba(42,38,34,.04)}
+  .opt span{font-size:16px;color:var(--ink);font-weight:400}
+  /* one option shown chosen — amber edge, the only color */
+  .opt.on{border-color:var(--accent);background:#FCF6EA}
+  .opt.on span{font-weight:600}
+  .dot{width:18px;height:18px;border-radius:50%;border:1.8px solid var(--line);
+    margin-left:auto;flex-shrink:0}
+  .opt.on .dot{border-color:var(--accent);background:var(--accent);
+    box-shadow:inset 0 0 0 3px #fff}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+  <div class="prog">
+    <i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i>
+  </div>
+  <div class="skip">skip</div>
+
+  <div class="stage">
+    <div class="glyph">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-width="1.7">
+        <path d="M6 8h12l1.5 11a1 1 0 0 1-1 1.1H5.5A1 1 0 0 1 4.5 19z"/>
+        <path d="M9 8V6a3 3 0 0 1 6 0v2"/>
+      </svg>
+    </div>
+    <div class="stem">over the last year</div>
+    <div class="q">you shop or buy things in order to change your mood</div>
+    <div class="scale">
+      <div class="opt"><span>never</span><span class="dot"></span></div>
+      <div class="opt"><span>rarely</span><span class="dot"></span></div>
+      <div class="opt on"><span>sometimes</span><span class="dot"></span></div>
+      <div class="opt"><span>often</span><span class="dot"></span></div>
+      <div class="opt"><span>very often</span><span class="dot"></span></div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
