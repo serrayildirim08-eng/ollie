@@ -215,6 +215,7 @@ describe('PetObservationEntry', () => {
     expect((container.querySelector('textarea') as HTMLTextAreaElement).value).toBe('');
   });
 
+  // notif-scope-allow — this test asserts the streak ban; the word IS the assertion
   it('DNA: rendered copy carries no blame / streak / exclamation', () => {
     act(() => {
       root.render(
@@ -224,16 +225,20 @@ describe('PetObservationEntry', () => {
     openPanel();
     const copy = (container.textContent ?? '').toLowerCase();
     expect(copy).not.toContain('!');
+    // notif-scope-allow — asserts the streak ban
     expect(copy).not.toContain('streak');
     expect(copy).not.toContain('you forgot');
     expect(copy).not.toContain('you missed');
   });
 
+  // notif-scope-allow — this test asserts the streak ban; the word IS the assertion
   it('DNA: source placeholders carry no blame / streak / exclamation', () => {
     const src = readFileSync(join(__dirname, 'PetObservationEntry.tsx'), 'utf8');
-    // user-facing string literals only — exclude code operators
+    // user-facing string literals only — exclude code operators.
+    // notif-scope-allow — the line below is a literal-extraction regex, not copy
     const literals = src.match(/(["'])(?:(?!\1).)*\1/g) ?? [];
     const copy = literals.join(' ').toLowerCase();
+    // notif-scope-allow — asserts the streak ban
     expect(copy).not.toContain('streak');
     expect(copy).not.toContain('you forgot');
     expect(copy).not.toContain('you missed');
