@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Medication — add</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  /* swipe-down handle dismisses — same return gesture everywhere */
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;
+    padding:0 26px 36px}
+
+  /* the lead — one calm line */
+  .lead{margin-top:116px;font-size:22px;font-weight:300;color:var(--ink);
+    letter-spacing:-.02em}
+  .lead b{font-weight:500}
+
+  /* THE NAME FIELD — one quiet underlined line, never a big box. ink. */
+  .field{margin-top:30px;border-bottom:1.5px solid var(--ink);padding-bottom:11px;
+    display:flex;align-items:baseline;gap:2px}
+  .field span{font-size:21px;color:var(--ink);font-weight:500;letter-spacing:-.01em}
+  .field .caret{width:2px;height:22px;background:var(--accent);
+    display:inline-block;margin-left:1px;border-radius:1px}
+
+  /* a section label */
+  .sect{margin-top:36px;font-size:11px;color:var(--mute);font-weight:600;
+    letter-spacing:.08em;text-transform:uppercase}
+  .sect .opt{color:var(--line);font-weight:500;text-transform:none;
+    letter-spacing:.01em;margin-left:7px}
+
+  /* the dose field — optional, a quieter underline (line not ink) */
+  .dose{margin-top:14px;border-bottom:1px solid var(--line);padding-bottom:11px;
+    display:flex;align-items:baseline}
+  .dose span{font-size:17px;color:var(--mute);font-weight:400;letter-spacing:-.01em}
+
+  /* kind — vitamin / supplement / prescription / otc. a calm 2x2 of soft
+     tiles. one tap. selected = amber edge. */
+  .kinds{margin-top:14px;display:grid;grid-template-columns:1fr 1fr;gap:9px}
+  .kt{height:58px;border-radius:16px;border:1px solid var(--line);
+    background:#fff;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;gap:4px;box-shadow:0 6px 16px rgba(42,38,34,.04)}
+  .kt span{font-size:14px;color:var(--ink);font-weight:500;letter-spacing:-.01em}
+  .kt .kh{font-size:10px;color:var(--mute);font-weight:600;letter-spacing:.03em}
+  .kt.on{border-color:var(--accent);background:#FCF6EA}
+  .kt.on span{font-weight:600}
+
+  /* schedule — comma-separated HH:MM times. a quiet underlined line, with
+     a calm hint of the times-as-chips ollie pulls out. blank = manual. */
+  .sched{margin-top:14px;border-bottom:1px solid var(--line);padding-bottom:11px;
+    display:flex;align-items:baseline;gap:2px}
+  .sched span{font-size:17px;color:var(--ink);font-weight:500;letter-spacing:-.01em}
+  .sched .caret{width:2px;height:18px;background:var(--accent);
+    display:inline-block;margin-left:1px;border-radius:1px}
+  /* the parsed times — a quiet preview, like sleep-log's parsed fields */
+  .times{margin-top:13px;display:flex;align-items:center;gap:8px}
+  .tchip{border:1px solid var(--line);background:#fff;border-radius:13px;
+    padding:5px 11px;font-size:12px;font-weight:600;color:var(--ink);
+    letter-spacing:.01em}
+  .thint{font-size:12px;color:var(--mute);font-weight:400}
+  /* the manual-only note — a calm sage line, the honest alternative */
+  .manual{margin-top:13px;display:flex;align-items:flex-start;gap:9px}
+  .manual .mdot{width:7px;height:7px;border-radius:50%;background:var(--sage);
+    flex-shrink:0;margin-top:5px}
+  .manual span{font-size:13px;color:var(--mute);font-weight:400;line-height:1.5}
+  .manual b{color:var(--ink);font-weight:600}
+
+  /* save — full-width amber, the one commit */
+  .save{margin-top:38px;height:52px;border-radius:26px;background:var(--accent);
+    display:flex;align-items:center;justify-content:center;gap:8px;
+    box-shadow:0 12px 28px rgba(201,146,62,.32)}
+  .save svg{stroke:#fff}
+  .save span{font-size:16px;font-weight:600;color:#fff;letter-spacing:-.01em}
+  /* the saved confirmation — dry, lowercase, period */
+  .saved{margin-top:16px;text-align:center;font-size:13px;color:var(--sage);
+    font-weight:600;letter-spacing:.01em}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+
+  <div class="who">
+    <span>add a medication</span>
+  </div>
+
+  <div class="scroll">
+    <div class="lead"><b>what are you adding</b></div>
+
+    <!-- the name field — one quiet underlined line -->
+    <div class="field">
+      <span>methylphenidate</span><span class="caret"></span>
+    </div>
+
+    <!-- dose — optional -->
+    <div class="sect">dose<span class="opt">— optional</span></div>
+    <div class="dose">
+      <span>10mg</span>
+    </div>
+
+    <!-- kind — vitamin / supplement / prescription / otc -->
+    <div class="sect">kind</div>
+    <div class="kinds">
+      <div class="kt">
+        <span>vitamin</span>
+        <span class="kh">d, b12, …</span>
+      </div>
+      <div class="kt">
+        <span>supplement</span>
+        <span class="kh">magnesium, …</span>
+      </div>
+      <div class="kt on">
+        <span>prescription</span>
+        <span class="kh">prescribed</span>
+      </div>
+      <div class="kt">
+        <span>otc</span>
+        <span class="kh">over the counter</span>
+      </div>
+    </div>
+
+    <!-- schedule — comma-separated HH:MM times -->
+    <div class="sect">schedule<span class="opt">— blank = log it manually</span></div>
+    <div class="sched">
+      <span>08:00, 14:00</span><span class="caret"></span>
+    </div>
+    <div class="times">
+      <span class="tchip">8:00am</span>
+      <span class="tchip">2:00pm</span>
+      <span class="thint">— two doses a day</span>
+    </div>
+    <!-- the honest alternative — blank schedule = manual log -->
+    <div class="manual">
+      <span class="mdot"></span>
+      <span>leave it blank and ollie won't remind you — you'll just
+        <b>log a dose when you take one</b>.</span>
+    </div>
+
+    <div class="save">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.4"><path d="M5 13l4 4 10-11"/></svg>
+      <span>add it</span>
+    </div>
+    <div class="saved">noted.</div>
+  </div>
+</div>
+</body>
+</html>

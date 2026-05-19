@@ -14,14 +14,21 @@
  * a try/catch in every caller.
  */
 
-import { getAccount } from './account-boot';
+import { getAuthJwt } from './account-boot';
 
 interface ViteEnv {
   VITE_AI_WORKER_URL?: string;
 }
 const env: ViteEnv = (import.meta as unknown as { env?: ViteEnv }).env ?? {};
 
-const BETA_INVITE_REQUIRED = true;
+// Closed alpha (TestFlight): sign-up is gated on a valid invite code.
+// This also powers the activation funnel — claim-invite only fires when
+// the code field is shown, so the funnel's "claimed" step depends on it.
+//
+// OFF on the redesign/money-v2 branch so Serra can sign in on her own
+// device to test the v2 redesign without an invite code. FLIP BACK TO
+// `true` before any real closed-alpha / TestFlight release.
+const BETA_INVITE_REQUIRED = false;
 
 export function isBetaInviteRequired(): boolean {
   return BETA_INVITE_REQUIRED;
@@ -63,12 +70,9 @@ function workerUrl(path: string): string | null {
 }
 
 function getJwt(): string | null {
-  try {
-    const account = getAccount();
-    return account?.auth.state().session?.access_token ?? null;
-  } catch {
-    return null;
-  }
+  // Phase 1 (Clerk migration): no Supabase-accepted JWT. The invite worker
+  // re-accepts a Clerk-verified JWT in Phase 3.
+  return getAuthJwt();
 }
 
 async function post<T>(
@@ -113,13 +117,13 @@ async function post<T>(
   return { ok: true, data };
 }
 
-export async function generateInvite(): Promise<GenerateResult> {
+export async function generateInvite(channel?: string): Promise<GenerateResult> {
   const r = await post<{
     code: string;
     share_url: string;
     expires_at: number;
     remaining?: number;
-  }>('/generate-invite', {});
+  }>('/generate-invite', channel ? { channel } : {});
   if (!r.ok) return r;
   const d = r.data;
   if (!d?.code || !d?.share_url) {

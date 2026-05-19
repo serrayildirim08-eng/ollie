@@ -150,6 +150,7 @@ function PassphraseModal({ open, busy, onCancel, onSubmit }: PassphraseModalProp
           borderRadius: 12,
           padding: 24,
           width: 'min(440px, 92vw)',
+          boxSizing: 'border-box',
         }}
       >
         <p style={{ ...labelStyle, marginBottom: 12 }}>encrypt this export</p>

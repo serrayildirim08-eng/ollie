@@ -87,6 +87,7 @@ export function SourcesLink({ sources, label, locale = 'en' }: SourcesLinkProps)
             bottom: 'calc(100% + 6px)',
             left: 0,
             width: 'min(360px, 90vw)',
+            boxSizing: 'border-box',
             padding: '14px 16px',
             background: 'var(--paper)',
             border: '1px solid var(--rule)',

@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@capgo/capacitor-native-biometric": "^8.4.5",
-    "@capacitor/app": "^8.1.0",
+    "@clerk/react": "^6.6.4",
     "@ollie/api": "workspace:*",
     "@ollie/auth": "workspace:*",
     "@ollie/backup": "workspace:*",

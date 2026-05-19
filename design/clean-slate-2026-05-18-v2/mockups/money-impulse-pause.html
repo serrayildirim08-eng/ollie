@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Impulse pause</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+
+  /* the spend screen behind, dimmed — the sheet rises over it */
+  .behind{position:absolute;inset:0;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;opacity:.35;
+    filter:blur(2px);padding:0 44px}
+  .behind .lead{font-size:13px;color:var(--mute);font-weight:500}
+  .behind .amt{font-size:80px;font-weight:300;color:var(--ink);letter-spacing:-.04em}
+  .behind .amt .c{color:var(--mute);font-size:48px}
+  .scrim{position:absolute;inset:0;background:rgba(42,38,34,.28)}
+
+  /* the impulse-pause sheet — an OFFER, not a block. opt-in only.
+     neutral: no praise for waiting, no push to buy. just a question. */
+  .sheet{position:absolute;left:0;right:0;bottom:0;background:var(--paper);
+    border-radius:30px 30px 0 0;box-shadow:0 -20px 50px rgba(42,38,34,.22);
+    padding:14px 30px 40px;display:flex;flex-direction:column;align-items:center}
+  .grip{width:38px;height:5px;border-radius:3px;background:var(--line);
+    margin-bottom:26px}
+  /* a slow sage clock glyph — calm, not an alarm */
+  .glyph{width:58px;height:58px;border-radius:50%;background:#F2EEDF;
+    display:flex;align-items:center;justify-content:center;margin-bottom:24px}
+  .glyph svg{stroke:var(--sage)}
+
+  /* the spend, named plainly */
+  .item{font-size:24px;font-weight:400;color:var(--ink);letter-spacing:-.015em;
+    text-align:center}
+  /* the observation — sage, factual, no judgment */
+  .obs{margin-top:14px;font-size:15px;line-height:1.5;color:var(--sage);
+    font-weight:500;text-align:center;max-width:270px}
+  /* the question — calm, the actual ask */
+  .q{margin-top:20px;font-size:17px;color:var(--ink);font-weight:500;
+    text-align:center;letter-spacing:-.01em}
+
+  /* two equal targets — hold OR spend now. no nudge either way. */
+  .choices{margin-top:28px;display:flex;flex-direction:column;gap:10px;width:100%}
+  .hold{height:54px;border-radius:27px;background:var(--accent);
+    display:flex;align-items:center;justify-content:center;gap:8px;
+    box-shadow:0 12px 28px rgba(201,146,62,.3)}
+  .hold svg{stroke:#fff}
+  .hold span{font-size:16px;font-weight:600;color:#fff}
+  .now{height:54px;border-radius:27px;border:1px solid var(--line);background:var(--paper);
+    display:flex;align-items:center;justify-content:center;font-size:16px;
+    font-weight:600;color:var(--ink)}
+  /* a quiet line — it's opt-in, and it can be turned off */
+  .opt{margin-top:20px;font-size:12px;color:var(--mute);font-weight:500;
+    text-align:center}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+
+  <div class="behind">
+    <div class="lead">spent</div>
+    <div class="amt"><span class="c">$</span>180</div>
+  </div>
+  <div class="scrim"></div>
+
+  <div class="sheet">
+    <div class="grip"></div>
+    <div class="glyph">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke-width="1.7">
+        <circle cx="12" cy="12" r="9"/><path d="M12 7v5l4 2"/>
+      </svg>
+    </div>
+    <div class="item">$180 · headphones</div>
+    <div class="obs">this looks like the speaker you almost bought last week.</div>
+    <div class="q">hold it 24 hours?</div>
+    <div class="choices">
+      <div class="hold">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l4 2"/></svg>
+        <span>hold 24h</span>
+      </div>
+      <div class="now">spend it now</div>
+    </div>
+    <div class="opt">an offer, not a block · turn off in settings</div>
+  </div>
+</div>
+</body>
+</html>

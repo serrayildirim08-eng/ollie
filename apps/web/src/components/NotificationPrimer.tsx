@@ -133,6 +133,9 @@ export function NotificationPrimer({ onDone }: NotificationPrimerProps): React.R
         onClick={(e) => e.stopPropagation()}
         style={{
           width: 'min(92vw, 420px)',
+          // content-box: width:92vw + 56px h-padding overflowed the
+          // viewport on a 390px iPhone. Audit 2026-05-18.
+          boxSizing: 'border-box',
           background: 'var(--bone)',
           border: '1px solid var(--rule)',
           borderRadius: 18,
@@ -207,6 +210,7 @@ export function NotificationPrimer({ onDone }: NotificationPrimerProps): React.R
             disabled={busy}
             style={{
               width: '100%',
+              boxSizing: 'border-box',
               padding: '13px 20px',
               minHeight: 48,
               background: 'var(--ink)',
@@ -231,6 +235,7 @@ export function NotificationPrimer({ onDone }: NotificationPrimerProps): React.R
             disabled={busy}
             style={{
               width: '100%',
+              boxSizing: 'border-box',
               padding: '11px 20px',
               minHeight: 44,
               background: 'transparent',

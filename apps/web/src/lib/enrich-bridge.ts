@@ -8,11 +8,24 @@
  * useApplyBrainDump hook checks `research.hasConsent()` before invoking.
  */
 
+import { getAuthJwt } from './account-boot';
+
 interface ViteEnv {
   VITE_AI_WORKER_URL?: string;
 }
 
 const env: ViteEnv = (import.meta as unknown as { env?: ViteEnv }).env ?? {};
+
+/**
+ * Default JWT source — the Supabase access token off the booted auth
+ * client. Same access path as lib/invite.ts · getJwt(). Returns null
+ * pre-sign-in or before bootAccount() has run.
+ */
+function defaultGetJwt(): string | null {
+  // Phase 1 (Clerk migration): no Supabase-accepted JWT — the request is
+  // skipped. Re-wired to the Clerk session token in Phase 3.
+  return getAuthJwt();
+}
 
 export interface EnrichDumpInput {
   user_hash: string;

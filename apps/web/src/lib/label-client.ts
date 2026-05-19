@@ -31,6 +31,17 @@
  */
 
 import type { LabelClient } from '@ollie/orchestrator';
+import { getAuthJwt } from './account-boot';
+
+/**
+ * Default JWT source — the Supabase access token off the booted auth
+ * client. Same access path as lib/invite.ts · getJwt().
+ */
+function defaultGetJwt(): string | null {
+  // Phase 1 (Clerk migration): no Supabase-accepted JWT — /label calls are
+  // skipped. Re-wired to the Clerk session token in Phase 3.
+  return getAuthJwt();
+}
 
 /**
  * The exact `postLabel` payload shape, sourced from the orchestrator's

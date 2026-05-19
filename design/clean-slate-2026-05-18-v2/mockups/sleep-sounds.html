@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Sleep — sounds</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  /* swipe-down handle dismisses */
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  /* the sounds screen is one quiet player — centred, deeply calm.
+     one sound name, a soft play control, a sleep timer. minimal. */
+  .stage{flex:1;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;padding:0 38px}
+
+  /* THE ONE THING — the play disc. a large soft circle, the sound's
+     waveform a few calm rings inside it. tapping plays/pauses. when
+     playing, the rings hold steady (a still, brown-noise calm). */
+  .disc{width:200px;height:200px;border-radius:50%;
+    background:radial-gradient(circle at 50% 44%,#F2EEDF 0%,#EFE9D8 60%,#EAE2D4 100%);
+    display:flex;align-items:center;justify-content:center;position:relative;
+    box-shadow:0 18px 40px rgba(42,38,34,.1)}
+  /* the calm sound-rings — concentric, sage, soft. the visual of "noise" */
+  .disc svg{position:absolute}
+  /* the play / pause glyph at the centre */
+  .ctrl{width:64px;height:64px;border-radius:50%;background:var(--accent);
+    display:flex;align-items:center;justify-content:center;z-index:1;
+    box-shadow:0 12px 28px rgba(201,146,62,.34)}
+  .ctrl svg{stroke:none;fill:#fff}
+
+  /* the sound name — one word, large, calm. below it a quiet kind line. */
+  .name{margin-top:36px;font-size:30px;font-weight:300;color:var(--ink);
+    letter-spacing:-.025em}
+  .kind{margin-top:7px;font-size:13px;color:var(--mute);font-weight:500;
+    letter-spacing:.02em}
+
+  /* a quiet sound switcher — three calm dots, the current one ink */
+  .switch{margin-top:22px;display:flex;gap:9px}
+  .switch i{width:7px;height:7px;border-radius:50%;background:var(--line)}
+  .switch i.on{background:var(--ink)}
+
+  /* THE SLEEP TIMER — one soft row. the player fades out after it.
+     the chosen span sits amber, the rest mute. one tap each. */
+  .timer{margin-top:46px;width:100%}
+  .tlead{font-size:11px;color:var(--mute);font-weight:600;letter-spacing:.08em;
+    text-transform:uppercase;text-align:center}
+  .tspans{margin-top:15px;display:flex;justify-content:center;gap:9px}
+  .tspans span{border:1px solid var(--line);background:#fff;border-radius:16px;
+    padding:9px 15px;font-size:14px;color:var(--ink);font-weight:500;
+    letter-spacing:-.01em}
+  .tspans span.on{border-color:var(--accent);background:#FCF6EA;font-weight:600}
+  /* the calm "fades out in" line under the timer */
+  .tnote{margin-top:16px;font-size:12px;color:var(--mute);font-weight:400;
+    text-align:center}
+  .tnote b{color:var(--ink);font-weight:600}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+
+  <div class="who">
+    <span>sounds</span>
+  </div>
+
+  <div class="stage">
+    <!-- the play disc — soft concentric sound-rings, an amber play glyph -->
+    <div class="disc">
+      <svg width="168" height="168" viewBox="0 0 168 168" fill="none">
+        <circle cx="84" cy="84" r="78" stroke="#5B8C7E" stroke-width="1.4" opacity=".22"/>
+        <circle cx="84" cy="84" r="62" stroke="#5B8C7E" stroke-width="1.4" opacity=".34"/>
+        <circle cx="84" cy="84" r="46" stroke="#5B8C7E" stroke-width="1.4" opacity=".5"/>
+      </svg>
+      <div class="ctrl">
+        <!-- play triangle — paused state shown -->
+        <svg width="24" height="24" viewBox="0 0 24 24"><path d="M8 5l12 7-12 7z"/></svg>
+      </div>
+    </div>
+
+    <div class="name">brown noise</div>
+    <div class="kind">a low, even hum · no melody</div>
+
+    <div class="switch">
+      <i class="on"></i><i></i><i></i>
+    </div>
+
+    <!-- the soft sleep timer -->
+    <div class="timer">
+      <div class="tlead">sleep timer</div>
+      <div class="tspans">
+        <span>20m</span>
+        <span class="on">45m</span>
+        <span>1h</span>
+        <span>off</span>
+      </div>
+      <div class="tnote">fades out in <b>45m</b>, gently — no hard stop.</div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

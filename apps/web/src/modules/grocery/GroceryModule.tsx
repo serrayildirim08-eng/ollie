@@ -802,6 +802,7 @@ export function GroceryModule() {
                 onClick={sweepAll}
                 style={{
                   width: '100%',
+                  boxSizing: 'border-box',
                   background: 'rgba(79,110,91,0.08)',
                   border: '1px solid rgba(79,110,91,0.25)',
                   borderRadius: 14,

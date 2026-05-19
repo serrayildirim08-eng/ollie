@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Noticed</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --sage:#5B8C7E;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  .safe{position:absolute;top:62px;right:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .safe svg{stroke:var(--mute)}
+
+  .stage{flex:1;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;padding:0 46px}
+
+  /* one glyph: a soft observed-link mark */
+  .mark{width:64px;height:64px;border-radius:50%;border:1.5px solid var(--line);
+    display:flex;align-items:center;justify-content:center;margin-bottom:40px;
+    background:#fff;box-shadow:0 8px 22px rgba(42,38,34,.05)}
+  .mark svg{stroke:var(--sage)}
+
+  /* the one pattern — app-written, the user's payoff. one sentence. */
+  .pattern{font-size:25px;line-height:1.5;color:var(--ink);text-align:center;
+    letter-spacing:-.012em;font-weight:400}
+  .pattern b{color:var(--sage);font-weight:400}
+
+  /* faint history dots — how many other patterns wait */
+  .more{margin-top:50px;display:flex;gap:8px}
+  .more i{width:7px;height:7px;border-radius:50%;background:var(--line);display:block}
+  .more i.on{background:var(--ink)}
+
+  .dots{position:absolute;bottom:38px;left:0;right:0;display:flex;
+    gap:9px;justify-content:center}
+  .dots i{width:6px;height:6px;border-radius:50%;background:var(--line);display:block}
+  .dots i.on{background:var(--ink);width:22px;border-radius:3px}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="safe">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.5-7 10-7 10z"/>
+    </svg>
+  </div>
+
+  <div class="stage">
+    <div class="mark">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke-width="1.7">
+        <circle cx="7" cy="7" r="3.4"/><circle cx="17" cy="17" r="3.4"/>
+        <path d="M9.4 9.4l5.2 5.2"/>
+      </svg>
+    </div>
+    <div class="pattern">coffee after 3pm &mdash; you sleep <b>40 min less</b></div>
+    <div class="more"><i class="on"></i><i></i><i></i></div>
+  </div>
+
+  <div class="dots"><i></i><i></i><i class="on"></i></div>
+</div>
+</body>
+</html>

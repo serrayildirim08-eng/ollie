@@ -214,6 +214,7 @@ function RecordPanel({ onSave, onCancel }: RecordPanelProps) {
         placeholder={t('cycle.record.note_ph')}
         style={{
           width: '100%',
+          boxSizing: 'border-box',
           background: C.base,
           border: `1px solid ${C.sand}`,
           padding: '12px 14px',
@@ -501,6 +502,7 @@ function SettingsPanel({ settings, onChange, onClose }: SettingsPanelProps) {
           background: C.base,
           maxWidth: 440,
           width: '100%',
+          boxSizing: 'border-box',
           padding: 32,
         }}
       >
@@ -595,6 +597,7 @@ function SettingsPanel({ settings, onChange, onClose }: SettingsPanelProps) {
             onChange={e => onChange({ ...settings, passphrase_hint: e.target.value })}
             style={{
               width: '100%',
+              boxSizing: 'border-box',
               background: C.base,
               border: `1px solid ${C.sand}`,
               padding: '10px 12px',
@@ -992,7 +995,8 @@ export function CycleModule({ onBack }: CycleModuleProps) {
         <div style={{ maxWidth: 860, margin: '0 auto 72px' }}>
           {stats.irregular_flag ? (
             <div style={{
-              width: 320, height: 320,
+              width: 'min(320px, 78vw)', height: 'min(320px, 78vw)',
+              boxSizing: 'border-box',
               background: C.bone,
               margin: '0 auto 56px',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -1216,6 +1220,7 @@ export function CycleModule({ onBack }: CycleModuleProps) {
             onClick={() => setRecordOpen(v => !v)}
             style={{
               display: 'block', width: '100%', maxWidth: 480, margin: '96px auto 0',
+              boxSizing: 'border-box',
               background: recordOpen ? C.deep : C.base,
               border: `1.5px solid ${C.ink}`,
               color: recordOpen ? C.base : C.ink,

@@ -1,4 +1,24 @@
 /* ───────────────────────────────────────────────────────────────────── */
+/* RESET · minimal · iPhone-readiness                                    */
+/* ───────────────────────────────────────────────────────────────────── */
+/* No global box-sizing override — the app is built content-box.         */
+
+html {
+  /* prevent iOS Safari/WKWebView from auto-inflating text on rotate */
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  /* The app is a single-column mobile layout on every platform — it
+   * must never scroll horizontally. This also clips position:fixed
+   * panels parked off-screen-right (e.g. the Sleep "the rest" drawer
+   * when closed), which would otherwise be revealed by iOS rubber-band
+   * horizontal scroll. Audit 2026-05-18. */
+  overflow-x: hidden;
+}
+
+/* ───────────────────────────────────────────────────────────────────── */
 /* FONTS · local · downloaded to apps/web/public/fonts/                  */
 /* ───────────────────────────────────────────────────────────────────── */
 

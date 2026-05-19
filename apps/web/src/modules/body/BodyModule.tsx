@@ -822,6 +822,7 @@ function ActiveEpisodeCard() {
             onClick={openDocModal}
             style={{
               width: '100%',
+              boxSizing: 'border-box',
               padding: '12px 14px',
               background: 'transparent',
               color: C.ink,

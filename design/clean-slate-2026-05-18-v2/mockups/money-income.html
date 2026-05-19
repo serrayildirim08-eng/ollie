@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Income</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  .safe{position:absolute;top:62px;right:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .safe svg{stroke:var(--mute)}
+  .find{position:absolute;top:62px;left:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .find svg{stroke:var(--mute)}
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  .who{position:absolute;top:96px;left:26px;display:flex;align-items:center;gap:10px}
+  .who .g{width:34px;height:34px;border-radius:11px;background:#F2EEDF;
+    display:flex;align-items:center;justify-content:center}
+  .who .g svg{stroke:var(--accent)}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .stage{flex:1;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;padding:0 44px}
+
+  /* THE ONE THING — the variable-income picture, stated calmly.
+     a freelancer's panic comes from "I don't know what I make".
+     this view answers that in one sentence + a quiet shape. */
+  .lead{font-size:13px;color:var(--mute);font-weight:500;letter-spacing:.02em}
+  .amount{font-size:62px;font-weight:300;color:var(--ink);letter-spacing:-.035em;
+    line-height:1;margin-top:8px}
+  .amount .c,.amount .u{color:var(--mute);font-weight:300}
+  .amount .u{font-size:26px;margin-left:1px}
+  /* one calm word for the shape of it — not a warning, a fact */
+  .shape{margin-top:13px;font-size:14px;color:var(--sage);font-weight:600;
+    letter-spacing:.01em}
+
+  /* a soft 6-month band — bars, no axis, no grid. the spread IS the point:
+     it shows variability as something seen and held, not feared. */
+  .band{margin-top:42px;width:100%;display:flex;align-items:flex-end;
+    gap:11px;height:96px}
+  .bar{flex:1;background:var(--line);border-radius:5px;position:relative}
+  .bar.now{background:var(--accent)}
+  .labels{margin-top:10px;width:100%;display:flex;gap:11px}
+  .labels span{flex:1;text-align:center;font-size:11px;color:var(--mute);
+    font-weight:500}
+
+  /* two quiet facts under the band, hairline-divided */
+  .facts{margin-top:30px;width:100%;border-top:1px solid var(--line);
+    padding-top:18px;display:flex;flex-direction:column;gap:11px}
+  .line{display:flex;align-items:baseline;justify-content:space-between;font-size:13px}
+  .line .k{color:var(--mute);font-weight:500}
+  .line .v{color:var(--ink);font-weight:600}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+  <div class="find">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/>
+    </svg>
+  </div>
+  <div class="safe">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.5-7 10-7 10z"/>
+    </svg>
+  </div>
+
+  <div class="who">
+    <div class="g">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="1.7">
+        <path d="M3 17l5-5 4 3 7-8"/><path d="M14 4h5v5"/>
+      </svg>
+    </div>
+    <span>income</span>
+  </div>
+
+  <div class="stage">
+    <div class="lead">you make, on a normal month</div>
+    <div class="amount"><span class="c">~$</span>3.2<span class="u">k</span></div>
+    <div class="shape">irregular · no fixed payday</div>
+
+    <div class="band">
+      <div class="bar" style="height:54%"></div>
+      <div class="bar" style="height:78%"></div>
+      <div class="bar" style="height:62%"></div>
+      <div class="bar" style="height:90%"></div>
+      <div class="bar" style="height:48%"></div>
+      <div class="bar now" style="height:68%"></div>
+    </div>
+    <div class="labels">
+      <span>dec</span><span>jan</span><span>feb</span>
+      <span>mar</span><span>apr</span><span>may</span>
+    </div>
+
+    <div class="facts">
+      <div class="line"><span class="k">a quiet month</span><span class="v">~$2.4k</span></div>
+      <div class="line"><span class="k">a good month</span><span class="v">~$3.9k</span></div>
+      <div class="line"><span class="k">last landed</span><span class="v">$1,150 · 6 days ago</span></div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

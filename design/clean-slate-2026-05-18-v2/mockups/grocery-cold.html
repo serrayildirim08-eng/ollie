@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Grocery — first run</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E; --umber:#A8703C;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  .safe{position:absolute;top:62px;right:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .safe svg{stroke:var(--mute)}
+  .find{position:absolute;top:62px;left:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .find svg{stroke:var(--mute)}
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  /* the cold state — the grocery FACE is still present, never blank.
+     the 3-mode switch is here, shop selected. where the live face has a
+     torn-note list, the cold face holds a calm empty note-block and an
+     honest invitation. margin-top clears the .who label. */
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;
+    padding:0 26px 36px}
+
+  /* the 3-mode switch — present even cold, shop selected. so the user
+     sees from the first moment that grocery is a 3-mode tool. */
+  .modes{margin-top:116px;display:flex;gap:22px;padding-bottom:2px}
+  .mode{font-size:14px;color:var(--mute);font-weight:500;letter-spacing:-.01em;
+    padding-bottom:7px;border-bottom:2px solid transparent}
+  .mode.on{color:var(--ink);border-bottom-color:var(--accent);font-weight:600}
+
+  .hero{margin-top:30px;display:flex;flex-direction:column;align-items:center}
+
+  /* the empty note-block — the torn-note hero token from the live face,
+     but bare: three faint hairline rules waiting for lines, no ticks
+     filled. a quiet "nothing on the list yet", never broken. */
+  .emptynote{width:188px;display:flex;flex-direction:column;gap:0;
+    margin-bottom:24px}
+  .nrule{height:46px;border-bottom:1px dashed var(--line);display:flex;
+    align-items:center;gap:13px;padding:0 4px}
+  .nrule .ntick{width:21px;height:21px;border-radius:50%;
+    border:1.6px solid var(--line);flex-shrink:0}
+  .nrule .nstub{height:6px;border-radius:3px;background:var(--line);
+    opacity:.55}
+
+  .lead{font-size:13px;color:var(--mute);font-weight:500;letter-spacing:.02em}
+  .thing{font-size:30px;font-weight:300;color:var(--ink);letter-spacing:-.025em;
+    line-height:1.25;margin-top:9px;text-align:center;max-width:290px}
+
+  /* the honest invitation — a sage dot marks it as a "still empty" note.
+     it tells the user what grocery is for, plainly. */
+  .invite{margin-top:22px;display:flex;align-items:flex-start;gap:9px;
+    max-width:300px}
+  .invite .idot{width:7px;height:7px;border-radius:50%;background:var(--sage);
+    flex-shrink:0;margin-top:6px}
+  .invite span{font-size:14px;color:var(--ink);font-weight:500;letter-spacing:-.01em;
+    line-height:1.5;text-align:left}
+  .invite b{font-weight:600}
+
+  /* one amber button — the add invitation, the only thing to do */
+  .add{margin:30px auto 0;height:50px;border-radius:25px;background:var(--accent);
+    display:flex;align-items:center;justify-content:center;gap:8px;padding:0 26px;
+    box-shadow:0 12px 28px rgba(201,146,62,.32)}
+  .add svg{stroke:#fff}
+  .add span{font-size:16px;font-weight:600;color:#fff;letter-spacing:-.01em}
+
+  /* a calm worked example — the 3 modes, so the page is never barren.
+     each a faint hairline row with a tiny line glyph + what it becomes. */
+  .egs{margin-top:40px;display:flex;flex-direction:column}
+  .egk{font-size:11px;color:var(--mute);font-weight:600;letter-spacing:.08em;
+    text-transform:uppercase;margin-bottom:4px}
+  .eg{border-top:1px solid var(--line);padding:14px 2px;display:flex;
+    align-items:center;gap:12px}
+  .egs .eg:last-child{border-bottom:1px solid var(--line)}
+  .egglyph{width:20px;height:20px;flex-shrink:0;display:flex;
+    align-items:center;justify-content:center}
+  .egglyph svg{stroke:var(--mute);fill:none;stroke-width:1.6;
+    stroke-linecap:round;stroke-linejoin:round}
+  .egname{font-size:14px;color:var(--mute);font-weight:600;flex-shrink:0;
+    letter-spacing:-.01em}
+  .egwhat{flex:1;font-size:13px;color:var(--mute);font-weight:400;
+    text-align:right;letter-spacing:-.01em}
+
+  /* a quiet honest note — the pantry & recipes fill in on their own */
+  .cold-note{margin-top:24px;display:flex;align-items:flex-start;gap:9px}
+  .cold-note .cdot{width:6px;height:6px;border-radius:50%;background:var(--line);
+    flex-shrink:0;margin-top:5px}
+  .cold-note span{font-size:12px;color:var(--mute);font-weight:400;line-height:1.5}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+  <div class="find">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/>
+    </svg>
+  </div>
+  <div class="safe">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.5-7 10-7 10z"/>
+    </svg>
+  </div>
+
+  <div class="who">
+    <span>grocery</span>
+  </div>
+
+  <div class="scroll">
+
+    <!-- the 3-mode switch — present even cold, shop selected -->
+    <div class="modes">
+      <span class="mode on">shop</span>
+      <span class="mode">pantry</span>
+      <span class="mode">feed me</span>
+    </div>
+
+    <div class="hero">
+      <!-- the empty note-block — bare torn-note, hairline rules waiting -->
+      <div class="emptynote">
+        <div class="nrule">
+          <span class="ntick"></span>
+          <span class="nstub" style="flex:0 0 96px"></span>
+        </div>
+        <div class="nrule">
+          <span class="ntick"></span>
+          <span class="nstub" style="flex:0 0 64px"></span>
+        </div>
+        <div class="nrule" style="border-bottom:none">
+          <span class="ntick"></span>
+          <span class="nstub" style="flex:0 0 78px"></span>
+        </div>
+      </div>
+
+      <div class="lead">nothing on the list yet</div>
+      <div class="thing">the list's empty &mdash; add the first thing</div>
+
+      <div class="invite">
+        <span class="idot"></span>
+        <span>grocery is a <b>3-mode tool</b> &mdash; a shopping list you
+          can just talk to, a pantry that watches what turns soon, and a
+          <b>feed me</b> that finds a meal from what you have.</span>
+      </div>
+
+      <div class="add">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="2.4">
+          <path d="M12 5v14M5 12h14"/>
+        </svg>
+        <span>add the first thing</span>
+      </div>
+    </div>
+
+    <!-- a calm worked example — the 3 modes, so the page is never barren -->
+    <div class="egs">
+      <div class="egk">the 3 ways in</div>
+      <div class="eg">
+        <span class="egglyph"><svg width="16" height="16" viewBox="0 0 24 24"><path d="M4 8h16l-1.4 10.6a1 1 0 0 1-1 .9H6.4a1 1 0 0 1-1-.9L4 8z"/><path d="M8.5 8V6a3.5 3.5 0 0 1 7 0v2"/></svg></span>
+        <span class="egname">shop</span>
+        <span class="egwhat">a list you talk to</span>
+      </div>
+      <div class="eg">
+        <span class="egglyph"><svg width="16" height="16" viewBox="0 0 24 24"><path d="M7 9.5V6a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v3.5"/><rect x="5.5" y="9.5" width="13" height="11" rx="1.5"/><path d="M9.5 4v5.5M14.5 4v5.5"/></svg></span>
+        <span class="egname">pantry</span>
+        <span class="egwhat">watches what turns soon</span>
+      </div>
+      <div class="eg">
+        <span class="egglyph"><svg width="16" height="16" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.5"/></svg></span>
+        <span class="egname">feed me</span>
+        <span class="egwhat">a meal from what you have</span>
+      </div>
+    </div>
+
+    <div class="cold-note">
+      <span class="cdot"></span>
+      <span>the pantry and feed me fill in on their own &mdash; each thing
+        you check off the list lands in the pantry with a shelf life,
+        nothing to set up.</span>
+    </div>
+  </div>
+</div>
+</body>
+</html>

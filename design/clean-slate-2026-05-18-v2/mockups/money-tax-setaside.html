@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Tax set-aside</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  .safe{position:absolute;top:62px;right:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .safe svg{stroke:var(--mute)}
+  .find{position:absolute;top:62px;left:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .find svg{stroke:var(--mute)}
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  .who{position:absolute;top:96px;left:26px;display:flex;align-items:center;gap:10px}
+  .who .g{width:34px;height:34px;border-radius:11px;background:#F2EEDF;
+    display:flex;align-items:center;justify-content:center}
+  .who .g svg{stroke:var(--accent)}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .stage{flex:1;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;padding:0 44px}
+
+  /* THE ONE THING — the slice of this income that belongs to tax.
+     self-employed only. one number, stated calmly so it's set aside
+     before it gets spent. the jurisdiction is shown, quietly. */
+  .lead{font-size:13px;color:var(--mute);font-weight:500;letter-spacing:.02em}
+  .amount{margin-top:8px;font-size:72px;font-weight:300;color:var(--ink);
+    letter-spacing:-.04em;line-height:1}
+  .amount .c{color:var(--mute);font-weight:300}
+  /* the basis line — what the number came from, no math shown */
+  .basis{margin-top:13px;font-size:13px;color:var(--mute);font-weight:500}
+  /* the jurisdiction, set as one quiet chip */
+  .juris{margin-top:24px;display:flex;align-items:center;gap:8px;
+    border:1px solid var(--line);background:#fff;border-radius:18px;
+    padding:9px 16px;box-shadow:0 8px 20px rgba(42,38,34,.05)}
+  .juris svg{stroke:var(--accent)}
+  .juris b{font-size:14px;font-weight:600;color:var(--ink)}
+  .juris .rate{font-size:13px;color:var(--mute);font-weight:500}
+  .juris .ch{stroke:var(--mute);margin-left:2px}
+
+  /* two targets — set it aside, and export the report */
+  .acts{margin-top:42px;width:100%;display:flex;flex-direction:column;gap:10px}
+  .aside{height:52px;border-radius:26px;background:var(--accent);
+    display:flex;align-items:center;justify-content:center;gap:8px;
+    box-shadow:0 12px 28px rgba(201,146,62,.3)}
+  .aside svg{stroke:#fff}
+  .aside span{font-size:16px;font-weight:600;color:#fff}
+  .export{height:52px;border-radius:26px;border:1px solid var(--line);background:var(--paper);
+    display:flex;align-items:center;justify-content:center;gap:8px}
+  .export svg{stroke:var(--ink)}
+  .export span{font-size:15px;font-weight:600;color:var(--ink)}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+  <div class="find">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/>
+    </svg>
+  </div>
+  <div class="safe">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.5-7 10-7 10z"/>
+    </svg>
+  </div>
+
+  <div class="who">
+    <div class="g">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="1.7">
+        <path d="M9 3h6l1 4H8zM6 7h12v12a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2z"/>
+        <path d="M12 11v6M9 14h6"/>
+      </svg>
+    </div>
+    <span>tax set-aside</span>
+  </div>
+
+  <div class="stage">
+    <div class="lead">set aside from the $1,150 that landed</div>
+    <div class="amount"><span class="c">$</span>340</div>
+    <div class="basis">~30% · so it's there when tax is due</div>
+    <div class="juris">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="1.8">
+        <circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18 14 14 0 0 1 0-18z"/>
+      </svg>
+      <b>united states</b>
+      <span class="rate">· self-employed</span>
+      <svg class="ch" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+    </div>
+    <div class="acts">
+      <div class="aside">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke-width="2.2"><path d="M5 13l4 4 10-11"/></svg>
+        <span>set $340 aside</span>
+      </div>
+      <div class="export">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke-width="1.9">
+          <path d="M12 3v12M8 11l4 4 4-4M5 20h14"/>
+        </svg>
+        <span>export the adhd tax report · pdf</span>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

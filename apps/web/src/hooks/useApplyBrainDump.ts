@@ -13,8 +13,7 @@ import { useCallback } from 'react';
 import { detectCrisis } from '@ollie/logic/crisis';
 import { extract } from '@ollie/logic/dissection';
 import { emit } from '@ollie/events';
-import * as appEvents from '@ollie/events';
-import { getString, type Locale } from '../i18n';
+import { type Locale } from '../i18n';
 import { store as appStore, useStoreSlice } from '../store';
 import { chipFly } from '../components/ChipFly';
 import { useToast } from '../components/ToastContext';
@@ -32,22 +31,6 @@ import { getDeviceId, getAppVersion } from '../lib/device';
 // Re-export so callers only need one import.
 export { applyRoute } from './applyRoute';
 
-// ─── Country → crisis hotline key ─────────────────────────────────────────────
-
-const COUNTRY_TO_HOTLINE_KEY: Record<string, string> = {
-  TR: 'crisis.hotline_TR',
-  US: 'crisis.hotline_US',
-  GB: 'crisis.hotline_GB',
-  CA: 'crisis.hotline_CA',
-  AU: 'crisis.hotline_AU',
-  DE: 'crisis.hotline_DE',
-  FR: 'crisis.hotline_FR',
-  NL: 'crisis.hotline_NL',
-  IT: 'crisis.hotline_IT',
-  ES: 'crisis.hotline_ES',
-  SE: 'crisis.hotline_SE',
-};
-
 // ─── hook ─────────────────────────────────────────────────────────────────────
 
 export function useApplyBrainDump(): (text: string, fromRect?: DOMRect) => Promise<void> {
@@ -62,17 +45,19 @@ export function useApplyBrainDump(): (text: string, fromRect?: DOMRect) => Promi
   return useCallback(
     async (text: string, fromRect?: DOMRect): Promise<void> => {
       // ── 1. Crisis guard ────────────────────────────────────────────────────
-      const { match, line } = detectCrisis(text);
+      // Crisis / method-seeking text is never routed, never enriched, never
+      // persisted with content — it stops here and the user is sent to the
+      // boundary surface (/crisis). `lang` is 'tr' when the user wrote
+      // Turkish, otherwise the app locale; it drives the response copy.
+      const { match, lang } = detectCrisis(text, locale === 'es' ? 'es' : 'en');
       if (match) {
-        emit('void:crisis:detected', { text, matchedLine: line, ts: Date.now() });
-        const upper = (country || '').toUpperCase();
-        const hotlineKey = upper && COUNTRY_TO_HOTLINE_KEY[upper]
-          ? COUNTRY_TO_HOTLINE_KEY[upper]
-          : 'crisis.hotline_INTL';
-        const opener = getString(locale, 'crisis.opener_no_name');
-        const hotline = getString(locale, hotlineKey);
-        const close = getString(locale, 'crisis.close');
-        toast.show(`${opener} ${hotline} ${close}`, { module: 'crisis', ttl: 30000 });
+        // Day30Prompt listens for this to suppress its prompt in-session.
+        // The payload carries NO crisis text — only a timestamp.
+        emit('void:crisis:detected', { ts: Date.now() });
+        // This hook runs OUTSIDE <RouterProvider> (AppServicesProvider wraps
+        // it), so useNavigate() is unavailable here. The app uses a hash
+        // router — assigning the hash navigates; the router picks it up.
+        window.location.hash = `#/crisis?lang=${lang}`;
         return;
       }
 

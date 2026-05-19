@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Admin — first run</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E; --umber:#A8703C;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  .safe{position:absolute;top:62px;right:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .safe svg{stroke:var(--mute)}
+  .find{position:absolute;top:62px;left:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .find svg{stroke:var(--mute)}
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;
+    padding:0 26px 36px}
+
+  /* the cold state — the admin FACE is still present, never blank.
+     where the live face has a renewal hero, the cold face holds a calm
+     empty runway and an honest invitation. the drill rows are present
+     but in their cold form. margin-top clears the .who label. */
+  .hero{margin-top:116px;display:flex;flex-direction:column;align-items:center}
+
+  /* the empty runway — the same staged-renewal track from the live face,
+     but bare: faint dashed stage ticks, no marker. a calm "nothing here
+     yet", never broken. */
+  .runway{width:208px;height:44px;margin-bottom:24px;position:relative}
+  .runway svg{display:block}
+
+  .lead{font-size:13px;color:var(--mute);font-weight:500;letter-spacing:.02em}
+  .thing{font-size:30px;font-weight:300;color:var(--ink);letter-spacing:-.025em;
+    line-height:1.25;margin-top:9px;text-align:center;max-width:282px}
+
+  /* the honest invitation — calm, a sage dot marks it as a "still empty"
+     note. it tells the user what admin is for, plainly. */
+  .invite{margin-top:22px;display:flex;align-items:flex-start;gap:9px;
+    max-width:296px}
+  .invite .idot{width:7px;height:7px;border-radius:50%;background:var(--sage);
+    flex-shrink:0;margin-top:6px}
+  .invite span{font-size:14px;color:var(--ink);font-weight:500;letter-spacing:-.01em;
+    line-height:1.5;text-align:left}
+  .invite b{font-weight:600}
+
+  /* one amber button — the add invitation, the only thing to do */
+  .add{margin:30px auto 0;height:50px;border-radius:25px;background:var(--accent);
+    display:flex;align-items:center;justify-content:center;gap:8px;padding:0 26px;
+    box-shadow:0 12px 28px rgba(201,146,62,.32)}
+  .add svg{stroke:#fff}
+  .add span{font-size:16px;font-weight:600;color:#fff;letter-spacing:-.01em}
+
+  /* a calm worked example — three quiet lines of what admin tends to hold,
+     so the page is never barren. each a faint hairline row. */
+  .egs{margin-top:38px;display:flex;flex-direction:column}
+  .egk{font-size:11px;color:var(--mute);font-weight:600;letter-spacing:.08em;
+    text-transform:uppercase;margin-bottom:4px}
+  .eg{border-top:1px solid var(--line);padding:14px 2px;display:flex;
+    align-items:center;gap:11px}
+  .egs .eg:last-child{border-bottom:1px solid var(--line)}
+  .egmk{width:6px;height:6px;border-radius:2px;border:1.4px solid var(--line);
+    flex-shrink:0}
+  .egname{flex:1;font-size:14px;color:var(--mute);font-weight:400;
+    letter-spacing:-.01em}
+  .egtype{font-size:12px;color:var(--mute);font-weight:500;flex-shrink:0}
+
+  /* the drill rows — present but cold. all-tasks reads its empty form. */
+  .rows{margin-top:36px;display:flex;flex-direction:column}
+  .row{border-top:1px solid var(--line);padding:18px 2px;display:flex;
+    align-items:center}
+  .row:last-child{border-bottom:1px solid var(--line)}
+  .rk{font-size:13px;color:var(--mute);font-weight:600;letter-spacing:.01em;
+    flex-shrink:0}
+  .rsep{color:var(--line);margin:0 8px;font-size:13px}
+  .rv{font-size:14px;color:var(--mute);font-weight:400;letter-spacing:-.01em;flex:1}
+  .chev{stroke:var(--line);flex-shrink:0;margin-left:8px}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+  <div class="find">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/>
+    </svg>
+  </div>
+  <div class="safe">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.5-7 10-7 10z"/>
+    </svg>
+  </div>
+
+  <div class="who">
+    <span>admin</span>
+  </div>
+
+  <div class="scroll">
+    <div class="hero">
+      <!-- the empty runway — bare dashed stage ticks, no marker -->
+      <div class="runway">
+        <svg width="208" height="44" viewBox="0 0 208 44">
+          <line x1="8" y1="30" x2="200" y2="30" stroke="#EAE2D4"
+            stroke-width="2" stroke-linecap="round" stroke-dasharray="2 5"/>
+          <line x1="8" y1="25" x2="8" y2="35" stroke="#EAE2D4" stroke-width="1.6"/>
+          <line x1="72" y1="25" x2="72" y2="35" stroke="#EAE2D4" stroke-width="1.6"/>
+          <line x1="136" y1="25" x2="136" y2="35" stroke="#EAE2D4" stroke-width="1.6"/>
+          <line x1="200" y1="25" x2="200" y2="35" stroke="#EAE2D4" stroke-width="1.6"/>
+        </svg>
+      </div>
+
+      <div class="lead">nothing due yet</div>
+      <div class="thing">admin is empty — that's fine</div>
+
+      <div class="invite">
+        <span class="idot"></span>
+        <span>this is where the <b>stuff you forget</b> lives — passport,
+          lease, taxes, the dentist. add the first one and ollie will
+          carry the dates.</span>
+      </div>
+
+      <div class="add">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="2.4">
+          <path d="M12 5v14M5 12h14"/>
+        </svg>
+        <span>add the first thing</span>
+      </div>
+    </div>
+
+    <!-- a calm worked example — what admin tends to hold, so it's not barren -->
+    <div class="egs">
+      <div class="egk">things people put here</div>
+      <div class="eg">
+        <span class="egmk"></span>
+        <span class="egname">renew passport</span>
+        <span class="egtype">renewal</span>
+      </div>
+      <div class="eg">
+        <span class="egmk"></span>
+        <span class="egname">book a dentist cleaning</span>
+        <span class="egtype">appointment</span>
+      </div>
+      <div class="eg">
+        <span class="egmk"></span>
+        <span class="egname">file the taxes</span>
+        <span class="egtype">financial</span>
+      </div>
+    </div>
+
+    <div class="rows">
+      <!-- all tasks — cold form -->
+      <div class="row">
+        <span class="rk">all tasks</span><span class="rsep">·</span>
+        <span class="rv">nothing on the list yet</span>
+        <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+
+      <!-- 2-min burst — cold form -->
+      <div class="row">
+        <span class="rk">2-min burst</span><span class="rsep">·</span>
+        <span class="rv">quick things show up here as you add them</span>
+        <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

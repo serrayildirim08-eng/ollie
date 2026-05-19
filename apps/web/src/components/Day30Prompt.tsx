@@ -106,6 +106,9 @@ export function Day30Prompt(): React.ReactElement | null {
         transform: 'translateX(-50%)',
         zIndex: 70,
         width: 'min(92vw, 360px)',
+        // content-box: width + 36px h-padding pushed past the viewport
+        // edge on sub-400px iPhones. Audit 2026-05-18.
+        boxSizing: 'border-box',
         pointerEvents: 'auto',
         background: 'rgba(255,255,255,0.72)',
         backdropFilter: 'blur(20px)',

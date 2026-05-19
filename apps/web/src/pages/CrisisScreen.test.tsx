@@ -1,13 +1,14 @@
 /**
- * CrisisScreen · calm crisis surface · behavioral tests
+ * CrisisScreen · boundary surface · behavioral tests
  *
  * Covers:
- *   1. renders the title + intro (always available)
- *   2. shows the country-specific hotline (TR → 182)
- *   3. falls back to the INTL directory when country is unknown
- *   4. close button calls onClose
- *   5. DOCTRINE: imports zero telemetry / network — no @ollie/events,
- *      no fetch reference in the source file
+ *   1. renders the boundary message (EN by default)
+ *   2. renders the findahelpline.com link pointing at the real URL
+ *   3. ?lang=tr renders the Turkish copy
+ *   4. ?lang=es renders the Spanish copy
+ *   5. back button calls onClose
+ *   6. DOCTRINE: the source imports zero telemetry / network — no
+ *      @ollie/events, no fetch reference in the file
  */
 
 import React, { act } from 'react';
@@ -15,18 +16,13 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createRoot, type Root } from 'react-dom/client';
+import { MemoryRouter } from 'react-router-dom';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const storeData = new Map<string, unknown>();
 
 vi.mock('../store', () => ({
-  store: {
-    get: vi.fn((mod: string, key: string, fallback: unknown) => {
-      const k = `${mod}:${key}`;
-      return storeData.has(k) ? storeData.get(k) : fallback;
-    }),
-  },
   useStoreSlice: vi.fn(
     <T,>(mod: string, key: string, defaultValue: T): [T, (v: T) => void] => {
       const k = `${mod}:${key}`;
@@ -40,6 +36,16 @@ import { CrisisScreen } from './CrisisScreen';
 
 let container: HTMLDivElement;
 let root: Root;
+
+function render(entry: string, onClose: () => void = () => {}): void {
+  act(() => {
+    root.render(
+      <MemoryRouter initialEntries={[entry]}>
+        <CrisisScreen onClose={onClose} />
+      </MemoryRouter>,
+    );
+  });
+}
 
 function click(el: HTMLElement): void {
   act(() => {
@@ -60,36 +66,43 @@ afterEach(() => {
 });
 
 describe('CrisisScreen', () => {
-  it('renders title and intro', () => {
-    act(() => { root.render(<CrisisScreen onClose={() => {}} />); });
-    expect(container.textContent).toContain("you're not alone");
-    expect(container.textContent).toContain('nothing leaves this device');
+  it('renders the boundary message in English by default', () => {
+    render('/crisis');
+    expect(container.textContent).toContain("i can't help with this");
+    expect(container.textContent).toContain("not what i'm here for");
   });
 
-  it('shows the country-specific hotline for TR', () => {
-    storeData.set('shared:settings', { country: 'TR' });
-    act(() => { root.render(<CrisisScreen onClose={() => {}} />); });
-    expect(container.textContent).toContain('182');
+  it('points to findahelpline.com', () => {
+    render('/crisis');
+    const link = container.querySelector('a') as HTMLAnchorElement;
+    expect(link).not.toBeNull();
+    expect(link.getAttribute('href')).toBe('https://findahelpline.com');
+    expect(link.textContent).toContain('findahelpline.com');
   });
 
-  it('falls back to the INTL directory for an unknown country', () => {
-    storeData.set('shared:settings', { country: 'XX' });
-    act(() => { root.render(<CrisisScreen onClose={() => {}} />); });
+  it('renders the Turkish copy for ?lang=tr', () => {
+    render('/crisis?lang=tr');
+    expect(container.textContent).toContain('bu konuda yardım edemem');
     expect(container.textContent).toContain('findahelpline.com');
   });
 
-  it('close button calls onClose', () => {
+  it('renders the Spanish copy for ?lang=es', () => {
+    render('/crisis?lang=es');
+    expect(container.textContent).toContain('no puedo ayudarte con esto');
+  });
+
+  it('back button calls onClose', () => {
     const onClose = vi.fn();
-    act(() => { root.render(<CrisisScreen onClose={onClose} />); });
-    const closeBtn = container.querySelector('button') as HTMLButtonElement;
-    expect(closeBtn).not.toBeNull();
-    click(closeBtn);
+    render('/crisis', onClose);
+    const backBtn = container.querySelector('button') as HTMLButtonElement;
+    expect(backBtn).not.toBeNull();
+    click(backBtn);
     expect(onClose).toHaveBeenCalled();
   });
 
   it('source file contains no telemetry or network calls', () => {
-    // Strip comments — the doctrine is also documented in prose at the
-    // top of the file, and we only want to assert against real code.
+    // Strip comments — the doctrine is documented in prose at the top of
+    // the file; we only want to assert against real code.
     const raw = readFileSync(join(__dirname, 'CrisisScreen.tsx'), 'utf8');
     const code = raw
       .replace(/\/\*[\s\S]*?\*\//g, '')

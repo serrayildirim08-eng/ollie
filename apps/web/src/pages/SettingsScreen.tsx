@@ -24,7 +24,8 @@
 
 import React, { useEffect, useState } from 'react';
 import { getString, type Locale } from '../i18n';
-import type { AuthClient } from '@ollie/auth';
+import type { VaultClient } from '@ollie/auth';
+import { useUser, useAuth } from '@clerk/react';
 import { exportBackup, envelopeToFileBytes, defaultFilename, importBackup } from '@ollie/backup';
 import { requestPermission, checkPermission } from '@ollie/notifications';
 import {
@@ -62,16 +63,23 @@ interface NotificationBudget {
 }
 
 export interface SettingsScreenProps {
-  auth: AuthClient | null;
+  vault: VaultClient | null;
   onBack: () => void;
   onSignedOut: () => void;
+  /**
+   * Open the v2 redesign preview hub (`/preview`). Settings is always
+   * reachable in the native iOS app, where there is no URL bar — so the
+   * "preview the new design" row below is the tappable entry point into
+   * the v2 preview surfaces.
+   */
+  onPreview: () => void;
 }
 
 // ─── tokens ──────────────────────────────────────────────────────────────────
 
 const styles = {
   page: {
-    minHeight: '100vh',
+    minHeight: '100dvh',
     background: 'var(--bone)',
     color: 'var(--ink)',
     fontFamily: 'var(--font-system)',
@@ -313,6 +321,7 @@ function ConfirmModal({
           padding: '28px',
           maxWidth: '420px',
           width: '100%',
+          boxSizing: 'border-box',
           boxShadow: 'var(--sh-lg)',
         }}
       >
@@ -385,50 +394,47 @@ function ConfirmModal({
 // ─── Account section ─────────────────────────────────────────────────────────
 
 function AccountSection({
-  auth,
+  vault,
   onSignedOut,
 }: {
-  auth: AuthClient | null;
+  vault: VaultClient | null;
   onSignedOut: () => void;
 }) {
-  const session = auth?.state().session ?? null;
+  const { user } = useUser();
+  const { signOut } = useAuth();
+  const email = user?.primaryEmailAddress?.emailAddress ?? '—';
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   async function handleSignOut() {
-    if (!auth) return;
-    await auth.signOut();
+    // Lock the encryption vault, then end the Clerk session. The auth gate
+    // catches the next render and shows AuthFlow.
+    vault?.lock();
+    try { await signOut(); } catch { /* non-fatal */ }
     onSignedOut();
   }
 
   async function handleDeleteAccount() {
-    if (!auth) return;
-    // Server-cascade deletion (Sprint B'). The auth client posts the
-    // user's JWT + confirm token to `/account/delete`, which cascades
-    // every user-scoped table via service-role and then deletes the
-    // auth.users row last. The client only wipes local data AFTER the
-    // server reports success — if the server fails the user keeps
-    // their local data and can retry without losing access.
+    // Phase 1 (Clerk migration): client-side erase — wipe the local vault
+    // + every local module blob, then delete the Clerk user. The server-
+    // row cascade returns in Phase 2 once the Clerk↔Supabase sync layer
+    // exists; in Phase 1 there is no synced server data.
     setDeleting(true);
     setDeleteError(null);
     try {
-      const r = await auth.deleteAccount();
-      if (!r.ok) {
-        const msg =
-          r.code === 'no-endpoint'
-            ? 'account deletion is not enabled in this build'
-            : r.code === 'unauthorized'
-            ? 'session expired — sign in again and retry'
-            : r.code === 'network'
-            ? 'network error — check your connection and retry'
-            : r.code === 'cascade-failed' || r.code === 'auth-delete-failed'
-            ? 'partial deletion — please retry'
-            : r.message;
-        setDeleteError(msg);
-        setDeleting(false);
-        return;
-      }
+      vault?.reset();
+      try {
+        if (typeof localStorage !== 'undefined') {
+          const keys: string[] = [];
+          for (let i = 0; i < localStorage.length; i++) {
+            const k = localStorage.key(i);
+            if (k && k.startsWith('void.state.')) keys.push(k);
+          }
+          for (const k of keys) localStorage.removeItem(k);
+        }
+      } catch { /* non-fatal */ }
+      await user?.delete();
       setConfirmDelete(false);
       setDeleting(false);
       onSignedOut();
@@ -447,7 +453,7 @@ function AccountSection({
         <div>
           <p style={styles.rowLabel}>email</p>
         </div>
-        <span style={styles.rowValue}>{session?.email ?? '—'}</span>
+        <span style={styles.rowValue}>{email}</span>
       </div>
 
       <div style={styles.row}>
@@ -455,7 +461,7 @@ function AccountSection({
           <p style={styles.rowLabel}>sign out</p>
           <p style={styles.rowHint}>keep data on this device · re-enter passphrase to unlock</p>
         </div>
-        <button type="button" onClick={() => void handleSignOut()} style={styles.linkBtn} disabled={!auth}>
+        <button type="button" onClick={() => void handleSignOut()} style={styles.linkBtn}>
           sign out
         </button>
       </div>
@@ -463,13 +469,13 @@ function AccountSection({
       <div style={styles.row}>
         <div>
           <p style={styles.rowLabel}>delete account</p>
-          <p style={styles.rowHint}>erases local data and every server row · final</p>
+          <p style={styles.rowHint}>erases local data and your account · final</p>
         </div>
         <button
           type="button"
           onClick={() => setConfirmDelete(true)}
           style={styles.destructive}
-          disabled={!auth || !session}
+          disabled={!user}
         >
           delete
         </button>
@@ -487,7 +493,7 @@ function AccountSection({
       <ConfirmModal
         open={confirmDelete}
         title="delete account?"
-        body="this erases ollie's data on this device AND every row tied to your account on ollie's server. anonymized research contributions you opted into stay in the corpus. there is no undo."
+        body="this erases ollie's data on this device and deletes your account. anonymized research contributions you opted into stay in the corpus. there is no undo."
         confirmLabel={deleting ? 'deleting…' : 'delete'}
         onConfirm={() => { if (!deleting) void handleDeleteAccount(); }}
         onCancel={() => { if (!deleting) setConfirmDelete(false); }}
@@ -976,6 +982,9 @@ function InviteSection() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
+  // Optional acquisition-channel tag — kept across generates so a batch of
+  // codes for the same channel doesn't need re-typing.
+  const [channel, setChannel] = useState('');
 
   // Roll over the week when sunday flips.
   useEffect(() => {
@@ -1009,7 +1018,7 @@ function InviteSection() {
     }
     setBusy(true);
     setError(null);
-    const r = await generateInvite();
+    const r = await generateInvite(channel.trim() || undefined);
     setBusy(false);
     if (!r.ok) {
       setError(r.message);
@@ -1080,6 +1089,33 @@ function InviteSection() {
               : `${remaining} remaining · resets sunday`}
           </p>
         </div>
+      </div>
+
+      <div style={styles.row}>
+        <div style={{ flex: 1 }}>
+          <p style={styles.rowLabel}>channel</p>
+          <p style={styles.rowHint}>optional · tags where this code is shared</p>
+        </div>
+        <input
+          type="text"
+          value={channel}
+          onChange={(e) => setChannel(e.target.value)}
+          placeholder="e.g. twitter"
+          aria-label="invite channel tag"
+          maxLength={40}
+          style={{
+            width: '140px',
+            background: 'transparent',
+            border: 'none',
+            borderBottom: '1px solid var(--rule-soft)',
+            padding: '4px 2px',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 'var(--t-caption)',
+            color: 'var(--ink)',
+            textAlign: 'right',
+            outline: 'none',
+          }}
+        />
       </div>
 
       {active ? (
@@ -1387,14 +1423,54 @@ function AboutSection() {
   );
 }
 
+// ─── Preview section (v2 redesign hub entry point) ──────────────────────────
+//
+// The tappable entry point into the clean-slate v2 redesign preview. In
+// the native iOS Capacitor app there is NO URL bar, so a hash route like
+// `#/preview` cannot be typed. Settings is always reachable, so this row
+// is where Serra taps to reach the preview hub — from there every preview
+// surface (the full v2 app + 12 module previews) is one tap away.
+//
+// Voice matches the rest of Settings: lowercase label, dry hint, sage
+// link affordance. Additive only — nothing else in Settings changes.
+
+function PreviewSection({ onPreview }: { onPreview: () => void }) {
+  return (
+    <section style={styles.section} aria-label="preview">
+      <h2 style={styles.sectionHeader}>preview</h2>
+
+      <button
+        type="button"
+        onClick={onPreview}
+        aria-label="preview the new design"
+        style={{
+          ...styles.row,
+          width: '100%',
+          background: 'none',
+          border: 'none',
+          borderBottom: '1px solid var(--rule-soft)',
+          textAlign: 'left',
+          cursor: 'pointer',
+          color: 'var(--ink)',
+        }}
+      >
+        <div>
+          <p style={styles.rowLabel}>preview the new design</p>
+          <p style={styles.rowHint}>the clean-slate v2 redesign · the full app + each module</p>
+        </div>
+        <span style={styles.linkBtn as React.CSSProperties}>open</span>
+      </button>
+    </section>
+  );
+}
+
 // ─── Root ────────────────────────────────────────────────────────────────────
 
-export function SettingsScreen({ auth, onBack, onSignedOut }: SettingsScreenProps) {
-  // Stable user id for @ollie/consent. Mirrors the derivation in App.tsx
-  // (Sprint B' router): pre-auth / local-dev builds fall back to
-  // 'local-dev' so the toggle still round-trips through the package
-  // even when Supabase is unwired.
-  const userId = auth?.state().session?.user_id ?? 'local-dev';
+export function SettingsScreen({ vault, onBack, onSignedOut, onPreview }: SettingsScreenProps) {
+  // Stable user id for @ollie/consent — the Clerk user id, or 'local-dev'
+  // on a keyless build so the consent toggle still round-trips locally.
+  const { user } = useUser();
+  const userId = user?.id ?? 'local-dev';
   return (
     <main style={styles.page}>
       <div style={styles.wrap}>
@@ -1406,13 +1482,14 @@ export function SettingsScreen({ auth, onBack, onSignedOut }: SettingsScreenProp
 
         <h1 style={styles.title}>settings.</h1>
 
-        <AccountSection auth={auth} onSignedOut={onSignedOut} />
+        <AccountSection vault={vault} onSignedOut={onSignedOut} />
         <InviteSection />
         <NotificationsSection />
         <HealthSection />
         <FinanceSection />
         <PrivacySection />
         <ResearchSection userId={userId} />
+        <PreviewSection onPreview={onPreview} />
         <AboutSection />
       </div>
     </main>
