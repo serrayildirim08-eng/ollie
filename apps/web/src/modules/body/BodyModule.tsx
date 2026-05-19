@@ -7,10 +7,12 @@
  * ChronicConditionsCard, TreatmentPlansCard, BodyNoticed (~lines 40503–42070).
  */
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   activeEpisode,
   elapsedDays,
+  openEpisode,
+  suggestEpisodeKind,
   logSeverity,
   logMed,
   closeEpisode,
@@ -22,7 +24,7 @@ import {
   addCycleStart,
   cyclePosition,
 } from '@ollie/logic/body';
-import type { Episode, TreatmentPlan, AnyBodyPattern } from '@ollie/logic/body';
+import type { Episode, EpisodeKind, TreatmentPlan, AnyBodyPattern } from '@ollie/logic/body';
 import { useStoreSlice } from '../../store';
 import { ModuleHelp } from '../../components/ModuleHelp';
 import { SourcesLink } from '../../components/SourcesLink';
@@ -119,6 +121,16 @@ interface Supplement {
   name: string;
   dose: string | null;
   added_at: number;
+  /**
+   * Days (YYYY-MM-DD) this supplement was marked taken. This is the field
+   * the body orchestrator's `emitSupplementDue` reads to decide whether to
+   * fire a reminder. The UI's per-day `body.supp_checks` slice is the
+   * rendering source of truth; `checked_dates` is kept in sync with it on
+   * every toggle so the reminder and the checkbox never disagree.
+   */
+  checked_dates?: string[];
+  /** Optional per-supplement reminder time (HH:MM); orchestrator default 08:00. */
+  reminder_hhmm?: string;
 }
 
 // ─── Shared settings shape ────────────────────────────────────────────────────
@@ -130,12 +142,31 @@ interface SharedSettings {
   [k: string]: unknown;
 }
 
-// ─── Signal shape ─────────────────────────────────────────────────────────────
+// ─── Cross-module signal contract ─────────────────────────────────────────────
+//
+// `shared.signals` is written by the backend cross-module orchestrator. It is
+// NOT a dumping ground for single-module observations — each module already
+// has its own "— noticed" panel for that. A signal earns a place here only if
+// it connects ≥2 modules: something no single module could see on its own
+// (e.g. sleep debt bleeding into focus, cycle phase shifting energy).
+//
+// Contract the UI relies on — backend, please write exactly this shape:
+//   {
+//     id:        string            // stable, dedupe + dismiss key
+//     copy:      string            // one plain sentence, lowercase, calm
+//     modules:   string[]          // ≥2 module ids this signal bridges
+//     sources?:  { citation?, url? }[]
+//     ts?:       number            // when detected (for ordering)
+//   }
+// Anything with fewer than 2 modules is filtered out here on purpose, so a
+// mis-scoped single-module write can never leak into this section.
 
-interface Signal {
-  signal: string;
+interface CrossModuleSignal {
+  id: string;
   copy: string;
+  modules: string[];
   sources?: Array<{ citation?: string; url?: string }>;
+  ts?: number;
 }
 
 // ─── style helpers ────────────────────────────────────────────────────────────
@@ -176,57 +207,338 @@ const inputStyle: React.CSSProperties = {
   boxSizing: 'border-box',
 };
 
-// ─── SIGNAL_MODULE_RELEVANCE ──────────────────────────────────────────────────
+// ─── episode kinds ────────────────────────────────────────────────────────────
+// Surfaced in the start flow. Labels stay neutral — no "attack", no alarm.
 
-const BODY_SIGNALS = new Set([
-  'stress_luteal_migraine_cascade',
-  'sleep_debt_amygdala',
-  'hyperfocus_meal_rebound',
-  'stress-caffeine-sleep-cooccurrence',
-  'body_mind_comorbidity',
-  'treatment_cycle_mood_lag',
-]);
+interface EpisodeKindOption {
+  value: EpisodeKind;
+  label: string;
+  hint: string;
+}
+
+const EPISODE_KIND_OPTIONS: ReadonlyArray<EpisodeKindOption> = [
+  { value: 'acute', label: 'acute', hint: 'a flare that comes and goes' },
+  { value: 'chronic', label: 'chronic', hint: 'an ongoing condition acting up' },
+  { value: 'mental', label: 'mental', hint: 'a low or hard mental stretch' },
+  { value: 'mixed', label: 'mixed', hint: 'both body and mind at once' },
+];
 
 // ─── sub-components ───────────────────────────────────────────────────────────
+
+// ── StartEpisodeCard ──────────────────────────────────────────────────────────
+// The missing entry point. Lets the user begin tracking a symptom episode.
+// Only renders when no episode is currently open — it is the inverse of
+// ActiveEpisodeCard. Tone: calm, never urgent. We are offering a place to
+// keep notes, not raising an alarm.
+
+function StartEpisodeCard() {
+  const [episodes, setEpisodes] = useStoreSlice<Episode[]>('body', 'episodes', []);
+  const [settings] = useStoreSlice<SharedSettings>('shared', 'settings', {});
+  const [open, setOpen] = useState(false);
+  const [label, setLabel] = useState('');
+  const [kind, setKind] = useState<EpisodeKind | null>(null);
+
+  const list = useMemo(() => (Array.isArray(episodes) ? episodes : []), [episodes]);
+  const activeEp = useMemo(() => activeEpisode(list), [list]);
+  if (activeEp) return null;
+
+  const conditions: string[] = Array.isArray(settings?.chronic_conditions)
+    ? (settings.chronic_conditions as string[])
+    : [];
+
+  // When the typed label matches a tracked chronic condition, default the
+  // kind to "chronic" so the user doesn't have to think about it.
+  const suggestedKind = label.trim()
+    ? (suggestEpisodeKind(label, conditions, 'acute') as EpisodeKind)
+    : 'acute';
+  const effectiveKind: EpisodeKind = kind ?? suggestedKind;
+
+  function reset() {
+    setOpen(false);
+    setLabel('');
+    setKind(null);
+  }
+
+  function submit() {
+    const lbl = label.trim();
+    if (!lbl) return;
+    const ep = openEpisode(lbl, effectiveKind, { now: Date.now() });
+    setEpisodes([...list, ep]);
+    reset();
+  }
+
+  if (!open) {
+    return (
+      <section style={{ marginBottom: 40 }}>
+        <div
+          style={{
+            padding: '20px 22px',
+            background: C.paper,
+            border: `1px solid ${C.hairline}`,
+            borderRadius: 4,
+          }}
+        >
+          <div style={{ ...labelStyle, paddingBottom: 10 }}>symptom tracking</div>
+          <div
+            style={{
+              fontFamily: "'Inter Tight', sans-serif",
+              fontSize: 14,
+              color: C.muted,
+              lineHeight: 1.55,
+              paddingBottom: 16,
+              maxWidth: 540,
+            }}
+          >
+            going through something — a migraine, a flare, a rough mental
+            stretch? start an episode and ollie will hold the day-by-day
+            record so you don't have to remember it for the doctor.
+          </div>
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            style={{
+              padding: '12px 20px',
+              background: C.ink,
+              color: C.bg,
+              border: `1px solid ${C.ink}`,
+              fontFamily: "'DM Mono', monospace",
+              fontSize: 10,
+              letterSpacing: '0.22em',
+              textTransform: 'uppercase',
+              cursor: 'pointer',
+              borderRadius: 2,
+              minHeight: 44,
+            }}
+          >
+            start an episode
+          </button>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section style={{ marginBottom: 40 }}>
+      <div
+        style={{
+          padding: 24,
+          background: C.paper,
+          border: `1px solid ${C.hairline}`,
+          borderLeft: `2px solid ${C.water}`,
+          borderRadius: 2,
+        }}
+      >
+        <div style={{ ...labelStyle, paddingBottom: 14 }}>start an episode</div>
+
+        <div style={{ ...labelStyle, fontSize: 9, paddingBottom: 8 }}>
+          what's going on
+        </div>
+        <input
+          style={inputStyle}
+          value={label}
+          onChange={(e) => setLabel(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              submit();
+            }
+          }}
+          placeholder="e.g. migraine, ibs flare, low stretch"
+          aria-label="episode label"
+          autoFocus
+        />
+
+        <div style={{ ...labelStyle, fontSize: 9, paddingTop: 18, paddingBottom: 10 }}>
+          kind
+        </div>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(2, 1fr)',
+            gap: 8,
+          }}
+        >
+          {EPISODE_KIND_OPTIONS.map((opt) => {
+            const active = effectiveKind === opt.value;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setKind(opt.value)}
+                aria-pressed={active}
+                style={{
+                  textAlign: 'left',
+                  padding: '12px 14px',
+                  background: active ? C.bg : 'transparent',
+                  border: `1px solid ${active ? C.water : C.hairlineHi}`,
+                  borderRadius: 2,
+                  cursor: 'pointer',
+                }}
+              >
+                <div
+                  style={{
+                    fontFamily: "'DM Mono', monospace",
+                    fontSize: 10,
+                    letterSpacing: '0.20em',
+                    textTransform: 'uppercase',
+                    color: active ? C.ink : C.muted,
+                    paddingBottom: 4,
+                    fontWeight: 500,
+                  }}
+                >
+                  {opt.label}
+                </div>
+                <div
+                  style={{
+                    fontFamily: "'Inter Tight', sans-serif",
+                    fontSize: 12,
+                    color: C.faint,
+                    lineHeight: 1.4,
+                  }}
+                >
+                  {opt.hint}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        {label.trim() &&
+          kind == null &&
+          suggestEpisodeKind(label, conditions, 'acute') === 'chronic' && (
+            <div
+              style={{
+                fontFamily: "'DM Mono', monospace",
+                fontSize: 9,
+                letterSpacing: '0.16em',
+                textTransform: 'uppercase',
+                color: C.faint,
+                paddingTop: 12,
+              }}
+            >
+              matched a tracked chronic condition — preset to chronic
+            </div>
+          )}
+
+        <div style={{ display: 'flex', gap: 10, paddingTop: 20 }}>
+          <button
+            type="button"
+            onClick={submit}
+            disabled={!label.trim()}
+            style={{
+              padding: '11px 20px',
+              background: label.trim() ? C.ink : 'transparent',
+              color: label.trim() ? C.bg : C.faint,
+              border: `1px solid ${label.trim() ? C.ink : C.hairlineHi}`,
+              fontFamily: "'DM Mono', monospace",
+              fontSize: 10,
+              letterSpacing: '0.22em',
+              textTransform: 'uppercase',
+              cursor: label.trim() ? 'pointer' : 'default',
+              borderRadius: 2,
+              minHeight: 44,
+            }}
+          >
+            begin tracking
+          </button>
+          <button
+            type="button"
+            onClick={reset}
+            style={{
+              padding: '11px 14px',
+              background: 'transparent',
+              color: C.muted,
+              border: `1px solid ${C.hairlineHi}`,
+              fontFamily: "'DM Mono', monospace",
+              fontSize: 10,
+              letterSpacing: '0.22em',
+              textTransform: 'uppercase',
+              cursor: 'pointer',
+              borderRadius: 2,
+              minHeight: 44,
+            }}
+          >
+            cancel
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
 
 // ── SignalsSection ────────────────────────────────────────────────────────────
 
 function SignalsSection() {
-  const [signals] = useStoreSlice<Signal[]>('shared', 'signals', []);
+  const [signals] = useStoreSlice<CrossModuleSignal[]>('shared', 'signals', []);
   const [dismissed, setDismissed] = useStoreSlice<string[]>('shared', 'dismissedSignals', []);
 
   const dismissedSet = useMemo(() => new Set(dismissed), [dismissed]);
 
+  // A signal qualifies only when it bridges ≥2 modules — that is the whole
+  // point of this section. Single-module observations belong in each
+  // module's own "— noticed" panel and are filtered out here.
   const visible = useMemo(
     () =>
-      (Array.isArray(signals) ? signals : []).filter(
-        (s) => s && s.signal && BODY_SIGNALS.has(s.signal) && !dismissedSet.has(s.signal),
-      ),
+      (Array.isArray(signals) ? signals : [])
+        .filter(
+          (s) =>
+            s &&
+            typeof s.id === 'string' &&
+            typeof s.copy === 'string' &&
+            Array.isArray(s.modules) &&
+            s.modules.filter(Boolean).length >= 2 &&
+            !dismissedSet.has(s.id),
+        )
+        .sort((a, b) => (b.ts ?? 0) - (a.ts ?? 0)),
     [signals, dismissedSet],
   );
 
   if (visible.length === 0) return null;
 
-  function dismiss(sig: string) {
-    setDismissed([...dismissed, sig]);
+  function dismiss(id: string) {
+    setDismissed([...dismissed, id]);
   }
 
   return (
-    <section style={{ paddingBottom: 24 }}>
-      <div style={{ ...labelStyle, paddingBottom: 16 }}>
-        signals{' '}
-        <span style={{ color: C.faint, margin: '0 10px' }}>·</span>
-        {visible.length}
+    <section style={{ marginBottom: 40 }}>
+      <div
+        style={{
+          ...labelStyle,
+          paddingBottom: 8,
+          borderBottom: `1px solid ${C.hairline}`,
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'baseline',
+        }}
+      >
+        <span>
+          across your modules{' '}
+          <span style={{ color: C.faint, margin: '0 8px' }}>·</span>
+          {visible.length}
+        </span>
+      </div>
+      <div
+        style={{
+          fontFamily: "'Inter Tight', sans-serif",
+          fontSize: 12,
+          fontStyle: 'italic',
+          color: C.faint,
+          lineHeight: 1.5,
+          padding: '10px 0 14px',
+        }}
+      >
+        connections no single module could see on its own.
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {visible.map((sig) => (
           <div
-            key={sig.signal}
+            key={sig.id}
             style={{
               background: C.paper,
               border: `1px solid ${C.hairline}`,
-              borderRadius: 4,
-              padding: '20px 24px',
+              borderLeft: `2px solid ${C.water}`,
+              borderRadius: 2,
+              padding: '18px 22px',
               display: 'flex',
               flexDirection: 'column',
               gap: 12,
@@ -234,26 +546,48 @@ function SignalsSection() {
           >
             <div
               style={{
-                fontFamily: "'DM Sans', sans-serif",
-                fontSize: 13,
+                fontFamily: "'DM Mono', monospace",
+                fontSize: 9,
+                letterSpacing: '0.20em',
+                textTransform: 'uppercase',
+                color: C.faint,
+                display: 'flex',
+                gap: 8,
+                flexWrap: 'wrap',
+                alignItems: 'center',
+              }}
+            >
+              {sig.modules.filter(Boolean).map((m, i) => (
+                <React.Fragment key={m}>
+                  {i > 0 && <span style={{ color: C.hairlineHi }}>+</span>}
+                  <span>{m}</span>
+                </React.Fragment>
+              ))}
+            </div>
+            <div
+              style={{
+                fontFamily: "'Inter Tight', sans-serif",
+                fontSize: 15,
                 lineHeight: 1.55,
                 color: C.ink,
               }}
             >
               {sig.copy}
             </div>
-            {sig.sources && sig.sources.length > 0 && (
-              <SourcesLink
-                sources={sig.sources
-                  .slice(0, 2)
-                  .map((s) => s.url ?? '')
-                  .filter(Boolean)}
-              />
-            )}
-            <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+              {sig.sources && sig.sources.length > 0 ? (
+                <SourcesLink
+                  sources={sig.sources
+                    .slice(0, 2)
+                    .map((s) => s.url ?? '')
+                    .filter(Boolean)}
+                />
+              ) : (
+                <span />
+              )}
               <button
                 type="button"
-                onClick={() => dismiss(sig.signal)}
+                onClick={() => dismiss(sig.id)}
                 style={{
                   background: 'transparent',
                   border: `1px solid ${C.hairlineHi}`,
@@ -680,7 +1014,7 @@ function ActiveEpisodeCard() {
           </div>
         )}
 
-        {/* close confirm */}
+        {/* close confirm — calm recap, no alarm */}
         {mode === 'close' && (
           <div
             style={{
@@ -689,7 +1023,6 @@ function ActiveEpisodeCard() {
               background: C.bg,
               border: `1px solid ${C.hairline}`,
               borderRadius: 2,
-              textAlign: 'center',
             }}
           >
             <div
@@ -697,13 +1030,45 @@ function ActiveEpisodeCard() {
                 fontFamily: "'Inter Tight', sans-serif",
                 fontSize: 14,
                 color: C.ink,
-                lineHeight: 1.5,
-                paddingBottom: 16,
+                lineHeight: 1.55,
+                paddingBottom: 14,
               }}
             >
-              episode over? can't undo.
+              feeling through it? closing the episode keeps this record for
+              your history — you can start a new one any time.
             </div>
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+            {(() => {
+              const sum = summarizeEpisode(ep, { now: Date.now() });
+              const bits: string[] = [`${sum.duration_days + 1} days tracked`];
+              if (sum.n_severity_logs > 0) {
+                bits.push(`${sum.n_severity_logs} check-ins`);
+                bits.push(`peak ${sum.max_severity}/5`);
+              }
+              if (sum.n_meds > 0) bits.push(`${sum.n_meds} meds logged`);
+              return (
+                <div
+                  style={{
+                    fontFamily: "'DM Mono', monospace",
+                    fontSize: 9,
+                    letterSpacing: '0.18em',
+                    textTransform: 'uppercase',
+                    color: C.faint,
+                    paddingBottom: 16,
+                    display: 'flex',
+                    gap: 10,
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  {bits.map((b, i) => (
+                    <React.Fragment key={b}>
+                      {i > 0 && <span style={{ color: C.hairlineHi }}>·</span>}
+                      <span>{b}</span>
+                    </React.Fragment>
+                  ))}
+                </div>
+              );
+            })()}
+            <div style={{ display: 'flex', gap: 10 }}>
               <button
                 type="button"
                 onClick={submitClose}
@@ -720,7 +1085,7 @@ function ActiveEpisodeCard() {
                   borderRadius: 2,
                 }}
               >
-                yes, close
+                close episode
               </button>
               <button
                 type="button"
@@ -738,7 +1103,7 @@ function ActiveEpisodeCard() {
                   borderRadius: 2,
                 }}
               >
-                cancel
+                not yet
               </button>
             </div>
           </div>
@@ -838,6 +1203,23 @@ function ActiveEpisodeCard() {
               </div>
             )}
 
+            {/* the summary itself — plain text, doctor-readable */}
+            <pre
+              style={{
+                margin: 0,
+                padding: '20px 28px',
+                background: '#FCFAF5',
+                fontFamily: "'DM Mono', monospace",
+                fontSize: 12,
+                lineHeight: 1.7,
+                color: '#14130F',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+              }}
+            >
+              {docModal.md}
+            </pre>
+
             <div
               style={{
                 padding: '16px 28px 22px',
@@ -877,6 +1259,44 @@ function ActiveEpisodeCard() {
                 }}
               >
                 {docCopied ? 'copied' : 'copy as markdown'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  try {
+                    const blob = new Blob([docModal.md], {
+                      type: 'text/markdown',
+                    });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    const safe = (ep.label || 'episode')
+                      .toLowerCase()
+                      .replace(/[^a-z0-9]+/g, '-')
+                      .replace(/^-+|-+$/g, '');
+                    a.href = url;
+                    a.download = `ollie-${safe || 'episode'}-summary.md`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    setTimeout(() => URL.revokeObjectURL(url), 1000);
+                  } catch {
+                    // download unavailable — silent; copy still works
+                  }
+                }}
+                style={{
+                  padding: '13px 16px',
+                  background: 'transparent',
+                  color: '#14130F',
+                  border: '1px solid rgba(17,17,17,0.28)',
+                  fontFamily: "'DM Mono', monospace",
+                  fontSize: 10,
+                  letterSpacing: '0.20em',
+                  textTransform: 'uppercase',
+                  cursor: 'pointer',
+                  borderRadius: 2,
+                }}
+              >
+                download .md
               </button>
               <button
                 type="button"
@@ -1530,10 +1950,30 @@ export function BodyModule({ onBack }: BodyModuleProps) {
 
   function toggleSupp(id: string) {
     const curr = todayChecks[id];
+    const next = !curr;
+
+    // (1) per-day render slice — source of truth for the checkbox UI.
     setSuppChecks({
       ...suppChecks,
-      [todayKey]: { ...todayChecks, [id]: !curr },
+      [todayKey]: { ...todayChecks, [id]: next },
     });
+
+    // (2) mirror into `checked_dates` on the supplement object. This is the
+    //     slice the body orchestrator's emitSupplementDue() reads. Audit #14:
+    //     before this, the reminder looked at checked_dates (always empty)
+    //     while the UI wrote only supp_checks — so reminders fired even after
+    //     the user had taken the supplement. Keeping both in lockstep here is
+    //     the fix; coordinated with backend-senior so the read side is stable.
+    const supList = Array.isArray(supps) ? supps : [];
+    setSupps(
+      supList.map((s) => {
+        if (!s || s.id !== id) return s;
+        const dates = new Set(Array.isArray(s.checked_dates) ? s.checked_dates : []);
+        if (next) dates.add(todayKey);
+        else dates.delete(todayKey);
+        return { ...s, checked_dates: Array.from(dates).sort() };
+      }),
+    );
   }
 
   function addSupp() {
@@ -1554,6 +1994,47 @@ export function BodyModule({ onBack }: BodyModuleProps) {
   function removeSupp(id: string) {
     setSupps((Array.isArray(supps) ? supps : []).filter((s) => s && s.id !== id));
   }
+
+  // ── one-time checked_dates backfill ─────────────────────────────────────────
+  // Supplements checked before the reminder-reconciliation fix (audit #14)
+  // only have history in `body.supp_checks`, not in `checked_dates` on the
+  // supplement object — the slice the orchestrator reads. Backfill once on
+  // mount so the reminder respects past check-offs. Guarded by a ref so it
+  // runs at most once per session and never loops on its own write.
+  const backfilledRef = useRef(false);
+  useEffect(() => {
+    if (backfilledRef.current) return;
+    const supList = Array.isArray(supps) ? supps : [];
+    if (supList.length === 0) return;
+
+    // Build supplement-id → set of checked dates from the per-day slice.
+    const datesById: Record<string, Set<string>> = {};
+    for (const [dateKey, checks] of Object.entries(suppChecks ?? {})) {
+      if (!checks || typeof checks !== 'object') continue;
+      for (const [suppId, on] of Object.entries(checks)) {
+        if (!on) continue;
+        (datesById[suppId] ??= new Set()).add(dateKey);
+      }
+    }
+
+    let changed = false;
+    const reconciled = supList.map((s) => {
+      if (!s) return s;
+      const want = datesById[s.id] ?? new Set<string>();
+      const have = new Set(Array.isArray(s.checked_dates) ? s.checked_dates : []);
+      // Union: never drop a date already on the object.
+      for (const d of have) want.add(d);
+      if (want.size === have.size && [...want].every((d) => have.has(d))) {
+        return s;
+      }
+      changed = true;
+      return { ...s, checked_dates: Array.from(want).sort() };
+    });
+
+    backfilledRef.current = true;
+    if (changed) setSupps(reconciled);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [supps, suppChecks]);
 
   // ── render ──────────────────────────────────────────────────────────────────
   return (
@@ -1652,11 +2133,14 @@ export function BodyModule({ onBack }: BodyModuleProps) {
         {/* protective cards (Sprint 5 · F5) */}
         <BodyProtectiveCards />
 
-        {/* active episode (conditional) */}
-        <ActiveEpisodeCard />
-
-        {/* cross-module signals */}
+        {/* cross-module signals — connections no single module sees */}
         <SignalsSection />
+
+        {/* symptom episode — start flow (renders only when none open) */}
+        <StartEpisodeCard />
+
+        {/* active episode — day-by-day tracking (renders only when one open) */}
+        <ActiveEpisodeCard />
 
         {/* chronic conditions */}
         <ChronicConditionsCard />

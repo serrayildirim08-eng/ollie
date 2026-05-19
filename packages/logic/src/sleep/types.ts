@@ -138,6 +138,33 @@ export interface PredictApi {
   forecast(hours: number[], opts: { preset: string }): { mean: number; ci95: [number, number]; tier: string; method: string } | null;
 }
 
+// ─── Insomnia severity survey ─────────────────────────────────────────
+// A 7-question instrument modelled on the Insomnia Severity Index (ISI):
+// every item is scored 0–4, total 0–28. This is the "go deeper" lite
+// survey — NOT a full clinical battery. Each answer is the chosen
+// 0–4 option index for the matching question.
+
+export type InsomniaSurveyAnswers = [
+  number, number, number, number, number, number, number,
+];
+
+export type InsomniaSeverityBand =
+  | 'none'           // 0–7   · no clinically significant insomnia
+  | 'subthreshold'   // 8–14  · subthreshold insomnia
+  | 'moderate'       // 15–21 · moderate insomnia
+  | 'severe';        // 22–28 · severe insomnia
+
+export interface InsomniaSurveyResult {
+  /** Sum of the 7 item scores, 0–28. */
+  score: number;
+  /** Severity band derived from the score. */
+  band: InsomniaSeverityBand;
+  /** Number of questions answered with a valid 0–4 value. */
+  answered: number;
+  /** ms timestamp the survey was scored. */
+  scored_at: number;
+}
+
 // ─── Pattern source ───────────────────────────────────────────────────
 
 export interface PatternSource {
@@ -330,7 +357,7 @@ export interface WindDownLogEntry {
   ts: number;
   step_id: string;
   step_label?: string;
-  action: 'checked' | 'unchecked' | string;
+  action: 'checked' | 'unchecked';
 }
 
 export interface MedsLogEntry {

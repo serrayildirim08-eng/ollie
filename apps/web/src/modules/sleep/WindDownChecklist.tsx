@@ -24,9 +24,17 @@
  *     this component renders null. Opt-in is the default.
  *
  * Events:
- *   - sleep:wind_down_started   on first item tap of the night
  *   - sleep:wind_down_completed when the final item is checked
  *   - sleep:wind_down_skipped   when the user dismisses the card mid-flow
+ *
+ * Pattern feed (sleep:wind_down_step):
+ *   - Each item tap emits one `sleep:wind_down_step` event
+ *     { ts, step_id, step_label, action: 'checked' }. The sleep orchestrator
+ *     subscribes and appends a WindDownLogEntry to the sleep.windDownLog
+ *     slice (single-writer: idempotency + cap live there, not here).
+ *     detectWindDownFriction reads that slice and measures the first→last
+ *     checked gap per night to surface a "stuck step". Without this emit the
+ *     friction detector has no input and the pattern never fires.
  *
  * Style:
  *   - Sleep module palette (bone / ink / sage accent). Courier New.
@@ -271,15 +279,22 @@ export function WindDownChecklist({ nowFn }: WindDownChecklistProps): React.Reac
     if (state.finished || allDone) return;
     if (index !== cursor) return; // only the next item is tappable
 
-    const wasFirst = state.completed.length === 0;
-    const startedAt = state.startedAt ?? Date.now();
+    const tappedAt = Date.now();
+    const startedAt = state.startedAt ?? tappedAt;
 
-    if (wasFirst) {
-      try {
-        events.emit('sleep:wind_down_started', { ts: startedAt });
-      } catch {
-        // emit failures are non-fatal in the UI layer
-      }
+    // Emit the per-step row the friction detector feeds on. The sleep
+    // orchestrator subscribes to sleep:wind_down_step and appends it to
+    // sleep.windDownLog (single-writer — idempotency + cap live there).
+    // detectWindDownFriction groups rows by night via this ts.
+    try {
+      events.emit('sleep:wind_down_step', {
+        ts:         tappedAt,
+        step_id:    item.id,
+        step_label: item.label,
+        action:     'checked',
+      });
+    } catch {
+      // emit failures are non-fatal in the UI layer
     }
 
     const nextCompleted: WindDownItemId[] = [...state.completed, item.id];

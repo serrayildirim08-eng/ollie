@@ -67,22 +67,13 @@ describe('finance orchestrator', () => {
     expect(settings?.currency).toBe('USD');
   });
 
-  it('emits finance:record_added when a dump item parses as a finance record', () => {
-    const emitted: Array<{ id: string; kind: string }> = [];
-    const unsub = on('finance:record_added', (p) => {
-      emitted.push(p as { id: string; kind: string });
-    });
-
+  it('ingests a parseable dump item into finance.records without throwing', () => {
     // A dump text that parseFinanceDump should recognise as a finance item.
     const dumpItem = { ts: NOW - 1000, text: 'spent $50 on groceries' };
     store.set('dump', 'items', [dumpItem]);
 
     orch.init();
 
-    unsub();
-
-    // If the parse logic recognises the text, an event fires.
-    // If not (cold-start no-match), emitted stays empty — acceptable.
     // What we must guarantee: no throw and records array is an array.
     const records = store.get<FinanceRecord[]>('finance', 'records', []);
     expect(Array.isArray(records)).toBe(true);
@@ -282,6 +273,62 @@ describe('finance orchestrator', () => {
     const records = store.get<FinanceRecord[]>('finance', 'records', []);
     // Exactly one record — the existing one, no duplicate ingested.
     expect(records?.filter((r) => r.raw_source_id === String(dumpItem.ts))).toHaveLength(1);
+  });
+});
+
+// ─── own-form slice subscription tests (Faz 2 fix, 2026-05-15) ────────────────
+// The module's in-app forms write finance.bills / .subscriptions /
+// .transactions / .goals / .adhd_tax directly. Each write must trigger a
+// debounced recomputeDerived so anomaly/pattern/savings cards stay fresh.
+
+describe('finance orchestrator — own-form slice subscriptions', () => {
+  let store: ReturnType<typeof createStore>;
+  let orch: ReturnType<typeof createFinanceOrchestrator>;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    store = createStore(createMemoryAdapter());
+    orch = createFinanceOrchestrator(store, { now: () => NOW });
+  });
+
+  afterEach(() => {
+    orch.teardown();
+    vi.useRealTimers();
+    _clearAllHandlers();
+  });
+
+  for (const slice of ['bills', 'subscriptions', 'transactions', 'goals', 'adhd_tax'] as const) {
+    it(`finance.${slice} write triggers a debounced recompute`, () => {
+      store.set('finance', 'records', [] as FinanceRecord[]);
+      orch.init();
+      // init() ran a synchronous cold-start recompute. Capture that baseline,
+      // then clear it so we can prove the form write produces a NEW recompute.
+      expect(store.get<number>('finance', 'lastRecomputeAt', 0)).toBe(NOW);
+      store.set('finance', 'lastRecomputeAt', 0);
+
+      // Simulate an in-app form appending a row to its own slice.
+      store.update<Array<{ id: string; text: string; ts: number }>>(
+        'finance',
+        slice,
+        (cur) => [...(cur ?? []), { id: `f-${slice}`, text: 'x', ts: NOW }],
+      );
+
+      // Debounced — nothing yet before the 500ms timer fires.
+      expect(store.get<number>('finance', 'lastRecomputeAt', 0)).toBe(0);
+      vi.advanceTimersByTime(500);
+      expect(store.get<number>('finance', 'lastRecomputeAt', 0)).toBe(NOW);
+    });
+  }
+
+  it('teardown stops own-form slice recomputes', () => {
+    store.set('finance', 'records', [] as FinanceRecord[]);
+    orch.init();
+    orch.teardown();
+    store.set('finance', 'lastRecomputeAt', 0);
+
+    store.update<Array<{ id: string }>>('finance', 'bills', (cur) => [...(cur ?? []), { id: 'b1' }]);
+    vi.advanceTimersByTime(500);
+    expect(store.get<number>('finance', 'lastRecomputeAt', 0)).toBe(0);
   });
 });
 
@@ -815,5 +862,129 @@ describe('finance orchestrator — tax set-aside', () => {
     const pushHits = scanForBanned(title, ['push']);
     expect(globalHits).toHaveLength(0);
     expect(pushHits).toHaveLength(0);
+  });
+});
+
+// ─── finance:savings_deposit_detected consumer ──────────────────────────────
+
+describe('finance orchestrator · savings_deposit_detected sink', () => {
+  let store: ReturnType<typeof createStore>;
+  let orch: ReturnType<typeof createFinanceOrchestrator>;
+
+  beforeEach(() => {
+    store = createStore(createMemoryAdapter());
+    orch = createFinanceOrchestrator(store, { now: () => NOW });
+    orch.init();
+  });
+
+  afterEach(() => {
+    orch.teardown();
+    _clearAllHandlers();
+  });
+
+  it('appends a savings deposit to finance.savingsLedger', () => {
+    emit('finance:savings_deposit_detected', {
+      transfer_id: 't1', record_id: 'r1', paired_record_id: null,
+      amount: 75, date: '2026-05-09', memo: 'set aside',
+      matched_keyword: 'set aside', confidence: 'high',
+      is_matched_pair: false, ts: NOW,
+    });
+    const ledger = store.get<Array<{ id: string; amount: number }>>('finance', 'savingsLedger', []);
+    expect(ledger).toHaveLength(1);
+    expect(ledger[0].id).toBe('t1');
+    expect(ledger[0].amount).toBe(75);
+  });
+
+  it('is idempotent — duplicate transfer id appended once', () => {
+    const payload = {
+      transfer_id: 't1', record_id: 'r1', paired_record_id: null,
+      amount: 50, date: '2026-05-09', memo: null,
+      matched_keyword: null, confidence: 'medium' as const,
+      is_matched_pair: false, ts: NOW,
+    };
+    emit('finance:savings_deposit_detected', payload);
+    emit('finance:savings_deposit_detected', payload);
+    expect(store.get('finance', 'savingsLedger', [])).toHaveLength(1);
+  });
+
+  it('credits the earliest incomplete savings goal', () => {
+    store.set('finance', 'goals', [
+      { id: 'g1', name: 'emergency', target: 1000, saved: 900, ts: NOW },
+      { id: 'g2', name: 'vacation', target: 1000, saved: 100, ts: NOW },
+    ]);
+    emit('finance:savings_deposit_detected', {
+      transfer_id: 't1', record_id: 'r1', paired_record_id: null,
+      amount: 40, date: '2026-05-09', memo: null,
+      matched_keyword: null, confidence: 'high',
+      is_matched_pair: false, ts: NOW,
+    });
+    const goals = store.get<Array<{ id: string; saved: number }>>('finance', 'goals', []);
+    // g2 has the lowest progress ratio → credited.
+    expect(goals.find((g) => g.id === 'g2')?.saved).toBe(140);
+    expect(goals.find((g) => g.id === 'g1')?.saved).toBe(900);
+    const ledger = store.get<Array<{ goal_id: string | null }>>('finance', 'savingsLedger', []);
+    expect(ledger[0].goal_id).toBe('g2');
+  });
+
+  it('grows the garden via burhan:add_leaf on a deposit', () => {
+    const leaves: unknown[] = [];
+    on('burhan:add_leaf', (p) => leaves.push(p));
+    emit('finance:savings_deposit_detected', {
+      transfer_id: 't1', record_id: 'r1', paired_record_id: null,
+      amount: 30, date: '2026-05-09', memo: null,
+      matched_keyword: null, confidence: 'high',
+      is_matched_pair: false, ts: NOW,
+    });
+    expect(leaves).toHaveLength(1);
+  });
+
+  it('drops a zero/negative-amount deposit', () => {
+    emit('finance:savings_deposit_detected', {
+      transfer_id: 't1', record_id: 'r1', paired_record_id: null,
+      amount: 0, date: '2026-05-09', memo: null,
+      matched_keyword: null, confidence: 'high',
+      is_matched_pair: false, ts: NOW,
+    });
+    expect(store.get('finance', 'savingsLedger', [])).toHaveLength(0);
+  });
+});
+
+// ─── finance:adhd_tax_candidate_detected consumer ───────────────────────────
+
+describe('finance orchestrator · adhd_tax_candidate_detected sink', () => {
+  let store: ReturnType<typeof createStore>;
+  let orch: ReturnType<typeof createFinanceOrchestrator>;
+
+  beforeEach(() => {
+    store = createStore(createMemoryAdapter());
+    orch = createFinanceOrchestrator(store, { now: () => NOW });
+    orch.init();
+  });
+
+  afterEach(() => {
+    orch.teardown();
+    _clearAllHandlers();
+  });
+
+  it('appends a candidate to finance.adhdTaxCandidates', () => {
+    emit('finance:adhd_tax_candidate_detected', {
+      record_id: 'r1', category: 'late_fee', confidence: 'high',
+      amount: 35, matched_phrase: 'late fee', copy: 'was this a late fee?',
+      auto_add: false, ts: NOW,
+    });
+    const pending = store.get<Array<{ category: string }>>('finance', 'adhdTaxCandidates', []);
+    expect(pending).toHaveLength(1);
+    expect(pending[0].category).toBe('late_fee');
+  });
+
+  it('is idempotent — same record/category/phrase appended once', () => {
+    const payload = {
+      record_id: 'r1', category: 'duplicate' as const, confidence: 'medium' as const,
+      amount: 20, matched_phrase: 'duplicate purchase', copy: 'bought twice?',
+      auto_add: false, ts: NOW,
+    };
+    emit('finance:adhd_tax_candidate_detected', payload);
+    emit('finance:adhd_tax_candidate_detected', payload);
+    expect(store.get('finance', 'adhdTaxCandidates', [])).toHaveLength(1);
   });
 });

@@ -781,6 +781,124 @@ function GoalsNoticed() {
   );
 }
 
+// ─── AchievementGallery ───────────────────────────────────────────────────────
+// A quiet place to look back at finished goals. ADHD anti-shame mission:
+// celebration, but un-amplified — no streaks, no "great job!", no exclamation.
+// Editorial restraint. Just: here is what you did, and when.
+
+interface AchievementGalleryProps {
+  goals: StoredGoal[];
+}
+
+function AchievementGallery({ goals }: AchievementGalleryProps) {
+  // Completed goals only, most-recently finished first.
+  const finished = useMemo(() => {
+    return (goals ?? [])
+      .filter((g) => g && g.status === 'done' && g.title)
+      .sort((a, b) => (b.status_at ?? b.created_at ?? 0) - (a.status_at ?? a.created_at ?? 0));
+  }, [goals]);
+
+  if (finished.length === 0) return null;
+
+  return (
+    <section style={{ marginTop: 72, paddingTop: 36, borderTop: `1px solid ${HAIRLINE}` }}>
+      <div style={{ ...LABEL_STYLE, paddingBottom: 6 }}>— what you finished</div>
+      <div
+        style={{
+          fontFamily: "'DM Serif Display',serif",
+          fontStyle: 'italic',
+          fontSize: 'clamp(16px, 1.6vw, 19px)',
+          color: MUTED,
+          lineHeight: 1.4,
+          paddingBottom: 28,
+          maxWidth: 540,
+        }}
+      >
+        {finished.length === 1
+          ? 'one goal carried all the way through. worth a look back.'
+          : `${finished.length} goals carried all the way through. worth a look back.`}
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {finished.map((g) => {
+          const when = fmtDate(
+            g.status_at
+              ? new Date(g.status_at).toISOString()
+              : g.created_at
+                ? new Date(g.created_at).toISOString()
+                : null,
+          );
+          return (
+            <div
+              key={g.id}
+              style={{
+                padding: '20px 22px',
+                background: PAPER,
+                border: `1px solid ${HAIRLINE}`,
+                borderLeft: `2px solid ${ACCENT}`,
+                borderRadius: 2,
+              }}
+            >
+              <div
+                style={{
+                  fontFamily: "'DM Serif Display',serif",
+                  fontSize: 'clamp(19px, 2vw, 23px)',
+                  color: INK,
+                  letterSpacing: '-0.01em',
+                  lineHeight: 1.25,
+                }}
+              >
+                {g.title}
+              </div>
+              {g.why && (
+                <div
+                  style={{
+                    fontFamily: "'Inter Tight',sans-serif",
+                    fontStyle: 'italic',
+                    fontSize: 15,
+                    color: MUTED,
+                    lineHeight: 1.5,
+                    paddingTop: 8,
+                  }}
+                >
+                  {g.why}
+                </div>
+              )}
+              <div
+                style={{
+                  fontFamily: "'DM Mono',monospace",
+                  fontSize: 9,
+                  letterSpacing: '0.22em',
+                  color: FAINT,
+                  textTransform: 'uppercase',
+                  paddingTop: 14,
+                  display: 'flex',
+                  gap: 10,
+                  flexWrap: 'wrap',
+                }}
+              >
+                <span>finished</span>
+                {when && (
+                  <>
+                    <span>·</span>
+                    <span>{when}</span>
+                  </>
+                )}
+                {g.category && (
+                  <>
+                    <span>·</span>
+                    <span>{g.category}</span>
+                  </>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 // ─── GoalsModule ──────────────────────────────────────────────────────────────
 
 export interface GoalsModuleProps {
@@ -2571,6 +2689,8 @@ export function GoalsModule({ onBack }: GoalsModuleProps) {
             );
           })}
         </div>
+
+        <AchievementGallery goals={goals ?? []} />
 
         <GoalsNoticed />
 

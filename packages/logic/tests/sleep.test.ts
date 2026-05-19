@@ -21,6 +21,11 @@ import {
   detectWeekendRecoveryIllusion,
   detectCyclePhaseSleepCoupling,
   detectStimulantSleepDebt,
+  forecastTonightHeuristic,
+  scoreInsomniaSurvey,
+  insomniaSeverityBand,
+  INSOMNIA_SURVEY_QUESTIONS,
+  INSOMNIA_SURVEY_LENGTH,
   type SleepRecord,
 } from '../src/sleep';
 
@@ -340,5 +345,155 @@ describe('detectStimulantSleepDebt', () => {
     });
     expect(result).not.toBeNull();
     expect(result!.delta_min).toBeGreaterThanOrEqual(10);
+  });
+});
+
+// ─── forecastTonightHeuristic ────────────────────────────────────────
+
+describe('forecastTonightHeuristic', () => {
+  const NOW = new Date('2026-05-15T20:00:00').getTime();
+
+  it('returns null with fewer than 3 usable nights', () => {
+    const recs = [
+      makeRecord('2026-05-13', 420),
+      makeRecord('2026-05-14', 420),
+    ];
+    expect(forecastTonightHeuristic(recs, NOW)).toBeNull();
+  });
+
+  it('returns null for non-array input', () => {
+    // @ts-expect-error — exercising the runtime guard
+    expect(forecastTonightHeuristic(null, NOW)).toBeNull();
+  });
+
+  it('forecasts the mean for a stable history', () => {
+    const recs = Array.from({ length: 10 }, (_, i) =>
+      makeRecord(`2026-05-${String(i + 1).padStart(2, '0')}`, 420),
+    );
+    const f = forecastTonightHeuristic(recs, NOW)!;
+    expect(f).not.toBeNull();
+    expect(f.mean_h).toBeCloseTo(7, 1);
+    expect(f.nights_counted).toBe(10);
+    expect(f.method).toBe('recency_weighted_dow');
+    // CI brackets the mean and stays inside the [3h,11h] clamp.
+    expect(f.ci95_h[0]).toBeLessThanOrEqual(f.mean_h);
+    expect(f.ci95_h[1]).toBeGreaterThanOrEqual(f.mean_h);
+    expect(f.ci95_h[0]).toBeGreaterThanOrEqual(3);
+    expect(f.ci95_h[1]).toBeLessThanOrEqual(11);
+  });
+
+  it('weights recent nights more heavily than old ones', () => {
+    // first 10 nights at 5h, last 10 at 8h → recency-weighted > simple mean (6.5h).
+    const recs: SleepRecord[] = [];
+    for (let i = 0; i < 20; i++) {
+      const iso = `2026-04-${String(i + 1).padStart(2, '0')}`;
+      recs.push(makeRecord(iso, i < 10 ? 300 : 480));
+    }
+    const f = forecastTonightHeuristic(recs, NOW)!;
+    expect(f.mean_h).toBeGreaterThan(6.5);
+  });
+
+  it('skips skipped nights and zero-TST rows', () => {
+    const recs = [
+      makeRecord('2026-05-10', 420),
+      { ...makeRecord('2026-05-11', 0), is_skipped: true },
+      makeRecord('2026-05-12', 420),
+      makeRecord('2026-05-13', 420),
+    ];
+    const f = forecastTonightHeuristic(recs, NOW)!;
+    expect(f.nights_counted).toBe(3);
+  });
+
+  it('day-of-week adjustment pulls toward the matching weekday subgroup', () => {
+    // 2026-05-15 is a Friday. Build a history where Fridays are short (4h)
+    // and every other day is long (8h). Forecasting for a Friday should land
+    // below the un-adjusted recency mean.
+    const recs: SleepRecord[] = [];
+    const base = new Date('2026-04-03'); // a Friday
+    for (let i = 0; i < 21; i++) {
+      const d = new Date(base);
+      d.setDate(base.getDate() + i);
+      const iso = d.toISOString().slice(0, 10);
+      const isFriday = d.getDay() === 5;
+      recs.push(makeRecord(iso, isFriday ? 240 : 480));
+    }
+    const withDow = forecastTonightHeuristic(recs, NOW, 5)!;     // Friday
+    const withoutDow = forecastTonightHeuristic(recs, NOW)!;     // no dow
+    expect(withDow.mean_h).toBeLessThan(withoutDow.mean_h);
+  });
+
+  it('reports tier by sample size', () => {
+    const short = Array.from({ length: 4 }, (_, i) =>
+      makeRecord(`2026-05-1${i}`, 420),
+    );
+    expect(forecastTonightHeuristic(short, NOW)!.tier).toBe('low');
+    const long = Array.from({ length: 16 }, (_, i) =>
+      makeRecord(`2026-04-${String(i + 1).padStart(2, '0')}`, 420),
+    );
+    expect(forecastTonightHeuristic(long, NOW)!.tier).toBe('high');
+  });
+});
+
+// ─── insomnia severity survey ────────────────────────────────────────
+
+describe('insomniaSeverityBand', () => {
+  it('maps scores to the standard ISI bands', () => {
+    expect(insomniaSeverityBand(0)).toBe('none');
+    expect(insomniaSeverityBand(7)).toBe('none');
+    expect(insomniaSeverityBand(8)).toBe('subthreshold');
+    expect(insomniaSeverityBand(14)).toBe('subthreshold');
+    expect(insomniaSeverityBand(15)).toBe('moderate');
+    expect(insomniaSeverityBand(21)).toBe('moderate');
+    expect(insomniaSeverityBand(22)).toBe('severe');
+    expect(insomniaSeverityBand(28)).toBe('severe');
+  });
+});
+
+describe('scoreInsomniaSurvey', () => {
+  const NOW = 1_700_000_000_000;
+
+  it('exposes exactly 7 questions, each with 5 options', () => {
+    expect(INSOMNIA_SURVEY_LENGTH).toBe(7);
+    expect(INSOMNIA_SURVEY_QUESTIONS).toHaveLength(7);
+    for (const q of INSOMNIA_SURVEY_QUESTIONS) {
+      expect(q.options).toHaveLength(5);
+      expect(typeof q.id).toBe('string');
+    }
+  });
+
+  it('sums a complete answer set and bands it', () => {
+    const r = scoreInsomniaSurvey([3, 3, 3, 3, 3, 3, 3], NOW)!;
+    expect(r.score).toBe(21);
+    expect(r.band).toBe('moderate');
+    expect(r.answered).toBe(7);
+    expect(r.scored_at).toBe(NOW);
+  });
+
+  it('scores an all-zero survey as none', () => {
+    const r = scoreInsomniaSurvey([0, 0, 0, 0, 0, 0, 0], NOW)!;
+    expect(r.score).toBe(0);
+    expect(r.band).toBe('none');
+  });
+
+  it('scores a maxed survey as severe', () => {
+    const r = scoreInsomniaSurvey([4, 4, 4, 4, 4, 4, 4], NOW)!;
+    expect(r.score).toBe(28);
+    expect(r.band).toBe('severe');
+  });
+
+  it('returns null for the wrong answer count', () => {
+    expect(scoreInsomniaSurvey([1, 2, 3], NOW)).toBeNull();
+    expect(scoreInsomniaSurvey([0, 0, 0, 0, 0, 0, 0, 0], NOW)).toBeNull();
+  });
+
+  it('returns null for out-of-range or non-integer answers', () => {
+    expect(scoreInsomniaSurvey([0, 0, 0, 0, 0, 0, 5], NOW)).toBeNull();
+    expect(scoreInsomniaSurvey([0, 0, 0, 0, 0, 0, -1], NOW)).toBeNull();
+    expect(scoreInsomniaSurvey([0, 0, 0, 0, 0, 0, 2.5], NOW)).toBeNull();
+  });
+
+  it('returns null for non-array / nullish input', () => {
+    expect(scoreInsomniaSurvey(null, NOW)).toBeNull();
+    expect(scoreInsomniaSurvey(undefined, NOW)).toBeNull();
   });
 });

@@ -394,6 +394,9 @@ importers:
       '@ollie/api':
         specifier: workspace:*
         version: link:../api
+      '@ollie/consent':
+        specifier: workspace:*
+        version: link:../consent
       '@ollie/events':
         specifier: workspace:*
         version: link:../events
@@ -444,6 +447,9 @@ importers:
       '@ollie/api':
         specifier: workspace:*
         version: link:../api
+      '@ollie/consent':
+        specifier: workspace:*
+        version: link:../consent
       '@ollie/crypto':
         specifier: workspace:*
         version: link:../crypto

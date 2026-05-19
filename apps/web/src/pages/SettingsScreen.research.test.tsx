@@ -3,8 +3,8 @@
  *
  * Covers the acceptance contract:
  *   - hydrates from getConsent() on mount
- *   - toggle ON  → setConsent({ research_optin: true }) + consent:set event w/ source 'settings'
- *   - toggle OFF → setConsent({ research_optin: false }) + consent:set event w/ source 'settings'
+ *   - toggle ON  → setConsent({ research_optin: true })
+ *   - toggle OFF → setConsent({ research_optin: false })
  *   - inline confirmation copy renders after each flip (not a modal)
  *
  * Mirrors apps/web/src/screens/onboarding/ConsentStep.test.tsx — same
@@ -31,7 +31,6 @@ import { createRoot, type Root } from 'react-dom/client';
 const mocks = vi.hoisted(() => ({
   getConsentSpy: vi.fn(),
   setConsentSpy: vi.fn().mockResolvedValue(undefined),
-  emitSpy: vi.fn(),
 }));
 
 vi.mock('@ollie/consent', () => ({
@@ -48,10 +47,6 @@ vi.mock('@ollie/consent', () => ({
   CONSENT_STORE_MODULE: 'consent',
   CONSENT_STORE_KEY: 'state',
   CONSENT_PIVOT_TS: Date.UTC(2026, 4, 14),
-}));
-
-vi.mock('@ollie/events', () => ({
-  emit: mocks.emitSpy,
 }));
 
 // Stub the store + lib transitive imports so SettingsScreen.tsx loads
@@ -86,13 +81,7 @@ vi.mock('../lib/invite', () => ({
   generateInvite: vi.fn(),
 }));
 
-vi.mock('../lib/encryption-boot', () => ({
-  hasSessionPassphrase: () => false,
-  setSessionPassphrase: vi.fn(),
-  clearSessionPassphrase: vi.fn(),
-}));
-
-const { getConsentSpy, setConsentSpy, emitSpy } = mocks;
+const { getConsentSpy, setConsentSpy } = mocks;
 
 // Now safe to import — all transitive deps mocked.
 import { ResearchSection } from './SettingsScreen';
@@ -135,7 +124,6 @@ beforeEach(() => {
   getConsentSpy.mockReset();
   setConsentSpy.mockReset();
   setConsentSpy.mockResolvedValue(undefined);
-  emitSpy.mockReset();
   container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);
@@ -177,7 +165,7 @@ describe('ResearchSection · hydration', () => {
 });
 
 describe('ResearchSection · toggle round-trip', () => {
-  it('OFF → ON calls setConsent({ research_optin: true }) and emits consent:set', async () => {
+  it('OFF → ON calls setConsent({ research_optin: true })', async () => {
     getConsentSpy
       .mockResolvedValueOnce({
         necessary: true, marketing: false, research_optin: false, set_at: 1, v: 1,
@@ -197,17 +185,9 @@ describe('ResearchSection · toggle round-trip', () => {
     expect(setConsentSpy.mock.calls[0][1]).toMatchObject({
       research_optin: true,
     });
-
-    expect(emitSpy).toHaveBeenCalledTimes(1);
-    expect(emitSpy.mock.calls[0][0]).toBe('consent:set');
-    const payload = emitSpy.mock.calls[0][1] as Record<string, unknown>;
-    expect(payload.necessary).toBe(true);
-    expect(payload.research_optin).toBe(true);
-    expect(payload.source).toBe('settings');
-    expect(typeof payload.ts).toBe('number');
   });
 
-  it('ON → OFF calls setConsent({ research_optin: false }) and emits consent:set', async () => {
+  it('ON → OFF calls setConsent({ research_optin: false })', async () => {
     getConsentSpy
       .mockResolvedValueOnce({
         necessary: true, marketing: false, research_optin: true, set_at: 1, v: 1,
@@ -224,9 +204,6 @@ describe('ResearchSection · toggle round-trip', () => {
     expect(setConsentSpy.mock.calls[0][1]).toMatchObject({
       research_optin: false,
     });
-    const payload = emitSpy.mock.calls[0][1] as Record<string, unknown>;
-    expect(payload.research_optin).toBe(false);
-    expect(payload.source).toBe('settings');
   });
 });
 
@@ -287,6 +264,5 @@ describe('ResearchSection · pre-hydration safety', () => {
     // Don't flush — keep the component in its un-hydrated state.
     click(getResearchToggle());
     expect(setConsentSpy).not.toHaveBeenCalled();
-    expect(emitSpy).not.toHaveBeenCalled();
   });
 });

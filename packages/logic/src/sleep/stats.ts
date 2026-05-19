@@ -325,5 +325,98 @@ export function forecastTonightTST(
   };
 }
 
+/**
+ * forecastTonightHeuristic — local-only TST forecast.
+ *
+ * Unlike forecastTonightTST (which needs an external PredictApi layer that
+ * was never wired), this derives a "tonight likely" estimate purely from
+ * sleep.records — no network, no injected dependency.
+ *
+ * Method:
+ *  1. Recency-weighted mean of the last ≤21 logged nights (newer nights
+ *     weighted higher via a linear ramp). This is the base estimate.
+ *  2. Day-of-week adjustment: if ≥2 prior nights share `targetDow` (the
+ *     day-of-week of the night being forecast), nudge the estimate toward
+ *     that subgroup's mean (50% blend) so a consistently short Friday or
+ *     long Sunday is reflected.
+ *  3. CI95 is mean ± 1.96·SD, clamped to a sane [3h, 11h] window.
+ *
+ * `targetDow` is 0–6 (Sun–Sat) for the night being forecast — caller
+ * passes `new Date(now).getDay()` (tonight's bedtime falls on today).
+ * Returns null with fewer than 3 usable nights — same floor as the
+ * old API version, so the UI card behaves identically when data is thin.
+ */
+export function forecastTonightHeuristic(
+  records: SleepRecord[],
+  now: number,
+  targetDow?: number,
+): ForecastResult | null {
+  if (!Array.isArray(records)) return null;
+  const usable = records
+    .filter(
+      (r) =>
+        r &&
+        !r.is_skipped &&
+        typeof r.tst_min === 'number' &&
+        isFinite(r.tst_min as number) &&
+        (r.tst_min as number) > 0,
+    )
+    .slice(-21);
+  if (usable.length < 3) return null;
+
+  const tstMin = usable.map((r) => r.tst_min as number);
+
+  // 1 — recency-weighted mean (linear ramp: oldest weight 1, newest = n).
+  let wSum = 0;
+  let weightTotal = 0;
+  for (let i = 0; i < tstMin.length; i++) {
+    const w = i + 1;
+    wSum += tstMin[i] * w;
+    weightTotal += w;
+  }
+  let estMin = wSum / weightTotal;
+
+  // 2 — day-of-week adjustment.
+  if (typeof targetDow === 'number' && targetDow >= 0 && targetDow <= 6) {
+    const dowTst: number[] = [];
+    for (const r of usable) {
+      if (typeof r.night_of !== 'string') continue;
+      const d = new Date(r.night_of + 'T12:00:00');
+      if (isNaN(d.getTime())) continue;
+      if (d.getDay() === targetDow) dowTst.push(r.tst_min as number);
+    }
+    if (dowTst.length >= 2) {
+      const dowMean = _mean(dowTst)!;
+      estMin = estMin * 0.5 + dowMean * 0.5;
+    }
+  }
+
+  // 3 — confidence interval from the spread of the window.
+  const sd = _stdev(tstMin);
+  const half = 1.96 * sd;
+  const clampMin = 3 * 60;
+  const clampMax = 11 * 60;
+  const estClamped = Math.min(clampMax, Math.max(clampMin, estMin));
+  const loMin = Math.min(clampMax, Math.max(clampMin, estClamped - half));
+  const hiMin = Math.min(clampMax, Math.max(clampMin, estClamped + half));
+
+  // tier: how much we trust the estimate, by sample size.
+  const tier = usable.length >= 14 ? 'high' : usable.length >= 7 ? 'medium' : 'low';
+
+  const meanH = Number((estClamped / 60).toFixed(1));
+  const loH = Number((loMin / 60).toFixed(1));
+  const hiH = Number((hiMin / 60).toFixed(1));
+
+  return {
+    mean_h: meanH,
+    ci95_h: [loH, hiH],
+    mean_min: Math.round(estClamped),
+    ci95_min: [Math.round(loMin), Math.round(hiMin)],
+    tier,
+    method: 'recency_weighted_dow',
+    nights_counted: usable.length,
+  };
+}
+
 /** Re-export isoDate so patterns can use it without circular imports. */
 export { isoDate };

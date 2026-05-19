@@ -1,35 +1,49 @@
 /**
  * @ollie/orchestrator · braindump-dispatch
  *
- * Public dispatcher API. Wraps dissection.extract() + writes each
- * routed Action into the right store slice. Lives here (not in
- * @ollie/logic) so the logic package stays pure (no store dep).
+ * THE single canonical brain-dump routing core (Görev 2 · 2026-05-15).
  *
- * Audit-task 1 (2026-05-14): the work + goals routes used to land
- * in <module>.items. They now populate work.tasks, work.meetings,
- * goals.items[] with proper schema, so the existing W-* and G-*
- * pattern detectors actually see the data.
+ * Wraps dissection.extract() + writes each routed Action into the right
+ * store slice. Lives here (not in @ollie/logic) so the logic package
+ * stays pure (no store dep) but the orchestrator package already depends
+ * on both @ollie/store and @ollie/logic.
  *
- * Sprint B'' (2026-05-14): each row write now emits
- * `research:row_written` so the opt-in research orchestrator can pick
- * it up, scrub, and ship to /label. Emit happens unconditionally;
- * consent gating lives in research.ts. Table mapping:
+ * ─── Consolidation (Görev 2) ────────────────────────────────────────────────
+ * Until 2026-05-15 there were TWO routing implementations that had drifted:
+ *   - apps/web/src/hooks/applyRoute.ts — the UI path, with finance
+ *     sub-classification (records/bills/subscriptions/goals/adhd_tax/
+ *     transactions) but NO research:row_written emit.
+ *   - this file — the research-pipeline path, with research:row_written
+ *     emit + dump handling but NO finance sub-classification.
+ * They are now ONE. `dispatchAction` below is the union:
+ *   - finance sub-slice classification (was UI-only) — ported here;
+ *   - research:row_written emit (was research-only) — kept here;
+ *   - dump / astrology→dump / work.meetings handling — kept here.
+ * `applyRoute.ts` is now a thin shim that delegates to `dispatchAction`.
+ *
+ * Audit-task 1 (2026-05-14): work + goals routes populate work.tasks /
+ * work.meetings / goals.items[] with proper schema so the W-* / G-*
+ * pattern detectors see the data.
+ *
+ * Sprint B'' (2026-05-14): each scrubbable row write emits
+ * `research:row_written` so the opt-in research orchestrator can pick it
+ * up, scrub, and ship to /label. Emit is unconditional; consent gating
+ * lives in research.ts. Table mapping:
  *   body                                  → body_records
  *   work                                  → work_records
  *   astrology + explicit dump module      → brain_dump_log
  *   default fallthrough (admin/sleep/habits/pets/grocery/…)
  *                                         → home_records
  * cycle + goals have structured slices without scrubbable free text so
- * they're NOT emitted. finance has its own orchestrator emit path.
- *
- * The store-write semantics intentionally mirror
- * apps/web/src/hooks/applyRoute.ts; if you change one, update both.
+ * they're NOT emitted. finance is NOT emitted here either — the finance
+ * orchestrator owns the finance_records corpus emit path.
  */
 
 import type { Store } from '@ollie/store';
 import * as events from '@ollie/events';
 import { extract } from '@ollie/logic/dissection';
 import type { Action, Route } from '@ollie/logic/dissection';
+import { parseFinanceDump } from '@ollie/logic/finance';
 
 /**
  * Locale token for the scrubber. Mirrors @ollie/pii-scrub `Locale`. We
@@ -48,6 +62,48 @@ function newId(): string {
     return crypto.randomUUID();
   }
   return `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+}
+
+// ─── finance sub-slice classification (ported from applyRoute.ts) ─────────────
+//
+// Sub-slice keywords not covered by parseFinanceDump (subscription / bill /
+// savings). parseFinanceDump already handles is_adhd_tax and direction in/out.
+
+const SUBSCRIPTION_RE =
+  /\b(subscription|subscri(?:be|bed)|monthly\s+plan|annual\s+plan|canva|spotify|netflix|apple\s+one|notion|figma|slack)\b/i;
+const BILL_RE =
+  /\b(rent|electric(?:ity)?|gas\s+bill|internet\s+bill|phone\s+bill|every\s+(?:month|week|year|quarter)|monthly|weekly|yearly|quarterly|recurring)\b/i;
+const SAVINGS_RE =
+  /\b(save|saving|savings|put\s+aside|set\s+aside|goal|toward|for\s+(?:a\s+)?\w+\s+(?:fund|goal))\b/i;
+
+export type FinanceSlice =
+  | 'records'
+  | 'bills'
+  | 'subscriptions'
+  | 'goals'
+  | 'adhd_tax'
+  | 'transactions';
+
+/** Classify a finance text into a store sub-slice key. */
+function classifyFinanceSlice(text: string, now: number): FinanceSlice {
+  const parsed = parseFinanceDump(text, now);
+  const rec = parsed.record;
+
+  if (rec?.is_adhd_tax) return 'adhd_tax';
+
+  const lower = text.toLowerCase();
+
+  if (SAVINGS_RE.test(lower)) return 'goals';
+
+  // Check subscription before bill — "canva monthly $20" is a subscription.
+  if (SUBSCRIPTION_RE.test(lower)) return 'subscriptions';
+
+  if (BILL_RE.test(lower)) return 'bills';
+
+  // One-off income or expense.
+  if (rec && (rec.direction === 'in' || rec.direction === 'out')) return 'records';
+
+  return 'transactions';
 }
 
 /**
@@ -163,6 +219,21 @@ export function dispatchAction(
     return;
   }
 
+  // ── finance ──────────────────────────────────────────────────────────
+  // Görev 2: finance sub-slice classification (was UI-only in
+  // applyRoute.ts). Lands in finance.<slice> with a generic row shape.
+  // No research:row_written emit — the finance orchestrator owns the
+  // finance_records corpus path.
+  if (module === 'finance') {
+    const slice = classifyFinanceSlice(data, ts);
+    store.update<Array<{ id: string; text: string; ts: number }>>(
+      'finance',
+      slice,
+      (cur) => [...(cur ?? []), { id: newId(), text: data, ts }],
+    );
+    return;
+  }
+
   // ── work ────────────────────────────────────────────────────────────
   if (module === 'work') {
     const lower = data.toLowerCase();
@@ -220,6 +291,18 @@ export function dispatchAction(
       store.update<Array<{ id: string; text: string; ts: number }>>(
         'body',
         'supplements',
+        (cur) => [...(cur ?? []), { id, text: data, ts }],
+      );
+      emitResearchRow('body_records', id, data, ts, getLocale());
+      return;
+    }
+    // Görev 2: episodes sub-slice (was UI-only in applyRoute.ts) — migraine
+    // / crash / flare entries land in body.episodes, not body.items.
+    if (/migraine|migren|episode|severe|crash|flare/i.test(lower)) {
+      const id = newId();
+      store.update<Array<{ id: string; text: string; ts: number }>>(
+        'body',
+        'episodes',
         (cur) => [...(cur ?? []), { id, text: data, ts }],
       );
       emitResearchRow('body_records', id, data, ts, getLocale());

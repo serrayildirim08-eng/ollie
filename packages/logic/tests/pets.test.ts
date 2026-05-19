@@ -160,6 +160,28 @@ describe('detectHealthFlags', () => {
     const flags = detectHealthFlags('pet-1', obs, SPECIES_PROFILES, NOW);
     expect(flags).toHaveLength(0);
   });
+
+  it('matches signals on structured kind="symptom" observations', () => {
+    // Frontend writes structured observations; the engine still scans `text`.
+    const obs: Observation[] = [
+      { id: 'o1', pet_id: 'pet-1', kind: 'symptom', text: 'hunched', tags: ['posture'], occurred_at: NOW - 3 * DAY, created_at: NOW - 3 * DAY },
+      { id: 'o2', pet_id: 'pet-1', kind: 'symptom', text: 'still hunched today', tags: ['posture'], occurred_at: NOW - 2 * DAY, created_at: NOW - 2 * DAY },
+      { id: 'o3', pet_id: 'pet-1', kind: 'symptom', text: 'hunched again', tags: ['posture'], occurred_at: NOW - 1 * DAY, created_at: NOW - 1 * DAY },
+    ];
+    const flags = detectHealthFlags('pet-1', obs, SPECIES_PROFILES, NOW);
+    expect(flags.some((f) => f.flag === 'hunched')).toBe(true);
+  });
+
+  it('ignores kind="weight" observations for signal matching', () => {
+    // Weight rows carry no signal phrase → never trip a health flag.
+    const obs: Observation[] = [
+      { id: 'w1', pet_id: 'pet-1', kind: 'weight', text: '', tags: [], value_grams: 980, occurred_at: NOW - 3 * DAY },
+      { id: 'w2', pet_id: 'pet-1', kind: 'weight', text: '', tags: [], value_grams: 975, occurred_at: NOW - 2 * DAY },
+      { id: 'w3', pet_id: 'pet-1', kind: 'weight', text: '', tags: [], value_grams: 970, occurred_at: NOW - 1 * DAY },
+    ];
+    const flags = detectHealthFlags('pet-1', obs, SPECIES_PROFILES, NOW);
+    expect(flags).toHaveLength(0);
+  });
 });
 
 // ─── 6. generateGuiltTripCopy ─────────────────────────────────────────

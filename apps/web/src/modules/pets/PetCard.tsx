@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import * as events from '@ollie/events';
 import {
   TASK_DISPLAY,
   generateGuiltTripCopy,
@@ -18,6 +19,7 @@ import type {
 import { SourcesLink } from '../../components/SourcesLink';
 import { PetPortrait } from './PetPortrait';
 import { PetCareStrip } from './PetCareStrip';
+import { PetObservationEntry } from './PetObservationEntry';
 
 // ─── local helpers ────────────────────────────────────────────────────────────
 
@@ -61,6 +63,7 @@ interface PetCardProps {
   onLogManual: (petId: string, task: string) => void;
   onArchive: (petId: string) => void;
   onReviewFlag: (flagId: string) => void;
+  onRecordObservation: (observation: Observation) => void;
   dailyForecast?: Record<string, string>;
   milestones?: Milestone[];
   vocabShown?: Record<string, string[]>;
@@ -84,6 +87,7 @@ export function PetCard({
   onLogManual,
   onArchive,
   onReviewFlag,
+  onRecordObservation,
   dailyForecast,
   milestones = [],
   vocabShown = {},
@@ -91,6 +95,28 @@ export function PetCard({
 }: PetCardProps) {
   const [manualOpen, setManualOpen] = useState(false);
   const [recentClick, setRecentClick] = useState<Record<string, number>>({});
+
+  // pets:guilt_copy_generated — the orchestrator's pets recompute emits the
+  // anti-guilt copy it generated for each escalated care gap. We render that
+  // copy on the matching care-gap row; the UI's own generateGuiltTripCopy()
+  // call below stays as a synchronous fallback (cold render before the
+  // recompute fires, or when consent/voice settings shift the copy out).
+  // Keyed by `${pet_id}:${task}`.
+  const [guiltCopy, setGuiltCopy] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    const unsub = events.on('pets:guilt_copy_generated', (raw: unknown) => {
+      const p = (raw ?? {}) as {
+        pet_id?: string;
+        task?: string;
+        text?: string;
+      };
+      if (typeof p.pet_id !== 'string' || typeof p.task !== 'string') return;
+      if (typeof p.text !== 'string' || p.text.trim().length === 0) return;
+      setGuiltCopy((prev) => ({ ...prev, [`${p.pet_id}:${p.task}`]: p.text! }));
+    });
+    return unsub;
+  }, []);
 
   const taskKeys = Object.keys(speciesProfile.care_tasks || {});
 
@@ -261,7 +287,13 @@ export function PetCard({
             const taskProfile = speciesProfile.care_tasks[g.task] || {};
             const display = TASK_DISPLAY[g.task] || g.task.replace(/_/g, ' ');
             const daysInt = g.days_since === null ? '—' : Math.floor(g.days_since);
-            const copy = generateGuiltTripCopy(g, petAsBase, speciesProfile);
+            const uiCopy = generateGuiltTripCopy(g, petAsBase, speciesProfile);
+            // Prefer the orchestrator-emitted copy when present; fall back to
+            // the synchronous UI computation for the cold-render window.
+            const emittedCopy = guiltCopy[`${pet.id}:${g.task}`];
+            const copy = emittedCopy
+              ? { ...uiCopy, text: emittedCopy }
+              : uiCopy;
             const hasCopy =
               state.settings.guilt_voice !== 'off' && copy.text && !awayActive;
             const isConcerned = g.severity === 'concerned' || g.severity === 'firm';
@@ -533,6 +565,8 @@ export function PetCard({
       <div
         style={{
           display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'center',
           gap: 8,
           paddingTop: 16,
           borderTop: '1px solid var(--rule)',
@@ -556,6 +590,12 @@ export function PetCard({
         >
           {manualOpen ? 'close' : 'log care manually'}
         </button>
+        <span style={{ color: 'var(--ink-faint)', alignSelf: 'center' }}>·</span>
+        <PetObservationEntry
+          petId={pet.id}
+          speciesProfile={speciesProfile}
+          onRecord={onRecordObservation}
+        />
         <span style={{ color: 'var(--ink-faint)', alignSelf: 'center' }}>·</span>
         <button
           type="button"

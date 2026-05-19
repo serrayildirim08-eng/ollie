@@ -160,7 +160,6 @@ export interface WorkState {
   recurring_meetings?: RecurringMeeting[];
   tasks?: WorkTask[];
   projects?: Project[];
-  focus_log?: FocusLogEntry[];
   shutdown_log?: ShutdownLogEntry[];
   triage_days?: TriageDay[];
   estimation_log?: EstimationLogEntry[];
@@ -173,6 +172,68 @@ export interface WorkState {
   rsd_anchor_log?: RsdAnchorEntry[];
   /** Booked future focus blocks (for "deep work tomorrow 10am" cues). */
   scheduled_blocks?: ScheduledFocusBlock[];
+  /** Completed focus sessions — drives pomodoro break math. */
+  focus_log?: FocusLogEntry[];
+  /** Phase 3 · manual distraction-moment log. */
+  distraction_log?: DistractionEntry[];
+  /** Phase 3 · handoff / collaboration notes. */
+  handoff_notes?: HandoffNote[];
+}
+
+// ─── Distraction log (Phase 3 · feature 1) ────────────────────────────
+// One entry per "I got pulled away" moment captured during a focus
+// session. Manual entry only — there is NO braindump feed into this
+// slice yet. (See NOTE below: a braindump→distraction route can be
+// added after the Phase-1 routing rewrite merges.)
+//
+// Stored under work.distraction_log.
+
+/** Optional coarse bucket for what pulled the user away. */
+export type DistractionCategory =
+  | 'notification'
+  | 'person'
+  | 'thought'
+  | 'task_switch'
+  | 'physical'
+  | 'other';
+
+export interface DistractionEntry {
+  /** Stable id (UI-generated). */
+  id: string;
+  /** ms epoch of when the distraction was logged. */
+  ts: number;
+  /** Free text — what pulled you away. May be empty. */
+  note: string;
+  /** Optional coarse category. */
+  category?: DistractionCategory;
+  /**
+   * Optional link to the focus_log entry (its `ts`) the user was inside
+   * when distracted. Set by the UI when a session is running.
+   */
+  focus_session_ts?: number;
+}
+
+// NOTE (Phase 3): braindump → distraction routing is intentionally NOT
+// wired here. The braindump router (applyRoute / braindump-dispatch) is
+// being rewritten by the Phase-1 agent in an isolated worktree. Once
+// that merge lands, a 'work' item with an inattention marker can be
+// appended to work.distraction_log from the dispatch layer.
+
+// ─── Handoff / collaboration notes (Phase 3 · feature 3) ──────────────
+// A note left for a teammate (or future-you) when handing off work.
+// Stored under work.handoff_notes.
+
+export interface HandoffNote {
+  /** Stable id (UI-generated). */
+  id: string;
+  /** ms epoch of creation. */
+  ts: number;
+  /** Note body. */
+  text: string;
+  /** Optional recipient name — free text, no contact-book link. */
+  to?: string;
+  /** Optional resolution stamp (ms epoch). When set, UI hides from active list. */
+  resolved_at?: number | null;
 }
 
 // ─── Scheduled focus blocks ───────────────────────────────────────────

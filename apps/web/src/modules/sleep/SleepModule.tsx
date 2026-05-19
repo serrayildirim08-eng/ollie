@@ -33,6 +33,7 @@ import type {
   ShortSleepRunResult,
   ForecastResult,
   AnySleepPattern,
+  InsomniaSurveyResult,
 } from '@ollie/logic/sleep';
 import type { CaffeineSleepResult } from '@ollie/logic/body';
 import { useStoreSlice } from '../../store';
@@ -40,6 +41,7 @@ import { ModuleHelp } from '../../components/ModuleHelp';
 import { SourcesLink } from '../../components/SourcesLink';
 import { SleepSoundPlayer } from '../../components/SleepSoundPlayer';
 import { WindDownChecklist } from './WindDownChecklist';
+import { InsomniaSurvey } from './InsomniaSurvey';
 
 // ─── palette ─────────────────────────────────────────────────────────────────
 
@@ -243,6 +245,13 @@ export function SleepModule({ onBack }: SleepModuleProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [sayMoreOpen, setSayMoreOpen] = useState(false);
   const [sayMoreText, setSayMoreText] = useState('');
+  const [surveyOpen, setSurveyOpen] = useState(false);
+
+  // "Go deeper" insomnia survey — orchestrator-scored result, if the user
+  // has taken it before. Drives the drawer line's sub-copy.
+  const [insomniaResult] = useStoreSlice<InsomniaSurveyResult | null>(
+    'sleep', 'insomnia_survey_result', null,
+  );
 
   // ── derived (useMemo — pure logic only) ──────────────────────────────────
   const target = useMemo(() => resolveTarget(settings), [settings]);
@@ -300,8 +309,27 @@ export function SleepModule({ onBack }: SleepModuleProps) {
     [safeRecords],
   );
 
-  // tonightForecast is written by the orchestrator; read from store directly.
-  const [tonightForecast] = useStoreSlice<ForecastResult | null>('sleep', 'tonightForecast', null);
+  // tonightForecast is written by the orchestrator (forecastTonightHeuristic);
+  // read from store directly. Defensively validated below before render —
+  // a malformed orchestrator write must never crash the spread.
+  const [tonightForecastRaw] = useStoreSlice<ForecastResult | null>('sleep', 'tonightForecast', null);
+  const tonightForecast = useMemo<ForecastResult | null>(() => {
+    const f = tonightForecastRaw;
+    if (
+      !f ||
+      typeof f.mean_h !== 'number' ||
+      !Number.isFinite(f.mean_h) ||
+      !Array.isArray(f.ci95_h) ||
+      f.ci95_h.length !== 2 ||
+      typeof f.ci95_h[0] !== 'number' ||
+      typeof f.ci95_h[1] !== 'number' ||
+      !Number.isFinite(f.ci95_h[0]) ||
+      !Number.isFinite(f.ci95_h[1])
+    ) {
+      return null;
+    }
+    return f;
+  }, [tonightForecastRaw]);
 
   // Patterns stored in store (orchestrator writes them)
   const [storedPatterns] = useStoreSlice<AnySleepPattern[]>('sleep', 'patterns', []);
@@ -610,15 +638,25 @@ export function SleepModule({ onBack }: SleepModuleProps) {
                   : <>you're <span style={{ color: C.warn, fontStyle: 'normal', fontWeight: 700 }}>{debtMin} min short</span> this week.</>}
               </div>
 
-              {/* tonight forecast */}
+              {/* tonight forecast — written by orchestrator forecastTonightHeuristic */}
               {tonightForecast && (
                 <div style={{ padding: '18px 0', borderTop: `1px solid ${C.rule}`, borderBottom: `1px solid ${C.rule}` }}>
+                  <div style={{
+                    fontSize: 11, letterSpacing: '0.20em', textTransform: 'uppercase',
+                    color: C.inkSoft, fontWeight: 700, marginBottom: 8,
+                  }}>
+                    tonight's estimate
+                  </div>
                   <div style={{ fontSize: 'clamp(16px, 1.7vw, 20px)', fontWeight: 700, color: C.ink, lineHeight: 1.45 }}>
-                    tonight likely <strong style={{ color: C.accent }}>{tonightForecast.mean_h}h</strong>{' '}
-                    ({tonightForecast.ci95_h[0]}–{tonightForecast.ci95_h[1]}h).
+                    likely <strong style={{ color: C.accent }}>{tonightForecast.mean_h}h</strong>{' '}
+                    <span style={{ color: C.inkSoft, fontWeight: 400 }}>
+                      ({tonightForecast.ci95_h[0]}–{tonightForecast.ci95_h[1]}h).
+                    </span>
                   </div>
                   <div style={{ fontSize: 13, fontStyle: 'italic', color: C.inkSoft, fontWeight: 400, marginTop: 6 }}>
-                    based on last {tonightForecast.nights_counted} nights.
+                    {tonightForecast.tier === 'low'
+                      ? `early read — ${tonightForecast.nights_counted} nights so far.`
+                      : `from your last ${tonightForecast.nights_counted} nights.`}
                   </div>
                 </div>
               )}
@@ -876,6 +914,9 @@ export function SleepModule({ onBack }: SleepModuleProps) {
         </>
       )}
 
+      {/* ── insomnia survey ("go deeper" lite survey) ── */}
+      {surveyOpen && <InsomniaSurvey onClose={() => setSurveyOpen(false)} />}
+
       {/* ── drawer backdrop ── */}
       {drawerOpen && (
         <div
@@ -959,19 +1000,50 @@ export function SleepModule({ onBack }: SleepModuleProps) {
         {/* go deeper */}
         <div style={{ marginBottom: 28 }}>
           <div style={{ fontSize: 11, letterSpacing: '0.20em', textTransform: 'uppercase', color: C.inkSoft, marginBottom: 12, fontWeight: 700 }}>
-            go deeper · once
+            go deeper
           </div>
+
+          {/* insomnia check — the live "lite" survey (Serra decision 2026-05-15) */}
+          <button
+            type="button"
+            onClick={() => { setDrawerOpen(false); setSurveyOpen(true); }}
+            style={{
+              display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
+              width: '100%', textAlign: 'left', background: 'none', cursor: 'pointer',
+              border: 'none', borderBottom: `1px solid ${C.rule}`,
+              padding: '14px 4px', fontFamily: COURIER,
+            }}
+            aria-label="open the insomnia check survey"
+          >
+            <span style={{ fontSize: 13, color: C.ink, fontWeight: 700 }}>
+              insomnia check
+              <span style={{ fontStyle: 'italic', fontWeight: 400, color: C.inkFaint, marginLeft: 6 }}>
+                {insomniaResult
+                  ? `last score ${insomniaResult.score}/28 · retake`
+                  : '7 questions · about 2 min'}
+              </span>
+            </span>
+            <span style={{ fontSize: 12, color: C.accent, fontWeight: 700, marginLeft: 12, flexShrink: 0 }}>
+              start
+            </span>
+          </button>
+
+          {/* future instruments — not built yet (lite survey only, per scope) */}
           {[
-            { name: 'profile chronotype · 5 min',                      sub: 'MCTQ · recommended · calibrates the algorithm' },
-            { name: 'last month quality · 8 min',                      sub: 'PSQI · 19 questions' },
-            { name: 'insomnia check · 3 min',                          sub: 'ISI · 7 questions' },
-            { name: 'daytime sleepiness · 4 min',                      sub: 'ESS · 8 questions' },
-            { name: `all logs · ${safeRecords.length} nights`,         sub: 'scrollable history' },
-            { name: 'export · .void',                                  sub: 'encrypted backup' },
+            { name: 'profile chronotype', sub: 'MCTQ · later' },
+            { name: 'last month quality', sub: 'PSQI · later' },
+            { name: 'daytime sleepiness', sub: 'ESS · later' },
           ].map((l) => (
-            <div key={l.name} style={{ padding: '14px 0', fontSize: 13, color: C.inkSoft, fontWeight: 700, borderBottom: `1px solid ${C.ruleSoft}` }}>
+            <div
+              key={l.name}
+              aria-disabled="true"
+              style={{
+                padding: '14px 4px', fontSize: 13, color: C.inkGhost, fontWeight: 700,
+                borderBottom: `1px solid ${C.ruleSoft}`,
+              }}
+            >
               {l.name}
-              <span style={{ fontStyle: 'italic', fontWeight: 400, color: C.inkFaint, marginLeft: 6 }}>{l.sub}</span>
+              <span style={{ fontStyle: 'italic', fontWeight: 400, color: C.inkGhost, marginLeft: 6 }}>{l.sub}</span>
             </div>
           ))}
         </div>

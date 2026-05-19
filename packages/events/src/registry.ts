@@ -37,8 +37,6 @@ export const REGISTRY: Registry = {
   'grocery:pattern_detected':      { payload: '{ pattern: string, confidence: string, sample_n: number, ts: number }' },
 
   // ─── cycle prediction & flags ───────────────────────────────────
-  'void:prediction:updated':       { payload: '{ nextPeriodTs: number|null, confidence: number, explanation: string }' },
-  'void:flag:raised':              { payload: '{ key: string, severity: "info"|"watch"|"discuss", title: string, evidence: string[] }' },
   'void:cycle:symptom_logged':     { payload: '{ ts: number, tags: string[], moduleContext: string }' },
   'void:cycle:asks_changed':       { payload: '{ asks: string[], ts: number }' },
 
@@ -54,7 +52,7 @@ export const REGISTRY: Registry = {
   'pets:care_logged':              { payload: '{ pet_id: string, task: string, source: string, occurred_at: number }' },
   'pets:observation_logged':      { payload: '{ pet_id: string, text: string, tags: string[] }' },
   'pets:care_gap_detected':        { payload: '{ pet_id: string, task: string, severity: string, days_since: number }' },
-  'pets:health_flag_raised':       { payload: '{ pet_id: string, flag: string, run_length: number, source_url: string }' },
+  'pets:health_flag_raised':       { payload: '{ pet_id: string, pet_name: string, flag: string, run_length: number, source_url: string }' },
   'pets:health_flag_reviewed':     { payload: '{ pet_id: string, flag_id: string, status: string }' },
   'pets:guilt_copy_generated':     { payload: '{ pet_id: string, task: string, level: string, text: string }' },
   'pets:milestone_detected':       { payload: '{ pet_id: string, tag: string, first_seen_at: number }' },
@@ -73,12 +71,6 @@ export const REGISTRY: Registry = {
 
   // ─── consent (B2B pivot 2026-05-14) ─────────────────────────────
   // Fires every time consent state is persisted via @ollie/consent
-  // setConsent(). Carries the new shape so downstream subscribers
-  // (research-stream, sessionTracker, orchestrator) can react without
-  // re-reading the store. source distinguishes onboarding vs reprompt vs
-  // settings-change paths.
-  'consent:set':                   { payload: '{ necessary: true, marketing: boolean, research_optin: boolean, source: "onboarding"|"settings"|"reprompt", ts: number }' },
-
   // ─── consumption (B2B panel) ────────────────────────────────────
   'consumption:brand:detected':    { payload: '{ id: string, brand_key: string, category_l1: string, category_l2?: string, confidence: number, source: "braindump"|"finance"|"grocery"|"direct", raw_module: string, ts: number }' },
   'consumption:brand:confirmed':   { payload: '{ id: string, brand_key: string, confirmed_by: "user" }' },
@@ -101,6 +93,9 @@ export const REGISTRY: Registry = {
   'sleep:wind_down_started':       { payload: '{ ts: number }' },
   'sleep:wind_down_completed':     { payload: '{ ts: number, durationMs: number, itemsCompleted: number }' },
   'sleep:wind_down_skipped':       { payload: '{ ts: number, itemsCompleted: number }' },
+  // Per-step row — emitted once per ritual-item tap. The sleep orchestrator
+  // subscribes and appends each to sleep.windDownLog for detectWindDownFriction.
+  'sleep:wind_down_step':          { payload: '{ ts: number, step_id: string, step_label?: string, action: "checked"|"unchecked" }' },
 
   // ─── episodes ───────────────────────────────────────────────────
   'void:episode:opened':           { payload: '{ id: string, label: string, kind: string, started_at: number }' },

@@ -19,9 +19,11 @@
  * Constitutional:
  *   - server NEVER sees plaintext finance data
  *   - sync gated on shared.settings.sync.enabled (= opt-in)
- *   - consent gated on shared.consent.necessary (necessary off = app
- *     does not work, so this should never block in practice — but we
- *     guard anyway because defense in depth is free)
+ *   - consent gated on the canonical @ollie/consent `necessary` flag
+ *     (necessary off = app does not work, so this should never block in
+ *     practice — but we guard anyway because defense in depth is free).
+ *     Görev 1 (2026-05-15): reads via hasNecessaryConsent() rather than
+ *     the raw `shared.consent.necessary` key — single source of truth.
  *   - LWW per-record via updated_at; ties broken server-side by the
  *     before-insert/update trigger that clamps updated_at >= now()
  *   - decryption failures fail-closed: skip the row, warn, never write
@@ -31,6 +33,7 @@
 import type { Store } from '@ollie/store';
 import type { OllieAPI } from '@ollie/api';
 import * as events from '@ollie/events';
+import { hasNecessaryConsent } from '@ollie/consent';
 import {
   bytesToBase64,
   base64ToBytes,
@@ -216,11 +219,10 @@ export function createFinanceSyncClient(initialDeps: FinanceSyncDeps): FinanceSy
   function isEnabled(): boolean {
     const sync = deps.store.get<{ enabled?: boolean }>('shared', 'settings.sync', { enabled: false }) ?? { enabled: false };
     if (!sync.enabled) return false;
-    // Defense in depth: respect the master consent toggle even though
+    // Defense in depth: respect the master consent gate even though
     // "necessary off" means the app does not work at all (consent screen
-    // blocks sign-up). If somehow the toggle reads false here, we no-op.
-    const consent = deps.store.get<boolean>('shared', 'consent.necessary', false) ?? false;
-    if (!consent) return false;
+    // blocks sign-up). Reads the canonical @ollie/consent state.
+    if (!hasNecessaryConsent(deps.store)) return false;
     return true;
   }
 

@@ -26,29 +26,11 @@ import type { BirthData } from '@ollie/logic/astrology';
 import { createOrchestrator, initPatternDetectedSubscriber } from '@ollie/orchestrator';
 import { scheduleServerJob } from '@ollie/notifications/server-schedule';
 import { getAccount } from './lib/account-boot';
-import { bootEncryption, hasSessionPassphrase } from './lib/encryption-boot';
 
 runMigrations(browserAdapter);
 
 export const store = createStore(browserAdapter);
 installCrossTabSync(store, browserAdapter);
-
-// Audit task 10: AES-GCM-256 encrypted snapshot for work + goals modules.
-// Fire-and-forget: orchestrators read lazily so the brief delay between
-// store init and snapshot restore is safe.
-//
-// 2026-05-14: passphrase prompt moved into SettingsScreen. We only call
-// bootEncryption() at startup when the user has previously set a
-// passphrase in this session (cached in sessionStorage). Otherwise the
-// store stays plaintext until the user opens Settings → encryption →
-// set passphrase, which calls setSessionPassphrase() to invoke
-// bootEncryption() with the freshly-saved value. This preserves the
-// graceful-plaintext audit pattern without a blocking window.prompt.
-if (hasSessionPassphrase()) {
-  void bootEncryption(store, {
-    promptForPassphrase: () => Promise.resolve(null),
-  });
-}
 
 export function useStoreSlice<T>(
   mod: string,

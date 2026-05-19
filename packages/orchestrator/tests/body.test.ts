@@ -292,4 +292,181 @@ describe('body orchestrator — push notification subscribers', () => {
     expect(scheduled).toHaveLength(0);
     orch2.teardown();
   });
+
+  // ── supplement_due ↔ body.supp_checks reconciliation ──────────────────────
+  // The UI checks supplements off into body.supp_checks (date-keyed), NOT into
+  // checked_dates. The reminder must read supp_checks too, else it nags a user
+  // who already took the supplement.
+
+  it('does NOT emit body:supplement_due when checked off via body.supp_checks', () => {
+    let emitted = 0;
+    on('body:supplement_due', () => { emitted++; });
+    const todayKey = new Date(FIXED_NOW).toISOString().slice(0, 10);
+    store.set('body', 'supplements', [
+      { id: 'sup-d', name: 'vitamin d', reminder_hhmm: '08:00', added_at: FIXED_NOW - 86400_000 },
+    ]);
+    // UI's write path — supp_checks, not checked_dates.
+    store.set('body', 'supp_checks', { [todayKey]: { 'sup-d': true } });
+    orch.init();
+    vi.advanceTimersByTime(600);
+    expect(emitted).toBe(0);
+  });
+
+  it('STILL emits body:supplement_due when supp_checks has it false / a different day', () => {
+    let emitted = 0;
+    on('body:supplement_due', () => { emitted++; });
+    const todayKey = new Date(FIXED_NOW).toISOString().slice(0, 10);
+    store.set('body', 'supplements', [
+      { id: 'sup-d', name: 'vitamin d', reminder_hhmm: '08:00', added_at: FIXED_NOW - 86400_000 },
+    ]);
+    store.set('body', 'supp_checks', {
+      '2020-01-01': { 'sup-d': true },   // old day — irrelevant
+      [todayKey]: { 'sup-d': false },    // explicitly not taken today
+    });
+    orch.init();
+    vi.advanceTimersByTime(600);
+    expect(emitted).toBeGreaterThanOrEqual(1);
+  });
+});
+
+// ─── episode normalization ──────────────────────────────────────────────────
+
+describe('body orchestrator — episode normalization', () => {
+  const FIXED_NOW = new Date('2026-05-11T12:00:00Z').getTime();
+  let store: ReturnType<typeof createStore>;
+  let orch: ReturnType<typeof createBodyOrchestrator>;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(FIXED_NOW);
+    store = createStore(createMemoryAdapter());
+    orch = createBodyOrchestrator(store, { now: () => FIXED_NOW });
+  });
+
+  afterEach(() => {
+    orch.teardown();
+    _clearAllHandlers();
+    vi.useRealTimers();
+  });
+
+  it('heals brain-dump-shaped {id,text,ts} episodes into valid Episodes', () => {
+    // Exactly what braindump-dispatch currently writes into body.episodes.
+    store.set('body', 'episodes', [
+      { id: 'bd_1', text: 'migraine since this morning', ts: FIXED_NOW - 3600_000 },
+    ]);
+    orch.init();
+    vi.advanceTimersByTime(600);
+
+    const eps = store.get<Array<Record<string, unknown>>>('body', 'episodes', []);
+    expect(eps).toHaveLength(1);
+    const ep = eps[0];
+    expect(typeof ep.started_at).toBe('number');
+    expect(typeof ep.label).toBe('string');
+    expect(ep.label).toBe('migraine since this morning');
+    expect(Array.isArray(ep.severity_log)).toBe(true);
+    expect(Array.isArray(ep.meds)).toBe(true);
+    expect(typeof ep.kind).toBe('string');
+  });
+
+  it('leaves well-formed episodes untouched (no rewrite loop)', () => {
+    const valid = {
+      id: 'ep_1', started_at: FIXED_NOW, label: 'grip', kind: 'acute',
+      symptoms: [], meds: [], severity_log: [], notes: [], tags: [],
+    };
+    store.set('body', 'episodes', [valid]);
+    orch.init();
+    vi.advanceTimersByTime(600);
+    const eps = store.get<Array<Record<string, unknown>>>('body', 'episodes', []);
+    expect(eps[0]).toEqual(valid);
+  });
+});
+
+// ─── cross-module signals ───────────────────────────────────────────────────
+
+describe('body orchestrator — cross-module signals', () => {
+  const FIXED_NOW = new Date('2026-05-15T12:00:00Z').getTime();
+  const DAY = 86_400_000;
+  const HOUR = 3_600_000;
+  let store: ReturnType<typeof createStore>;
+  let orch: ReturnType<typeof createBodyOrchestrator>;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(FIXED_NOW);
+    store = createStore(createMemoryAdapter());
+    orch = createBodyOrchestrator(store, { now: () => FIXED_NOW });
+  });
+
+  afterEach(() => {
+    orch.teardown();
+    _clearAllHandlers();
+    vi.useRealTimers();
+  });
+
+  it('writes a sleep↔work signal to shared.signals from sleep + focus data', () => {
+    const dKey = (ts: number) => new Date(ts).toISOString().slice(0, 10);
+    const sleepRecords: Array<{ night_of: string; tst_min: number }> = [];
+    const focusLog: Array<{ ts: number; duration_min: number; duration_ms: number }> = [];
+    for (let d = 14; d >= 1; d--) {
+      const dayTs = FIXED_NOW - d * DAY + 13 * HOUR;
+      const short = d % 2 === 0;
+      sleepRecords.push({ night_of: dKey(dayTs - DAY), tst_min: short ? 300 : 450 });
+      for (let k = 0; k < 2; k++) {
+        focusLog.push({
+          ts: dayTs + k * HOUR,
+          duration_min: 45,
+          duration_ms: short ? 45 * 60_000 * 0.5 : 45 * 60_000,
+        });
+      }
+    }
+    store.set('sleep', 'records', sleepRecords);
+    store.set('work', 'focus_log', focusLog);
+
+    orch.init();
+    vi.advanceTimersByTime(600);
+
+    const signals = store.get<Array<{ id: string; modules: string[] }>>('shared', 'signals', []);
+    expect(Array.isArray(signals)).toBe(true);
+    const sig = signals.find((s) => s.id === 'sleep_debt_focus_quality');
+    expect(sig).toBeDefined();
+    expect(sig?.modules.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('merges body signals without clobbering other modules\' signals', () => {
+    // A signal owned by another module already sits in shared.signals.
+    store.set('shared', 'signals', [
+      { id: 'finance_cycle_spend', copy: 'x', modules: ['finance', 'cycle'] },
+    ]);
+    orch.init();
+    vi.advanceTimersByTime(600);
+    const signals = store.get<Array<{ id: string }>>('shared', 'signals', []);
+    // foreign signal survives the body recompute
+    expect(signals.some((s) => s.id === 'finance_cycle_spend')).toBe(true);
+  });
+
+  it('recompute is idempotent — no duplicate body signal entries', () => {
+    const dKey = (ts: number) => new Date(ts).toISOString().slice(0, 10);
+    const sleepRecords: Array<{ night_of: string; tst_min: number }> = [];
+    const focusLog: Array<{ ts: number; duration_min: number; duration_ms: number }> = [];
+    for (let d = 14; d >= 1; d--) {
+      const dayTs = FIXED_NOW - d * DAY + 13 * HOUR;
+      const short = d % 2 === 0;
+      sleepRecords.push({ night_of: dKey(dayTs - DAY), tst_min: short ? 300 : 450 });
+      for (let k = 0; k < 2; k++) {
+        focusLog.push({
+          ts: dayTs + k * HOUR, duration_min: 45,
+          duration_ms: short ? 45 * 60_000 * 0.5 : 45 * 60_000,
+        });
+      }
+    }
+    store.set('sleep', 'records', sleepRecords);
+    store.set('work', 'focus_log', focusLog);
+    orch.init();
+    vi.advanceTimersByTime(600);
+    orch.recomputePatterns();
+    orch.recomputePatterns();
+    const signals = store.get<Array<{ id: string }>>('shared', 'signals', []);
+    const count = signals.filter((s) => s.id === 'sleep_debt_focus_quality').length;
+    expect(count).toBe(1);
+  });
 });

@@ -30,8 +30,6 @@ export const SHAPES: Record<string, ShapeSpec> = {
   'braindump:routing_failed':  { raw: 'string', reason: 'string', ts: 'number' },
   'void:inventory:refill':     { productType: 'string', quantity: 'number', source: 'string' },
   'void:cycle:started':        { ts: 'number', source: 'string' },
-  'void:flag:raised':          { key: 'string', severity: 'string', title: 'string', evidence: 'array' },
-  'void:prediction:updated':   { confidence: 'number', explanation: 'string' },
   'pets:care_logged':          { pet_id: 'string', task: 'string', source: 'string', occurred_at: 'number' },
   'void:reminder:scheduled':   { id: 'string', fireAt: 'number', message: 'string', module: 'string', source: 'string' },
   'void:crisis:detected':      { text: 'string', matchedLine: 'string', ts: 'number' },
@@ -62,15 +60,6 @@ export const SHAPES: Record<string, ShapeSpec> = {
   // habits completion → garden
   'habits:completed': { habitId: 'string', category: 'string', habitName: 'string', ts: 'number' },
 
-  // consent (B2B pivot 2026-05-14) — every persist via setConsent() fires this.
-  'consent:set': {
-    necessary: 'boolean',
-    marketing: 'boolean',
-    research_optin: 'boolean',
-    source: 'string',
-    ts: 'number',
-  },
-
   // body weekly review
   'body:weekly_review': { ts: 'number', weekStartTs: 'number', weekEndTs: 'number', copy: 'string', summary: 'object' },
 
@@ -78,6 +67,9 @@ export const SHAPES: Record<string, ShapeSpec> = {
   'sleep:wind_down_started':   { ts: 'number' },
   'sleep:wind_down_completed': { ts: 'number', durationMs: 'number', itemsCompleted: 'number' },
   'sleep:wind_down_skipped':   { ts: 'number', itemsCompleted: 'number' },
+  // per-step row → sleep.windDownLog (action is 'checked' | 'unchecked';
+  // typed as string here since SHAPES has no literal-union token).
+  'sleep:wind_down_step':      { ts: 'number', step_id: 'string', 'step_label?': 'string', action: 'string' },
 
   // body notifications · 11 push events (Sprint body-v2 wiring)
   'cycle:period_approaching':    { predictedTs: 'number', daysUntil: 'number', ts: 'number' },

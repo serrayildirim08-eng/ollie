@@ -36,6 +36,7 @@ export { createGroceryOrchestrator } from './grocery';
 export { createSleepOrchestrator } from './sleep';
 export { createFinanceOrchestrator } from './finance';
 export { createPatternsOrchestrator } from './patterns';
+export type { ModuleInsight } from './patterns';
 export { createAdminOrchestrator } from './admin';
 export { createDumpOrchestrator } from './dump';
 export { createHabitsOrchestrator } from './habits';
@@ -74,8 +75,15 @@ export type {
   RunBodyCorrelationPassOpts,
   ScheduleBodyCorrelationPassOpts,
 } from './body-correlations';
+export { runBodySignalsPass } from './body-signals';
+export type { RunBodySignalsOpts } from './body-signals';
 export { routeBrainDump, dispatchAction } from './braindump-dispatch';
-export type { RouteBrainDumpResult } from './braindump-dispatch';
+export type {
+  RouteBrainDumpResult,
+  DispatchLocale,
+  DispatchOptions,
+  FinanceSlice,
+} from './braindump-dispatch';
 
 export interface RootOrchestrator extends Orchestrator {
   cycle: ReturnType<typeof createCycleOrchestrator>;
@@ -116,7 +124,9 @@ export function createOrchestrator(
     scheduleNotification: opts.scheduleNotification,
     ovulationOptIn: opts.ovulationOptIn,
   });
-  const petsOrch = createPetsOrchestrator(store);
+  const petsOrch = createPetsOrchestrator(store, {
+    scheduleNotification: opts.scheduleNotification,
+  });
   const bodyOrch = createBodyOrchestrator(store, {
     scheduleNotification: opts.scheduleNotification,
   });
@@ -127,7 +137,9 @@ export function createOrchestrator(
   const financeOrch = createFinanceOrchestrator(store, {
     scheduleNotification: opts.scheduleNotification,
   });
-  const patternsOrch = createPatternsOrchestrator(store);
+  const patternsOrch = createPatternsOrchestrator(store, {
+    scheduleNotification: opts.scheduleNotification,
+  });
   const adminOrch = createAdminOrchestrator(store);
   const dumpOrch = createDumpOrchestrator(store);
   const habitsOrch = createHabitsOrchestrator(store, {
@@ -140,7 +152,9 @@ export function createOrchestrator(
     scheduleNotification: opts.scheduleNotification,
   });
   const burhanOrch = createBurhanOrchestrator(store);
-  const medicationOrch = createMedicationOrchestrator(store);
+  const medicationOrch = createMedicationOrchestrator(store, {
+    scheduleNotification: opts.scheduleNotification,
+  });
 
   return {
     cycle: cycleOrch,
