@@ -99,6 +99,12 @@ export function useApplyBrainDump(): (text: string, fromRect?: DOMRect) => Promi
       const modulesHit = new Set<string>();
       const chipPromises: Promise<void>[] = [];
 
+      // Görev 2: applyRoute now delegates to the canonical dispatch core,
+      // which emits research:row_written. Pass the active locale so the
+      // emitted event carries the right wordlist tag for the scrubber.
+      // The app UI ships en + es only (Locale type); tr is not reachable.
+      const dispatchLocale: 'en' | 'es' | 'tr' = locale === 'es' ? 'es' : 'en';
+
       actions.forEach((route, i) => {
         modulesHit.add(route.module);
 
@@ -114,7 +120,7 @@ export function useApplyBrainDump(): (text: string, fromRect?: DOMRect) => Promi
           );
         }
 
-        applyRoute(route, appStore);
+        applyRoute(route, appStore, () => dispatchLocale);
       });
 
       if (chipPromises.length > 0) {

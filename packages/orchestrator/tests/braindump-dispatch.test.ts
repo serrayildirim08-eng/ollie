@@ -109,15 +109,14 @@ describe('routeBrainDump — grocery + body + cycle + finance', () => {
     expect(habits.length).toBeGreaterThan(0);
   });
 
-  it('"pay the rent" → finance.bills', () => {
+  it('"pay the rent" → finance.bills (finance sub-classification)', () => {
     routeBrainDump('pay the rent', store, FIXED_NOW);
+    // Görev 2: dispatchAction now carries the finance sub-classifier that
+    // used to be UI-only. "rent" matches BILL_RE → finance.bills, NOT a
+    // generic finance.items bucket.
     const bills = store.get<GenericItem[]>('finance', 'bills', []);
-    // applyRoute slices into finance sub-keys; rent matches BILL_RE
-    // in apps/web — but in @ollie/orchestrator/dispatch we route the
-    // raw text into finance.items (no finance parsing dep). Accept
-    // either landing zone.
-    const itemsFallback = store.get<GenericItem[]>('finance', 'items', []);
-    expect(bills.length + itemsFallback.length).toBeGreaterThan(0);
+    expect(bills.length).toBeGreaterThan(0);
+    expect(store.get<GenericItem[]>('finance', 'items', [])).toHaveLength(0);
   });
 
   it('"started my period yesterday" → cycle.items started', () => {
@@ -193,5 +192,70 @@ describe('dispatchAction direct', () => {
     expect(goals).toHaveLength(1);
     expect(goals[0].status).toBe('active');
     expect(goals[0].created_at).toBe(FIXED_NOW);
+  });
+});
+
+// ─── Görev 2: union coverage — finance sub-slices + body.episodes ─────────────
+//
+// These exercise the merged-in logic that used to live ONLY in
+// apps/web/src/hooks/applyRoute.ts. Confirms the consolidated dispatchAction
+// is a true superset.
+
+describe('dispatchAction · finance sub-classification (merged from applyRoute)', () => {
+  let store: ReturnType<typeof makeStore>;
+  beforeEach(() => { store = makeStore(); });
+
+  const fin = (slice: string) => store.get<GenericItem[]>('finance', slice, []);
+
+  it('"canva $20 monthly" → finance.subscriptions', () => {
+    dispatchAction({ module: 'finance', action: 'log', data: 'canva $20 monthly' }, store, FIXED_NOW);
+    expect(fin('subscriptions')).toHaveLength(1);
+    expect(fin('items')).toHaveLength(0);
+  });
+
+  it('"paid $80 late fee on my card" → finance.adhd_tax', () => {
+    dispatchAction({ module: 'finance', action: 'log', data: 'paid $80 late fee on my card' }, store, FIXED_NOW);
+    expect(fin('adhd_tax')).toHaveLength(1);
+  });
+
+  it('"rent $800 every month" → finance.bills', () => {
+    dispatchAction({ module: 'finance', action: 'log', data: 'rent $800 every month' }, store, FIXED_NOW);
+    expect(fin('bills')).toHaveLength(1);
+  });
+
+  it('"save $100 toward laptop" → finance.goals', () => {
+    dispatchAction({ module: 'finance', action: 'log', data: 'save $100 toward laptop' }, store, FIXED_NOW);
+    expect(fin('goals')).toHaveLength(1);
+  });
+
+  it('"got paid $5000" → finance.records', () => {
+    dispatchAction({ module: 'finance', action: 'log', data: 'got paid $5000' }, store, FIXED_NOW);
+    expect(fin('records')).toHaveLength(1);
+  });
+
+  it('finance text with no markers → finance.transactions', () => {
+    dispatchAction({ module: 'finance', action: 'log', data: 'thinking about money' }, store, FIXED_NOW);
+    expect(fin('transactions')).toHaveLength(1);
+  });
+});
+
+describe('dispatchAction · body.episodes (merged from applyRoute)', () => {
+  let store: ReturnType<typeof makeStore>;
+  beforeEach(() => { store = makeStore(); });
+
+  it('"migraine today" → body.episodes (not body.items)', () => {
+    dispatchAction({ module: 'body', action: 'log', data: 'migraine today' }, store, FIXED_NOW);
+    expect(store.get<GenericItem[]>('body', 'episodes', [])).toHaveLength(1);
+    expect(store.get<GenericItem[]>('body', 'items', [])).toHaveLength(0);
+  });
+
+  it('"took my magnesium" → body.supplements', () => {
+    dispatchAction({ module: 'body', action: 'log', data: 'took my magnesium' }, store, FIXED_NOW);
+    expect(store.get<GenericItem[]>('body', 'supplements', [])).toHaveLength(1);
+  });
+
+  it('unclassified body input → body.items', () => {
+    dispatchAction({ module: 'body', action: 'log', data: 'went for a walk' }, store, FIXED_NOW);
+    expect(store.get<GenericItem[]>('body', 'items', [])).toHaveLength(1);
   });
 });

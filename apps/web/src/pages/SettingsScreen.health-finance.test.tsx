@@ -87,12 +87,6 @@ vi.mock('@ollie/backup', () => ({
 
 vi.mock('../lib/invite', () => ({ generateInvite: vi.fn() }));
 
-vi.mock('../lib/encryption-boot', () => ({
-  hasSessionPassphrase: () => false,
-  setSessionPassphrase: vi.fn(),
-  clearSessionPassphrase: vi.fn(),
-}));
-
 // ─── imports (after mocks) ────────────────────────────────────────────────────
 
 import { HealthSection, FinanceSection } from './SettingsScreen';

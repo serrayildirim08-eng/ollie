@@ -104,11 +104,34 @@ export interface CareLogEntry {
 
 // ─── Observation ─────────────────────────────────────────────────────
 
+/**
+ * Discriminates the structured payload a keeper logged.
+ *  - 'weight'   numeric body-weight reading (value_grams)
+ *  - 'symptom'  a health-relevant sign (e.g. "not eating", "hunched")
+ *  - 'behavior' a behavioural note (mood, activity, social)
+ *  - 'note'     free-text fallback (legacy / unstructured)
+ *
+ * `text` is always present and is the substring corpus the health-flag
+ * engine scans — structured observations MUST still populate `text`
+ * (e.g. the symptom phrase) so detectHealthFlags can match signals.
+ */
+export type ObservationKind = 'weight' | 'symptom' | 'behavior' | 'note';
+
 export interface Observation {
+  /** Stable id; UI generates it. Optional for legacy rows. */
+  id?: string;
   pet_id: string;
+  /** Free text — always the corpus health-flag signals match against. */
   text: string;
   tags: string[];
+  /** Discriminant; absent on legacy rows → treated as 'note'. */
+  kind?: ObservationKind;
+  /** Body weight in grams; only meaningful when kind === 'weight'. */
+  value_grams?: number;
+  /** Wall-clock epoch ms the observation refers to. */
   occurred_at?: number;
+  /** Wall-clock epoch ms the row was created. */
+  created_at?: number;
 }
 
 // ─── Care gap ─────────────────────────────────────────────────────────

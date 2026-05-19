@@ -9,20 +9,43 @@
  *   care_gaps       CareGap[] from computeCareGaps
  *   health_flags    PetHealthFlag records detected across all pets
  *   daily_forecast  Record<pet_id, string> from todayForecast
+ *   patterns        AnyPattern[] from detectPatterns (P1–P5 behavioral)
+ *   patternsLastComputedAt timestamp of most recent pattern recompute
  *   alert_cooldowns Record<string, number> (persisted to avoid spam)
+ *
+ * Subscriptions:
+ *   pets.pets          → recompute (gaps + health flags + patterns)
+ *   pets.care_log      → recomputeGaps + recomputePatterns
+ *   pets.observations  → recomputeHealthFlags
+ *   pets.vet_schedule  → recomputePatterns
+ *   pets.coregulation_log / miss_log / projection_log / micro_steps
+ *                      → recomputePatterns
+ *
+ * consent gate: defaults to true (pass getConsent to override). Gates
+ * behavioral pattern detection only — care gaps + health flags are
+ * welfare-critical and always run.
  */
 
 import type { Store } from '@ollie/store';
 import type { Unsubscribe } from '@ollie/events';
 import * as events from '@ollie/events';
+import type { NotificationSpec } from '@ollie/notifications';
 import {
   computeCareGaps,
   detectHealthFlags,
+  detectPatterns,
   generateGuiltTripCopy,
   todayForecast,
   SPECIES_PROFILES,
 } from '@ollie/logic/pets';
-import type { Pet, CareLogEntry, Observation, CareGap } from '@ollie/logic/pets';
+import type {
+  Pet,
+  CareLogEntry,
+  Observation,
+  CareGap,
+  PetsState,
+  AnyPattern,
+} from '@ollie/logic/pets';
 import type { Orchestrator } from './types';
 
 const COOLDOWN_MS = 72 * 3_600_000;
@@ -30,6 +53,14 @@ const COOLDOWN_MS = 72 * 3_600_000;
 export interface PetsOrchestratorOptions {
   /** Injected for tests; defaults to Date.now */
   now?: () => number;
+  /** Behavioral-pattern consent gate; defaults to true. */
+  getConsent?: () => boolean;
+  /**
+   * APNs push scheduler — injected by the app boot layer. Omit in tests
+   * and contexts without APNs. When omitted the health-flag push
+   * subscriber is not attached (care gaps + flags still render in-app).
+   */
+  scheduleNotification?: (spec: NotificationSpec, fireAt: number) => void;
 }
 
 export function createPetsOrchestrator(
@@ -37,6 +68,8 @@ export function createPetsOrchestrator(
   opts: PetsOrchestratorOptions = {},
 ): Orchestrator {
   const nowFn = opts.now ?? (() => Date.now());
+  const consentFn = opts.getConsent ?? (() => true);
+  const scheduleNotification = opts.scheduleNotification ?? null;
   let initialized = false;
   const unsubs: Unsubscribe[] = [];
 
@@ -186,6 +219,7 @@ export function createPetsOrchestrator(
 
         events.emit('pets:health_flag_raised', {
           pet_id: pet.id,
+          pet_name: pet.name,
           flag: d.flag,
           run_length: d.run_length,
           source_url: d.source_url,
@@ -197,11 +231,56 @@ export function createPetsOrchestrator(
     store.set('pets', 'alert_cooldowns', cooldowns);
   }
 
+  // ── behavioral patterns (P1–P5) ───────────────────────────────────────────
+
+  /**
+   * Build a PetsState from the store and run all behavioral pattern
+   * detectors. The cross-module slices (vet_schedule, coregulation_log,
+   * miss_log, projection_log, micro_steps) are read defensively — they
+   * may not exist yet; detectors no-op on empty arrays.
+   *
+   * Consent-gated: when consent is off, detectPatterns returns []. We
+   * still write the empty array so the panel reflects the off state.
+   */
+  function recomputePatterns(): void {
+    try {
+      const now = nowFn();
+      const consent = consentFn();
+
+      const state: PetsState = {
+        pets: getPets(),
+        care_log: getCareLog(),
+        vet_schedule:
+          store.get<PetsState['vet_schedule']>('pets', 'vet_schedule', []) ?? [],
+        coregulation_log:
+          store.get<PetsState['coregulation_log']>('pets', 'coregulation_log', []) ?? [],
+        miss_log:
+          store.get<PetsState['miss_log']>('pets', 'miss_log', []) ?? [],
+        projection_log:
+          store.get<PetsState['projection_log']>('pets', 'projection_log', []) ?? [],
+        micro_steps:
+          store.get<PetsState['micro_steps']>('pets', 'micro_steps', []) ?? [],
+      };
+
+      const patterns: AnyPattern[] = detectPatterns(state, {
+        now,
+        consent,
+        speciesProfiles: SPECIES_PROFILES,
+      });
+
+      store.set('pets', 'patterns', patterns);
+      store.set('pets', 'patternsLastComputedAt', now);
+    } catch (e) {
+      console.error('[orchestrator/pets] recomputePatterns failed:', e);
+    }
+  }
+
   // ── full recompute ────────────────────────────────────────────────────────
 
   function recompute(): void {
     recomputeGaps();
     recomputeHealthFlags();
+    recomputePatterns();
   }
 
   // ── lifecycle ─────────────────────────────────────────────────────────────
@@ -211,8 +290,49 @@ export function createPetsOrchestrator(
     initialized = true;
 
     unsubs.push(store.subscribeKey('pets', 'pets', () => recompute()));
-    unsubs.push(store.subscribeKey('pets', 'care_log', () => recomputeGaps()));
+    unsubs.push(store.subscribeKey('pets', 'care_log', () => {
+      recomputeGaps();
+      recomputePatterns();
+    }));
     unsubs.push(store.subscribeKey('pets', 'observations', () => recomputeHealthFlags()));
+    unsubs.push(store.subscribeKey('pets', 'vet_schedule', () => recomputePatterns()));
+    unsubs.push(store.subscribeKey('pets', 'coregulation_log', () => recomputePatterns()));
+    unsubs.push(store.subscribeKey('pets', 'miss_log', () => recomputePatterns()));
+    unsubs.push(store.subscribeKey('pets', 'projection_log', () => recomputePatterns()));
+    unsubs.push(store.subscribeKey('pets', 'micro_steps', () => recomputePatterns()));
+
+    // pets:health_flag_raised → REMINDER push. A welfare flag is a
+    // functional "look at this" — health-relevant, not a pattern digest,
+    // so REMINDER (not PATTERN_ALERT). recomputeHealthFlags() only emits
+    // on the FIRST detection of a flag (prevKeys guard) so this can't
+    // re-fire; dedupe_key adds a second guard against the budget layer.
+    if (scheduleNotification) {
+      unsubs.push(events.on('pets:health_flag_raised', (raw: unknown) => {
+        try {
+          const p = (raw ?? {}) as {
+            pet_id?: string;
+            pet_name?: string;
+            flag?: string;
+            run_length?: number;
+          };
+          if (typeof p.pet_id !== 'string' || typeof p.flag !== 'string') return;
+          const now = nowFn();
+          const who = typeof p.pet_name === 'string' && p.pet_name.trim().length > 0
+            ? p.pet_name.trim()
+            : 'your pet';
+          const flagLabel = p.flag.replace(/_/g, ' ');
+          scheduleNotification(
+            {
+              title: `${who} — ${flagLabel} worth a look.`,
+              category: 'REMINDER',
+              dedupe_key: `pets:health_flag:${p.pet_id}:${p.flag}`,
+              action_url: '/pets',
+            },
+            now,
+          );
+        } catch { /* non-fatal */ }
+      }));
+    }
 
     recompute();
   }

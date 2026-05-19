@@ -7,6 +7,8 @@
  * Derived keys written (namespace: "work"):
  *   patterns               AnyWorkPattern[] from detectPatterns
  *   patternsLastComputedAt timestamp of most recent recompute
+ *   pomodoro               PomodoroBreakState — completed-block cycle +
+ *                          earned-break math derived from work.focus_log
  *
  * Subscriptions:
  *   work.tasks             → schedule recompute
@@ -27,13 +29,14 @@
 import type { Store } from '@ollie/store';
 import type { Unsubscribe } from '@ollie/events';
 import * as events from '@ollie/events';
-import { detectPatterns } from '@ollie/logic/work';
+import { detectPatterns, computePomodoroBreakState } from '@ollie/logic/work';
 import type {
   AnyWorkPattern,
   WorkState,
   Meeting,
   ScheduledFocusBlock,
   FocusLogEntry,
+  PomodoroBreakState,
 } from '@ollie/logic/work';
 import type { NotificationSpec } from '@ollie/notifications';
 import type { Orchestrator } from './types';
@@ -93,7 +96,11 @@ function localDayKey(ts: number): string {
 export function createWorkOrchestrator(
   store: Store,
   opts: WorkOrchestratorOptions = {},
-): Orchestrator & { recomputePatterns(): void; scanCues(): void } {
+): Orchestrator & {
+  recomputePatterns(): void;
+  recomputePomodoro(): void;
+  scanCues(): void;
+} {
   const getNow = opts.now ?? (() => Date.now());
   const scheduleNotification = opts.scheduleNotification ?? null;
 
@@ -101,6 +108,7 @@ export function createWorkOrchestrator(
   const unsubs: Unsubscribe[] = [];
   let timer: ReturnType<typeof setTimeout> | null = null;
   let cueTimer: ReturnType<typeof setTimeout> | null = null;
+  let pomodoroTimer: ReturnType<typeof setTimeout> | null = null;
 
   /** Module-instance dedupe — one dispatch per logical cue. */
   const firedCues = new Set<string>();
@@ -182,6 +190,26 @@ export function createWorkOrchestrator(
       }
     } catch (e) {
       console.error('[orchestrator/work] recompute failed:', e);
+    }
+  }
+
+  /**
+   * Phase 3 feature 2 — pomodoro break tracking.
+   *
+   * Derives the completed-focus-block cycle from work.focus_log and
+   * writes it to work.pomodoro for the UI to read. Recomputed whenever
+   * focus_log changes (same source key as the cue scan). Independent of
+   * recomputePatterns — pomodoro is not a pattern, it is live state.
+   */
+  function recomputePomodoro(): void {
+    try {
+      const now = getNow();
+      const focusLog = store.get<FocusLogEntry[]>('work', 'focus_log', []) ?? [];
+      const state: PomodoroBreakState = computePomodoroBreakState(focusLog, { now });
+      store.set('work', 'pomodoro', state);
+      store.set('work', 'pomodoroLastComputedAt', now);
+    } catch (e) {
+      console.error('[orchestrator/work] pomodoro recompute failed:', e);
     }
   }
 
@@ -309,6 +337,11 @@ export function createWorkOrchestrator(
     cueTimer = setTimeout(() => { cueTimer = null; scanCues(); }, DEBOUNCE_MS);
   }
 
+  function schedulePomodoro(): void {
+    if (pomodoroTimer) clearTimeout(pomodoroTimer);
+    pomodoroTimer = setTimeout(() => { pomodoroTimer = null; recomputePomodoro(); }, DEBOUNCE_MS);
+  }
+
   function init(): void {
     if (initialized) return;
     initialized = true;
@@ -331,6 +364,9 @@ export function createWorkOrchestrator(
     unsubs.push(store.subscribeKey('work', 'scheduled_blocks', scheduleCueScan));
     unsubs.push(store.subscribeKey('work', 'focus_log', scheduleCueScan));
 
+    // Pomodoro break state recomputes whenever the focus log changes.
+    unsubs.push(store.subscribeKey('work', 'focus_log', schedulePomodoro));
+
     unsubs.push(
       events.on('void:braindump:submitted', (payload: unknown) => {
         try {
@@ -348,18 +384,20 @@ export function createWorkOrchestrator(
       }),
     );
 
-    // Cold start — populate patterns + scan cues immediately.
+    // Cold start — populate patterns + pomodoro + scan cues immediately.
     schedule();
     scheduleCueScan();
+    schedulePomodoro();
   }
 
   function teardown(): void {
     unsubs.splice(0).forEach((fn) => fn());
     if (timer) { clearTimeout(timer); timer = null; }
     if (cueTimer) { clearTimeout(cueTimer); cueTimer = null; }
+    if (pomodoroTimer) { clearTimeout(pomodoroTimer); pomodoroTimer = null; }
     firedCues.clear();
     initialized = false;
   }
 
-  return { init, teardown, recomputePatterns, scanCues };
+  return { init, teardown, recomputePatterns, recomputePomodoro, scanCues };
 }

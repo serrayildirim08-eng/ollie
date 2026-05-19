@@ -60,3 +60,14 @@ export type {
   VelocityPatternSignal,
   VelocityOpts,
 } from './velocity';
+
+// Achievement gallery — Phase 3 · feature 4 (2026-05-15)
+export {
+  buildAchievementGallery,
+  isAchievedGoal,
+} from './achievements';
+export type {
+  AchievementItem,
+  AchievementGallery,
+  AchievementGalleryOptions,
+} from './achievements';

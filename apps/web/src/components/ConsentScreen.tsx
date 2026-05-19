@@ -7,10 +7,15 @@
  *
  * Two toggles:
  *
- *   - consent.marketing   — default ON. Bidirectional, anytime.
- *   - consent.necessary   — default OFF. One-way: tap to flip ON, then locked.
- *                           "Continue" is gated until this is ON. Once given,
- *                           the only way to revoke is "delete your account".
+ *   - marketing   — default ON. Bidirectional, anytime.
+ *   - necessary   — default OFF. One-way: tap to flip ON, then locked.
+ *                   "Continue" is gated until this is ON. Once given, the
+ *                   only way to revoke is "delete your account".
+ *
+ * Consent consolidation (Görev 1 · 2026-05-15): both flags now persist to
+ * the canonical `@ollie/consent` `consent.state` row via
+ * setNecessaryConsentSync / setMarketingConsentSync — NOT the old raw
+ * `shared.consent.*` keys. App.tsx's boot gate reads the same canonical row.
  *
  * Voice: lowercase labels, DM Mono caps headers, sage active.
  * Pattern matches AuthFlow.tsx (Shell, CapHeader, Headline, Sub, PrimaryBtn).
@@ -19,6 +24,10 @@
  */
 
 import React, { useState } from 'react';
+import {
+  setMarketingConsentSync,
+  setNecessaryConsentSync,
+} from '@ollie/consent';
 import { store } from '../store';
 import { getAccount } from '../lib/account-boot';
 import { readUserHash } from '../lib/user-hash';
@@ -224,7 +233,8 @@ export function ConsentScreen({ onContinue }: ConsentScreenProps) {
 
   function handleMarketingToggle(next: boolean) {
     setMarketing(next);
-    store.set('shared', 'consent.marketing', next);
+    // Canonical write — round-trips through @ollie/consent's consent.state.
+    setMarketingConsentSync(store, next);
   }
 
   function handleNecessaryFlip() {
@@ -233,16 +243,18 @@ export function ConsentScreen({ onContinue }: ConsentScreenProps) {
     // but this is the second line of defence.
     if (necessary) return;
     setNecessary(true);
-    store.set('shared', 'consent.necessary', true);
+    // Canonical write — flips necessary true on the consent.state row.
+    setNecessaryConsentSync(store);
   }
 
   function handleContinue() {
     if (!necessary) return;
-    // Persist marketing on Continue too — covers the case where the
-    // user never tapped the marketing toggle (default ON wasn't written
-    // yet) but did flip necessary.
-    store.set('shared', 'consent.marketing', marketing);
-    store.set('shared', 'consent.necessary', true);
+    // Persist both on Continue too — covers the case where the user never
+    // tapped the marketing toggle (default ON wasn't written yet) but did
+    // flip necessary. Order: marketing first, then necessary, so the
+    // necessary write carries the freshest marketing value.
+    setMarketingConsentSync(store, marketing);
+    setNecessaryConsentSync(store);
     // Consent audit — fire-and-forget. Never blocks the flow.
     // research.hasConsent() reads from the store which we just wrote,
     // so this is always true at this point. The check is defence-in-depth.

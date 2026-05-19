@@ -199,6 +199,147 @@ describe('sleep orchestrator', () => {
   });
 });
 
+// ─── Faz 2: forecast · wind-down log · insomnia survey ──────────────────────
+
+describe('sleep orchestrator — tonight forecast', () => {
+  let store: ReturnType<typeof createStore>;
+  let orch: ReturnType<typeof createSleepOrchestrator>;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(FIXED_NOW);
+    store = createStore(createMemoryAdapter());
+    orch = createSleepOrchestrator(store, { now: () => FIXED_NOW });
+  });
+
+  afterEach(() => {
+    orch.teardown();
+    _clearAllHandlers();
+    vi.useRealTimers();
+  });
+
+  it('writes a non-null tonightForecast from records alone (no PredictApi)', () => {
+    store.set('sleep', 'records', makeSleepRecords(FIXED_NOW));
+    orch.init();
+
+    const forecast = store.get<{
+      mean_h: number;
+      ci95_h: [number, number];
+      method: string;
+      nights_counted: number;
+    } | null>('sleep', 'tonightForecast', null);
+
+    expect(forecast).not.toBeNull();
+    expect(forecast!.method).toBe('recency_weighted_dow');
+    expect(forecast!.mean_h).toBeGreaterThan(0);
+    expect(forecast!.nights_counted).toBeGreaterThanOrEqual(3);
+  });
+
+  it('leaves tonightForecast null when there are too few nights', () => {
+    store.set('sleep', 'records', makeSleepRecords(FIXED_NOW, 2));
+    orch.init();
+    expect(store.get('sleep', 'tonightForecast', null)).toBeNull();
+  });
+});
+
+describe('sleep orchestrator — wind-down log', () => {
+  let store: ReturnType<typeof createStore>;
+  let orch: ReturnType<typeof createSleepOrchestrator>;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(FIXED_NOW);
+    store = createStore(createMemoryAdapter());
+    orch = createSleepOrchestrator(store, { now: () => FIXED_NOW });
+    orch.init();
+  });
+
+  afterEach(() => {
+    orch.teardown();
+    _clearAllHandlers();
+    vi.useRealTimers();
+  });
+
+  it('appends a sleep:wind_down_step event to sleep.windDownLog', () => {
+    emit('sleep:wind_down_step', {
+      ts: FIXED_NOW,
+      step_id: 'phone_away',
+      step_label: 'phone away',
+      action: 'checked',
+    });
+
+    const log = store.get<Array<{ step_id: string; action: string }>>('sleep', 'windDownLog', []);
+    expect(log).toHaveLength(1);
+    expect(log![0].step_id).toBe('phone_away');
+    expect(log![0].action).toBe('checked');
+  });
+
+  it('keeps log time-sorted across multiple steps', () => {
+    emit('sleep:wind_down_step', { ts: FIXED_NOW + 200, step_id: 'into_bed', action: 'checked' });
+    emit('sleep:wind_down_step', { ts: FIXED_NOW + 100, step_id: 'lights_low', action: 'checked' });
+
+    const log = store.get<Array<{ ts: number }>>('sleep', 'windDownLog', []);
+    expect(log).toHaveLength(2);
+    expect(log![0].ts).toBeLessThan(log![1].ts);
+  });
+
+  it('drops exact duplicate (ts, step_id, action) rows', () => {
+    const ev = { ts: FIXED_NOW, step_id: 'phone_away', action: 'checked' as const };
+    emit('sleep:wind_down_step', ev);
+    emit('sleep:wind_down_step', ev);
+    expect(store.get<unknown[]>('sleep', 'windDownLog', [])).toHaveLength(1);
+  });
+
+  it('ignores malformed events (bad action, missing fields)', () => {
+    emit('sleep:wind_down_step', { ts: FIXED_NOW, step_id: 'x', action: 'started' });
+    emit('sleep:wind_down_step', { ts: FIXED_NOW, action: 'checked' });
+    emit('sleep:wind_down_step', { step_id: 'x', action: 'checked' });
+    expect(store.get<unknown[]>('sleep', 'windDownLog', [])).toHaveLength(0);
+  });
+});
+
+describe('sleep orchestrator — insomnia survey', () => {
+  let store: ReturnType<typeof createStore>;
+  let orch: ReturnType<typeof createSleepOrchestrator>;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(FIXED_NOW);
+    store = createStore(createMemoryAdapter());
+    orch = createSleepOrchestrator(store, { now: () => FIXED_NOW });
+    orch.init();
+  });
+
+  afterEach(() => {
+    orch.teardown();
+    _clearAllHandlers();
+    vi.useRealTimers();
+  });
+
+  it('scores answers written to sleep.insomnia_survey_answers', () => {
+    store.set('sleep', 'insomnia_survey_answers', [3, 3, 3, 3, 3, 3, 3]);
+
+    const result = store.get<{ score: number; band: string; scored_at: number } | null>(
+      'sleep', 'insomnia_survey_result', null,
+    );
+    expect(result).not.toBeNull();
+    expect(result!.score).toBe(21);
+    expect(result!.band).toBe('moderate');
+    expect(result!.scored_at).toBe(FIXED_NOW);
+  });
+
+  it('leaves prior result untouched when new answers are invalid', () => {
+    store.set('sleep', 'insomnia_survey_answers', [0, 0, 0, 0, 0, 0, 0]);
+    const first = store.get<{ score: number } | null>('sleep', 'insomnia_survey_result', null);
+    expect(first!.score).toBe(0);
+
+    // Invalid (too short) — must NOT clobber the existing result.
+    store.set('sleep', 'insomnia_survey_answers', [1, 2, 3]);
+    const after = store.get<{ score: number } | null>('sleep', 'insomnia_survey_result', null);
+    expect(after!.score).toBe(0);
+  });
+});
+
 // ─── push notification subscribers ──────────────────────────────────────────
 
 describe('sleep orchestrator — push notification subscribers', () => {

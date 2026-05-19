@@ -24,8 +24,13 @@
  *   research_loops          ResearchLoop[]        tagged research-paralysis loops
  *   lastRecomputeAt         number
  *
+ *   savingsLedger           SavingsLedgerEntry[]  append-only "money I set aside"
+ *                                                 log, fed by finance:savings_deposit_detected
+ *   adhdTaxCandidates       ADHDTaxCandidateEntry[]  pending "was this ADHD tax?"
+ *                                                 prompts, fed by
+ *                                                 finance:adhd_tax_candidate_detected
+ *
  * Events emitted:
- *   finance:record_added             — new FinanceRecord ingested from a dump item
  *   finance:pattern_detected         — new PatternCard pattern key observed
  *   finance:bill_due_predicted       — upcoming bill within 3 days (for push scheduling)
  *
@@ -90,6 +95,50 @@ import type { Orchestrator } from './types';
 
 const DEBOUNCE_MS = 500;
 const MAX_DUMP_LEN = 4000;
+
+/** Hard cap on the savings ledger slice — keeps the store bounded. */
+const SAVINGS_LEDGER_CAP = 200;
+
+/** Hard cap on the pending ADHD-tax-candidate slice. */
+const ADHD_TAX_CANDIDATES_CAP = 50;
+
+/**
+ * One entry in the finance "money I set aside" ledger. Append-only — written
+ * by the finance:savings_deposit_detected consumer wired in init(). The UI
+ * reads `finance.savingsLedger` so the user can see a running history of
+ * every "I put X aside" moment. Deduped by `id` (= the emit's transfer_id).
+ */
+export interface SavingsLedgerEntry {
+  id: string;
+  amount: number;
+  date: string;
+  memo: string | null;
+  matched_keyword: string | null;
+  confidence: 'low' | 'medium' | 'high';
+  /** id of the finance.goals row this deposit was credited to, or null. */
+  goal_id: string | null;
+  /** ts the deposit was recorded into the ledger. */
+  ts: number;
+}
+
+/**
+ * One pending "was this an ADHD tax?" prompt. Append-only — written by the
+ * finance:adhd_tax_candidate_detected consumer wired in init(). The UI reads
+ * `finance.adhdTaxCandidates` to render the gentle confirm chip; sayfa
+ * yenilense de soru kaybolmasın diye event değil store kanonik. Deduped by
+ * `id`, capped at ADHD_TAX_CANDIDATES_CAP (newest kept).
+ */
+export interface ADHDTaxCandidateEntry {
+  id: string;
+  record_id: string | null;
+  category: 'late_fee' | 'replacement' | 'duplicate' | 'unknown';
+  confidence: 'low' | 'medium' | 'high';
+  amount: number | null;
+  matched_phrase: string;
+  copy: string;
+  auto_add: boolean;
+  ts: number;
+}
 
 export interface FinanceOrchestratorOptions {
   /** Injected for tests; defaults to Date.now */
@@ -241,20 +290,6 @@ export function createFinanceOrchestrator(
     );
     setRecords(next);
 
-    try {
-      events.emit('finance:record_added', {
-        id: built.id,
-        kind: built.kind,
-        amount: built.amount,
-        direction: built.direction,
-        merchant: built.merchant,
-        merchant_normalized: built.merchant_normalized,
-        category: built.category,
-        is_adhd_tax: built.is_adhd_tax,
-        ts: dumpItem.ts,
-      });
-    } catch { /* non-fatal */ }
-
     // Sprint B'' (2026-05-14): finance_records is one of the 5 scrubbable
     // tables in the research corpus. We emit the raw dump text (the
     // description-equivalent) so the research orchestrator can scrub +
@@ -316,6 +351,7 @@ export function createFinanceOrchestrator(
               estimatedInterval: c.estimatedInterval,
               nextDueDate: c.nextDueDate,
               confidence: c.confidence,
+              category: c.category,
               evidence: c.evidence,
               ts: now,
             });
@@ -978,18 +1014,155 @@ export function createFinanceOrchestrator(
       surfaced_by_ollie: true,
     };
     store.set('finance', 'cancellations', [...list, entry]);
-    try {
-      events.emit('finance:savings_recorded', {
-        id: entry.id,
-        merchant: entry.merchant,
-        monthly_amount: entry.monthly_amount,
-        cancelled_at: entry.cancelled_at,
-        surfaced_by_ollie: entry.surfaced_by_ollie,
-        ts,
-      });
-    } catch { /* non-fatal */ }
     // Trigger a recompute so finance.savings reflects the new entry.
     schedule();
+  }
+
+  // ── finance:savings_deposit_detected consumer ─────────────────────────────
+  //
+  // The recompute pass emits finance:savings_deposit_detected for each newly
+  // seen savings transfer (already deduped at the emit site via
+  // _savingsDepositEmittedIds). This consumer is the canonical sink:
+  //
+  //   1. Appends the raw deposit to `finance.savingsLedger` — an append-only
+  //      "money I set aside" history the user can browse. Deduped by transfer
+  //      id; capped at SAVINGS_LEDGER_CAP (newest kept).
+  //   2. Credits the deposit amount to the earliest still-incomplete savings
+  //      goal (`finance.goals[].saved`), advancing goal progress. The goals
+  //      subscription then re-runs recomputeDerived(), which re-checks
+  //      savings_milestone thresholds against the new `saved` value.
+  //   3. Emits `burhan:add_leaf` so the garden grows on a savings deposit —
+  //      a constitutional "append only" growth event (burhan never decays).
+  //
+  // Low-confidence transfers are dropped at the emit site, so every payload
+  // that reaches here is medium/high confidence.
+  function onSavingsDepositDetected(raw: unknown): void {
+    try {
+      type StoredSavingsGoal = { id: string; name?: string; target?: number; saved?: number };
+      const p = (raw ?? {}) as {
+        transfer_id?: unknown;
+        amount?: unknown;
+        date?: unknown;
+        memo?: unknown;
+        matched_keyword?: unknown;
+        confidence?: unknown;
+        ts?: unknown;
+      };
+      const transferId = typeof p.transfer_id === 'string' ? p.transfer_id : '';
+      const amount = typeof p.amount === 'number' && p.amount > 0 ? p.amount : 0;
+      if (!transferId || amount <= 0) return;
+
+      const ledger = store.get<SavingsLedgerEntry[]>('finance', 'savingsLedger', []) ?? [];
+      if (ledger.some((e) => e.id === transferId)) return; // idempotent
+
+      // Credit the earliest incomplete savings goal, if any.
+      const goals = store.get<StoredSavingsGoal[]>('finance', 'goals', []) ?? [];
+      const targetGoal = goals
+        .filter((g) => g?.id && typeof g.target === 'number' && g.target > 0
+          && (typeof g.saved === 'number' ? g.saved : 0) < g.target)
+        .sort((a, b) => (a.saved ?? 0) / (a.target ?? 1) - (b.saved ?? 0) / (b.target ?? 1))[0]
+        ?? null;
+
+      let creditedGoalId: string | null = null;
+      if (targetGoal?.id) {
+        creditedGoalId = targetGoal.id;
+        const nextGoals = goals.map((g) =>
+          g.id === targetGoal.id
+            ? { ...g, saved: (typeof g.saved === 'number' ? g.saved : 0) + amount }
+            : g,
+        );
+        // Writing finance.goals triggers the goals subscription → schedule()
+        // → recomputeDerived(), which re-runs the savings_milestone check.
+        store.set('finance', 'goals', nextGoals);
+      }
+
+      const confidence: SavingsLedgerEntry['confidence'] =
+        p.confidence === 'high' || p.confidence === 'medium' || p.confidence === 'low'
+          ? p.confidence
+          : 'medium';
+      const entry: SavingsLedgerEntry = {
+        id: transferId,
+        amount,
+        date: typeof p.date === 'string' ? p.date : new Date(getNow()).toISOString().slice(0, 10),
+        memo: typeof p.memo === 'string' ? p.memo : null,
+        matched_keyword: typeof p.matched_keyword === 'string' ? p.matched_keyword : null,
+        confidence,
+        goal_id: creditedGoalId,
+        ts: typeof p.ts === 'number' ? p.ts : getNow(),
+      };
+      store.set('finance', 'savingsLedger', [...ledger, entry].slice(-SAVINGS_LEDGER_CAP));
+
+      // Grow the garden — append-only, burhan listens to burhan:add_leaf.
+      try {
+        events.emit('burhan:add_leaf', {
+          ts: entry.ts,
+          source_event_id: `finance:savings_deposit:${transferId}`,
+        });
+      } catch { /* non-fatal */ }
+    } catch (err) {
+      console.error('[orchestrator/finance] savings_deposit sink failed', err);
+    }
+  }
+
+  // ── finance:adhd_tax_candidate_detected consumer ──────────────────────────
+  //
+  // The recompute pass emits finance:adhd_tax_candidate_detected for each
+  // newly seen ADHD-tax candidate (already deduped at the emit site via
+  // _adhdTaxCandidateEmittedIds). This consumer is the canonical sink: it
+  // appends the candidate to `finance.adhdTaxCandidates` — a persistent
+  // pending-prompts list the UI reads to render the gentle "was this an
+  // ADHD tax?" confirm chip. Without a store slice the prompt would vanish
+  // on reload (events are not durable). Append-only, deduped by a derived
+  // id, capped at ADHD_TAX_CANDIDATES_CAP (newest kept).
+  function onADHDTaxCandidateDetected(raw: unknown): void {
+    try {
+      const p = (raw ?? {}) as {
+        record_id?: unknown;
+        category?: unknown;
+        confidence?: unknown;
+        amount?: unknown;
+        matched_phrase?: unknown;
+        copy?: unknown;
+        auto_add?: unknown;
+        ts?: unknown;
+      };
+      const category: ADHDTaxCandidateEntry['category'] =
+        p.category === 'late_fee' || p.category === 'replacement'
+          || p.category === 'duplicate' || p.category === 'unknown'
+          ? p.category
+          : 'unknown';
+      const matchedPhrase = typeof p.matched_phrase === 'string' ? p.matched_phrase : '';
+      const recordId = typeof p.record_id === 'string' ? p.record_id : null;
+      if (!matchedPhrase) return;
+
+      // Derive a stable id mirroring the emit-site dedup key shape.
+      const id = `${recordId ?? '_'}:${category}:${matchedPhrase}`;
+      const pending = store.get<ADHDTaxCandidateEntry[]>('finance', 'adhdTaxCandidates', []) ?? [];
+      if (pending.some((e) => e.id === id)) return; // idempotent
+
+      const confidence: ADHDTaxCandidateEntry['confidence'] =
+        p.confidence === 'high' || p.confidence === 'medium' || p.confidence === 'low'
+          ? p.confidence
+          : 'medium';
+      const entry: ADHDTaxCandidateEntry = {
+        id,
+        record_id: recordId,
+        category,
+        confidence,
+        amount: typeof p.amount === 'number' ? p.amount : null,
+        matched_phrase: matchedPhrase,
+        copy: typeof p.copy === 'string' ? p.copy : '',
+        auto_add: p.auto_add === true,
+        ts: typeof p.ts === 'number' ? p.ts : getNow(),
+      };
+      store.set(
+        'finance',
+        'adhdTaxCandidates',
+        [...pending, entry].slice(-ADHD_TAX_CANDIDATES_CAP),
+      );
+    } catch (err) {
+      console.error('[orchestrator/finance] adhd_tax_candidate sink failed', err);
+    }
   }
 
   // ── processBacklog ────────────────────────────────────────────────────────
@@ -1045,10 +1218,32 @@ export function createFinanceOrchestrator(
     unsubs.push(store.subscribeKey('finance', 'cancellations', () => {
       try { schedule(); } catch (err) { console.error('[orchestrator/finance] cancellations tick failed', err); }
     }));
+    // Faz 2 fix (2026-05-15): the module's own in-app forms write these
+    // slices directly (FinanceModule.tsx / braindump-dispatch.ts finance
+    // sub-classification). They don't go through processDump/processBacklog,
+    // so without these subscriptions a manually-added bill/subscription/
+    // transaction/goal/adhd-tax row never triggers a recompute and the
+    // anomaly/pattern/savings-milestone cards go stale. schedule() (debounced
+    // recomputeDerived) is the right trigger — these slices carry their own
+    // form schema and produce no new FinanceRecord, so processBacklog is wrong.
+    for (const formSlice of ['bills', 'subscriptions', 'transactions', 'goals', 'adhd_tax'] as const) {
+      unsubs.push(store.subscribeKey('finance', formSlice, () => {
+        try { schedule(); } catch (err) { console.error(`[orchestrator/finance] finance.${formSlice} tick failed`, err); }
+      }));
+    }
     unsubs.push(events.on('finance:subscription_cancelled', (p) => {
       try { onSubscriptionCancelled(p); }
       catch (err) { console.error('[orchestrator/finance] onSubscriptionCancelled failed', err); }
     }));
+
+    // Savings deposit → ledger append + goal progress + garden growth.
+    // Always wired (not push-gated): the ledger + goal credit are core
+    // product state, not a notification.
+    unsubs.push(events.on('finance:savings_deposit_detected', onSavingsDepositDetected));
+
+    // ADHD-tax candidate → persistent pending-prompts slice. Always wired:
+    // the UI reads finance.adhdTaxCandidates to render the confirm chip.
+    unsubs.push(events.on('finance:adhd_tax_candidate_detected', onADHDTaxCandidateDetected));
 
     unsubs.push(
       events.on('void:braindump:submitted', (payload: unknown) => {

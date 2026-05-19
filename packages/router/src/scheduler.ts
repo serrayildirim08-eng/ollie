@@ -2,7 +2,7 @@
  * createReminderScheduler
  *
  * Manages setTimeout handles for future reminders.
- * On fire: emits void:reminder:fired + void:toast, updates status in store.
+ * On fire: emits void:toast, updates status in store.
  */
 
 import type { Store } from '@ollie/store';
@@ -40,7 +40,6 @@ export function createReminderScheduler(store: Store, evts: typeof events): Remi
     );
     writeReminders(store, updated);
 
-    evts.emit('void:reminder:fired', { id: reminder.id, fireAt: reminder.datetime });
     evts.emit('void:toast', { message: reminder.body, module: reminder.module });
   }
 

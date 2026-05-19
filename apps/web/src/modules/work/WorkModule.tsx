@@ -34,6 +34,31 @@ interface WorkItem {
   action?: string;
 }
 
+// ─── Phase 3 UI-local types ──────────────────────────────────────────────────
+// Backend Phase 3 schema lands separately; these mirror what the UI writes to
+// the loose store slices and will be reconciled with @ollie/logic/work on merge.
+
+// Distraction journal — manual entry: when + what pulled you away.
+// ADHD tool: non-judgmental, just makes the pattern visible.
+interface DistractionEntry {
+  id: string;
+  /** ms epoch the distraction was logged. */
+  ts: number;
+  /** Free-text: what pulled attention away. */
+  what: string;
+}
+
+// Collaboration / hand-off notes — text + optional recipient.
+interface HandoffNote {
+  id: string;
+  /** ms epoch created. */
+  ts: number;
+  /** Note body. */
+  text: string;
+  /** Optional "for" name — who the hand-off is addressed to. */
+  to?: string;
+}
+
 // Legacy log entries (pre-2026-05-14) may have used { at, duration_min } shape.
 // We migrate on read in todaySessions/billable rollups.
 interface LegacyFocusLogEntry {
@@ -294,6 +319,9 @@ export function WorkModule({ onBack }: WorkModuleProps) {
   );
   // Cross-module: read body.sleep_sounds for brown-noise overlay default.
   const [sleepSounds] = useStoreSlice<{ enabled?: boolean; track?: string }>('body', 'sleep_sounds', { enabled: true, track: 'brown_noise' });
+  // Phase 3 slices — distraction journal + collaboration notes.
+  const [distractions, setDistractions] = useStoreSlice<DistractionEntry[]>('work', 'distractions', []);
+  const [handoffNotes, setHandoffNotes] = useStoreSlice<HandoffNote[]>('work', 'handoff_notes', []);
 
   // ── local UI state ──────────────────────────────────────────────────────────
   const [newTask, setNewTask] = useState('');
@@ -325,6 +353,14 @@ export function WorkModule({ onBack }: WorkModuleProps) {
   const [blockWhen, setBlockWhen] = useState('');
   const [blockDuration, setBlockDuration] = useState<FocusDurationMin>(45);
   const [blockProjectId, setBlockProjectId] = useState<string>('');
+
+  // ── distraction journal UI state ────────────────────────────────────────────
+  const [distractText, setDistractText] = useState('');
+
+  // ── collaboration notes UI state ────────────────────────────────────────────
+  const [noteOpen, setNoteOpen] = useState(false);
+  const [noteText, setNoteText] = useState('');
+  const [noteTo, setNoteTo] = useState('');
 
   // ── task ops ────────────────────────────────────────────────────────────────
   const addTask = useCallback(() => {
@@ -586,6 +622,83 @@ export function WorkModule({ onBack }: WorkModuleProps) {
     [projects],
   );
 
+  // ── distraction journal ─────────────────────────────────────────────────────
+  const addDistraction = useCallback(() => {
+    const w = distractText.trim();
+    if (!w) return;
+    const entry: DistractionEntry = {
+      id: `dx-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+      ts: Date.now(),
+      what: sanitize(w),
+    };
+    setDistractions([...(distractions ?? []), entry]);
+    setDistractText('');
+  }, [distractText, distractions, setDistractions]);
+
+  const removeDistraction = useCallback(
+    (id: string) => {
+      setDistractions((distractions ?? []).filter((d) => d?.id !== id));
+    },
+    [distractions, setDistractions],
+  );
+
+  // Recent distractions, newest first, capped to keep the list calm.
+  const recentDistractions = useMemo(() => {
+    return (distractions ?? [])
+      .filter((d) => d?.what)
+      .sort((a, b) => (b.ts ?? 0) - (a.ts ?? 0))
+      .slice(0, 30);
+  }, [distractions]);
+
+  // Count of distractions logged today — a plain, un-judged tally.
+  const distractionsToday = useMemo(() => {
+    const today = new Date().toDateString();
+    return (distractions ?? []).filter(
+      (d) => d?.ts && new Date(d.ts).toDateString() === today,
+    ).length;
+  }, [distractions]);
+
+  // ── pomodoro cycle ──────────────────────────────────────────────────────────
+  // Backend cycle logic lands separately; until then the UI derives a simple,
+  // deterministic cycle from today's completed focus sessions: after every
+  // 4th block, a longer break is suggested. No streaks, no pressure.
+  const pomodoro = useMemo(() => {
+    const done = todaySessions.length;
+    const inCycle = done % 4; // 0..3 blocks into the current set of four
+    const blocksUntilLongBreak = inCycle === 0 ? 4 : 4 - inCycle;
+    const longBreakNow = done > 0 && inCycle === 0;
+    return { done, inCycle, blocksUntilLongBreak, longBreakNow };
+  }, [todaySessions]);
+
+  // ── collaboration / hand-off notes ──────────────────────────────────────────
+  const addNote = useCallback(() => {
+    const t = noteText.trim();
+    if (!t) return;
+    const note: HandoffNote = {
+      id: `hn-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+      ts: Date.now(),
+      text: sanitize(t),
+      ...(noteTo.trim() ? { to: sanitize(noteTo.trim()) } : {}),
+    };
+    setHandoffNotes([...(handoffNotes ?? []), note]);
+    setNoteText('');
+    setNoteTo('');
+    setNoteOpen(false);
+  }, [noteText, noteTo, handoffNotes, setHandoffNotes]);
+
+  const removeNote = useCallback(
+    (id: string) => {
+      setHandoffNotes((handoffNotes ?? []).filter((n) => n?.id !== id));
+    },
+    [handoffNotes, setHandoffNotes],
+  );
+
+  const sortedNotes = useMemo(() => {
+    return (handoffNotes ?? [])
+      .filter((n) => n?.text)
+      .sort((a, b) => (b.ts ?? 0) - (a.ts ?? 0));
+  }, [handoffNotes]);
+
   function fmtBlockWhen(ms: number): string {
     try {
       return new Date(ms).toLocaleString(undefined, {
@@ -609,6 +722,24 @@ export function WorkModule({ onBack }: WorkModuleProps) {
         hour: 'numeric',
         minute: '2-digit',
       }).toLowerCase();
+    } catch {
+      return new Date(ms).toISOString();
+    }
+  }
+
+  // Calm relative-time stamp for journal-style lists (distractions, notes).
+  function fmtLogWhen(ms: number): string {
+    try {
+      const now = Date.now();
+      const sameDay = new Date(ms).toDateString() === new Date(now).toDateString();
+      const time = new Date(ms)
+        .toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+        .toLowerCase();
+      if (sameDay) return `today · ${time}`;
+      const day = new Date(ms)
+        .toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
+        .toLowerCase();
+      return `${day} · ${time}`;
     } catch {
       return new Date(ms).toISOString();
     }
@@ -1017,6 +1148,65 @@ export function WorkModule({ onBack }: WorkModuleProps) {
             preload="auto"
             aria-hidden="true"
           />
+
+          {/* ── pomodoro cycle indicator ─────────────────────────────── */}
+          {/* Shows position in the 4-block cycle. Quiet by design: a row of
+              ticks, no running tally, no exclamation. Only nudges toward a
+              break. */}
+          {pomodoro.done > 0 && (
+            <div
+              style={{
+                marginTop: 24,
+                padding: '18px 22px',
+                background: PAPER,
+                border: `1px solid ${HAIRLINE}`,
+                borderRadius: 2,
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: 14,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                <div style={{ display: 'flex', gap: 6 }} aria-hidden="true">
+                  {[0, 1, 2, 3].map((i) => {
+                    const filled = i < (pomodoro.longBreakNow ? 4 : pomodoro.inCycle);
+                    return (
+                      <span
+                        key={i}
+                        style={{
+                          width: 10,
+                          height: 10,
+                          borderRadius: '50%',
+                          background: filled ? ACCENT : 'transparent',
+                          border: `1px solid ${filled ? ACCENT : HAIRLINE_HI}`,
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+                <div style={LABEL_STYLE}>
+                  {pomodoro.done} {pomodoro.done === 1 ? 'block' : 'blocks'} today
+                </div>
+              </div>
+              <div
+                style={{
+                  fontFamily: "'DM Serif Display',serif",
+                  fontStyle: 'italic',
+                  fontSize: 'clamp(15px, 1.5vw, 17px)',
+                  color: pomodoro.longBreakNow ? ACCENT : MUTED,
+                  lineHeight: 1.4,
+                }}
+              >
+                {pomodoro.longBreakNow
+                  ? 'four blocks done. a longer break is earned — step away.'
+                  : pomodoro.blocksUntilLongBreak === 1
+                    ? 'one more block, then a longer break.'
+                    : `${pomodoro.blocksUntilLongBreak} blocks until a longer break.`}
+              </div>
+            </div>
+          )}
 
           {/* ── billable hours per project (week-to-date) ───────────── */}
           {weeklyRollup.length > 0 && (
@@ -1784,6 +1974,368 @@ export function WorkModule({ onBack }: WorkModuleProps) {
                   </div>
                 );
               })}
+            </div>
+          )}
+        </section>
+
+        {/* ── distraction journal ─────────────────────────────────────── */}
+        <section style={{ paddingBottom: 48, borderTop: `1px solid ${HAIRLINE}`, paddingTop: 32 }}>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'baseline',
+              paddingBottom: 8,
+              flexWrap: 'wrap',
+              gap: 12,
+            }}
+          >
+            <div style={LABEL_STYLE}>
+              distractions
+              {distractionsToday > 0 && (
+                <>
+                  <span style={{ color: FAINT, margin: '0 10px' }}>·</span>
+                  {distractionsToday} today
+                </>
+              )}
+            </div>
+          </div>
+          <div
+            style={{
+              fontFamily: "'DM Serif Display',serif",
+              fontStyle: 'italic',
+              fontSize: 'clamp(15px, 1.5vw, 17px)',
+              color: MUTED,
+              lineHeight: 1.4,
+              paddingBottom: 20,
+              maxWidth: 540,
+            }}
+          >
+            note what pulled you away — no fix needed, just so the shape becomes visible over time.
+          </div>
+
+          {/* add distraction input */}
+          <div style={{ display: 'flex', gap: 10, paddingBottom: 24 }}>
+            <input
+              value={distractText}
+              onChange={(e) => setDistractText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') addDistraction();
+              }}
+              placeholder="what pulled you away? enter to log"
+              aria-label="log a distraction"
+              style={{
+                flex: 1,
+                padding: '12px 14px',
+                background: PAPER,
+                border: `1px solid ${HAIRLINE}`,
+                color: INK,
+                borderRadius: 2,
+                fontFamily: "'Inter Tight',sans-serif",
+                fontSize: 15,
+                outline: 'none',
+              }}
+            />
+            <button
+              onClick={addDistraction}
+              disabled={!distractText.trim()}
+              style={{
+                padding: '12px 22px',
+                background: distractText.trim() ? INK : 'transparent',
+                color: distractText.trim() ? BG : FAINT,
+                border: `1px solid ${distractText.trim() ? INK : HAIRLINE_HI}`,
+                fontFamily: "'DM Mono',monospace",
+                fontSize: 10,
+                letterSpacing: '0.22em',
+                textTransform: 'uppercase',
+                cursor: distractText.trim() ? 'pointer' : 'default',
+                borderRadius: 2,
+              }}
+            >
+              log
+            </button>
+          </div>
+
+          {recentDistractions.length === 0 ? (
+            <div
+              style={{
+                fontFamily: "'DM Serif Display',serif",
+                fontStyle: 'italic',
+                fontSize: 'clamp(16px, 1.6vw, 18px)',
+                color: MUTED,
+                lineHeight: 1.4,
+                paddingTop: 4,
+              }}
+            >
+              nothing logged yet. when your focus slips, jot it here.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              {recentDistractions.map((d) => (
+                <div
+                  key={d.id}
+                  style={{
+                    padding: '14px 0',
+                    borderBottom: `1px solid ${HAIRLINE}`,
+                    display: 'grid',
+                    gridTemplateColumns: '1fr auto',
+                    gap: 14,
+                    alignItems: 'baseline',
+                  }}
+                >
+                  <div>
+                    <div
+                      style={{
+                        fontFamily: "'Inter Tight',sans-serif",
+                        fontSize: 16,
+                        color: INK,
+                        lineHeight: 1.5,
+                      }}
+                    >
+                      {d.what}
+                    </div>
+                    <div
+                      style={{
+                        fontFamily: "'DM Mono',monospace",
+                        fontSize: 9,
+                        letterSpacing: '0.22em',
+                        color: FAINT,
+                        textTransform: 'uppercase',
+                        paddingTop: 6,
+                      }}
+                    >
+                      {fmtLogWhen(d.ts)}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => removeDistraction(d.id)}
+                    aria-label={`remove distraction: ${d.what}`}
+                    style={{
+                      padding: '6px 10px',
+                      background: 'transparent',
+                      color: FAINT,
+                      border: 'none',
+                      fontFamily: "'DM Mono',monospace",
+                      fontSize: 10,
+                      letterSpacing: '0.2em',
+                      textTransform: 'uppercase',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    remove
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* ── collaboration / hand-off notes ──────────────────────────── */}
+        <section style={{ paddingBottom: 48, borderTop: `1px solid ${HAIRLINE}`, paddingTop: 32 }}>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'baseline',
+              paddingBottom: 20,
+              flexWrap: 'wrap',
+              gap: 12,
+            }}
+          >
+            <div style={LABEL_STYLE}>
+              hand-off notes <span style={{ color: FAINT, margin: '0 10px' }}>·</span> what to pass on
+            </div>
+            <button
+              type="button"
+              onClick={() => setNoteOpen((o) => !o)}
+              style={{
+                padding: '8px 16px',
+                background: noteOpen ? INK : 'transparent',
+                color: noteOpen ? BG : INK,
+                border: `1px solid ${noteOpen ? INK : HAIRLINE_HI}`,
+                fontFamily: "'DM Mono',monospace",
+                fontSize: 10,
+                letterSpacing: '0.22em',
+                textTransform: 'uppercase',
+                cursor: 'pointer',
+                borderRadius: 2,
+              }}
+            >
+              {noteOpen ? 'close' : '+ add note'}
+            </button>
+          </div>
+
+          {noteOpen && (
+            <div
+              style={{
+                padding: 22,
+                background: PAPER,
+                border: `1px solid ${HAIRLINE}`,
+                borderRadius: 2,
+                marginBottom: 24,
+                display: 'grid',
+                gap: 12,
+              }}
+            >
+              <textarea
+                value={noteText}
+                onChange={(e) => setNoteText(e.target.value)}
+                placeholder="what does the next person need to know?"
+                aria-label="hand-off note"
+                rows={3}
+                style={{
+                  padding: '12px 14px',
+                  background: BG,
+                  border: `1px solid ${HAIRLINE}`,
+                  color: INK,
+                  borderRadius: 2,
+                  fontFamily: "'Inter Tight',sans-serif",
+                  fontSize: 15,
+                  lineHeight: 1.5,
+                  outline: 'none',
+                  resize: 'vertical',
+                }}
+              />
+              <input
+                value={noteTo}
+                onChange={(e) => setNoteTo(e.target.value)}
+                placeholder="for · name · optional"
+                aria-label="hand-off recipient"
+                style={{
+                  padding: '10px 12px',
+                  background: BG,
+                  border: `1px solid ${HAIRLINE}`,
+                  color: INK,
+                  borderRadius: 2,
+                  fontFamily: "'Inter Tight',sans-serif",
+                  fontSize: 13,
+                  outline: 'none',
+                }}
+              />
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button
+                  type="button"
+                  onClick={addNote}
+                  disabled={!noteText.trim()}
+                  style={{
+                    padding: '10px 20px',
+                    background: noteText.trim() ? INK : 'transparent',
+                    color: noteText.trim() ? BG : FAINT,
+                    border: `1px solid ${noteText.trim() ? INK : HAIRLINE_HI}`,
+                    fontFamily: "'DM Mono',monospace",
+                    fontSize: 10,
+                    letterSpacing: '0.22em',
+                    textTransform: 'uppercase',
+                    cursor: noteText.trim() ? 'pointer' : 'default',
+                    borderRadius: 2,
+                  }}
+                >
+                  add
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setNoteOpen(false); setNoteText(''); setNoteTo(''); }}
+                  style={{
+                    padding: '10px 14px',
+                    background: 'transparent',
+                    color: FAINT,
+                    border: 'none',
+                    fontFamily: "'DM Mono',monospace",
+                    fontSize: 10,
+                    letterSpacing: '0.22em',
+                    textTransform: 'uppercase',
+                    cursor: 'pointer',
+                  }}
+                >
+                  cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+          {sortedNotes.length === 0 ? (
+            <div
+              style={{
+                fontFamily: "'DM Serif Display',serif",
+                fontStyle: 'italic',
+                fontSize: 'clamp(16px, 1.6vw, 18px)',
+                color: MUTED,
+                lineHeight: 1.4,
+                paddingTop: 4,
+              }}
+            >
+              no notes yet. leave a thread for whoever picks this up next.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {sortedNotes.map((n) => (
+                <div
+                  key={n.id}
+                  style={{
+                    padding: '16px 18px',
+                    background: PAPER,
+                    border: `1px solid ${HAIRLINE}`,
+                    borderLeft: `2px solid ${WORK_ACCENT}`,
+                    borderRadius: 2,
+                    display: 'grid',
+                    gridTemplateColumns: '1fr auto',
+                    gap: 14,
+                    alignItems: 'start',
+                  }}
+                >
+                  <div>
+                    <div
+                      style={{
+                        fontFamily: "'Inter Tight',sans-serif",
+                        fontSize: 15,
+                        color: INK,
+                        lineHeight: 1.55,
+                        whiteSpace: 'pre-wrap',
+                      }}
+                    >
+                      {n.text}
+                    </div>
+                    <div
+                      style={{
+                        fontFamily: "'DM Mono',monospace",
+                        fontSize: 9,
+                        letterSpacing: '0.22em',
+                        color: FAINT,
+                        textTransform: 'uppercase',
+                        paddingTop: 10,
+                        display: 'flex',
+                        gap: 10,
+                        flexWrap: 'wrap',
+                      }}
+                    >
+                      <span>{fmtLogWhen(n.ts)}</span>
+                      {n.to && (
+                        <>
+                          <span>·</span>
+                          <span style={{ color: MUTED }}>for {n.to}</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => removeNote(n.id)}
+                    aria-label={`remove hand-off note`}
+                    style={{
+                      padding: '6px 10px',
+                      background: 'transparent',
+                      color: FAINT,
+                      border: 'none',
+                      fontFamily: "'DM Mono',monospace",
+                      fontSize: 10,
+                      letterSpacing: '0.2em',
+                      textTransform: 'uppercase',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    remove
+                  </button>
+                </div>
+              ))}
             </div>
           )}
         </section>

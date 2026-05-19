@@ -7,9 +7,14 @@
  * deferred until the B2B product is designed.
  *
  * What ships now (foundation):
- *   - opt-in toggle: shared.consent.necessary (default off — written
- *     true by ConsentScreen at sign-up; this is the master gate that
- *     replaced the older per-feature consent.spending_research key)
+ *   - master gate: the canonical @ollie/consent `necessary` flag (default
+ *     off — written true by ConsentScreen at sign-up). Görev 1 (2026-05-15):
+ *     this used to read the raw `shared.consent.necessary` key directly;
+ *     it now goes through @ollie/consent's `hasNecessaryConsent()` so there
+ *     is a single source of truth for consent. `necessary` gates STRUCTURED
+ *     telemetry (session/module/retention/consent_audit rows) — the
+ *     free-text research-corpus pipeline has its own `research_optin` gate
+ *     in @ollie/orchestrator/research.ts.
  *   - flexible JSON event capture: track(type, payload)
  *   - random_uuid per device (NO link to user_id, email, anything)
  *   - GDPR endpoints: exportContributions(), deleteContributions(),
@@ -29,6 +34,10 @@
 import type { Store } from '@ollie/store';
 import type { OllieAPI } from '@ollie/api';
 import * as events from '@ollie/events';
+import {
+  hasNecessaryConsent,
+  setNecessaryConsentSync,
+} from '@ollie/consent';
 
 const QUEUE_CAP = 5_000;
 const DEFAULT_FLUSH_INTERVAL_MS = 30_000;
@@ -101,9 +110,23 @@ export interface ResearchClient {
   _inspect(): { queueDepth: number; deviceId: string | null; running: boolean };
 }
 
-const CONSENT_KEY = 'consent.necessary';
 const DEVICE_ID_KEY = '_research_device_id';
 const QUEUE_KEY = '_research_queue';
+
+/**
+ * Görev 1 (2026-05-15): research-stream's GDPR withdrawal flag.
+ *
+ * Pre-consolidation `withdrawConsent()` flipped `shared.consent.necessary`
+ * to false to disable the stream. That key is now the canonical app-master
+ * gate and `necessary` is structurally non-false (the app cannot run
+ * without it). So GDPR research-contribution withdrawal gets its OWN local
+ * flag here. `hasConsent()` = canonical necessary AND not-withdrawn.
+ *
+ * Default (unset) means "not withdrawn" → `hasConsent()` follows `necessary`
+ * exactly, which is the production behaviour: withdrawConsent()/grantConsent()
+ * are GDPR-surface methods that production code never calls.
+ */
+const RESEARCH_OPTOUT_KEY = '_research_withdrawn';
 
 export function createResearchStream(deps: ResearchDeps): ResearchClient {
   const nowFn = deps.now ?? (() => Date.now());
@@ -122,7 +145,14 @@ export function createResearchStream(deps: ResearchDeps): ResearchClient {
     deps.store.set('shared', QUEUE_KEY, q.slice(-QUEUE_CAP));
   }
   function hasConsent(): boolean {
-    return Boolean(deps.store.get<boolean>('shared', CONSENT_KEY, false));
+    // Single source of truth: the canonical @ollie/consent `necessary`
+    // flag, read synchronously off the store. hasNecessaryConsent() lazily
+    // migrates the legacy `shared.consent.necessary` key for returning
+    // users, so a pre-consolidation install keeps working unchanged.
+    //
+    // AND not GDPR-withdrawn — withdrawConsent() sets the local flag below.
+    if (deps.store.get<boolean>('shared', RESEARCH_OPTOUT_KEY, false)) return false;
+    return hasNecessaryConsent(deps.store);
   }
   function deviceId(): string | null {
     return deps.store.get<string | null>('shared', DEVICE_ID_KEY, null);
@@ -242,14 +272,24 @@ export function createResearchStream(deps: ResearchDeps): ResearchClient {
   }
 
   function withdrawConsent(): void {
-    deps.store.set('shared', CONSENT_KEY, false);
+    // GDPR withdrawal of the RESEARCH-STREAM contribution: flush nothing
+    // further, drop the queue, sever the device id, raise the local
+    // withdrawal flag so hasConsent() reads false. We deliberately do NOT
+    // flip the canonical `necessary` flag — its type forbids `false` and
+    // `necessary` off means the app cannot run at all. Account deletion is
+    // the path to revoke `necessary`.
+    deps.store.set('shared', RESEARCH_OPTOUT_KEY, true);
     writeQueue([]);
     deps.store.set('shared', DEVICE_ID_KEY, null);
     stop();
   }
 
   function grantConsent(): void {
-    deps.store.set('shared', CONSENT_KEY, true);
+    // Clear any prior GDPR withdrawal and persist the master `necessary`
+    // flag through the canonical writer so the consent.state row is the
+    // one and only record.
+    deps.store.set('shared', RESEARCH_OPTOUT_KEY, false);
+    setNecessaryConsentSync(deps.store);
     ensureDeviceId();
     if (running) scheduleFlush();
   }

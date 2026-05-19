@@ -282,23 +282,6 @@ describe('WindDownChecklist · items', () => {
 // ─── component: events ────────────────────────────────────────────────────
 
 describe('WindDownChecklist · events', () => {
-  it('emits sleep:wind_down_started on first tap', () => {
-    const started = vi.fn();
-    events.on('sleep:wind_down_started', started);
-
-    mount();
-    const first = container.querySelector(
-      'button[aria-pressed]',
-    ) as HTMLButtonElement;
-    act(() => {
-      first.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    expect(started).toHaveBeenCalledTimes(1);
-    const payload = started.mock.calls[0][0] as { ts: number };
-    expect(typeof payload.ts).toBe('number');
-  });
-
   it('emits sleep:wind_down_completed after the final item is checked', () => {
     const completed = vi.fn();
     events.on('sleep:wind_down_completed', completed);
@@ -323,6 +306,36 @@ describe('WindDownChecklist · events', () => {
 
     // Card collapses to "rest well." copy.
     expect((container.textContent ?? '').toLowerCase()).toContain('rest well.');
+  });
+
+  it('emits sleep:wind_down_step on every item tap (friction-detector feed)', () => {
+    const step = vi.fn();
+    events.on('sleep:wind_down_step', step);
+
+    mount(); // no supplements → 5 items
+    for (let i = 0; i < 5; i++) {
+      const btns = Array.from(
+        container.querySelectorAll('button[aria-pressed]'),
+      ) as HTMLButtonElement[];
+      act(() => {
+        btns[i].dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      });
+    }
+
+    // One step event per item — the orchestrator turns these into windDownLog.
+    expect(step).toHaveBeenCalledTimes(5);
+    const first = step.mock.calls[0][0] as {
+      ts: number; step_id: string; step_label: string; action: string;
+    };
+    expect(typeof first.ts).toBe('number');
+    expect(first.step_id).toBe('phone_away');
+    expect(first.action).toBe('checked');
+    expect(typeof first.step_label).toBe('string');
+    // Step ids follow the canonical ritual order.
+    const ids = step.mock.calls.map((c) => (c[0] as { step_id: string }).step_id);
+    expect(ids).toEqual([
+      'phone_away', 'drink_water', 'lights_low', 'breath_journal', 'into_bed',
+    ]);
   });
 
   it('emits sleep:wind_down_skipped when dismissed mid-flow', () => {

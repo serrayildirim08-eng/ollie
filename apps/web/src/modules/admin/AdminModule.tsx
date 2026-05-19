@@ -23,6 +23,7 @@ import type {
   AdminTask,
   RenewalStage,
 } from '@ollie/logic/admin';
+import * as events from '@ollie/events';
 import { useStoreSlice } from '../../store';
 import { ModuleHelp } from '../../components/ModuleHelp';
 import { SourcesLink } from '../../components/SourcesLink';
@@ -125,19 +126,26 @@ interface RecurringCueEntry {
   copy: string;
 }
 
+// Mirrors orchestrator/admin AdminPattern: every recompute entry carries a
+// `signal` discriminator (e.g. 'admin_renewal_cue') plus per-signal fields.
+// `signalKey()` in orchestrator/admin builds dedup keys as
+// `signal[:task_id|:dump_id]` — idOf() below must stay identical so the
+// store's `patterns_dismissed` map keys line up.
 interface AdminPattern {
-  pattern?: string;
+  signal?: string;
   copy?: string;
+  copy_es?: string;
   task_id?: string;
-  rule_id?: string;
-  category?: string;
+  dump_id?: string;
+  category_or_label?: string;
   cost_of_delay?: string;
   topic_key?: string;
   choice?: string;
   drift_count?: number;
   ref_count?: number;
+  defer_count?: number;
   labels?: string[];
-  source?: { citation: string; url?: string };
+  sources?: Array<{ citation: string; url?: string }>;
 }
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
@@ -211,6 +219,24 @@ const EMPTY_DRAFT = {
   eta_date: '',
   duration_min: '',
 };
+
+// ─── phone-task cluster ──────────────────────────────────────────────────────
+// Tasks tagged `phone_assist` (set when accepting a detected phone task, or
+// when a deferred task is routed "phone") are grouped into one "calls to
+// make" cluster. Pure selector — open, non-closed phone tasks only, oldest
+// first so the longest-waiting call surfaces at the top.
+
+export function selectPhoneTasks(items: AdminItemRow[] | null | undefined): AdminItemRow[] {
+  if (!Array.isArray(items)) return [];
+  return items
+    .filter((it): it is AdminItemRow => {
+      if (!it || it.phone_assist !== true) return false;
+      if (!it.title && !it.label) return false;
+      const st = it.state ?? (it.status === 'done' ? 'closed' : 'active');
+      return st !== 'closed';
+    })
+    .sort((a, b) => (a.ts ?? 0) - (b.ts ?? 0));
+}
 
 // ─── AdminReflected · Sprint 5 · F5 ──────────────────────────────────────────
 // Reads `admin.reflected` written by the cross-module router when, e.g.,
@@ -305,21 +331,31 @@ function AdminNoticed() {
 
   const list = useMemo(() => (Array.isArray(patterns) ? patterns : []), [patterns]);
 
-  const idOf = useCallback((p: AdminPattern): string => {
-    if (!p.pattern) return '?';
-    if (p.pattern === 'cost-of-delay' && p.task_id) return `${p.pattern}:${p.task_id}`;
-    if (p.pattern === 'decision-recall' && p.rule_id) return `${p.pattern}:${p.rule_id}`;
-    if (p.pattern === 'schedule-drift' && p.category) return `${p.pattern}:${p.category}`;
-    if (p.pattern === 'doc-refs-attached' && p.task_id) return `${p.pattern}:${p.task_id}`;
-    return p.pattern + (p.task_id ? `:${p.task_id}` : '');
+  // Stable per-pattern key. MUST match orchestrator/admin signalKey() exactly,
+  // otherwise the patterns_dismissed map keyed here drifts from what recompute
+  // produces. Falls back to the array index (passed in) only when a pattern
+  // has no `signal` at all — so an identity-less entry can't collide with and
+  // dismiss every other entry (the old bug: all keys collapsed to '?').
+  const idOf = useCallback((p: AdminPattern, i: number): string => {
+    if (!p.signal) return `?:${i}`;
+    if (typeof p.task_id === 'string') return `${p.signal}:${p.task_id}`;
+    if (typeof p.dump_id === 'string') return `${p.signal}:${p.dump_id}`;
+    if (typeof p.category_or_label === 'string') return `${p.signal}:${p.category_or_label}`;
+    return p.signal;
   }, []);
 
   const dismiss = useCallback((id: string) => {
     setDismissed({ ...(dismissed ?? {}), [id]: Date.now() });
   }, [dismissed, setDismissed]);
 
+  // Resolve each pattern's id against its index in the *full* list, so the
+  // fallback `?:i` key is stable as siblings get dismissed (filtering would
+  // otherwise renumber survivors and re-key them).
   const visible = useMemo(
-    () => list.filter((p) => p && p.copy && !(dismissed && dismissed[idOf(p)])),
+    () =>
+      list
+        .map((p, i) => ({ p, id: idOf(p, i) }))
+        .filter(({ p, id }) => p && p.copy && !(dismissed && dismissed[id])),
     [list, dismissed, idOf],
   );
 
@@ -327,7 +363,8 @@ function AdminNoticed() {
     const bits: string[] = [];
     if (typeof p.drift_count === 'number') bits.push(`${p.drift_count} in a row`);
     if (typeof p.ref_count === 'number') bits.push(`${p.ref_count} ref${p.ref_count === 1 ? '' : 's'}`);
-    if (p.category) bits.push(p.category);
+    if (typeof p.defer_count === 'number') bits.push(`deferred ${p.defer_count}×`);
+    if (p.category_or_label) bits.push(p.category_or_label);
     if (p.topic_key) bits.push(p.topic_key);
     if (p.choice) bits.push(`choice: ${p.choice}`);
     if (Array.isArray(p.labels) && p.labels.length > 0) bits.push(p.labels.join(' · '));
@@ -348,12 +385,13 @@ function AdminNoticed() {
           nothing to mirror right now. add a renewal, schedule a thing, see what surfaces.
         </div>
       ) : (
-        visible.map((p, i) => {
-          const id = idOf(p);
+        visible.map(({ p, id }) => {
           const meta = metaFor(p);
-          const sourceUrls = p.source?.url ? [p.source.url] : [];
+          const sourceUrls = Array.isArray(p.sources)
+            ? p.sources.map((s) => s?.url).filter((u): u is string => typeof u === 'string')
+            : [];
           return (
-            <div key={`${id}:${i}`} style={{
+            <div key={id} style={{
               padding: '18px 20px',
               background: PAPER,
               borderLeft: `2px solid ${ACCENT}`,
@@ -376,7 +414,7 @@ function AdminNoticed() {
                 fontFamily: "'DM Mono',monospace", fontSize: 9,
                 letterSpacing: '0.24em', color: FAINT,
                 textTransform: 'uppercase', paddingBottom: 8,
-              }}>{(p.pattern ?? '').replace(/-/g, ' ')}</div>
+              }}>{(p.signal ?? '').replace(/^admin_/, '').replace(/_/g, ' ')}</div>
               <div style={{
                 fontFamily: "'Inter Tight',sans-serif", fontSize: 16,
                 color: INK, lineHeight: 1.55, paddingRight: 24,
@@ -468,14 +506,14 @@ export function AdminModule({ onBack }: AdminModuleProps) {
   }, [items]);
 
   // ── event subscriptions ───────────────────────────────────────────────────
+  // orchestrator/admin recompute emits these via @ollie/events (in-memory bus,
+  // not window.dispatchEvent). The legacy window.VOID bus never existed in the
+  // ollie web app, so this panel was silently dead before this wire-up.
   useEffect(() => {
-    const VOID = (window as unknown as { VOID?: { events?: { on?: (name: string, cb: (p: unknown) => void) => () => void } } }).VOID;
-    if (!VOID?.events?.on) return;
-
     const unsubs: Array<() => void> = [];
 
     try {
-      unsubs.push(VOID.events.on('admin:renewal_cue', (raw) => {
+      unsubs.push(events.on('admin:renewal_cue', (raw) => {
         const p = raw as { task_id?: string; stage?: RenewalStage; days_left?: number };
         if (!p?.task_id) return;
         const cur = (items ?? []).find((x) => x?.id === p.task_id);
@@ -491,7 +529,7 @@ export function AdminModule({ onBack }: AdminModuleProps) {
         }));
       }));
 
-      unsubs.push(VOID.events.on('admin:stale_ball', (raw) => {
+      unsubs.push(events.on('admin:stale_ball', (raw) => {
         const p = raw as { task_id?: string; kind?: string; days_overdue?: number };
         if (!p?.task_id) return;
         const days = p.days_overdue ?? 0;
@@ -501,7 +539,7 @@ export function AdminModule({ onBack }: AdminModuleProps) {
         setStaleBalls((prev) => ({ ...prev, [p.task_id!]: { kind: p.kind ?? '', days_overdue: days, copy } }));
       }));
 
-      unsubs.push(VOID.events.on('admin:last_5pct', (raw) => {
+      unsubs.push(events.on('admin:last_5pct', (raw) => {
         const p = raw as { task_id?: string; days_since_done?: number };
         if (!p?.task_id) return;
         setLast5Pcts((prev) => ({
@@ -510,13 +548,13 @@ export function AdminModule({ onBack }: AdminModuleProps) {
         }));
       }));
 
-      unsubs.push(VOID.events.on('admin:open_loop_missing', (raw) => {
+      unsubs.push(events.on('admin:open_loop_missing', (raw) => {
         const p = raw as { dump_id?: string };
         if (!p?.dump_id) return;
         setOpenLoop({ dump_id: p.dump_id, copy: "you said 'i should…'. add a when+where+how?" });
       }));
 
-      unsubs.push(VOID.events.on('void:braindump:submitted', (raw) => {
+      unsubs.push(events.on('void:braindump:submitted', (raw) => {
         try {
           const p = raw as { text?: string; raw?: string; idempotency_key?: string };
           if (!p) return;
@@ -529,7 +567,7 @@ export function AdminModule({ onBack }: AdminModuleProps) {
         } catch { /* non-fatal */ }
       }));
 
-      unsubs.push(VOID.events.on('admin:paperwork_split', (raw) => {
+      unsubs.push(events.on('admin:paperwork_split', (raw) => {
         try {
           const p = raw as { dump_match?: boolean; task_id?: string };
           if (!p) return;
@@ -553,7 +591,7 @@ export function AdminModule({ onBack }: AdminModuleProps) {
         } catch { /* non-fatal */ }
       }));
 
-      unsubs.push(VOID.events.on('admin:firehose_dump', () => {
+      unsubs.push(events.on('admin:firehose_dump', () => {
         try {
           const now = Date.now();
           const hit = detectFirehoseDump({ dump_text: lastDumpText }, { now });
@@ -565,7 +603,7 @@ export function AdminModule({ onBack }: AdminModuleProps) {
         } catch { /* non-fatal */ }
       }));
 
-      unsubs.push(VOID.events.on('admin:defer_chain', (raw) => {
+      unsubs.push(events.on('admin:defer_chain', (raw) => {
         try {
           const p = raw as { task_id?: string; defer_count?: number };
           if (!p?.task_id) return;
@@ -587,7 +625,7 @@ export function AdminModule({ onBack }: AdminModuleProps) {
         } catch { /* non-fatal */ }
       }));
 
-      unsubs.push(VOID.events.on('admin:two_minute_tasks', (raw) => {
+      unsubs.push(events.on('admin:two_minute_tasks', (raw) => {
         try {
           const p = raw as { count?: number; batch?: boolean };
           if (!p) return;
@@ -599,7 +637,7 @@ export function AdminModule({ onBack }: AdminModuleProps) {
         } catch { /* non-fatal */ }
       }));
 
-      unsubs.push(VOID.events.on('admin:recurring_pattern', (raw) => {
+      unsubs.push(events.on('admin:recurring_pattern', (raw) => {
         try {
           const p = raw as { category_or_label?: string; predicted_next_ts?: number };
           if (!p?.category_or_label) return;
@@ -983,6 +1021,9 @@ export function AdminModule({ onBack }: AdminModuleProps) {
     return it._daysLeft != null && it._daysLeft <= 14 && st !== 'closed';
   }), [withDaysLeft]);
 
+  // Phone-task cluster — open `phone_assist` tasks grouped together.
+  const phoneTasks = useMemo(() => selectPhoneTasks(items), [items]);
+
   // ── counts for filter tabs ────────────────────────────────────────────────
   const activeCount = useMemo(() =>
     (items ?? []).filter((it) => {
@@ -1183,6 +1224,61 @@ export function AdminModule({ onBack }: AdminModuleProps) {
               <button type="button" onClick={() => setPhoneTask(null)} style={btnGhost}>skip</button>
             </div>
           </div>
+        )}
+
+        {/* ── phone-task cluster ─────────────────────────────────────────── */}
+        {phoneTasks.length > 0 && (
+          <section style={{ marginBottom: 32, padding: '20px 22px', background: PAPER, border: `1px solid ${HAIRLINE}`, borderRadius: 2 }}>
+            <div style={{ ...LABEL, paddingBottom: 14, fontSize: 9 }}>
+              calls to make <span style={{ color: FAINT, marginLeft: 6 }}>{phoneTasks.length}</span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              {phoneTasks.map((it, i) => (
+                <div
+                  key={it.id}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'baseline',
+                    gap: 16,
+                    padding: '12px 0',
+                    borderTop: i === 0 ? 'none' : `1px solid ${HAIRLINE}`,
+                  }}
+                >
+                  <div style={{
+                    fontFamily: "'Inter Tight',sans-serif",
+                    fontSize: 15,
+                    fontWeight: 600,
+                    color: INK,
+                    letterSpacing: '-0.01em',
+                    lineHeight: 1.3,
+                  }}>
+                    {it.title ?? it.label}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => markDone(it.id)}
+                    style={{
+                      minHeight: 44,
+                      padding: '8px 12px',
+                      background: 'transparent',
+                      border: `1px solid ${HAIRLINE_HI}`,
+                      color: MUTED,
+                      fontFamily: "'DM Mono',monospace",
+                      fontSize: 9,
+                      letterSpacing: '0.2em',
+                      textTransform: 'uppercase',
+                      cursor: 'pointer',
+                      borderRadius: 2,
+                      flexShrink: 0,
+                    }}
+                  >
+                    called
+                  </button>
+                </div>
+              ))}
+            </div>
+          </section>
         )}
 
         {/* ── add form ──────────────────────────────────────────────────── */}

@@ -8,9 +8,14 @@ import {
   configureConsent,
   defaultConsent,
   getConsent,
+  getConsentSync,
+  hasMarketingConsent,
+  hasNecessaryConsent,
   hasResearchConsent,
   needsResearchPrompt,
   setConsent,
+  setMarketingConsentSync,
+  setNecessaryConsentSync,
   _resetConsent,
 } from '../src/index';
 
@@ -166,5 +171,151 @@ describe('@ollie/consent', () => {
     // local state must still update
     const state = await getConsent('u1');
     expect(state.research_optin).toBe(true);
+  });
+});
+
+// ─── Görev 1: synchronous canonical helpers + legacy-key bridge ───────────────
+
+describe('@ollie/consent · sync helpers (Görev 1)', () => {
+  beforeEach(() => _resetConsent());
+  afterEach(() => _resetConsent());
+
+  it('getConsentSync returns the re-prompt sentinel on a brand-new install', () => {
+    const store = memoryStore();
+    const state = getConsentSync(store);
+    expect(state.necessary).toBe(true);
+    expect(state.research_optin).toBeNull();
+    expect(state.set_at).toBe(0);
+  });
+
+  it('hasNecessaryConsent is false on a brand-new install (boot gate shows ConsentScreen)', () => {
+    const store = memoryStore();
+    expect(hasNecessaryConsent(store)).toBe(false);
+  });
+
+  it('hasMarketingConsent defaults to false (default-deny)', () => {
+    const store = memoryStore();
+    expect(hasMarketingConsent(store)).toBe(false);
+  });
+
+  it('reads back a post-pivot canonical row written directly', () => {
+    const store = memoryStore();
+    const row: ConsentState = {
+      necessary: true,
+      marketing: true,
+      research_optin: true,
+      set_at: CONSENT_PIVOT_TS + 5000,
+      v: 1,
+    };
+    store.set(CONSENT_STORE_MODULE, CONSENT_STORE_KEY, row);
+    expect(hasNecessaryConsent(store)).toBe(true);
+    expect(hasMarketingConsent(store)).toBe(true);
+    expect(getConsentSync(store).research_optin).toBe(true);
+  });
+
+  it('legacy bridge: a returning System-A user with shared.consent.necessary keeps necessary', () => {
+    const store = memoryStore();
+    // System A wrote only the raw keys, no canonical consent.state row.
+    store.set('shared', 'consent.necessary', true);
+    store.set('shared', 'consent.marketing', true);
+
+    // Boot gate must see necessary === true (user is NOT bounced to ConsentScreen).
+    expect(hasNecessaryConsent(store)).toBe(true);
+
+    // First canonical read seeds consent.state from the legacy keys.
+    const seeded = getConsentSync(store);
+    expect(seeded.necessary).toBe(true);
+    expect(seeded.marketing).toBe(true);
+    // research_optin is conservatively null → ConsentStep re-prompts.
+    expect(seeded.research_optin).toBeNull();
+
+    // The seed is persisted — a second read comes straight off consent.state.
+    const persisted = store.get<ConsentState | null>(
+      CONSENT_STORE_MODULE,
+      CONSENT_STORE_KEY,
+      null,
+    );
+    expect(persisted?.necessary).toBe(true);
+    expect(persisted?.marketing).toBe(true);
+  });
+
+  it('legacy bridge: no legacy key + no canonical row → necessary stays false', () => {
+    const store = memoryStore();
+    store.set('shared', 'consent.necessary', false);
+    expect(hasNecessaryConsent(store)).toBe(false);
+    expect(getConsentSync(store).necessary).toBe(true); // type-level invariant
+    expect(getConsentSync(store).set_at).toBe(0); // sentinel — nothing persisted
+  });
+
+  it('canonical row wins over a stale legacy key', () => {
+    const store = memoryStore();
+    // Stale legacy key says marketing-off; canonical row says marketing-on.
+    store.set('shared', 'consent.marketing', false);
+    store.set(CONSENT_STORE_MODULE, CONSENT_STORE_KEY, {
+      necessary: true,
+      marketing: true,
+      research_optin: false,
+      set_at: CONSENT_PIVOT_TS + 1000,
+      v: 1,
+    } satisfies ConsentState);
+    expect(hasMarketingConsent(store)).toBe(true);
+  });
+
+  it('setNecessaryConsentSync persists necessary=true to the canonical row', () => {
+    const store = memoryStore();
+    setNecessaryConsentSync(store);
+    const row = store.get<ConsentState | null>(
+      CONSENT_STORE_MODULE,
+      CONSENT_STORE_KEY,
+      null,
+    );
+    expect(row?.necessary).toBe(true);
+    expect(hasNecessaryConsent(store)).toBe(true);
+  });
+
+  it('setMarketingConsentSync writes marketing through; necessary stays true', () => {
+    const store = memoryStore();
+    setMarketingConsentSync(store, false);
+    expect(hasMarketingConsent(store)).toBe(false);
+    expect(hasNecessaryConsent(store)).toBe(true);
+    setMarketingConsentSync(store, true);
+    expect(hasMarketingConsent(store)).toBe(true);
+  });
+
+  it('sync writers preserve research_optin (default-deny: never flips it on)', () => {
+    const store = memoryStore();
+    // Start from an explicit research opt-out.
+    store.set(CONSENT_STORE_MODULE, CONSENT_STORE_KEY, {
+      necessary: true,
+      marketing: false,
+      research_optin: false,
+      set_at: CONSENT_PIVOT_TS + 1000,
+      v: 1,
+    } satisfies ConsentState);
+    setMarketingConsentSync(store, true);
+    setNecessaryConsentSync(store);
+    expect(getConsentSync(store).research_optin).toBe(false);
+  });
+
+  it('pre-pivot canonical row is migrated to research_optin null on sync read', () => {
+    const store = memoryStore();
+    store.set(CONSENT_STORE_MODULE, CONSENT_STORE_KEY, {
+      necessary: true,
+      marketing: true,
+      research_optin: true, // pre-pivot users were implicitly opted in
+      set_at: CONSENT_PIVOT_TS - 1000,
+      v: 1,
+    } satisfies ConsentState);
+    expect(getConsentSync(store).research_optin).toBeNull();
+    expect(getConsentSync(store).marketing).toBe(true);
+  });
+
+  it('sync writers fire the configured durable sync sink', () => {
+    const store = memoryStore();
+    const sync = vi.fn().mockResolvedValue(undefined);
+    configureConsent({ store, sync });
+    setNecessaryConsentSync(store, 'u1');
+    expect(sync).toHaveBeenCalledTimes(1);
+    expect(sync.mock.calls[0][1]).toBe('u1');
   });
 });

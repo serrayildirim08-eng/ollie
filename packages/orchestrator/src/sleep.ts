@@ -13,18 +13,22 @@
  *   socialJetlag           SocialJetlagResult | null from computeSocialJetlag
  *   dspsFlag               DSPSResult | null from detectDSPSPattern
  *   shortSleepRun          ShortSleepRunResult | null from detectShortSleepRun
- *   tonightForecast        ForecastResult | null from forecastTonightTST
+ *   tonightForecast        ForecastResult | null from forecastTonightHeuristic
  *   patterns               AnySleepPattern[] (Phase 1–4 detectors)
  *   patternsLastComputedAt timestamp of most recent recompute
  *   lastRecomputeAt        timestamp of most recent recompute (alias)
+ *   windDownLog            WindDownLogEntry[] appended from sleep:wind_down_step
+ *   insomnia_survey_result InsomniaSurveyResult from scoreInsomniaSurvey
  *
  * Subscriptions:
- *   sleep.records          → schedule recompute
- *   sleep.items            → processBacklog (legacy applyRoute path)
- *   dump.items             → processBacklog
- *   cycle.cycles           → schedule recompute (luteal coupling)
+ *   sleep.records                 → schedule recompute
+ *   sleep.items                   → processBacklog (legacy applyRoute path)
+ *   sleep.insomnia_survey_answers → score "go deeper" insomnia survey
+ *   dump.items                    → processBacklog
+ *   cycle.cycles                  → schedule recompute (luteal coupling)
  *   void:braindump:submitted event → process sleep items + recompute
  *   body:pattern_detected  event  → schedule recompute (cross-feed)
+ *   sleep:wind_down_step   event  → append to windDownLog → friction detector
  */
 
 import type { Store } from '@ollie/store';
@@ -42,7 +46,8 @@ import {
   computeSocialJetlag,
   detectDSPSPattern,
   detectShortSleepRun,
-  forecastTonightTST,
+  forecastTonightHeuristic,
+  scoreInsomniaSurvey,
   detectRevengeBedtime,
   detectCaffeineCutoff,
   detectSleepOnsetGap,
@@ -62,6 +67,7 @@ import type {
   SleepSettings,
   AnySleepPattern,
   CyclePhaseWindow,
+  WindDownLogEntry,
 } from '@ollie/logic/sleep';
 import { computePhaseForDate } from '@ollie/logic/cycle';
 import {
@@ -170,6 +176,47 @@ export function createSleepOrchestrator(
     store.set('sleep', k, v);
   }
 
+  // ── wind-down log ─────────────────────────────────────────────────────────
+  // detectWindDownFriction reads `sleep.windDownLog` — an append-only list of
+  // per-step ritual events. The WindDownChecklist UI emits one
+  // `sleep:wind_down_step` event per item tap; we persist each as a
+  // WindDownLogEntry here. Lifecycle events (started/completed/skipped) are
+  // NOT logged — the detector only consumes `checked`/`unchecked` step rows.
+  const WIND_DOWN_LOG_CAP = 600; // ≈ 6 steps × 14 nights × ~7 — keeps it bounded
+
+  function appendWindDownLog(entry: WindDownLogEntry): void {
+    if (!entry || typeof entry.ts !== 'number' || !isFinite(entry.ts)) return;
+    if (typeof entry.step_id !== 'string' || !entry.step_id) return;
+    if (entry.action !== 'checked' && entry.action !== 'unchecked') return;
+    const log = store.get<WindDownLogEntry[]>('sleep', 'windDownLog', []) ?? [];
+    // Idempotency guard: drop an exact (ts, step_id, action) duplicate so a
+    // re-emitted event can't double-count a step's dwell time.
+    const dup = log.some(
+      (e) => e && e.ts === entry.ts && e.step_id === entry.step_id && e.action === entry.action,
+    );
+    if (dup) return;
+    const next = [...log, entry]
+      .sort((a, b) => (a?.ts ?? 0) - (b?.ts ?? 0))
+      .slice(-WIND_DOWN_LOG_CAP);
+    setKey('windDownLog', next);
+  }
+
+  // ── insomnia survey ───────────────────────────────────────────────────────
+  // The "go deeper" lite survey. The UI writes the raw 0–4 answer array to
+  // `sleep.insomnia_survey_answers`; we score it (pure fn) and write the
+  // derived result to `sleep.insomnia_survey_result` for the card to read.
+  function scoreInsomniaSurveyFromStore(): void {
+    try {
+      const answers = store.get<number[] | null>('sleep', 'insomnia_survey_answers', null);
+      if (!Array.isArray(answers)) return;
+      const result = scoreInsomniaSurvey(answers, getNow());
+      // null = incomplete/invalid; leave any prior result untouched.
+      if (result) setKey('insomnia_survey_result', result);
+    } catch (err) {
+      console.warn('[orchestrator/sleep] insomnia survey scoring failed:', err);
+    }
+  }
+
   // Build a step-function phase array from cycle.cycles for detectCyclePhaseSleepCoupling.
   function buildSleepCyclePhases(
     cycles: unknown[],
@@ -219,10 +266,6 @@ export function createSleepOrchestrator(
       ? records.map((r) => r.night_of === merged.night_of ? merged : r)
       : [...records, merged].sort((a, b) => (a.night_of ?? '').localeCompare(b.night_of ?? ''));
     setRecords(nextRecords);
-
-    try {
-      events.emit('sleep:record_updated', { night_of: merged.night_of, is_partial: merged.is_partial });
-    } catch { /* non-fatal */ }
 
     return { ok: true, night_of: merged.night_of };
   }
@@ -328,9 +371,13 @@ export function createSleepOrchestrator(
           store.set('sleep', '_pacingBreachEmittedAt', now);
         }
       } catch { /* non-fatal */ }
-      // forecastTonightTST requires a PredictApi integration layer; pass null
-      // so the function's own guard returns null until the layer is wired.
-      setKey('tonightForecast', forecastTonightTST(records, null as never));
+      // tonight's TST forecast — local heuristic, no external PredictApi.
+      // Tonight's bedtime falls on today's calendar date, so the
+      // day-of-week target is `new Date(now).getDay()`.
+      setKey(
+        'tonightForecast',
+        forecastTonightHeuristic(records, now, new Date(now).getDay()),
+      );
 
       // Build cross-module inputs.
       const actionLog = store.get<Array<{ ts: number; rawText?: string; undone?: boolean }>>('shared', 'actionLog', []) ?? [];
@@ -357,7 +404,7 @@ export function createSleepOrchestrator(
         ? (rawCycles as Array<{ start_date: string; length_days: number; ovulation_day?: number }>)
         : [];
 
-      const windDownLog = store.get<Array<{ ts: number; step_id: string; step_label?: string; action: string }>>('sleep', 'windDownLog', []) ?? [];
+      const windDownLog = store.get<WindDownLogEntry[]>('sleep', 'windDownLog', []) ?? [];
       const medsLog = store.get<Array<{ ts: number }>>('sleep', 'medsLog', []) ?? [];
 
       const patterns: AnySleepPattern[] = [
@@ -530,6 +577,11 @@ export function createSleepOrchestrator(
     unsubs.push(store.subscribeKey('cycle', 'cycles', () => {
       try { schedule(); } catch (err) { console.error('[orchestrator/sleep] cycle.cycles tick failed', err); }
     }));
+    // "Go deeper" insomnia survey — UI writes raw answers, we score them.
+    unsubs.push(store.subscribeKey('sleep', 'insomnia_survey_answers', () => {
+      try { scoreInsomniaSurveyFromStore(); }
+      catch (err) { console.error('[orchestrator/sleep] insomnia survey tick failed', err); }
+    }));
 
     unsubs.push(
       events.on('void:braindump:submitted', (payload: unknown) => {
@@ -561,6 +613,35 @@ export function createSleepOrchestrator(
     unsubs.push(
       events.on('body:pattern_detected', () => {
         try { schedule(); } catch (err) { console.error('[orchestrator/sleep] body:pattern_detected tick failed', err); }
+      }),
+    );
+
+    // sleep:wind_down_step → append a row to sleep.windDownLog.
+    // The WindDownChecklist UI emits this once per ritual-item tap so the
+    // friction detector has the per-step dwell data it needs. Payload shape:
+    //   { ts, step_id, step_label?, action: 'checked' | 'unchecked' }
+    unsubs.push(
+      events.on('sleep:wind_down_step', (raw: unknown) => {
+        try {
+          const p = (raw ?? {}) as {
+            ts?: number;
+            step_id?: string;
+            step_label?: string;
+            action?: string;
+          };
+          if (typeof p.ts !== 'number' || typeof p.step_id !== 'string') return;
+          if (p.action !== 'checked' && p.action !== 'unchecked') return;
+          appendWindDownLog({
+            ts: p.ts,
+            step_id: p.step_id,
+            step_label: typeof p.step_label === 'string' ? p.step_label : undefined,
+            action: p.action,
+          });
+          // A fresh step row can change the friction verdict — recompute.
+          schedule();
+        } catch (err) {
+          console.error('[orchestrator/sleep] wind_down_step tick failed', err);
+        }
       }),
     );
 

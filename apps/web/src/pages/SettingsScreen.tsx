@@ -10,9 +10,13 @@
  * Consent rewrite (Sprint 6): the per-feature privacy toggles
  * (spending-research / cycle / astrology) have been replaced by the
  * two-toggle consent model written at sign-up by ConsentScreen.
- *   - shared.consent.necessary  — locked-ON in settings; only revocable
- *                                 by deleting the account
- *   - shared.consent.marketing  — bidirectional, default ON
+ *   - necessary  — locked-ON in settings; only revocable by deleting the
+ *                  account
+ *   - marketing  — bidirectional, default ON
+ *
+ * Görev 1 (2026-05-15): both flags persist to the canonical @ollie/consent
+ * `consent.state` row. The marketing toggle below reads/writes that row,
+ * not the legacy `shared.consent.marketing` key.
  *
  * Voice: lowercase labels, sage active, DM Mono caps section headers.
  * Reached from HomeScreen.
@@ -23,21 +27,18 @@ import { getString, type Locale } from '../i18n';
 import type { AuthClient } from '@ollie/auth';
 import { exportBackup, envelopeToFileBytes, defaultFilename, importBackup } from '@ollie/backup';
 import {
+  CONSENT_STORE_KEY,
+  CONSENT_STORE_MODULE,
   getConsent,
   setConsent,
+  setMarketingConsentSync,
   type ConsentState,
 } from '@ollie/consent';
-import { emit as emitEvent } from '@ollie/events';
 import { useStoreSlice, store } from '../store';
 import { SUPPORTED_COUNTRIES } from '../lib/country';
 import { getAccount } from '../lib/account-boot';
 import { readUserHash } from '../lib/user-hash';
 import { getAppVersion } from '../lib/device';
-import {
-  hasSessionPassphrase,
-  setSessionPassphrase,
-  clearSessionPassphrase,
-} from '../lib/encryption-boot';
 import { generateInvite, type InviteRecord } from '../lib/invite';
 
 const APP_VERSION = '0.0.1';
@@ -691,12 +692,25 @@ function PrivacySection() {
   // Consent rewrite (Sprint 6): two toggles only.
   //   - necessary: locked-ON. The only revocation path is delete-account.
   //   - marketing: bidirectional, default ON (set at sign-up by ConsentScreen).
-  const [marketing, setMarketing] = useStoreSlice<boolean>('shared', 'consent.marketing', true);
+  //
+  // Görev 1 (2026-05-15): the marketing flag lives on the canonical
+  // @ollie/consent `consent.state` row. We subscribe to that row reactively
+  // and derive `marketing` from it; the toggle writes back through
+  // setMarketingConsentSync so App.tsx + every other reader stay in sync.
+  const [consentRow] = useStoreSlice<ConsentState | null>(
+    CONSENT_STORE_MODULE,
+    CONSENT_STORE_KEY,
+    null,
+  );
+  const marketing = consentRow?.marketing ?? true;
 
   function handleMarketingChange(next: boolean) {
-    setMarketing(next);
+    // Canonical write — round-trips through @ollie/consent and the
+    // configured Supabase sync sink. The useStoreSlice subscription above
+    // re-renders this section when the consent.state row changes.
+    setMarketingConsentSync(store, next);
     // Consent audit — fire-and-forget. Gated on hasConsent(); every user
-    // reaching Settings has consent.necessary=true so this always fires.
+    // reaching Settings has necessary=true so this always fires.
     const account = getAccount();
     if (!account?.research.hasConsent()) return;
     const userHash = readUserHash();
@@ -874,197 +888,6 @@ function PrivacySection() {
           </p>
         </div>
       </div>
-    </section>
-  );
-}
-
-// ─── Encryption section ──────────────────────────────────────────────────────
-//
-// Wires the AES-GCM-256 snapshot path (work + goals) to a Settings-provided
-// passphrase. The store.ts boot reads sessionStorage at launch; if missing,
-// modules stay plaintext until the user saves a passphrase here. Saving
-// re-invokes bootEncryption() so the encrypted snapshot is restored into the
-// live store before the next render. Clearing requires a reload to drop the
-// decrypted plaintext mirror — we warn the user before reload.
-//
-// Voice: dry editorial, no shame; sage accent on save. Min 8 chars. The
-// confirm input prevents a typo'd passphrase from locking the user out.
-
-function EncryptionSection() {
-  const [open, setOpen] = useState(false);
-  const [pass, setPass] = useState('');
-  const [confirm, setConfirm] = useState('');
-  const [err, setErr] = useState('');
-  const [saving, setSaving] = useState(false);
-  // Force a re-render after save/clear without subscribing to anything —
-  // sessionStorage isn't reactive, so we read at render time + bump a tick
-  // to refresh the status row.
-  const [, setTick] = useState(0);
-  const encrypted = hasSessionPassphrase();
-
-  async function handleSave() {
-    setErr('');
-    if (pass.length < 8) {
-      setErr('passphrase must be 8+ characters');
-      return;
-    }
-    if (pass !== confirm) {
-      setErr('confirm does not match');
-      return;
-    }
-    setSaving(true);
-    try {
-      await setSessionPassphrase(store, pass);
-      setPass('');
-      setConfirm('');
-      setOpen(false);
-      setTick((t) => t + 1);
-    } catch (e) {
-      setErr('save failed: ' + (e as Error).message);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  function handleClear() {
-    const ok = typeof window !== 'undefined'
-      ? window.confirm(
-          'clear passphrase? work + goals data on disk will stay encrypted but ollie won\'t decrypt them this session. the app will reload.',
-        )
-      : true;
-    if (!ok) return;
-    clearSessionPassphrase();
-    if (typeof window !== 'undefined') window.location.reload();
-  }
-
-  return (
-    <section style={styles.section} aria-label="encryption">
-      <h2 style={styles.sectionHeader}>encryption</h2>
-
-      <div style={styles.row}>
-        <div>
-          <p style={styles.rowLabel}>status</p>
-          <p style={styles.rowHint}>
-            {encrypted
-              ? 'work + goals snapshots encrypted at rest with your passphrase'
-              : 'work + goals stored as plaintext on this device'}
-          </p>
-        </div>
-        <span
-          style={{
-            ...styles.rowValue,
-            color: encrypted ? 'var(--accent)' : 'var(--ink-faint)',
-          }}
-        >
-          {encrypted ? 'encrypted' : 'plaintext'}
-        </span>
-      </div>
-
-      <div style={styles.row}>
-        <div>
-          <p style={styles.rowLabel}>{encrypted ? 'change passphrase' : 'set passphrase'}</p>
-          <p style={styles.rowHint}>aes-gcm 256 · derived via pbkdf2 100k iterations</p>
-        </div>
-        <button
-          type="button"
-          onClick={() => { setOpen((o) => !o); setErr(''); }}
-          style={styles.linkBtn}
-        >
-          {open ? 'cancel' : (encrypted ? 'change' : 'set')}
-        </button>
-      </div>
-
-      {open && (
-        <div
-          style={{
-            padding: '20px 0 4px',
-            display: 'grid',
-            gap: '12px',
-          }}
-        >
-          <label style={{ display: 'grid', gap: '6px' }}>
-            <span style={styles.rowHint}>passphrase · 8+ chars</span>
-            <input
-              type="password"
-              value={pass}
-              onChange={(e) => setPass(e.target.value)}
-              autoComplete="new-password"
-              aria-label="encryption passphrase"
-              style={{
-                padding: '10px 12px',
-                background: 'var(--bone)',
-                border: '1px solid var(--rule)',
-                borderRadius: '6px',
-                fontFamily: 'var(--font-mono)',
-                fontSize: 'var(--t-body)',
-                color: 'var(--ink)',
-                outline: 'none',
-              }}
-            />
-          </label>
-          <label style={{ display: 'grid', gap: '6px' }}>
-            <span style={styles.rowHint}>confirm</span>
-            <input
-              type="password"
-              value={confirm}
-              onChange={(e) => setConfirm(e.target.value)}
-              autoComplete="new-password"
-              aria-label="confirm passphrase"
-              onKeyDown={(e) => { if (e.key === 'Enter') void handleSave(); }}
-              style={{
-                padding: '10px 12px',
-                background: 'var(--bone)',
-                border: '1px solid var(--rule)',
-                borderRadius: '6px',
-                fontFamily: 'var(--font-mono)',
-                fontSize: 'var(--t-body)',
-                color: 'var(--ink)',
-                outline: 'none',
-              }}
-            />
-          </label>
-          {err && (
-            <p style={{ ...styles.rowHint, color: 'var(--umber)' }}>{err}</p>
-          )}
-          <div style={{ display: 'flex', gap: '10px' }}>
-            <button
-              type="button"
-              onClick={() => void handleSave()}
-              disabled={saving || !pass || !confirm}
-              style={{
-                padding: '10px 20px',
-                background: saving || !pass || !confirm ? 'transparent' : 'var(--accent)',
-                color: saving || !pass || !confirm ? 'var(--ink-faint)' : 'var(--bone)',
-                border: `1px solid ${saving || !pass || !confirm ? 'var(--rule)' : 'var(--accent)'}`,
-                borderRadius: '20px',
-                fontFamily: 'var(--font-mono)',
-                fontSize: 'var(--t-caption)',
-                letterSpacing: 'var(--ls-caps)',
-                textTransform: 'uppercase',
-                cursor: saving || !pass || !confirm ? 'default' : 'pointer',
-              }}
-            >
-              {saving ? 'saving…' : 'save'}
-            </button>
-          </div>
-          <p style={{ ...styles.rowHint, marginTop: '4px', lineHeight: 1.5 }}>
-            ollie can&apos;t recover this. write it down somewhere safe. losing the
-            passphrase means losing the work + goals data on this device.
-          </p>
-        </div>
-      )}
-
-      {encrypted && !open && (
-        <div style={styles.row}>
-          <div>
-            <p style={styles.rowLabel}>clear passphrase</p>
-            <p style={styles.rowHint}>app reloads · data stays encrypted on disk</p>
-          </div>
-          <button type="button" onClick={handleClear} style={styles.destructive}>
-            clear
-          </button>
-        </div>
-      )}
     </section>
   );
 }
@@ -1385,17 +1208,6 @@ export function ResearchSection({ userId }: ResearchSectionProps) {
     setSaving(true);
     try {
       await setConsent(userId, { research_optin: next });
-      // Read the canonical state back so we surface what was persisted,
-      // not what the user clicked — the package coerces necessary, and
-      // future fields may apply server defaults.
-      const after = await getConsent(userId);
-      emitEvent('consent:set', {
-        necessary: true as const,
-        marketing: after.marketing,
-        research_optin: after.research_optin === true,
-        source: 'settings',
-        ts: Date.now(),
-      });
       setFlipDirection(next ? 'just-on' : 'just-off');
     } catch {
       // setConsent should never reject in practice — local write is sync.
@@ -1563,7 +1375,6 @@ export function SettingsScreen({ auth, onBack, onSignedOut }: SettingsScreenProp
         <FinanceSection />
         <PrivacySection />
         <ResearchSection userId={userId} />
-        <EncryptionSection />
         <AboutSection />
       </div>
     </main>

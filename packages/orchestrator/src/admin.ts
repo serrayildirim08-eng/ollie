@@ -7,6 +7,8 @@
  * Derived keys written (namespace: "admin"):
  *   patterns                AdminPattern[]  collected signals from A1–A15
  *   patternsLastComputedAt  number          wall-clock ts of last run
+ *   phoneTasks              PhoneTaskItem[] "things to handle by phone" cluster,
+ *                                           append-only, fed by admin:phone_task_detected
  *
  * Events emitted:
  *   admin:open_loop_missing     — A1 signal for a new dump
@@ -56,7 +58,22 @@ import type {
 import type { Orchestrator } from './types';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type AdminPattern = { signal: string; ts: number } & Record<string, any>;
+export type AdminPattern = { signal: string; pattern: string; ts: number } & Record<string, any>;
+
+/**
+ * One entry in the admin "handle by phone" cluster. Append-only — written by
+ * the admin:phone_task_detected consumer wired in init(). The UI reads
+ * `admin.phoneTasks` to render the phone-task grouping badge. Deduped by
+ * `id` (`${verb}:${ts}`).
+ */
+export interface PhoneTaskItem {
+  id: string;
+  verb: string;
+  ts: number;
+}
+
+/** Hard cap on the phoneTasks cluster — keeps the store slice bounded. */
+const PHONE_TASKS_CAP = 50;
 
 export interface AdminOrchestratorOptions {
   /** Injected for tests; defaults to Date.now */
@@ -90,24 +107,49 @@ export function createAdminOrchestrator(
     };
   }
 
-  // ── pattern dedup ─────────────────────────────────────────────────────────
+  // ── pattern identity ──────────────────────────────────────────────────────
 
   /**
-   * Returns a stable key for a signal object so we can dedup against the
-   * existing patterns slice without object identity.
+   * Canonical, UI-facing pattern id derived from a detector's `signal` field.
+   * Detectors tag with snake_case `admin_*` signals; the admin UI keys on a
+   * hyphenated `pattern` field with the `admin_` prefix stripped
+   * (e.g. `admin_stale_ball` → `stale-ball`). We derive `pattern` here so the
+   * patterns slice carries one stable identity per notice — the UI dismiss
+   * logic depends on it.
+   */
+  function patternFromSignal(signal: string): string {
+    return signal.replace(/^admin_/, '').replace(/_/g, '-');
+  }
+
+  /**
+   * Returns a stable key for a pattern object so we can dedup against the
+   * existing patterns slice without object identity. Keyed on the canonical
+   * `pattern` id plus a per-notice discriminator (task/dump id) so distinct
+   * notices never collapse into one key.
    */
   function signalKey(s: AdminPattern): string {
-    const base = s['signal'] as string;
+    const base = (s['pattern'] as string | undefined)
+      ?? patternFromSignal((s['signal'] as string | undefined) ?? '');
     if (typeof s['task_id'] === 'string') return `${base}:${s['task_id']}`;
     if (typeof s['dump_id'] === 'string') return `${base}:${s['dump_id']}`;
+    if (typeof s['rule_id'] === 'string') return `${base}:${s['rule_id']}`;
+    if (typeof s['category'] === 'string') return `${base}:${s['category']}`;
     return base;
   }
 
-  /** Safely coerce any signal object to AdminPattern via unknown. */
+  /**
+   * Safely coerce any detector signal object to AdminPattern via unknown.
+   * Always stamps a canonical `pattern` id derived from `signal`, and a `ts`
+   * when one is missing. `signal` is preserved for registry/event parity.
+   */
   function toPattern(s: unknown, extraTs?: number): AdminPattern {
-    const obj = s as Record<string, unknown>;
+    const obj = { ...(s as Record<string, unknown>) };
+    const signal = typeof obj['signal'] === 'string' ? (obj['signal'] as string) : '';
+    if (typeof obj['pattern'] !== 'string') {
+      obj['pattern'] = patternFromSignal(signal);
+    }
     if (extraTs !== undefined && typeof obj['ts'] !== 'number') {
-      return { ...obj, ts: extraTs } as AdminPattern;
+      obj['ts'] = extraTs;
     }
     return obj as AdminPattern;
   }
@@ -339,6 +381,30 @@ export function createAdminOrchestrator(
     schedule();
   }
 
+  // ── admin:phone_task_detected consumer ────────────────────────────────────
+  //
+  // recomputePatterns() emits admin:phone_task_detected for each newly seen
+  // A2 signal. This consumer is the canonical sink: it appends the signal to
+  // the `admin.phoneTasks` cluster the UI reads. Append-only, deduped by
+  // `${verb}:${ts}`, capped at PHONE_TASKS_CAP (newest kept).
+  function onPhoneTaskDetected(raw: unknown): void {
+    try {
+      const p = (raw ?? {}) as { verb?: unknown; ts?: unknown };
+      const verb = typeof p.verb === 'string' ? p.verb : '';
+      const ts = typeof p.ts === 'number' ? p.ts : nowFn();
+      if (!verb) return;
+      const id = `${verb}:${ts}`;
+      const existing = store.get<PhoneTaskItem[]>('admin', 'phoneTasks', []) ?? [];
+      if (existing.some((t) => t.id === id)) return;
+      const next = [...existing, { id, verb, ts }]
+        .sort((a, b) => a.ts - b.ts)
+        .slice(-PHONE_TASKS_CAP);
+      store.set('admin', 'phoneTasks', next);
+    } catch (err) {
+      console.error('[orchestrator/admin] phone_task_detected sink failed', err);
+    }
+  }
+
   // ── lifecycle ─────────────────────────────────────────────────────────────
 
   function init(): void {
@@ -352,6 +418,7 @@ export function createAdminOrchestrator(
     }));
     unsubs.push(store.subscribeKey('dump', 'items', () => schedule()));
     unsubs.push(events.on('void:braindump:submitted', onBraindump));
+    unsubs.push(events.on('admin:phone_task_detected', onPhoneTaskDetected));
 
     recomputePatterns();
     try { detectAppointmentTransitions(); } catch { /* non-fatal */ }

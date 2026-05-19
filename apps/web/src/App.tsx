@@ -19,10 +19,11 @@ import { ConsentScreen } from './components/ConsentScreen';
 import { ConsentStep } from './screens/onboarding/ConsentStep';
 import {
   configureConsent,
-  type ConsentState,
+  getConsentSync,
+  hasNecessaryConsent,
 } from '@ollie/consent';
 import { useApplyBrainDump } from './hooks/useApplyBrainDump';
-import { trackSession } from './lib/retention';
+import { trackSession, makeRetentionBridge } from './lib/retention';
 import { emit as emitEvent } from '@ollie/events';
 import { bootAccount } from './lib/account-boot';
 import { sessionTracker } from './lib/session-tracker';
@@ -38,12 +39,26 @@ const DashboardScreen = lazy(() => import('./pages/DashboardScreen').then(m => (
 const GardenScreen    = lazy(() => import('./pages/GardenScreen').then(m => ({ default: m.GardenScreen })));
 const ModuleScreen    = lazy(() => import('./pages/ModuleScreen').then(m => ({ default: m.ModuleScreen })));
 const SettingsScreen  = lazy(() => import('./pages/SettingsScreen').then(m => ({ default: m.SettingsScreen })));
+const InsightsScreen  = lazy(() => import('./pages/InsightsScreen').then(m => ({ default: m.InsightsScreen })));
+const VoiceScreen     = lazy(() => import('./pages/VoiceScreen').then(m => ({ default: m.VoiceScreen })));
+const GalleryScreen   = lazy(() => import('./pages/GalleryScreen').then(m => ({ default: m.GalleryScreen })));
+const CrisisScreen    = lazy(() => import('./pages/CrisisScreen').then(m => ({ default: m.CrisisScreen })));
 
 function PageLoading() {
   return <div style={{ minHeight: '100vh', background: 'var(--bone)' }} aria-busy="true" />;
 }
 
-type Screen = 'home' | 'dashboard' | 'garden' | 'module' | 'demo' | 'onboarding' | 'settings';
+type Screen =
+  | 'home'
+  | 'dashboard'
+  | 'garden'
+  | 'module'
+  | 'demo'
+  | 'onboarding'
+  | 'settings'
+  | 'insights'
+  | 'voice'
+  | 'gallery';
 
 const eventCount = Object.keys(REGISTRY).length;
 
@@ -145,13 +160,35 @@ function AppInner() {
   const onboardedRaw = store.get<boolean>('shared', 'onboarded', false);
   const [onboarded, setOnboarded] = useState<boolean>(Boolean(onboardedRaw));
 
-  // Consent rewrite (Sprint 6): shared.consent.necessary is the master
-  // gate that replaces the per-feature consent flags. It's one-way (off
-  // → on, no way back without account deletion) and required to enter
-  // the app. Fresh sign-ups land on ConsentScreen before onboarding;
-  // returning users with consent.necessary === true skip it.
-  const necessaryRaw = store.get<boolean>('shared', 'consent.necessary', false);
-  const [consentGiven, setConsentGiven] = useState<boolean>(Boolean(necessaryRaw));
+  // Consent consolidation (Görev 1 · 2026-05-15): @ollie/consent's
+  // `consent.state` row is now the SINGLE canonical source. The old
+  // `shared.consent.necessary` raw key is gone as a read path — the
+  // canonical helpers below read `consent.state` and lazily seed it from
+  // the legacy key for returning users, so an existing `necessary: true`
+  // is preserved across the cutover.
+  //
+  // `necessary` is still the master app-boot gate: one-way (off → on, no
+  // way back without account deletion), required to enter the app. Fresh
+  // sign-ups land on ConsentScreen before onboarding; returning users with
+  // necessary === true skip it.
+  const consentBootedRef = React.useRef(false);
+  if (!consentBootedRef.current) {
+    // Sprint B'' Item 4: the `sync` arg is the durable Supabase sink. Without
+    // it, @ollie/consent only writes through to the local store and the
+    // consent_audit row never lands. The sink reads VITE_AI_WORKER_URL at
+    // call-time, so pre-auth writes (no user_hash yet) silently no-op and
+    // production writes flow through ai-proxy /ingest-event → Supabase.
+    //
+    // Must run BEFORE the first canonical read so the lazy legacy-key
+    // migration inside getConsentSync()/hasNecessaryConsent() is visible
+    // to every downstream consumer (research-stream, sync, ConsentScreen).
+    configureConsent({ store, sync: createConsentSync() });
+    consentBootedRef.current = true;
+  }
+
+  const [consentGiven, setConsentGiven] = useState<boolean>(
+    () => hasNecessaryConsent(store),
+  );
 
   // Sprint B' (pivot 2026-05-14): research opt-in gate. Reads the
   // canonical @ollie/consent state. Three signals:
@@ -160,27 +197,19 @@ function AppInner() {
   //   - false → opted out → research paths no-op
   //
   // Pre-pivot users (Sprint 6 returning) come in with set_at before
-  // the pivot date; @ollie/consent's getConsent() migrates them to
-  // research_optin: null so the UI re-prompts.
-  const consentBootedRef = React.useRef(false);
-  if (!consentBootedRef.current) {
-    // Sprint B'' Item 4: the `sync` arg is the durable Supabase sink. Without
-    // it, @ollie/consent only writes through to the local store and the
-    // consent_audit row never lands. The sink reads VITE_AI_WORKER_URL at
-    // call-time, so pre-auth writes (no user_hash yet) silently no-op and
-    // production writes flow through ai-proxy /ingest-event → Supabase.
-    configureConsent({ store, sync: createConsentSync() });
-    consentBootedRef.current = true;
-  }
-  const consentPersisted = store.get<ConsentState | null>('consent', 'state', null);
-  const initialResearchOptin: boolean | null =
-    consentPersisted?.research_optin ?? null;
+  // the pivot date; getConsentSync() migrates them to research_optin: null
+  // so the UI re-prompts.
+  const consentSnapshot = getConsentSync(store);
   const [researchOptin, setResearchOptin] = useState<boolean | null>(
-    initialResearchOptin,
+    () => consentSnapshot.research_optin,
   );
 
   const [screen, setScreen] = useState<Screen>('home');
   const [selectedModule, setSelectedModule] = useState<string>('');
+  // Crisis surface — an always-available calm full-screen layer. Kept
+  // OUT of the Screen union and rendered above every gate so it works
+  // even pre-auth / pre-consent. Zero telemetry by construction.
+  const [crisisOpen, setCrisisOpen] = useState<boolean>(false);
   const [visits, setVisits] = useStoreSlice<number>('shared', 'visit_count', 0);
   const toast = useToast();
   const demoTileRef = React.useRef<HTMLDivElement>(null);
@@ -196,13 +225,9 @@ function AppInner() {
     return () => off();
   }, [toast]);
 
-  // Retention markers — fires once per app mount. Emits
-  // void:retention:installed on fresh install, session_started every
-  // time, d1_returned the first time the user comes back ≥24h after
-  // install, d7_returned at ≥7d. Local-only until backend lands.
-  React.useEffect(() => {
-    trackSession(store, emitEvent);
-  }, []);
+  // Retention markers run once, after auth+consent (see effect below) so
+  // a user_hash exists for the server bridge.
+  const retentionRanRef = React.useRef(false);
 
   // Session telemetry — emits session_events start row once auth +
   // consent are confirmed, and an end row on tab close / background.
@@ -214,6 +239,23 @@ function AppInner() {
     const research = accountRef.current.research;
     const userHash = readUserHash() ?? '';
     const country = store.get<string>('shared', 'settings.country', 'INTL') ?? 'INTL';
+
+    // Retention: fan void:retention:* to retention_events via the bridge.
+    // Once per mount; local markers always emit, server rows need user_hash.
+    if (!retentionRanRef.current) {
+      retentionRanRef.current = true;
+      trackSession(
+        store,
+        makeRetentionBridge(emitEvent, research, () => ({
+          user_hash: readUserHash() ?? '',
+          device_id: getDeviceId(),
+          country,
+          locale: typeof navigator !== 'undefined' ? navigator.language : 'en',
+          app_version: getAppVersion(),
+        })),
+      );
+    }
+
     sessionTracker.start(research, {
       user_hash: userHash,
       country,
@@ -295,6 +337,21 @@ function AppInner() {
 
   let content: React.ReactNode;
 
+  // Crisis surface — rendered ABOVE every gate (auth / consent /
+  // onboarding) so it is reachable in any app state. CrisisScreen does
+  // zero telemetry and zero network by construction (see its header).
+  // It paints itself as a fixed full-screen layer at z-index 9000.
+  if (crisisOpen) {
+    return (
+      <>
+        <Suspense fallback={<PageLoading />}>
+          <CrisisScreen onClose={() => setCrisisOpen(false)} />
+        </Suspense>
+        {!SUPABASE_CONFIGURED && <DevModeBanner />}
+      </>
+    );
+  }
+
   // Auth gate runs BEFORE onboarding. A session is required to encrypt
   // anything (sync/backup/research). Sign-up + sign-in is Pattern A:
   // passphrase never leaves the device.
@@ -349,12 +406,13 @@ function AppInner() {
           userId={userId}
           source={source}
           initial={{
-            marketing: consentPersisted?.marketing ?? false,
+            marketing: consentSnapshot.marketing,
             research_optin: false,
           }}
           onContinue={() => {
-            const written = store.get<ConsentState | null>('consent', 'state', null);
-            setResearchOptin(written?.research_optin ?? false);
+            // Re-read the canonical row after ConsentStep persisted it.
+            const written = getConsentSync(store);
+            setResearchOptin(written.research_optin ?? false);
           }}
         />
         <ToastHost />
@@ -392,9 +450,37 @@ function AppInner() {
             if (to === 'dashboard') setScreen('dashboard');
             else if (to === 'garden') setScreen('garden');
             else if (to === 'settings') setScreen('settings');
+            else if (to === 'insights') setScreen('insights');
+            else if (to === 'voice') setScreen('voice');
+            else if (to === 'gallery') setScreen('gallery');
           }}
           onBrainDump={homeDump}
+          onCrisis={() => setCrisisOpen(true)}
         />
+      </Suspense>
+    );
+  } else if (screen === 'insights') {
+    content = (
+      <Suspense fallback={<PageLoading />}>
+        <InsightsScreen onNavigate={() => setScreen('home')} />
+      </Suspense>
+    );
+  } else if (screen === 'voice') {
+    content = (
+      <Suspense fallback={<PageLoading />}>
+        <VoiceScreen
+          onNavigate={() => setScreen('home')}
+          onApply={(text) => {
+            sessionTracker.onBrainDump('voice');
+            void apply(text);
+          }}
+        />
+      </Suspense>
+    );
+  } else if (screen === 'gallery') {
+    content = (
+      <Suspense fallback={<PageLoading />}>
+        <GalleryScreen onNavigate={() => setScreen('home')} />
       </Suspense>
     );
   } else if (screen === 'settings') {
@@ -625,10 +711,11 @@ function AppInner() {
           Only rendered after onboarding is complete (this return block is
           only reached when onboarded === true). */}
       <Day30Prompt />
-      {/* MicButton — push-to-talk, hidden when onboarding.
+      {/* MicButton — push-to-talk, hidden when onboarding and on the
+          dedicated VoiceScreen (which has its own capture control).
           Shows "heard · …" so user can tell a transcription miss from
           a routing miss before the apply pipeline runs. */}
-      {onboarded && screen !== 'onboarding' && (
+      {onboarded && screen !== 'onboarding' && screen !== 'voice' && (
         <MicButton onTranscript={(text) => {
           sessionTracker.onBrainDump('voice');
           toast.show(`heard · ${text}`, { module: 'voice', ttl: 6000 });
