@@ -61,6 +61,7 @@ import { OnboardingScreen } from './pages/OnboardingScreen';
 import { DevModeBanner } from './components/DevModeBanner';
 import { AppServicesProvider, useAppServices } from './app-services';
 import { CLERK_CONFIGURED } from './app-gates';
+import { useIsWideViewport } from './lib/useIsWideViewport';
 
 // ─── lazy page imports ────────────────────────────────────────────────────────
 
@@ -73,6 +74,12 @@ const CrisisScreen    = lazy(() => import('./pages/CrisisScreen').then(m => ({ d
 // `*-v2` modules behind one navigation host (capture deck · module rooms
 // · Find · Safe). The old hand-built screens are no longer routed.
 const ShellApp        = lazy(() => import('./modules/v2-shell').then(m => ({ default: m.ShellApp })));
+
+// The WIDE-VIEWPORT alternative to `ShellApp` — the "thin spine" desktop
+// layout. Same props interface (`ShellAppProps`); `ShellHostRoute` picks
+// it when `window.innerWidth >= 900` and falls back to `ShellApp` (the
+// phone single-column layout) when narrow, switching live on resize.
+const DesktopShell    = lazy(() => import('./modules/v2-shell').then(m => ({ default: m.DesktopShell })));
 
 // Dev-only preview of the clean-slate v2 money rebuild. Lazy + isolated:
 // the chunk is only fetched when `/preview/money` is opened, and the route
@@ -476,12 +483,19 @@ function NotificationPrimerGate() {
  * pipeline; `onSafe` opens the crisis surface; `onSettings` opens the
  * (still hand-built) settings screen, reached from the shell's modules
  * panel. The shell owns all in-app navigation internally.
+ *
+ * WIDTH SWITCH — a wide viewport (Electron desktop, ≥ 900px) gets the
+ * `DesktopShell` "thin spine" layout; a narrow viewport (the iPhone
+ * Capacitor shell) keeps the phone `ShellApp`. Both take the identical
+ * props, so the switch is a straight component swap.
  */
 function ShellHostRoute() {
   const navigate = useNavigate();
   const { applyDump } = useAppServices();
+  const wide = useIsWideViewport();
+  const Shell = wide ? DesktopShell : ShellApp;
   return (
-    <ShellApp
+    <Shell
       onThrow={(text) => applyDump(text, 'text')}
       onSafe={() => navigate('/crisis')}
       onSettings={() => navigate('/settings')}
