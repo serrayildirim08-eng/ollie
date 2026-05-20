@@ -8,7 +8,8 @@
   "scripts": {
     "dev": "electron .",
     "typecheck": "tsc --noEmit",
-    "build:mac": "electron-builder --mac --x64 --arm64",
+    "build:ai-helper": "swift build -c release --package-path native/ollie-ai-helper",
+    "build:mac": "npm run build:ai-helper && electron-builder --mac --x64 --arm64",
     "build:win": "electron-builder --win",
     "build:linux": "electron-builder --linux",
     "build:all": "electron-builder -mwl"
@@ -36,6 +37,10 @@
         "from": "../web/dist",
         "to": "web/dist",
         "filter": ["**/*"]
+      },
+      {
+        "from": "native/ollie-ai-helper/.build/release/ollie-ai-helper",
+        "to": "ollie-ai-helper/ollie-ai-helper"
       }
     ],
     "asar": true,
