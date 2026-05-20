@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>ollie desktop · safe</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --card:#FFFFFF; --tile:#F2EEDF;
+    --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E; --umber:#A8703C;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+    --mono:ui-monospace,'SF Mono',Menlo,monospace;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{width:100%;height:100%;overflow:hidden;}
+  body{background:var(--paper);font-family:var(--sans);color:var(--ink);
+    -webkit-font-smoothing:antialiased;}
+  .app{display:flex;width:100vw;height:100dvh;}
+
+  /* ─── THIN SPINE ─── */
+  .spine{width:clamp(60px,4.6vw,92px);height:100%;background:var(--tile);
+    border-right:1px solid var(--line);flex-shrink:0;
+    display:flex;flex-direction:column;align-items:center;
+    padding:clamp(26px,2.2vw,40px) 0 clamp(22px,1.8vw,34px);}
+  .mark{font-family:var(--sans);font-size:clamp(20px,1.7vw,30px);
+    font-weight:400;color:var(--ink);line-height:1;}
+  .glyphs{margin-top:clamp(74px,6vw,108px);display:flex;
+    flex-direction:column;align-items:center;gap:clamp(34px,2.8vw,50px);}
+  .glyph{width:clamp(24px,2vw,34px);height:clamp(24px,2vw,34px);
+    display:flex;align-items:center;justify-content:center;cursor:pointer;}
+  .glyph svg{display:block;width:clamp(18px,1.5vw,26px);
+    height:clamp(18px,1.5vw,26px);}
+  .spine-foot{margin-top:auto;display:flex;flex-direction:column;
+    align-items:center;gap:clamp(18px,1.5vw,28px);}
+  .kbd{font-family:var(--mono);font-size:clamp(9px,0.75vw,13px);
+    color:var(--mute);letter-spacing:.04em;}
+
+  /* ─── CANVAS ─── */
+  .canvas{flex:1;height:100%;background:var(--paper);
+    display:flex;align-items:center;justify-content:center;
+    padding:clamp(40px,5vw,110px);}
+  .measure{width:clamp(480px,36vw,680px);display:flex;
+    flex-direction:column;align-items:center;text-align:center;}
+  .line{font-family:var(--sans);font-size:clamp(27px,2.2vw,42px);
+    font-weight:300;letter-spacing:-.015em;line-height:1.4;color:var(--ink);}
+  .body{font-family:var(--sans);font-size:clamp(15px,1.2vw,22px);
+    font-weight:300;line-height:1.65;color:var(--mute);
+    margin-top:clamp(22px,1.8vw,34px);}
+  .help{margin-top:clamp(54px,4.4vw,84px);display:flex;
+    flex-direction:column;align-items:center;gap:clamp(5px,0.4vw,9px);}
+  .help-label{font-family:var(--sans);font-size:clamp(17px,1.35vw,26px);
+    font-weight:300;color:var(--sage);cursor:pointer;}
+  .help-sub{font-family:var(--mono);font-size:clamp(11px,0.9vw,15px);
+    letter-spacing:.06em;color:var(--mute);}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- THIN SPINE -->
+  <aside class="spine">
+    <div class="mark">o</div>
+    <nav class="glyphs">
+      <div class="glyph" title="throw">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none"
+          stroke="#B6ADA0" stroke-width="1.5">
+          <circle cx="9" cy="9" r="5"/>
+        </svg>
+      </div>
+      <div class="glyph" title="modules">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none"
+          stroke="#B6ADA0" stroke-width="1.5">
+          <circle cx="5" cy="5" r="2.4"/><circle cx="13" cy="5" r="2.4"/>
+          <circle cx="5" cy="13" r="2.4"/><circle cx="13" cy="13" r="2.4"/>
+        </svg>
+      </div>
+      <div class="glyph" title="noticed">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none"
+          stroke="#B6ADA0" stroke-width="1.5" stroke-linecap="round">
+          <path d="M2 12c2.5-6 4.5-6 7-3s4.5 3 7-3"/>
+        </svg>
+      </div>
+      <div class="glyph" title="find  ⌘K">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none"
+          stroke="#B6ADA0" stroke-width="1.5" stroke-linecap="round">
+          <circle cx="8" cy="8" r="5"/><path d="M15 15l-3.5-3.5"/>
+        </svg>
+      </div>
+    </nav>
+    <div class="spine-foot">
+      <div class="glyph" title="safe">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+          <path d="M9 2l5 2v5c0 4-5 7-5 7s-5-3-5-7V4z" stroke="#C9923E"
+            stroke-width="1.8" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <div class="kbd">⌘K</div>
+    </div>
+  </aside>
+
+  <!-- CANVAS -->
+  <main class="canvas">
+    <div class="measure">
+      <div class="line">it's good that you came here.</div>
+      <div class="body">there's no rush, and nothing to sort out.
+        if you'd like to talk to someone, they're ready when you are.</div>
+
+      <div class="help">
+        <div class="help-label">reach a person now</div>
+        <div class="help-sub">call or text 988 · open 24 hours</div>
+      </div>
+    </div>
+  </main>
+
+</div>
+</body>
+</html>

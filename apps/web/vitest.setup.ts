@@ -44,6 +44,25 @@ if (typeof window !== 'undefined') {
   Object.defineProperty(window, 'localStorage', { value: ls, configurable: true });
 }
 
+/**
+ * Pin a PHONE-width viewport as the test default.
+ *
+ * jsdom reports a 1024px `window.innerWidth`, which is above the 900px
+ * `DESKTOP_MIN_WIDTH` floor — so `useIsWideViewport()` would default every
+ * component tree to the desktop layout. The v2 module + primitive suites
+ * (e.g. the `<Screen>` tests asserting the phone Find/Safe corner dots)
+ * are written against the phone layout, which is the right default: the
+ * app is phone-first. Tests that must exercise the desktop layout set a
+ * wide `innerWidth` + dispatch a `resize` event themselves.
+ */
+if (typeof window !== 'undefined') {
+  Object.defineProperty(window, 'innerWidth', {
+    value: 390,
+    writable: true,
+    configurable: true,
+  });
+}
+
 // Each test starts with a clean storage so boot side-effects don't leak.
 beforeEach(() => {
   ls.clear();
