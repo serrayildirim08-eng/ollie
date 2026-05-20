@@ -32,4 +32,18 @@ contextBridge.exposeInMainWorld('ollie', {
       return () => ipcRenderer.removeListener('ollie:hotkey', handler);
     },
   },
+  ai: {
+    // Apple Intelligence bridge — the macOS desktop equivalent of the iOS
+    // `OllieAI` Capacitor plugin. The main process spawns a native Swift
+    // CLI (`ollie-ai-helper`) that talks to Apple's on-device
+    // FoundationModels framework. lib/ollie-ai.ts detects this surface and
+    // routes through it; absent on web / Capacitor builds, where it falls
+    // back to the Capacitor plugin or the keyword router.
+    //   available()            → { available, reason? }
+    //   route({text,modules})  → { routes: [{module,text,confidence}] } | null
+    //   extract({text,kind})   → grocery/finance shape | null
+    available: () => ipcRenderer.invoke('ollie:ai:available'),
+    route: (options) => ipcRenderer.invoke('ollie:ai:route', options),
+    extract: (options) => ipcRenderer.invoke('ollie:ai:extract', options),
+  },
 });

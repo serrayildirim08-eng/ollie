@@ -6,6 +6,7 @@
 
 const { app, BrowserWindow, Menu, Notification, globalShortcut, ipcMain, shell } = require('electron');
 const path = require('path');
+const { spawn } = require('child_process');
 
 const isDev = !app.isPackaged;
 
@@ -268,6 +269,153 @@ ipcMain.handle('ollie:voice:startDictation', () => {
 });
 
 ipcMain.handle('ollie:voice:stopDictation', () => ({ ok: true }));
+
+// ----- Apple Intelligence bridge (FoundationModels) ---------------------
+// The Electron build loads the web bundle and is NOT Capacitor, so the iOS
+// `OllieAI` Capacitor plugin cannot run here. Instead we ship a native
+// macOS Swift CLI — `ollie-ai-helper` — that talks to Apple's on-device
+// FoundationModels framework (macOS 26 Apple Intelligence).
+//
+// Protocol: spawn the helper, write one JSON request to its stdin, read
+// one JSON response from stdout (spawn-per-call). The helper logic is the
+// macOS port of OllieAIPlugin.swift. See native/ollie-ai-helper/.
+//
+// IPC contract — matches window.ollie.ai in preload.js / lib/ollie-ai.ts:
+//   window.ollie.ai.available()             → { available, reason? }
+//   window.ollie.ai.route({text,modules})   → { routes: [{module,text,confidence}] } | null
+//   window.ollie.ai.extract({text,kind})    → grocery/finance shape | null
+//
+// Every handler resolves a safe shape on any spawn/parse error — it never
+// throws. The renderer (lib/ollie-ai.ts) then degrades to the keyword
+// router exactly as it does on web / old iOS.
+
+/**
+ * Resolve the absolute path to the `ollie-ai-helper` binary.
+ *   - dev      → SwiftPM release-build output under native/ollie-ai-helper
+ *   - packaged → copied into the .app's Resources via electron-builder
+ *                extraResources (build.extraResources in package.json)
+ */
+function ollieAiHelperPath() {
+  if (isDev) {
+    return path.join(
+      __dirname,
+      'native',
+      'ollie-ai-helper',
+      '.build',
+      'release',
+      'ollie-ai-helper',
+    );
+  }
+  return path.join(process.resourcesPath, 'ollie-ai-helper', 'ollie-ai-helper');
+}
+
+/**
+ * Spawn the helper with one JSON request, return the parsed JSON response.
+ * Never rejects — resolves `null` on any spawn / timeout / parse failure so
+ * callers can fall back cleanly.
+ */
+function runOllieAiHelper(request) {
+  return new Promise((resolve) => {
+    let child;
+    try {
+      child = spawn(ollieAiHelperPath(), [], { stdio: ['pipe', 'pipe', 'pipe'] });
+    } catch (err) {
+      console.warn('[ollie:ai] spawn failed:', err && err.message);
+      resolve(null);
+      return;
+    }
+
+    let stdout = '';
+    let stderr = '';
+    let settled = false;
+
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+    };
+
+    // FoundationModels generation is fast on M-series but guard anyway.
+    const timer = setTimeout(() => {
+      try { child.kill('SIGKILL'); } catch (_e) { /* noop */ }
+      console.warn('[ollie:ai] helper timed out');
+      finish(null);
+    }, 30000);
+
+    child.stdout.on('data', (d) => { stdout += d.toString(); });
+    child.stderr.on('data', (d) => { stderr += d.toString(); });
+
+    child.on('error', (err) => {
+      clearTimeout(timer);
+      console.warn('[ollie:ai] helper process error:', err && err.message);
+      finish(null);
+    });
+
+    child.on('close', () => {
+      clearTimeout(timer);
+      if (stderr.trim()) console.warn('[ollie:ai] helper stderr:', stderr.trim());
+      try {
+        const parsed = JSON.parse(stdout.trim());
+        finish(parsed);
+      } catch (err) {
+        console.warn('[ollie:ai] helper output parse failed:', err && err.message, '· raw:', stdout.slice(0, 200));
+        finish(null);
+      }
+    });
+
+    try {
+      child.stdin.write(JSON.stringify(request));
+      child.stdin.end();
+    } catch (err) {
+      clearTimeout(timer);
+      console.warn('[ollie:ai] helper stdin write failed:', err && err.message);
+      try { child.kill('SIGKILL'); } catch (_e) { /* noop */ }
+      finish(null);
+    }
+  });
+}
+
+ipcMain.handle('ollie:ai:available', async () => {
+  const res = await runOllieAiHelper({ cmd: 'available' });
+  if (!res || typeof res.available !== 'boolean') {
+    return { available: false, reason: 'helper-unavailable' };
+  }
+  return { available: res.available, reason: res.reason };
+});
+
+ipcMain.handle('ollie:ai:route', async (_event, options) => {
+  const text = options && typeof options.text === 'string' ? options.text : '';
+  const modules =
+    options && Array.isArray(options.modules)
+      ? options.modules.filter((m) => typeof m === 'string')
+      : [];
+  if (!text.trim() || modules.length === 0) return null;
+  const res = await runOllieAiHelper({ cmd: 'route', text, modules });
+  if (!res || res.error || !Array.isArray(res.routes)) return null;
+  // The helper is multi-route: it splits the dump into distinct thoughts
+  // and returns one {module,text,confidence} item per thought. Pass the
+  // list straight through — lib/ollie-ai.ts normalises it.
+  const routes = res.routes
+    .filter(
+      (r) =>
+        r &&
+        typeof r.module === 'string' &&
+        typeof r.text === 'string' &&
+        typeof r.confidence === 'number',
+    )
+    .map((r) => ({ module: r.module, text: r.text, confidence: r.confidence }));
+  if (routes.length === 0) return null;
+  return { routes };
+});
+
+ipcMain.handle('ollie:ai:extract', async (_event, options) => {
+  const text = options && typeof options.text === 'string' ? options.text : '';
+  const kind = options && typeof options.kind === 'string' ? options.kind : '';
+  if (!text.trim() || !kind) return null;
+  const res = await runOllieAiHelper({ cmd: 'extract', text, kind });
+  if (!res || res.error) return null;
+  return res;
+});
 
 // ----- lifecycle --------------------------------------------------------
 if (gotTheLock) {

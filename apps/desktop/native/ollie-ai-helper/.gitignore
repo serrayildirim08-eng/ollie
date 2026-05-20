@@ -1,0 +1,5 @@
+# SwiftPM build artifacts — the ollie-ai-helper binary is built on demand
+# (npm run build:ai-helper) and shipped via electron-builder extraResources.
+.build/
+.swiftpm/
+Package.resolved
