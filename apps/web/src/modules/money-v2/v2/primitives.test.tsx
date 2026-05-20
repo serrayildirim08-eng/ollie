@@ -60,6 +60,41 @@ describe('Screen', () => {
     act(() => find.click());
     expect(found).toBe(true);
   });
+
+  it('drops the phone chrome on a wide viewport', () => {
+    // vitest.setup pins a 390px phone viewport; widen it past the 900px
+    // desktop floor + fire a resize so `useIsWideViewport()` flips.
+    const original = window.innerWidth;
+    try {
+      Object.defineProperty(window, 'innerWidth', {
+        value: 1280,
+        writable: true,
+        configurable: true,
+      });
+      act(() => {
+        window.dispatchEvent(new Event('resize'));
+        root.render(
+          <Screen label="money" onFind={() => {}} onSafe={() => {}}>
+            <div>body</div>
+          </Screen>,
+        );
+      });
+      // desktop mode: the editorial page, no phone Find/Safe corner dots
+      expect(container.querySelector('[data-testid="v2-screen-desktop"]')).not.toBeNull();
+      expect(container.querySelector('[aria-label="find"]')).toBeNull();
+      expect(container.querySelector('[aria-label="safe"]')).toBeNull();
+      // the who label + body still render
+      expect(container.textContent).toContain('money');
+      expect(container.textContent).toContain('body');
+    } finally {
+      Object.defineProperty(window, 'innerWidth', {
+        value: original,
+        writable: true,
+        configurable: true,
+      });
+      act(() => window.dispatchEvent(new Event('resize')));
+    }
+  });
 });
 
 describe('HeroNumber', () => {

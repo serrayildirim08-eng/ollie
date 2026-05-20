@@ -11,6 +11,9 @@
  */
 export { ShellApp } from './ShellApp';
 export type { ShellAppProps } from './ShellApp';
+// the wide-viewport ("thin spine") alternative to ShellApp — same props,
+// picked by router.tsx's ShellHostRoute at window.innerWidth >= 900.
+export { DesktopShell } from './DesktopShell';
 export type {
   DeckScreen,
   ModuleKey,

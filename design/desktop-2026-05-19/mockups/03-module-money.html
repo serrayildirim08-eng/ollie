@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>ollie desktop · money</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --card:#FFFFFF; --tile:#F2EEDF;
+    --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E; --umber:#A8703C;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+    --mono:ui-monospace,'SF Mono',Menlo,monospace;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{width:100%;height:100%;overflow:hidden;}
+  body{background:var(--paper);font-family:var(--sans);color:var(--ink);
+    -webkit-font-smoothing:antialiased;}
+  .app{display:flex;width:100vw;height:100dvh;}
+
+  /* ─── THIN SPINE ─── */
+  .spine{width:clamp(60px,4.6vw,92px);height:100%;background:var(--tile);
+    border-right:1px solid var(--line);flex-shrink:0;
+    display:flex;flex-direction:column;align-items:center;
+    padding:clamp(26px,2.2vw,40px) 0 clamp(22px,1.8vw,34px);}
+  .mark{font-family:var(--sans);font-size:clamp(20px,1.7vw,30px);
+    font-weight:400;color:var(--ink);line-height:1;}
+  .glyphs{margin-top:clamp(74px,6vw,108px);display:flex;
+    flex-direction:column;align-items:center;gap:clamp(34px,2.8vw,50px);}
+  .glyph{width:clamp(24px,2vw,34px);height:clamp(24px,2vw,34px);
+    display:flex;align-items:center;justify-content:center;cursor:pointer;}
+  .glyph svg{display:block;width:clamp(18px,1.5vw,26px);
+    height:clamp(18px,1.5vw,26px);}
+  .spine-foot{margin-top:auto;display:flex;flex-direction:column;
+    align-items:center;gap:clamp(18px,1.5vw,28px);}
+  .kbd{font-family:var(--mono);font-size:clamp(9px,0.75vw,13px);
+    color:var(--mute);letter-spacing:.04em;}
+
+  /* ─── CANVAS ─── */
+  .canvas{flex:1;height:100%;background:var(--paper);
+    display:flex;align-items:center;justify-content:center;
+    padding:clamp(40px,5vw,110px);}
+  .measure{width:clamp(560px,42vw,820px);}
+  .eyebrow{font-family:var(--mono);font-size:clamp(10px,0.85vw,14px);
+    letter-spacing:.22em;text-transform:uppercase;color:var(--mute);
+    margin-bottom:clamp(34px,2.8vw,52px);}
+
+  /* the one focus */
+  .figure{font-family:var(--sans);font-size:clamp(64px,5.4vw,104px);
+    font-weight:300;letter-spacing:-.03em;color:var(--ink);line-height:1;}
+  .figure .of{color:var(--mute);}
+  .figure-cap{font-family:var(--sans);font-size:clamp(14px,1.1vw,20px);
+    font-weight:300;color:var(--mute);margin-top:clamp(14px,1.2vw,22px);}
+  .bar{margin-top:clamp(24px,2vw,38px);height:clamp(3px,0.25vw,5px);
+    background:var(--line);position:relative;}
+  .bar-fill{position:absolute;left:0;top:0;bottom:0;width:71%;
+    background:var(--accent);}
+
+  /* two quiet rows */
+  .rows{margin-top:clamp(60px,5vw,96px);border-top:1px solid var(--line);}
+  .row{display:flex;justify-content:space-between;align-items:baseline;
+    padding:clamp(22px,1.8vw,34px) 0;border-bottom:1px solid var(--line);
+    cursor:pointer;}
+  .row-label{font-family:var(--sans);font-size:clamp(15px,1.15vw,22px);
+    font-weight:300;color:var(--ink);}
+  .row-value{font-family:var(--sans);font-size:clamp(15px,1.15vw,22px);
+    font-weight:300;color:var(--mute);}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- THIN SPINE -->
+  <aside class="spine">
+    <div class="mark">o</div>
+    <nav class="glyphs">
+      <div class="glyph" title="throw">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none"
+          stroke="#B6ADA0" stroke-width="1.5">
+          <circle cx="9" cy="9" r="5"/>
+        </svg>
+      </div>
+      <div class="glyph" title="modules">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+          <circle cx="5" cy="5" r="2.4" fill="#C9923E"/>
+          <circle cx="13" cy="5" r="2.4" fill="#C9923E"/>
+          <circle cx="5" cy="13" r="2.4" fill="#C9923E"/>
+          <circle cx="13" cy="13" r="2.4" fill="#C9923E"/>
+        </svg>
+      </div>
+      <div class="glyph" title="noticed">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none"
+          stroke="#B6ADA0" stroke-width="1.5" stroke-linecap="round">
+          <path d="M2 12c2.5-6 4.5-6 7-3s4.5 3 7-3"/>
+        </svg>
+      </div>
+      <div class="glyph" title="find  ⌘K">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none"
+          stroke="#B6ADA0" stroke-width="1.5" stroke-linecap="round">
+          <circle cx="8" cy="8" r="5"/><path d="M15 15l-3.5-3.5"/>
+        </svg>
+      </div>
+    </nav>
+    <div class="spine-foot">
+      <div class="glyph" title="safe">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none"
+          stroke="#B6ADA0" stroke-width="1.5" stroke-linejoin="round">
+          <path d="M9 2l5 2v5c0 4-5 7-5 7s-5-3-5-7V4z"/>
+        </svg>
+      </div>
+      <div class="kbd">⌘K</div>
+    </div>
+  </aside>
+
+  <!-- CANVAS -->
+  <main class="canvas">
+    <div class="measure">
+      <div class="eyebrow">money</div>
+
+      <div class="figure">$1,840 <span class="of">of $2,600</span></div>
+      <div class="figure-cap">spent this month — you have room left.</div>
+      <div class="bar"><div class="bar-fill"></div></div>
+
+      <div class="rows">
+        <div class="row">
+          <span class="row-label">set aside</span>
+          <span class="row-value">$320 this month</span>
+        </div>
+        <div class="row">
+          <span class="row-label">subscriptions</span>
+          <span class="row-value">7 active · one unused</span>
+        </div>
+      </div>
+    </div>
+  </main>
+
+</div>
+</body>
+</html>
