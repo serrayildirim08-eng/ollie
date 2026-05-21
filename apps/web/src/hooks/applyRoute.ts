@@ -24,11 +24,77 @@ import {
   type DispatchOptions,
   type GroceryListContext,
   type GroceryPurchaseEvent,
+  type GroceryMutationEntry,
+  type GroceryMutationReverse,
 } from '@ollie/orchestrator';
 import { getAuthJwt } from '../lib/account-boot';
+import { pushUndo } from '../lib/grocery-undo-stack';
 
 /** Hard cap on items shipped in the worker prompt — matches LIST_CONTEXT_CAP. */
 const GROCERY_CONTEXT_CAP = 50;
+
+// ─── Grocery undo reverse applier ─────────────────────────────────────────────
+
+type ShoppingItem = { id: string; name: string; canonical?: string | null; ts: number; checked: boolean };
+type PantryItem = { id: string; name: string; canonical?: string | null; ts: number; boughtTs: number };
+
+/**
+ * Apply a GroceryMutationReverse to the store. Called inside the undo()
+ * closure that applyRoute builds when onGroceryMutation fires.
+ */
+export function applyReverse(store: Store, reverse: GroceryMutationReverse): void {
+  switch (reverse.kind) {
+    case 'restore_to_items':
+      store.update<ShoppingItem[]>('grocery', 'items', (cur) => [
+        ...(cur ?? []),
+        {
+          id: reverse.item.id,
+          name: reverse.item.name,
+          canonical: reverse.item.canonical ?? undefined,
+          ts: reverse.item.ts,
+          checked: reverse.item.checked,
+        },
+      ]);
+      break;
+    case 'restore_to_pantry':
+      store.update<PantryItem[]>('grocery', 'pantry', (cur) => [
+        ...(cur ?? []),
+        {
+          id: reverse.item.id,
+          name: reverse.item.name,
+          canonical: reverse.item.canonical ?? undefined,
+          ts: reverse.item.ts,
+          boughtTs: reverse.item.boughtTs,
+        },
+      ]);
+      break;
+    case 'remove_from_items':
+      store.update<ShoppingItem[]>('grocery', 'items', (cur) =>
+        (cur ?? []).filter((it) => !reverse.ids.includes(it.id)),
+      );
+      break;
+    case 'remove_from_pantry':
+      store.update<PantryItem[]>('grocery', 'pantry', (cur) =>
+        (cur ?? []).filter((it) => !reverse.ids.includes(it.id)),
+      );
+      break;
+    case 'set_checked': {
+      const updates = reverse.updates;
+      store.update<ShoppingItem[]>('grocery', 'items', (cur) =>
+        (cur ?? []).map((it) => {
+          const update = updates.find((u) => u.id === it.id);
+          return update ? { ...it, checked: update.checked } : it;
+        }),
+      );
+      break;
+    }
+    case 'composite':
+      for (const step of reverse.steps) {
+        applyReverse(store, step);
+      }
+      break;
+  }
+}
 
 /**
  * Capture the user's live shopping + pantry slices for the worker. The
@@ -116,6 +182,14 @@ export function applyRoute(
   // routes — other modules don't read it.
   if (route.module === 'grocery') {
     opts.getGroceryContext = () => buildGroceryContext(store);
+    opts.onGroceryMutation = (entry: GroceryMutationEntry) => {
+      pushUndo({
+        ts: entry.ts,
+        mode: entry.mode,
+        description: entry.description,
+        undo: () => applyReverse(store, entry.reverse),
+      });
+    };
   }
   dispatchAction(route, store, Date.now(), opts);
 }
