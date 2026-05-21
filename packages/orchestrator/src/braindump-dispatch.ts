@@ -45,6 +45,107 @@ import { extract } from '@ollie/logic/dissection';
 import type { Action, Route } from '@ollie/logic/dissection';
 import { parseFinanceDump } from '@ollie/logic/finance';
 
+// ─── Grocery AI routing (T2 2026-05-21) ──────────────────────────────────────
+//
+// Locked shape from spec (memory MODULE_AGNOSTIC_AI.md + T2 task):
+//   source: 'cache_hit' | 'gemini_miss' | 'fallback_keyword'
+//
+// `grocery-routing.ts` in @ollie/events not yet shipped by frontend-senior;
+// type defined here to keep orchestrator self-contained. Align when it ships.
+
+export type GroceryRoutingSource = 'cache_hit' | 'gemini_miss' | 'fallback_keyword';
+
+export interface GroceryRoutedItem {
+  name: string;
+  canonical: string | null;
+  category: string;
+  intent: string;
+  target: 'pantry' | 'shopping';
+  qty?: number;
+  unit?: string;
+  shelfLifeDays?: number;
+  isRecipeExpansion?: boolean;
+}
+
+export interface GroceryRoutingResult {
+  dumpId: string;
+  source: GroceryRoutingSource;
+  latencyMs: number;
+  applied: boolean;
+  language: string;
+  recipeSourceLabel?: string | null;
+  items: GroceryRoutedItem[];
+}
+
+/** Base URL for the ai-proxy worker. Overrideable for tests. */
+let _aiProxyBaseUrl = 'https://ollie-ai-proxy.workers.dev';
+
+/** Override the ai-proxy base URL (for tests only). */
+export function _setAiProxyBaseUrl(url: string): void {
+  _aiProxyBaseUrl = url;
+}
+
+/** Timeout for /route/grocery call. Falls back to keyword logic on timeout. */
+const ROUTE_TIMEOUT_MS = 3000;
+
+/**
+ * Call /route/grocery on the ai-proxy worker. Returns null on any error or
+ * timeout — caller falls through to keyword fallback.
+ */
+async function callGroceryRoute(
+  text: string,
+  dumpId: string,
+  authToken?: string,
+): Promise<GroceryRoutingResult | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ROUTE_TIMEOUT_MS);
+
+  try {
+    const headers: Record<string, string> = { 'content-type': 'application/json' };
+    if (authToken) headers['authorization'] = `Bearer ${authToken}`;
+
+    const res = await fetch(`${_aiProxyBaseUrl}/route/grocery`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ text, dumpId }),
+      signal: controller.signal,
+    });
+
+    if (!res.ok) return null;
+
+    const data = (await res.json()) as {
+      source: 'cache_hit' | 'gemini_miss';
+      latencyMs: number;
+      language: string;
+      classification?: {
+        items?: GroceryRoutedItem[];
+        intent?: string;
+        language?: string;
+        recipeSourceLabel?: string | null;
+      };
+    };
+
+    const classification = data.classification ?? {};
+    const items: GroceryRoutedItem[] = Array.isArray(classification.items)
+      ? classification.items
+      : [];
+
+    return {
+      dumpId,
+      source: data.source,
+      latencyMs: data.latencyMs ?? 0,
+      applied: items.length > 0,
+      language: data.language ?? classification.language ?? 'en',
+      recipeSourceLabel: classification.recipeSourceLabel ?? null,
+      items,
+    };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /**
  * Locale token for the scrubber. Mirrors @ollie/pii-scrub `Locale`. We
  * re-type here instead of importing so this package doesn't gain a
@@ -55,6 +156,15 @@ export type DispatchLocale = 'en' | 'es' | 'tr';
 export interface DispatchOptions {
   /** Resolver for the active locale at emit time. Defaults to 'en'. */
   getLocale?: () => DispatchLocale;
+  /**
+   * Supabase/Clerk JWT to forward to /route/:module. Required once T0 ships.
+   * When absent, /route endpoint still responds (T0_JWT_ENFORCED not yet set).
+   */
+  authToken?: string;
+  /**
+   * Override the AI proxy base URL (tests + dev). Defaults to production worker.
+   */
+  aiProxyBaseUrl?: string;
 }
 
 function newId(): string {
@@ -186,6 +296,15 @@ export function dispatchAction(
   // ── grocery ──────────────────────────────────────────────────────────
   // Sprint B'' (2026-05-14): grocery rolls up into the home_records
   // corpus table server-side; emit accordingly.
+  //
+  // T2 (2026-05-21): async AI routing via /route/grocery.
+  //   - Emit `grocery:routing:pending` immediately (instant UI feedback).
+  //   - Call ai-proxy /route/grocery async (3s timeout).
+  //   - On success: emit `grocery:routed` with AI result + source=cache_hit/gemini_miss.
+  //   - On failure/timeout: keyword fallback (original behaviour below), source=fallback_keyword.
+  //   - Recipe expansion preserved: isRecipeExpansion items are kept.
+  //   - Store write (items/pantry) runs synchronously via keyword path first;
+  //     AI result is enrichment-only (adds canonical/category/intent metadata).
   if (module === 'grocery' && kind === 'add') {
     const id = newId();
     store.update<Array<{ id: string; name: string; ts: number; checked: boolean }>>(
@@ -194,6 +313,50 @@ export function dispatchAction(
       (cur) => [...(cur ?? []), { id, name: data, ts, checked: false }],
     );
     emitResearchRow('home_records', id, data, ts, getLocale());
+
+    // Async AI routing — fire-and-forget from the synchronous dispatch path.
+    // Override base URL from opts if set (used by tests + dev).
+    if (opts.aiProxyBaseUrl) _setAiProxyBaseUrl(opts.aiProxyBaseUrl);
+    try {
+      events.emit('grocery:routing:pending', {
+        idempotency_key: id,
+        raw: data,
+        ts,
+      });
+    } catch { /* non-fatal */ }
+    void (async () => {
+      const result = await callGroceryRoute(data, id, opts.authToken);
+      const now2 = Date.now();
+      if (result) {
+        try {
+          events.emit('grocery:routed', {
+            idempotency_key: id,
+            raw: data,
+            items: result.items.map((it) => ({
+              name: it.name,
+              target: it.target,
+              recipe_parent: it.isRecipeExpansion ? (result.recipeSourceLabel ?? undefined) : undefined,
+            })),
+            source: result.source === 'cache_hit' ? 'cache' : 'gemini',
+            latency_ms: result.latencyMs,
+            ts: now2,
+          });
+        } catch { /* non-fatal */ }
+      } else {
+        // Fallback — keyword path already applied; emit with fallback source.
+        try {
+          events.emit('grocery:routed', {
+            idempotency_key: id,
+            raw: data,
+            items: [{ name: data, target: 'shopping' }],
+            source: 'fallback',
+            latency_ms: Date.now() - ts,
+            ts: now2,
+          });
+        } catch { /* non-fatal */ }
+      }
+    })();
+
     return;
   }
   if (module === 'grocery' && kind === 'log') {
@@ -204,6 +367,35 @@ export function dispatchAction(
       (cur) => [...(cur ?? []), { id, name: data, ts, boughtTs: ts }],
     );
     emitResearchRow('home_records', id, data, ts, getLocale());
+
+    // Async AI routing for pantry log (intent=pantry).
+    if (opts.aiProxyBaseUrl) _setAiProxyBaseUrl(opts.aiProxyBaseUrl);
+    try {
+      events.emit('grocery:routing:pending', {
+        idempotency_key: id,
+        raw: data,
+        ts,
+      });
+    } catch { /* non-fatal */ }
+    void (async () => {
+      const result = await callGroceryRoute(data, id, opts.authToken);
+      const now2 = Date.now();
+      try {
+        events.emit('grocery:routed', {
+          idempotency_key: id,
+          raw: data,
+          items: result
+            ? result.items.map((it) => ({ name: it.name, target: it.target }))
+            : [{ name: data, target: 'pantry' as const }],
+          source: result
+            ? (result.source === 'cache_hit' ? 'cache' : 'gemini')
+            : 'fallback',
+          latency_ms: result ? result.latencyMs : Date.now() - ts,
+          ts: now2,
+        });
+      } catch { /* non-fatal */ }
+    })();
+
     return;
   }
 
