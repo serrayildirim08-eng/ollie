@@ -40,6 +40,11 @@ import {
   type InvitesEnv,
 } from './invites';
 import { handleRoute, type RouteEnv } from './router/route';
+import { handlePurchase, type PurchaseEnv } from './router/purchase';
+import { handleCookHistory, type CookHistoryEnv } from './router/cook-history';
+import { handleReplenishment, type ReplenishmentEnv } from './router/replenishment';
+import { handleFeedMe, type FeedMeEnv } from './router/feed-me';
+import { verifyClerkJwt } from './clerk-verify';
 
 /**
  * Cloudflare native Rate Limiting binding. `limit()` is atomic edge-side,
@@ -49,7 +54,16 @@ export interface RateLimiter {
   limit(opts: { key: string }): Promise<{ success: boolean }>;
 }
 
-export interface Env extends EnrichEnv, IngestEnv, LabelEnv, InvitesEnv, RouteEnv {
+export interface Env
+  extends EnrichEnv,
+    IngestEnv,
+    LabelEnv,
+    InvitesEnv,
+    RouteEnv,
+    PurchaseEnv,
+    ReplenishmentEnv,
+    FeedMeEnv,
+    CookHistoryEnv {
   ANTHROPIC_API_KEY: string;
   CACHE_KV: KVNamespace;
   RATE_KV: KVNamespace;
@@ -98,6 +112,74 @@ export default {
     // so browser will always preflight. Answer 204 + headers, no body.
     if (req.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: corsHeaders() });
+    }
+
+    // ── /grocery/purchase — adaptive replenishment event ingestion (T2.5) ───
+    // POST only. Per-user rate-limited (100/min budget for checkout bursts).
+    if (url.pathname === '/grocery/purchase' && req.method === 'POST') {
+      const purchaseUserId = await resolveUserIdForRateLimit(req, env);
+      if (purchaseUserId) {
+        const allowed = await checkRate(
+          env.TELEM_RATE_LIMITER,
+          env.RATE_KV,
+          `rl:purchase:${purchaseUserId}`,
+          PURCHASE_RATE_MAX,
+        );
+        if (!allowed) {
+          return withCors(json({ error: 'rate_limited' }, 429));
+        }
+      }
+      return withCors(await handlePurchase(req, env));
+    }
+
+    // ── /cook-history — Feed Me v2 cook event ingestion (rating + dish) ─────
+    // POST only. Shares the purchase rate-limit shape (cooks are not a burst).
+    if (url.pathname === '/cook-history' && req.method === 'POST') {
+      const cookUserId = await resolveUserIdForRateLimit(req, env);
+      if (cookUserId) {
+        const allowed = await checkRate(
+          env.TELEM_RATE_LIMITER,
+          env.RATE_KV,
+          `rl:cookhistory:${cookUserId}`,
+          PURCHASE_RATE_MAX,
+        );
+        if (!allowed) {
+          return withCors(json({ error: 'rate_limited' }, 429));
+        }
+      }
+      return withCors(await handleCookHistory(req, env));
+    }
+
+    // ── /feed-me/:user — AI recipe suggestion (user mode + pet mode) ────────
+    // POST only (pantry lives in the body). Auth + ownership enforced inside
+    // the handler; rate-limited per-user via the telemetry bucket so a single
+    // account cannot burn Voyage + Gemini budget by spamming the endpoint.
+    const feedMeMatch = url.pathname.match(/^\/feed-me\/([0-9a-f-]+)$/i);
+    if (feedMeMatch && req.method === 'POST') {
+      const fmUser = await resolveUserIdForRateLimit(req, env);
+      if (fmUser) {
+        const allowed = await checkRate(
+          env.TELEM_RATE_LIMITER,
+          env.RATE_KV,
+          `rl:feedme:${fmUser}`,
+        );
+        if (!allowed) {
+          return withCors(json({ error: 'rate_limited' }, 429));
+        }
+      }
+      return withCors(await handleFeedMe(req, env, feedMeMatch[1]));
+    }
+
+    // ── /replenishment/:user — adaptive cadence estimates (T2.5) ─────────────
+    // GET only. The path UUID becomes the user_id we look up; auth enforces
+    // ownership (JWT sub === path param). Read-only, no rate limit needed
+    // beyond Cloudflare's edge defaults — frontend re-fetches at most once
+    // per purchase + on grocery module mount.
+    const replenishMatch = url.pathname.match(
+      /^\/replenishment\/([0-9a-f-]+)$/i,
+    );
+    if (replenishMatch && req.method === 'GET') {
+      return withCors(await handleReplenishment(req, env, replenishMatch[1]));
     }
 
     if (req.method !== 'POST') {
