@@ -18,7 +18,18 @@
 
 import type { Action } from '@ollie/logic/dissection';
 import type { Store } from '@ollie/store';
-import { dispatchAction, type DispatchLocale } from '@ollie/orchestrator';
+import { dispatchAction, type DispatchLocale, type DispatchOptions } from '@ollie/orchestrator';
+import { getAuthJwt } from '../lib/account-boot';
+
+/**
+ * Resolve the ai-proxy worker URL from Vite env. Frontend-only: the
+ * orchestrator package can't read import.meta.env, so this shim does it.
+ * Falls back to the dispatch default when the var is absent.
+ */
+const AI_PROXY_URL =
+  (import.meta as unknown as { env?: { VITE_AI_WORKER_URL?: string; VITE_AI_PROXY_URL?: string } })
+    .env?.VITE_AI_WORKER_URL ??
+  (import.meta as unknown as { env?: { VITE_AI_PROXY_URL?: string } }).env?.VITE_AI_PROXY_URL;
 
 /**
  * Apply a single routed Action to the store via the canonical dispatcher.
@@ -33,5 +44,10 @@ export function applyRoute(
   store: Store,
   getLocale?: () => DispatchLocale,
 ): void {
-  dispatchAction(route, store, Date.now(), getLocale ? { getLocale } : {});
+  const opts: DispatchOptions = {};
+  if (getLocale) opts.getLocale = getLocale;
+  if (AI_PROXY_URL) opts.aiProxyBaseUrl = AI_PROXY_URL;
+  const token = getAuthJwt();
+  if (token) opts.authToken = token;
+  dispatchAction(route, store, Date.now(), opts);
 }
