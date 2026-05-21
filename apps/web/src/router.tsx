@@ -35,6 +35,7 @@ import {
   useNavigate,
 } from 'react-router-dom';
 
+import { ToastProvider } from './components/ToastContext';
 import { ToastHost } from './components/ToastHost';
 import { ChipFlyHost } from './components/ChipFly';
 import { Day30Prompt } from './components/Day30Prompt';
@@ -900,15 +901,27 @@ export const routes = [
 const router = createHashRouter(routes);
 
 /**
- * Root export. `AppServicesProvider` must wrap `RouterProvider` so route
- * elements can `useAppServices()`. `BackButtonBridge` is rendered as a
- * sibling outside the router (it only touches `window.history`).
+ * Root export. `ToastProvider` is the outermost shell so that
+ * `AppServicesProvider` (which calls `useToast()` via `useApplyBrainDump`)
+ * is always guaranteed to find it in context, regardless of which entry
+ * point mounts `AppRouter`. Previously `ToastProvider` lived in `App.tsx`,
+ * which meant any alternative mount path (tests, Storybook, future
+ * entry points) could trigger "useToast must be inside <ToastProvider>".
+ * Co-locating the provider with its only consumer that cares removes that
+ * implicit coupling and makes the Sentry #7487966680 / #7487966681 class
+ * of error structurally impossible.
+ *
+ * `AppServicesProvider` must wrap `RouterProvider` so route elements can
+ * `useAppServices()`. `BackButtonBridge` is rendered as a sibling outside
+ * the router (it only touches `window.history`).
  */
 export function AppRouter() {
   return (
-    <AppServicesProvider>
-      <BackButtonBridge />
-      <RouterProvider router={router} />
-    </AppServicesProvider>
+    <ToastProvider>
+      <AppServicesProvider>
+        <BackButtonBridge />
+        <RouterProvider router={router} />
+      </AppServicesProvider>
+    </ToastProvider>
   );
 }
