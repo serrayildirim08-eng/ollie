@@ -38,6 +38,7 @@ import {
 import { ToastProvider } from './components/ToastContext';
 import { ToastHost } from './components/ToastHost';
 import { ChipFlyHost } from './components/ChipFly';
+import { SortedToastHost } from './components/SortedToastHost';
 import { Day30Prompt } from './components/Day30Prompt';
 import {
   NotificationPrimer,
@@ -335,6 +336,7 @@ function GatedLayout() {
       </Suspense>
       <ToastHost />
       <ChipFlyHost />
+      <SortedToastHost />
       <Day30Prompt />
       <NotificationPrimerGate />
       <AppLockController />
