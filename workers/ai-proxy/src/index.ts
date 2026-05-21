@@ -85,12 +85,42 @@ const RATE_WINDOW_SEC = 60;
 
 // ─── handler ───────────────────────────────────────────────────────────────────
 
+/**
+ * CORS — every endpoint here is called from the browser (Electron dev,
+ * Capacitor iOS, web app). POST + application/json + Authorization Bearer
+ * all trigger a preflight, so we MUST answer OPTIONS with the right
+ * headers AND echo them on every real response. Pattern mirrors
+ * workers/sentry-tunnel.
+ */
+function corsHeaders(): Record<string, string> {
+  return {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-user-id',
+    'Access-Control-Max-Age': '86400',
+  };
+}
+
+function withCors(res: Response): Response {
+  const headers = new Headers(res.headers);
+  for (const [k, v] of Object.entries(corsHeaders())) {
+    headers.set(k, v);
+  }
+  return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
+}
+
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
     const url = new URL(req.url);
 
+    // CORS preflight — every endpoint requires Authorization or x-user-id,
+    // so browser will always preflight. Answer 204 + headers, no body.
+    if (req.method === 'OPTIONS') {
+      return new Response(null, { status: 204, headers: corsHeaders() });
+    }
+
     if (req.method !== 'POST') {
-      return json({ error: 'method_not_allowed' }, 405);
+      return withCors(json({ error: 'method_not_allowed' }, 405));
     }
 
     // Telemetry endpoints — separate code path. They use the service-role
@@ -144,7 +174,7 @@ export default {
     const routeMatch = url.pathname.match(/^\/route\/([a-z_-]+)$/);
     if (routeMatch) {
       const module = routeMatch[1];
-      return handleRoute(req, env, module);
+      return withCors(await handleRoute(req, env, module));
     }
 
     if (url.pathname !== '/brain-dump' && url.pathname !== '/v1/messages') {
