@@ -71,6 +71,7 @@ import type { Orchestrator } from '@ollie/orchestrator';
 import { invalidateSector } from '@ollie/research-cache';
 import * as Sentry from '@sentry/react';
 import * as events from '@ollie/events';
+import { readClerkJwt, readClerkUserId } from './clerk-auth-bridge';
 import { store } from '../store';
 import { createLabelClient } from './label-client';
 
@@ -182,10 +183,33 @@ export function getAccount(): AccountBootHandles | null {
 /**
  * One-time boot. Idempotent. Call once at app start.
  *
- * `overrides` is for tests only — production calls `bootAccount()` with no
- * args and everything is env-driven.
+ * Clerk migration · Phase 3 (T0, 2026-05-21): wired to the Clerk session
+ * token via the `clerk-auth-bridge` ref. The ClerkAuthBridge React
+ * component (mounted in App.tsx) subscribes to `useAuth().getToken` and
+ * refreshes this ref whenever Clerk rotates the session. Returns null when:
+ *   - the user is not signed in yet
+ *   - the bridge has not yet pushed its first token (the millisecond
+ *     window right after sign-in — callers already treat null as
+ *     "skip the request", which is the documented degrade path)
  */
-export function bootAccount(overrides: BootOverrides = {}): AccountBootHandles {
+export function getAuthJwt(): string | null {
+  return readClerkJwt();
+}
+
+/**
+ * The signed-in user's id for backend payloads (push-token mirroring,
+ * server jobs). Clerk migration · Phase 3: returns the Clerk user id
+ * (`user_<…>`). Null when unsigned-in.
+ */
+export function getAuthUserId(): string | null {
+  return readClerkUserId();
+}
+
+/**
+ * One-time boot. Idempotent. Call once at app start. Everything is
+ * env-driven; production calls `bootAccount()` with no args.
+ */
+export function bootAccount(): AccountBootHandles {
   if (handles) return handles;
 
   bootOverrides = overrides;
@@ -207,6 +231,11 @@ export function bootAccount(overrides: BootOverrides = {}): AccountBootHandles {
     api,
     endpointUrl: env.VITE_RESEARCH_ENDPOINT,
     ingestUrl: env.VITE_AI_WORKER_URL,
+    // Clerk migration · Phase 3 (T0): wired to the Clerk session token via
+    // the bridge ref. Returns null until the bridge first writes, which is
+    // the same documented best-effort degrade as before — research.track()
+    // queues locally and flushes once a token is available.
+    getJwt: () => readClerkJwt(),
   });
   // Start the research flush loop unconditionally; track() is a no-op
   // until consent is granted, so the loop is harmless when off.

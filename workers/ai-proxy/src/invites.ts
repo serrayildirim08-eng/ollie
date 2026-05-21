@@ -23,10 +23,21 @@
  *   the visually ambiguous 0/o/1/l/I removed. Lower-cased.
  */
 
+import { json, upstreamError } from '@ollie/worker-http';
+import { verifyClerkJwt } from './clerk-verify';
+
 export interface InvitesEnv {
   SUPABASE_URL: string;
   SUPABASE_SERVICE_ROLE: string;
   SUPABASE_ANON_KEY: string;
+  /**
+   * Clerk issuer URL — e.g. https://faithful-stag-15.clerk.accounts.dev.
+   * Set as a wrangler secret on deploy. When present, the JWT verify path
+   * tries Clerk first; when absent, behaviour is identical to pre-Clerk
+   * (Supabase-only). Migration-safe: a deploy with no CLERK_ISSUER keeps
+   * existing Supabase-authed sessions working.
+   */
+  CLERK_ISSUER?: string;
   INVITE_BASE_URL?: string;
   RATE_KV: KVNamespace;
 }
@@ -292,7 +303,48 @@ function randSegment(n: number): string {
   return out;
 }
 
-async function verifyJwt(jwt: string, env: InvitesEnv): Promise<string | null> {
+/**
+ * Verify a user JWT and return the verified user id.
+ *
+ * Dual-mode (Clerk migration · Phase 3 / T0):
+ *   1. If `env.CLERK_ISSUER` is set, try Clerk JWKS verify first. Clerk's
+ *      issued tokens carry `iss === CLERK_ISSUER`, so this path matches
+ *      every new sign-in.
+ *   2. Fall back to Supabase `GET /auth/v1/user` for any token Clerk
+ *      rejects. This keeps any still-live Supabase sessions working
+ *      through the migration window. Once no Supabase sessions remain,
+ *      this branch can be deleted.
+ *
+ * Returns null on any failure (signature, expired, wrong issuer, missing
+ * env). Never throws. Exported so the telemetry endpoints
+ * (/ingest-event, /label, /enrich-dump) gate on the same check.
+ *
+ * The user id returned is:
+ *   - Clerk: the `sub` claim (`user_<…>`).
+ *   - Supabase: the `id` field from /auth/v1/user (a uuid).
+ * Callers MUST treat the value opaquely — it is a "verified user id",
+ * not a Supabase uuid.
+ */
+export async function verifyJwt(
+  jwt: string,
+  env: {
+    SUPABASE_URL: string;
+    SUPABASE_ANON_KEY: string;
+    CLERK_ISSUER?: string;
+  },
+): Promise<string | null> {
+  // Clerk path — try first when configured. A successful Clerk verify is
+  // local (no upstream hop after the JWKS cache warms), so it is both
+  // faster and the canonical post-migration path.
+  if (env.CLERK_ISSUER) {
+    const clerkUserId = await verifyClerkJwt(jwt, env);
+    if (clerkUserId) return clerkUserId;
+    // Fall through to Supabase — a Clerk failure does not prove the token
+    // is bad, it might be a legacy Supabase JWT issued before the cutover.
+  }
+
+  // Supabase fallback (legacy). Removed once the Supabase session window
+  // has fully aged out.
   if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) return null;
   const url = `${env.SUPABASE_URL.replace(/\/$/, '')}/auth/v1/user`;
   try {
