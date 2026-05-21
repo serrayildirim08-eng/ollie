@@ -77,8 +77,8 @@ export interface GroceryRoutingResult {
   items: GroceryRoutedItem[];
 }
 
-/** Base URL for the ai-proxy worker. Overrideable for tests. */
-let _aiProxyBaseUrl = 'https://ollie-ai-proxy.workers.dev';
+/** Base URL for the ai-proxy worker. Overrideable for tests + frontend via DispatchOptions. */
+let _aiProxyBaseUrl = 'https://ollie-ai-proxy.ollieapp.workers.dev';
 
 /** Override the ai-proxy base URL (for tests only). */
 export function _setAiProxyBaseUrl(url: string): void {
