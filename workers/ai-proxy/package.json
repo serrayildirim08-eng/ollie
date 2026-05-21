@@ -16,6 +16,7 @@
     "wrangler": "^4.0.0"
   },
   "dependencies": {
+    "@ollie/pii-scrub": "workspace:*",
     "@ollie/worker-http": "workspace:*",
     "jose": "^6.2.3"
   }
