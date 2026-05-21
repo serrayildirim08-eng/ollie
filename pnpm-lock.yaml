@@ -533,6 +533,9 @@ importers:
 
   workers/ai-proxy:
     dependencies:
+      '@ollie/pii-scrub':
+        specifier: workspace:*
+        version: link:../../packages/pii-scrub
       '@ollie/worker-http':
         specifier: workspace:*
         version: link:../../packages/worker-http

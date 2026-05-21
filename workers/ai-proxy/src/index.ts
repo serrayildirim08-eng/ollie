@@ -55,7 +55,9 @@ import {
 } from './invites';
 import { handleRoute, type RouteEnv } from './router/route';
 import { handlePurchase, type PurchaseEnv } from './router/purchase';
+import { handleCookHistory, type CookHistoryEnv } from './router/cook-history';
 import { handleReplenishment, type ReplenishmentEnv } from './router/replenishment';
+import { handleFeedMe, type FeedMeEnv } from './router/feed-me';
 import { verifyClerkJwt } from './clerk-verify';
 
 /**
@@ -73,7 +75,9 @@ export interface Env
     InvitesEnv,
     RouteEnv,
     PurchaseEnv,
-    ReplenishmentEnv {
+    ReplenishmentEnv,
+    FeedMeEnv,
+    CookHistoryEnv {
   ANTHROPIC_API_KEY: string;
   CACHE_KV: KVNamespace;
   RATE_KV: KVNamespace;
@@ -146,6 +150,44 @@ export default {
         }
       }
       return withCors(await handlePurchase(req, env));
+    }
+
+    // ── /cook-history — Feed Me v2 cook event ingestion (rating + dish) ─────
+    // POST only. Shares the purchase rate-limit shape (cooks are not a burst).
+    if (url.pathname === '/cook-history' && req.method === 'POST') {
+      const cookUserId = await resolveUserIdForRateLimit(req, env);
+      if (cookUserId) {
+        const allowed = await checkRate(
+          env.TELEM_RATE_LIMITER,
+          env.RATE_KV,
+          `rl:cookhistory:${cookUserId}`,
+          PURCHASE_RATE_MAX,
+        );
+        if (!allowed) {
+          return withCors(json({ error: 'rate_limited' }, 429));
+        }
+      }
+      return withCors(await handleCookHistory(req, env));
+    }
+
+    // ── /feed-me/:user — AI recipe suggestion (user mode + pet mode) ────────
+    // POST only (pantry lives in the body). Auth + ownership enforced inside
+    // the handler; rate-limited per-user via the telemetry bucket so a single
+    // account cannot burn Voyage + Gemini budget by spamming the endpoint.
+    const feedMeMatch = url.pathname.match(/^\/feed-me\/([0-9a-f-]+)$/i);
+    if (feedMeMatch && req.method === 'POST') {
+      const fmUser = await resolveUserIdForRateLimit(req, env);
+      if (fmUser) {
+        const allowed = await checkRate(
+          env.TELEM_RATE_LIMITER,
+          env.RATE_KV,
+          `rl:feedme:${fmUser}`,
+        );
+        if (!allowed) {
+          return withCors(json({ error: 'rate_limited' }, 429));
+        }
+      }
+      return withCors(await handleFeedMe(req, env, feedMeMatch[1]));
     }
 
     // ── /replenishment/:user — adaptive cadence estimates (T2.5) ─────────────
