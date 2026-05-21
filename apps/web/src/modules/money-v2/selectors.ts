@@ -200,24 +200,65 @@ export interface SafeToSpendVM {
   daysLeftLabel: string;
 }
 
+/**
+ * Cold-start view-model. The single source of truth for the empty / null /
+ * malformed-band branch — used directly when `slices` is missing or `band`
+ * is null, and when `band` is a non-null object but lacks the fields the
+ * rest of the fn needs. Keeping this one literal stops divergence between
+ * "no data" and "bad data" — the UI gets a calm, identical face either way.
+ */
+const COLD_START_VM: SafeToSpendVM = {
+  amount: null,
+  coldStart: true,
+  horizonDays: 7,
+  horizonFill: 0,
+  daysLeftLabel: 'a few more weeks of data',
+};
+
 export function safeToSpendVM(slices: FinanceSlices, now: number): SafeToSpendVM {
-  const band: SpendBand | null =
-    slices.safeToSpend ?? safeToSpend(slices.records ?? [], now, 7, slices.settings ?? {});
-  // a null band = ollie has no income/outflow signal at all → cold start
-  if (!band) {
-    return {
-      amount: null,
-      coldStart: true,
-      horizonDays: 7,
-      horizonFill: 0,
-      daysLeftLabel: 'a few more weeks of data',
-    };
+  // Outer defensive guard. The hook bridge (useFinanceSlices) should never
+  // return undefined slices, but Sentry SF-1148/1149 reported a `band` null
+  // crash here from prod. Treat any missing slices object as cold-start —
+  // the face renders the empty state, not a NaN/undefined screen.
+  if (!slices) return COLD_START_VM;
+
+  // `slices.safeToSpend` comes from the orchestrator-derived store slice.
+  // It can legitimately be `null` (cold start) or `undefined` (slice never
+  // written). `??` covers both. The fallback `safeToSpend()` call itself
+  // can return null when there's no income/outflow signal.
+  let band: SpendBand | null = null;
+  try {
+    band =
+      slices.safeToSpend ??
+      safeToSpend(slices.records ?? [], now, 7, slices.settings ?? {});
+  } catch (err) {
+    // safeToSpend() is pure but defensive: never let an upstream logic
+    // throw break the money face. Log + fall through to cold-start.
+    console.warn('[money-v2 selectors] safeToSpend() threw, falling back to cold-start', err);
+    band = null;
   }
-  const coldStart = band.cold_start || typeof band.central !== 'number';
-  const horizonDays = band.horizonDays || 7;
+
+  // a null band = ollie has no income/outflow signal at all → cold start
+  if (!band) return COLD_START_VM;
+
+  // Belt-and-braces: a non-null `band` is expected to carry numeric
+  // `central` + `horizonDays` + boolean `cold_start`. If any are missing
+  // (e.g. partial migration, persisted shape drift), treat as cold-start
+  // rather than render NaN. This is the exact line Sentry implicated; the
+  // optional-chained `?? false` makes `cold_start` access null-safe even
+  // if `band` somehow resolves to a prototypeless object.
+  const coldStart =
+    (band.cold_start ?? false) ||
+    typeof band.central !== 'number' ||
+    !Number.isFinite(band.central);
+  const horizonDays =
+    typeof band.horizonDays === 'number' && band.horizonDays > 0
+      ? band.horizonDays
+      : 7;
+
   // fraction of the horizon already elapsed since the most recent income
   const incomes = (slices.records ?? [])
-    .filter((r) => r.direction === 'in' && r.event_date)
+    .filter((r) => r && r.direction === 'in' && r.event_date)
     .map((r) => new Date(r.event_date + 'T00:00:00Z').getTime())
     .sort((a, b) => b - a);
   const lastIncome = incomes[0] ?? now;
