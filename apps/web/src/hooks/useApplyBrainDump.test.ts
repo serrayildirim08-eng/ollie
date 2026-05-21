@@ -203,9 +203,17 @@ describe('applyRoute · generic modules', () => {
     expect(items[0].text).toBe('random thought');
   });
 
-  it('writes pets items', () => {
+  // Phantom-fix (2026-05-21): pets brain-dump text lands in the slice the
+  // UI actually subscribes to (`pets.observations`) with a StoredObservation
+  // shape; the legacy `pets.items` slice is no longer written.
+  it('writes pets observations (not pets.items)', () => {
     applyRoute({ module: 'pets', action: 'add', data: 'buy hay for tontin' }, store);
-    const items = store.get<GenericItem[]>('pets', 'items', []);
-    expect(items[0].text).toBe('buy hay for tontin');
+    const obs = store.get<Array<{ text: string; pet_id: string; tags: string[]; kind: string }>>(
+      'pets', 'observations', [],
+    );
+    expect(obs[0].text).toBe('buy hay for tontin');
+    expect(obs[0].pet_id).toBe('');
+    expect(obs[0].kind).toBe('note');
+    expect(store.get<GenericItem[]>('pets', 'items', [])).toHaveLength(0);
   });
 });
