@@ -55,16 +55,70 @@ import { parseFinanceDump } from '@ollie/logic/finance';
 
 export type GroceryRoutingSource = 'cache_hit' | 'gemini_miss' | 'fallback_keyword';
 
+/**
+ * Mutation action — mirror of the worker's GroceryAction union. Items
+ * without an `action` field are treated as 'add' for backward compat
+ * with cached Gemini classifications written before 2026-05-22.
+ */
+export type GroceryRoutedAction = 'add' | 'remove' | 'check' | 'move_to_pantry';
+
 export interface GroceryRoutedItem {
   name: string;
   canonical: string | null;
   category: string;
   intent: string;
   target: 'pantry' | 'shopping';
+  /** Mutation to apply. Absent = 'add' (backward compat). */
+  action?: GroceryRoutedAction;
   qty?: number;
   unit?: string;
   shelfLifeDays?: number;
   isRecipeExpansion?: boolean;
+}
+
+/**
+ * List context passed to the worker for mutation disambiguation. The
+ * dispatcher pulls it from `opts.getGroceryContext` synchronously so the
+ * caller can capture the live store state at dispatch time (not at async
+ * resolution time, which would race with the keyword placeholder write).
+ */
+export interface GroceryListContext {
+  shoppingItems: Array<{ name: string; canonical?: string | null }>;
+  pantryItems: Array<{ name: string; canonical?: string | null }>;
+}
+
+/**
+ * Mutation-verb regex covering EN + TR + ES. When this hits, the
+ * synchronous keyword placeholder write is suppressed and dispatch waits
+ * for the AI result. Verbs are tuned to be specific — "got" alone is NOT
+ * here (too many false positives for pantry log "got milk"). The
+ * mutation-disambiguating phrase needs more than the bare verb: "got
+ * everything except", "got all but", etc.
+ */
+const MUTATION_RE =
+  /\b(remove|delete|scratch|throw out|threw out|finished|ran out|ran out of|used up|got everything except|got all but|all except|no need for|drop\s+\w+\s+from|take\s+\w+\s+off|listeden çıkar|çıkar|sil|kaldır|bozuldu|bitti(?: ?artık)?|quita|elimina|borra|saca|menos|excepto|se acabó|se nos acabó|se echó a perder)\b/i;
+
+/**
+ * Match a store item against an AI-returned mutation item. Canonical
+ * match wins when both sides have one; otherwise fall back to
+ * case-insensitive substring match in either direction. Returns true
+ * when this store item should be the mutation's target.
+ *
+ * NOTE: this is intentionally permissive — Gemini sometimes returns the
+ * lemma ("egg") for a stored line that says the plural ("eggs"), so
+ * we accept substring matches in either direction.
+ */
+export function matchItem(
+  storeItem: { name: string; canonical?: string | null },
+  aiItem: { name: string; canonical: string | null },
+): boolean {
+  if (aiItem.canonical && storeItem.canonical && aiItem.canonical === storeItem.canonical) {
+    return true;
+  }
+  const a = (storeItem.name ?? '').toLowerCase().trim();
+  const b = (aiItem.name ?? '').toLowerCase().trim();
+  if (a.length === 0 || b.length === 0) return false;
+  return a.includes(b) || b.includes(a);
 }
 
 export interface GroceryRoutingResult {
@@ -100,6 +154,7 @@ async function callGroceryRoute(
   text: string,
   dumpId: string,
   authToken?: string,
+  context?: GroceryListContext,
 ): Promise<GroceryRoutingResult | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), ROUTE_TIMEOUT_MS);
@@ -108,10 +163,13 @@ async function callGroceryRoute(
     const headers: Record<string, string> = { 'content-type': 'application/json' };
     if (authToken) headers['authorization'] = `Bearer ${authToken}`;
 
+    const requestBody: Record<string, unknown> = { text, dumpId };
+    if (context) requestBody.context = context;
+
     const res = await fetch(`${_aiProxyBaseUrl}/route/grocery`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ text, dumpId }),
+      body: JSON.stringify(requestBody),
       signal: controller.signal,
     });
 
@@ -198,6 +256,16 @@ export interface DispatchOptions {
    * memory recorder.
    */
   recordGroceryPurchase?: (event: GroceryPurchaseEvent) => void;
+  /**
+   * Provides the live shopping + pantry lists at dispatch time so the
+   * worker can disambiguate mutation commands ("remove pasta",
+   * "got everything except eggs", "I finished the milk"). Synchronous —
+   * captured at the moment of dispatch, NOT when the async fetch resolves,
+   * so the AI sees the same state the user typed against. Optional; absent
+   * = no context block in the prompt (mutation still works via fuzzy match
+   * on the applier side, just less reliable).
+   */
+  getGroceryContext?: () => GroceryListContext;
 }
 
 function newId(): string {
@@ -273,6 +341,168 @@ function emitResearchRow(
   } catch { /* never throw from the dispatcher */ }
 }
 
+/**
+ * Apply a batch of AI-classified mutation items to the grocery slices.
+ *
+ * Each item carries an `action` (default 'add') that drives which slice
+ * is mutated and how:
+ *   - 'add': append to shopping or pantry per target.
+ *   - 'remove': drop one matching item from the target slice.
+ *   - 'check': mark a matching shopping item as bought (checked=true).
+ *   - 'move_to_pantry': remove from shopping AND append to pantry; also
+ *     emits a purchase-history event (source='ai_inferred').
+ *
+ * Match semantics — see `matchItem` above. Canonical preferred; substring
+ * either-direction fallback. No-match for any non-'add' action is a
+ * silent no-op (we'd rather lose a mutation than mangle the wrong row).
+ */
+export function applyGroceryMutations(
+  items: GroceryRoutedItem[],
+  store: Store,
+  ts: number,
+  opts: DispatchOptions = {},
+): void {
+  for (const aiItem of items) {
+    const act: GroceryRoutedAction = aiItem.action ?? 'add';
+
+    switch (act) {
+      case 'add': {
+        const newRowId = newId();
+        if (aiItem.target === 'pantry') {
+          store.update<Array<{ id: string; name: string; canonical?: string; ts: number; boughtTs: number }>>(
+            'grocery',
+            'pantry',
+            (cur) => [...(cur ?? []), {
+              id: newRowId,
+              name: aiItem.name,
+              canonical: aiItem.canonical ?? undefined,
+              ts,
+              boughtTs: ts,
+            }],
+          );
+          try {
+            opts.recordGroceryPurchase?.({
+              canonical: aiItem.canonical ?? aiItem.name,
+              qty: aiItem.qty,
+              unit: aiItem.unit,
+              source: 'ai_inferred',
+              ts,
+            });
+          } catch { /* fire-and-forget */ }
+        } else {
+          store.update<Array<{ id: string; name: string; canonical?: string; ts: number; checked: boolean }>>(
+            'grocery',
+            'items',
+            (cur) => [...(cur ?? []), {
+              id: newRowId,
+              name: aiItem.name,
+              canonical: aiItem.canonical ?? undefined,
+              ts,
+              checked: false,
+            }],
+          );
+        }
+        break;
+      }
+
+      case 'remove': {
+        if (aiItem.target === 'pantry') {
+          store.update<Array<{ id: string; name: string; canonical?: string | null; ts: number; boughtTs?: number }>>(
+            'grocery',
+            'pantry',
+            (cur) => {
+              const arr = cur ?? [];
+              // Remove the FIRST matching item. Silent no-op if no match.
+              const idx = arr.findIndex((it) => matchItem(it, aiItem));
+              if (idx < 0) return arr;
+              return [...arr.slice(0, idx), ...arr.slice(idx + 1)];
+            },
+          );
+        } else {
+          store.update<Array<{ id: string; name: string; canonical?: string | null; ts: number; checked: boolean }>>(
+            'grocery',
+            'items',
+            (cur) => {
+              const arr = cur ?? [];
+              const idx = arr.findIndex((it) => matchItem(it, aiItem));
+              if (idx < 0) return arr;
+              return [...arr.slice(0, idx), ...arr.slice(idx + 1)];
+            },
+          );
+        }
+        break;
+      }
+
+      case 'check': {
+        store.update<Array<{ id: string; name: string; canonical?: string | null; ts: number; checked: boolean }>>(
+          'grocery',
+          'items',
+          (cur) => {
+            const arr = cur ?? [];
+            // Mark the first match as checked. Any subsequent identical
+            // names are intentionally left alone — the AI would have
+            // emitted N items for N entries (see the "got everything
+            // except" few-shot pattern).
+            const idx = arr.findIndex((it) => !it.checked && matchItem(it, aiItem));
+            if (idx < 0) return arr;
+            return arr.map((it, i) => (i === idx ? { ...it, checked: true } : it));
+          },
+        );
+        // Treat checked items as purchases for the replenishment signal.
+        try {
+          opts.recordGroceryPurchase?.({
+            canonical: aiItem.canonical ?? aiItem.name,
+            qty: aiItem.qty,
+            unit: aiItem.unit,
+            source: 'shop_checked',
+            ts,
+          });
+        } catch { /* fire-and-forget */ }
+        break;
+      }
+
+      case 'move_to_pantry': {
+        // Remove from shopping (silent on no-match — user might be
+        // confirming possession of something never on the list).
+        store.update<Array<{ id: string; name: string; canonical?: string | null; ts: number; checked: boolean }>>(
+          'grocery',
+          'items',
+          (cur) => {
+            const arr = cur ?? [];
+            const idx = arr.findIndex((it) => matchItem(it, aiItem));
+            if (idx < 0) return arr;
+            return [...arr.slice(0, idx), ...arr.slice(idx + 1)];
+          },
+        );
+        // Add to pantry (always — "scratch X, got some" is a possession
+        // claim even when X wasn't on the shopping list).
+        const pantryRowId = newId();
+        store.update<Array<{ id: string; name: string; canonical?: string; ts: number; boughtTs: number }>>(
+          'grocery',
+          'pantry',
+          (cur) => [...(cur ?? []), {
+            id: pantryRowId,
+            name: aiItem.name,
+            canonical: aiItem.canonical ?? undefined,
+            ts,
+            boughtTs: ts,
+          }],
+        );
+        try {
+          opts.recordGroceryPurchase?.({
+            canonical: aiItem.canonical ?? aiItem.name,
+            qty: aiItem.qty,
+            unit: aiItem.unit,
+            source: 'ai_inferred',
+            ts,
+          });
+        } catch { /* fire-and-forget */ }
+        break;
+      }
+    }
+  }
+}
+
 export interface RouteBrainDumpResult {
   isAnswer: boolean;
   actions: Action[];
@@ -332,20 +562,37 @@ export function dispatchAction(
   //
   // T2 (2026-05-21): async AI routing via /route/grocery.
   //   - Emit `grocery:routing:pending` immediately (instant UI feedback).
-  //   - Call ai-proxy /route/grocery async (3s timeout).
-  //   - On success: emit `grocery:routed` with AI result + source=cache_hit/gemini_miss.
-  //   - On failure/timeout: keyword fallback (original behaviour below), source=fallback_keyword.
-  //   - Recipe expansion preserved: isRecipeExpansion items are kept.
-  //   - Store write (items/pantry) runs synchronously via keyword path first;
-  //     AI result is enrichment-only (adds canonical/category/intent metadata).
+  //   - Call ai-proxy /route/grocery async.
+  //   - On success: emit `grocery:routed` with AI result + source=cache/gemini.
+  //   - On failure/timeout: keyword fallback (original behaviour below),
+  //     source=fallback.
+  //
+  // Mutation (2026-05-22): when the input contains a mutation verb
+  // (remove / scratch / threw out / finished / "got everything except"
+  // and TR/ES equivalents) the synchronous keyword placeholder write is
+  // SUPPRESSED — we cannot write "remove pasta" to shopping as a regular
+  // line because that's exactly what the user wants undone. We still
+  // emit `grocery:routing:pending` so the UI shows the pending state,
+  // then wait for the AI to come back with action='remove' / 'check' /
+  // 'move_to_pantry' and apply the mutation against the live store.
   if (module === 'grocery' && kind === 'add') {
+    const isMutation = MUTATION_RE.test(data);
     const id = newId();
-    store.update<Array<{ id: string; name: string; ts: number; checked: boolean }>>(
-      'grocery',
-      'items',
-      (cur) => [...(cur ?? []), { id, name: data, ts, checked: false }],
-    );
-    emitResearchRow('home_records', id, data, ts, getLocale());
+
+    // Default path: place the placeholder in shopping immediately so the
+    // UI has something to render. Mutation path: skip the placeholder —
+    // we'll wait for the AI result to find and operate on the EXISTING
+    // matching items. If AI fails the user sees a no-op and the input
+    // line is dropped (we'd rather drop than incorrectly add "remove
+    // pasta" to the shopping list).
+    if (!isMutation) {
+      store.update<Array<{ id: string; name: string; ts: number; checked: boolean }>>(
+        'grocery',
+        'items',
+        (cur) => [...(cur ?? []), { id, name: data, ts, checked: false }],
+      );
+      emitResearchRow('home_records', id, data, ts, getLocale());
+    }
 
     // Async AI routing — fire-and-forget from the synchronous dispatch path.
     // Override base URL from opts if set (used by tests + dev).
@@ -357,58 +604,68 @@ export function dispatchAction(
         ts,
       });
     } catch { /* non-fatal */ }
+
+    // Capture context SYNCHRONOUSLY at dispatch time — not inside the
+    // async callback. The user's live list state at the moment they
+    // typed is what disambiguates "remove pasta" / "I finished the
+    // milk"; if we waited until the AI fetch resolved, a concurrent
+    // edit could shift the list out from under us.
+    const context = opts.getGroceryContext?.();
+
     void (async () => {
-      const result = await callGroceryRoute(data, id, opts.authToken);
+      const result = await callGroceryRoute(data, id, opts.authToken, context);
       const now2 = Date.now();
       if (result && result.items.length > 0) {
-        // AI succeeded — reconcile the keyword's synchronous shopping-write
-        // against the AI's classification. The keyword path always writes
-        // the raw text to `grocery.items` (shopping) so the UI has instant
-        // feedback. When AI returns and says "actually this is pantry" we
-        // need to MOVE the data, not just emit a notification. Remove the
-        // placeholder shopping item by id, then re-distribute AI items into
-        // the right slice (shopping vs pantry).
-        store.update<Array<{ id: string; name: string; canonical?: string; ts: number; checked: boolean }>>(
-          'grocery',
-          'items',
-          (cur) => (cur ?? []).filter((it) => it.id !== id),
-        );
-        for (const aiItem of result.items) {
-          const aiId = newId();
-          if (aiItem.target === 'pantry') {
-            store.update<Array<{ id: string; name: string; canonical?: string; ts: number; boughtTs: number }>>(
-              'grocery',
-              'pantry',
-              (cur) => [...(cur ?? []), {
-                id: aiId,
-                name: aiItem.name,
-                canonical: aiItem.canonical ?? undefined,
-                ts,
-                boughtTs: ts,
-              }],
-            );
-            // Purchase history — use AI-resolved canonical when available.
-            try {
-              opts.recordGroceryPurchase?.({
-                canonical: aiItem.canonical ?? aiItem.name,
-                qty: aiItem.qty,
-                unit: aiItem.unit,
-                source: 'ai_inferred',
-                ts,
-              });
-            } catch { /* fire-and-forget */ }
-          } else {
-            store.update<Array<{ id: string; name: string; canonical?: string; ts: number; checked: boolean }>>(
-              'grocery',
-              'items',
-              (cur) => [...(cur ?? []), {
-                id: aiId,
-                name: aiItem.name,
-                canonical: aiItem.canonical ?? undefined,
-                ts,
-                checked: false,
-              }],
-            );
+        if (isMutation) {
+          // Mutation path — apply action-aware logic against the live
+          // store. No placeholder to clean up (we suppressed it above).
+          applyGroceryMutations(result.items, store, ts, opts);
+        } else {
+          // Original "add" path — clean up the placeholder we wrote
+          // synchronously and re-distribute AI items into the right
+          // slice (shopping vs pantry).
+          store.update<Array<{ id: string; name: string; canonical?: string; ts: number; checked: boolean }>>(
+            'grocery',
+            'items',
+            (cur) => (cur ?? []).filter((it) => it.id !== id),
+          );
+          for (const aiItem of result.items) {
+            const aiId = newId();
+            if (aiItem.target === 'pantry') {
+              store.update<Array<{ id: string; name: string; canonical?: string; ts: number; boughtTs: number }>>(
+                'grocery',
+                'pantry',
+                (cur) => [...(cur ?? []), {
+                  id: aiId,
+                  name: aiItem.name,
+                  canonical: aiItem.canonical ?? undefined,
+                  ts,
+                  boughtTs: ts,
+                }],
+              );
+              // Purchase history — use AI-resolved canonical when available.
+              try {
+                opts.recordGroceryPurchase?.({
+                  canonical: aiItem.canonical ?? aiItem.name,
+                  qty: aiItem.qty,
+                  unit: aiItem.unit,
+                  source: 'ai_inferred',
+                  ts,
+                });
+              } catch { /* fire-and-forget */ }
+            } else {
+              store.update<Array<{ id: string; name: string; canonical?: string; ts: number; checked: boolean }>>(
+                'grocery',
+                'items',
+                (cur) => [...(cur ?? []), {
+                  id: aiId,
+                  name: aiItem.name,
+                  canonical: aiItem.canonical ?? undefined,
+                  ts,
+                  checked: false,
+                }],
+              );
+            }
           }
         }
         try {
@@ -426,13 +683,18 @@ export function dispatchAction(
           });
         } catch { /* non-fatal */ }
       } else {
-        // Fallback — keyword path already applied (item sits in shopping);
-        // emit with fallback source so SortedToast shows the "offline" state.
+        // Fallback.
+        //  - non-mutation: keyword placeholder is already in shopping; emit
+        //    fallback so the toast shows "offline sort".
+        //  - mutation: AI failed AND we suppressed the placeholder. There is
+        //    no safe local fallback (we'd need a fuzzy keyword matcher
+        //    against the live store, which is exactly the AI's job). Emit
+        //    an empty fallback so the UI knows nothing happened.
         try {
           events.emit('grocery:routed', {
             idempotency_key: id,
             raw: data,
-            items: [{ name: data, target: 'shopping' }],
+            items: isMutation ? [] : [{ name: data, target: 'shopping' }],
             source: 'fallback',
             latency_ms: Date.now() - ts,
             ts: now2,
@@ -466,8 +728,9 @@ export function dispatchAction(
         ts,
       });
     } catch { /* non-fatal */ }
+    const logContext = opts.getGroceryContext?.();
     void (async () => {
-      const result = await callGroceryRoute(data, id, opts.authToken);
+      const result = await callGroceryRoute(data, id, opts.authToken, logContext);
       const now2 = Date.now();
       try {
         events.emit('grocery:routed', {

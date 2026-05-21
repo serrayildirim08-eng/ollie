@@ -54,7 +54,7 @@ export interface RouteEnv {
 // ─── module registry ──────────────────────────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const MODULE_CONFIGS: Record<string, ModuleConfig<any>> = {
+const MODULE_CONFIGS: Record<string, ModuleConfig<any, any>> = {
   grocery: groceryConfig,
 };
 
@@ -108,9 +108,16 @@ export async function handleRoute(
   }
 
   // Parse body
-  let body: { text: string; dumpId?: string };
+  //
+  // `context` (2026-05-22) is optional list-state passed by the caller so the
+  // model can disambiguate mutation commands like "remove pasta" or
+  // "got everything except eggs" against the user's actual lists. Shape is
+  // intentionally module-agnostic at the route layer — each config decides
+  // how to render it into the system prompt (groceryConfig appends a
+  // CURRENT SHOPPING LIST / CURRENT PANTRY block).
+  let body: { text: string; dumpId?: string; context?: unknown };
   try {
-    body = (await req.json()) as { text: string; dumpId?: string };
+    body = (await req.json()) as { text: string; dumpId?: string; context?: unknown };
   } catch {
     return json({ error: 'bad_json' }, 400);
   }
@@ -157,11 +164,20 @@ export async function handleRoute(
     return json(resp);
   }
 
-  // 4. MISS — Gemini function-calling
+  // 4. MISS — Gemini function-calling.
+  // List context (when provided) is passed through to the config's prompt
+  // builder so groceryConfig can append the CURRENT SHOPPING LIST / PANTRY
+  // disambiguation block. Context is NOT factored into the cache key — the
+  // text-only embed remains the cache key so identical phrases share cache
+  // rows across users with different lists. Trade-off: a mutation cache hit
+  // returns the model's interpretation against an *empty* context, which
+  // means the downstream applier still has to fuzzy-match against the live
+  // list. That's acceptable because the applier already has a matchItem
+  // fallback for exactly this case.
   let classification: unknown;
   let language = 'en';
   try {
-    const result = await geminiClassify(cleanText, config, env.GEMINI_API_KEY);
+    const result = await geminiClassify(cleanText, config, env.GEMINI_API_KEY, body.context);
     classification = result.classification;
     language = result.language;
   } catch (err) {
@@ -321,10 +337,11 @@ interface GeminiResult {
 async function geminiClassify(
   text: string,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  config: ModuleConfig<any>,
+  config: ModuleConfig<any, any>,
   apiKey: string,
+  context?: unknown,
 ): Promise<GeminiResult> {
-  const systemPrompt = config.buildSystemPrompt();
+  const systemPrompt = config.buildSystemPrompt(context);
   const fnSchema = config.buildFunctionSchema();
 
   // Build few-shot examples as user/model turn pairs

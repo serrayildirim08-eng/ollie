@@ -8,12 +8,30 @@
  * Spec: docs/MODULE_AGNOSTIC_AI.md
  */
 
+/**
+ * Mutation action — added 2026-05-22 for list mutation commands
+ * (remove / check / move_to_pantry). Defaults to 'add' so existing
+ * Gemini cache rows and downstream consumers without `action` keep
+ * working unchanged.
+ */
+export type GroceryAction = 'add' | 'remove' | 'check' | 'move_to_pantry';
+
 export interface GroceryItem {
   name: string;
   canonical: string | null;
   category: string;
-  intent: 'acquire' | 'plan' | 'pantry' | 'unknown';
+  intent: 'acquire' | 'plan' | 'pantry' | 'unknown' | 'edit';
   target: 'shopping' | 'pantry';
+  /**
+   * The mutation to apply to the targeted slice.
+   *   - 'add' (default): append to slice.
+   *   - 'remove': delete a matching item from slice.
+   *   - 'check': mark a matching item as bought in shopping.
+   *   - 'move_to_pantry': remove from shopping AND append to pantry
+   *     (the "scratch X, got some" case).
+   * Items without an `action` field are treated as 'add' (backward compat).
+   */
+  action?: GroceryAction;
   qty?: number;
   unit?: string;
   shelfLifeDays?: number;
@@ -23,12 +41,29 @@ export interface GroceryItem {
 export interface GroceryClassification {
   items: GroceryItem[];
   /** Top-level intent of the dump fragment. */
-  intent: 'acquire' | 'plan' | 'pantry' | 'unknown';
+  intent: 'acquire' | 'plan' | 'pantry' | 'unknown' | 'edit';
   /** Detected language of the raw text. */
   language: 'en' | 'es' | 'tr' | 'other';
   /** Non-null when the fragment describes a dish/recipe — kept for recipe expansion. */
   recipeSourceLabel?: string | null;
 }
+
+/**
+ * List context passed alongside `text` on /route/grocery so Gemini can
+ * disambiguate "remove pasta" when multiple pastas exist, expand
+ * "everything except X" against the actual list, and decide where
+ * "I finished X" applies (pantry remove vs shopping add).
+ *
+ * Capped to 50 items per slice at the worker boundary to keep prompt
+ * tokens bounded.
+ */
+export interface GroceryListContext {
+  shoppingItems?: Array<{ name: string; canonical?: string | null }>;
+  pantryItems?: Array<{ name: string; canonical?: string | null }>;
+}
+
+/** Soft cap on list-context entries injected into the prompt. */
+export const LIST_CONTEXT_CAP = 50;
 
 export type GroceryIntentVerb = {
   acquire: string[];
@@ -36,7 +71,7 @@ export type GroceryIntentVerb = {
   pantry: string[];
 };
 
-export interface ModuleConfig<C> {
+export interface ModuleConfig<C, Ctx = unknown> {
   /** Human-readable module name (used in system prompt). */
   moduleName: string;
   /** Known/canonical items for this module (drives normalization hint). */
@@ -49,8 +84,12 @@ export interface ModuleConfig<C> {
   shelfLifeMap: Record<string, number>;
   /** Few-shot examples for the Gemini prompt. */
   examples: Array<{ input: string; output: C }>;
-  /** Build the Gemini system prompt for this module. */
-  buildSystemPrompt(): string;
+  /**
+   * Build the Gemini system prompt for this module. Optional `context`
+   * argument is appended to the prompt when present (e.g. current
+   * shopping + pantry lists for grocery mutation disambiguation).
+   */
+  buildSystemPrompt(context?: Ctx): string;
   /** Build the JSON schema block for Gemini function calling. */
   buildFunctionSchema(): Record<string, unknown>;
 }
@@ -291,6 +330,102 @@ const FEW_SHOT_EXAMPLES: Array<{ input: string; output: GroceryClassification }>
       ],
     },
   },
+  // ── Mutation commands (2026-05-22) ─────────────────────────────────────
+  // These set action=remove/check/move_to_pantry and intent=edit. The
+  // model uses the CURRENT SHOPPING LIST / CURRENT PANTRY context block
+  // appended at the end of the system prompt to disambiguate matches.
+
+  // Plain remove from shopping.
+  {
+    input: 'remove pasta from the list',
+    output: {
+      intent: 'edit',
+      language: 'en',
+      recipeSourceLabel: null,
+      items: [
+        { name: 'pasta', canonical: 'pasta', category: 'pantry', intent: 'edit', target: 'shopping', action: 'remove' },
+      ],
+    },
+  },
+  // Scratch X got some → remove from shopping + add to pantry.
+  {
+    input: 'scratch the bread, got some',
+    output: {
+      intent: 'edit',
+      language: 'en',
+      recipeSourceLabel: null,
+      items: [
+        { name: 'bread', canonical: 'bread', category: 'pantry', intent: 'edit', target: 'shopping', action: 'move_to_pantry', shelfLifeDays: 7 },
+      ],
+    },
+  },
+  // "Got everything except X" — enumerate shop list, mark all except X as
+  // checked. The shopping context in the prompt provides the enumeration.
+  {
+    input: 'got everything except eggs',
+    // Implicit context (would be appended by buildSystemPrompt):
+    //   CURRENT SHOPPING LIST: milk, eggs, bread, pasta
+    output: {
+      intent: 'edit',
+      language: 'en',
+      recipeSourceLabel: null,
+      items: [
+        { name: 'milk',  canonical: 'milk',  category: 'dairy',  intent: 'edit', target: 'shopping', action: 'check' },
+        { name: 'bread', canonical: 'bread', category: 'pantry', intent: 'edit', target: 'shopping', action: 'check' },
+        { name: 'pasta', canonical: 'pasta', category: 'pantry', intent: 'edit', target: 'shopping', action: 'check' },
+      ],
+    },
+  },
+  // "Finished X" where X is in pantry → remove from pantry (consumed).
+  {
+    input: 'I finished the milk',
+    // Implicit context: CURRENT PANTRY: milk, yogurt
+    output: {
+      intent: 'edit',
+      language: 'en',
+      recipeSourceLabel: null,
+      items: [
+        { name: 'milk', canonical: 'milk', category: 'dairy', intent: 'edit', target: 'pantry', action: 'remove' },
+      ],
+    },
+  },
+  // Spoiled — always pantry remove.
+  {
+    input: 'throw out the yogurt',
+    output: {
+      intent: 'edit',
+      language: 'en',
+      recipeSourceLabel: null,
+      items: [
+        { name: 'yogurt', canonical: 'yogurt', category: 'dairy', intent: 'edit', target: 'pantry', action: 'remove' },
+      ],
+    },
+  },
+  // Turkish — "listeden çıkar" remove from list.
+  {
+    input: 'pastayı listeden çıkar',
+    output: {
+      intent: 'edit',
+      language: 'tr',
+      recipeSourceLabel: null,
+      items: [
+        { name: 'pasta', canonical: 'pasta', category: 'pantry', intent: 'edit', target: 'shopping', action: 'remove' },
+      ],
+    },
+  },
+  // Spanish — "quita" remove from list.
+  {
+    input: 'quita la pasta de la lista',
+    output: {
+      intent: 'edit',
+      language: 'es',
+      recipeSourceLabel: null,
+      items: [
+        { name: 'pasta', canonical: 'pasta', category: 'pantry', intent: 'edit', target: 'shopping', action: 'remove' },
+      ],
+    },
+  },
+
   // Out-of-domain — not grocery, return empty.
   {
     input: 'buy stock',
@@ -303,10 +438,35 @@ const FEW_SHOT_EXAMPLES: Array<{ input: string; output: GroceryClassification }>
   },
 ];
 
-function buildSystemPrompt(): string {
+/**
+ * Render the list-context block appended to the system prompt when the
+ * caller passes the user's current lists. Returns an empty string when
+ * there's no context — preserves the previous prompt verbatim for
+ * existing Gemini cache rows.
+ */
+function renderListContext(context: GroceryListContext | undefined): string {
+  if (!context) return '';
+  const shop = (context.shoppingItems ?? [])
+    .slice(0, LIST_CONTEXT_CAP)
+    .map((i) => (i.canonical ?? i.name))
+    .filter((s) => typeof s === 'string' && s.length > 0);
+  const pantry = (context.pantryItems ?? [])
+    .slice(0, LIST_CONTEXT_CAP)
+    .map((i) => (i.canonical ?? i.name))
+    .filter((s) => typeof s === 'string' && s.length > 0);
+  if (shop.length === 0 && pantry.length === 0) return '';
+
+  const parts: string[] = ['', 'LIST CONTEXT (use this to disambiguate mutation commands):'];
+  if (shop.length > 0) parts.push(`CURRENT SHOPPING LIST: ${shop.join(', ')}`);
+  if (pantry.length > 0) parts.push(`CURRENT PANTRY: ${pantry.join(', ')}`);
+  return parts.join('\n');
+}
+
+function buildSystemPrompt(context?: GroceryListContext): string {
   const canonicalSample = CANONICAL_ITEMS.slice(0, 30).join(', ');
   const acquireVerbs = INTENT_VERBS.acquire.slice(0, 8).join(', ');
   const pantryVerbs = INTENT_VERBS.pantry.slice(0, 8).join(', ');
+  const contextBlock = renderListContext(context);
 
   return `You are an AI grocery assistant. Extract grocery items from a user's brain-dump text.
 
@@ -393,6 +553,62 @@ TARGET:
 
 SHELF LIFE: populate shelfLifeDays from your knowledge of typical shelf life.
 
+MUTATION COMMANDS — when the user wants to MODIFY an existing list (remove,
+check off, throw out, mark as got), set the item's "action" field. Use the
+LIST CONTEXT block below to identify which existing entry the command refers
+to. When NO mutation verb is present, leave action="add" (or omit — "add" is
+the default).
+
+Set intent="edit" for the top-level fragment AND each item when ANY mutation
+verb is detected.
+
+Action values:
+- "remove" — remove a single matching item from the target slice.
+    Verbs: "remove", "delete", "take X off the list", "scratch X" (alone,
+    no possession), "no need for X", "drop X from the list".
+    TR: "çıkar", "sil", "listeden çıkar", "kaldır", "iptal".
+    ES: "quita", "elimina", "borra", "saca", "saca de la lista".
+    target = the slice currently holding the item (shopping or pantry per
+    the LIST CONTEXT). When unsure, prefer shopping.
+
+- "move_to_pantry" — combined remove-from-shopping + add-to-pantry. Triggered
+    by "scratch X, got some" / "actually I have X already" / "X aldım zaten"
+    / "ya tengo X". target="shopping" (the slice we're removing from).
+
+- "check" — mark a single matching item as bought in shopping (the user
+    completed the purchase). Triggered when the user lists what they
+    already bought. The big multi-item case is "got everything except X" /
+    "got all but X" / "all except X" / "menos X" / "excepto X" / "X hariç" —
+    for these, enumerate the CURRENT SHOPPING LIST and emit one
+    action="check" item per entry EXCEPT X.
+    target always = "shopping".
+
+- "remove" from pantry — triggered by "I finished X" / "ran out of X" /
+    "used up X" / "threw out X" / "X bitti" / "X bozuldu" / "se acabó X" /
+    "se echó a perder X", ONLY when X currently appears in CURRENT PANTRY.
+    If X is NOT in pantry then "I finished X" is a DEPLETION signal — emit
+    a normal action="add" item with target="shopping" (buy more), not a
+    remove. This is the one case where the LIST CONTEXT changes the action.
+    target="pantry" for the remove case; target="shopping" for the
+    depletion/add case.
+
+- "throw out X" / "X bozuldu" / "se echó a perder X" → always action="remove"
+    target="pantry" (spoilage — context doesn't matter; user is telling us
+    they discarded it).
+
+DISAMBIGUATION RULES:
+- Prefer exact canonical match over substring. "remove pasta" with shopping
+  [whole wheat pasta, rice] → match "whole wheat pasta" (canonical="pasta").
+- When LIST CONTEXT is empty or absent, still emit the mutation with action
+  set — downstream applier uses fuzzy matching as a fallback.
+- When you emit a mutation, do NOT also emit a duplicate add. One verb =
+  one item (except the "everything except X" case which fans out).
+
+BACKWARD COMPAT: a brain-dump with NO mutation verbs should classify
+exactly as it did before mutation support — action="add" (or omitted),
+intent in {acquire, plan, pantry, unknown}, never "edit".
+${contextBlock}
+
 Respond ONLY with the classify_grocery_items function call.`;
 }
 
@@ -406,7 +622,7 @@ function buildFunctionSchema(): Record<string, unknown> {
       properties: {
         intent: {
           type: 'string',
-          enum: ['acquire', 'plan', 'pantry', 'unknown'],
+          enum: ['acquire', 'plan', 'pantry', 'unknown', 'edit'],
           description: 'Top-level intent of the whole fragment.',
         },
         language: {
@@ -426,8 +642,13 @@ function buildFunctionSchema(): Record<string, unknown> {
               name:             { type: 'string', description: 'Raw item name from user text.' },
               canonical:        { type: 'string', description: 'Normalized canonical name or null.' },
               category:         { type: 'string', enum: CATEGORIES },
-              intent:           { type: 'string', enum: ['acquire', 'plan', 'pantry', 'unknown'] },
+              intent:           { type: 'string', enum: ['acquire', 'plan', 'pantry', 'unknown', 'edit'] },
               target:           { type: 'string', enum: ['shopping', 'pantry'] },
+              action:           {
+                type: 'string',
+                enum: ['add', 'remove', 'check', 'move_to_pantry'],
+                description: 'Mutation to apply. Defaults to "add" when omitted.',
+              },
               qty:              { type: 'number' },
               unit:             { type: 'string' },
               shelfLifeDays:    { type: 'number' },
@@ -440,7 +661,7 @@ function buildFunctionSchema(): Record<string, unknown> {
   };
 }
 
-export const groceryConfig: ModuleConfig<GroceryClassification> = {
+export const groceryConfig: ModuleConfig<GroceryClassification, GroceryListContext> = {
   moduleName: 'grocery',
   canonicalItems: CANONICAL_ITEMS,
   intentVerbs: INTENT_VERBS,
