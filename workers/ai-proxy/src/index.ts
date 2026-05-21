@@ -39,8 +39,17 @@ import {
   handleClaimInvite,
   type InvitesEnv,
 } from './invites';
+import { handleRoute, type RouteEnv } from './router/route';
 
-export interface Env extends EnrichEnv, IngestEnv, LabelEnv, InvitesEnv {
+/**
+ * Cloudflare native Rate Limiting binding. `limit()` is atomic edge-side,
+ * which fixes the read-then-write race the KV counter had.
+ */
+export interface RateLimiter {
+  limit(opts: { key: string }): Promise<{ success: boolean }>;
+}
+
+export interface Env extends EnrichEnv, IngestEnv, LabelEnv, InvitesEnv, RouteEnv {
   ANTHROPIC_API_KEY: string;
   CACHE_KV: KVNamespace;
   RATE_KV: KVNamespace;
@@ -85,6 +94,15 @@ export default {
     }
     if (url.pathname === '/claim-invite') {
       return handleClaimInvite(req, env);
+    }
+
+    // ── /route/:module — module-agnostic AI semantic routing (T2) ────────────
+    // e.g. POST /route/grocery
+    // Auth: JWT enforcement gated by T0_JWT_ENFORCED env var (T0 dependency).
+    const routeMatch = url.pathname.match(/^\/route\/([a-z_-]+)$/);
+    if (routeMatch) {
+      const module = routeMatch[1];
+      return handleRoute(req, env, module);
     }
 
     if (url.pathname !== '/brain-dump' && url.pathname !== '/v1/messages') {
