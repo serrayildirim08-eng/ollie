@@ -23,10 +23,21 @@
  *   the visually ambiguous 0/o/1/l/I removed. Lower-cased.
  */
 
+import { json, upstreamError } from '@ollie/worker-http';
+import { verifyClerkJwt } from './clerk-verify';
+
 export interface InvitesEnv {
   SUPABASE_URL: string;
   SUPABASE_SERVICE_ROLE: string;
   SUPABASE_ANON_KEY: string;
+  /**
+   * Clerk issuer URL — e.g. https://faithful-stag-15.clerk.accounts.dev.
+   * Set as a wrangler secret on deploy. When present, the JWT verify path
+   * tries Clerk first; when absent, behaviour is identical to pre-Clerk
+   * (Supabase-only). Migration-safe: a deploy with no CLERK_ISSUER keeps
+   * existing Supabase-authed sessions working.
+   */
+  CLERK_ISSUER?: string;
   INVITE_BASE_URL?: string;
   RATE_KV: KVNamespace;
 }
@@ -292,7 +303,29 @@ function randSegment(n: number): string {
   return out;
 }
 
-async function verifyJwt(jwt: string, env: InvitesEnv): Promise<string | null> {
+/**
+ * Verify a user JWT and return the verified user id.
+ *
+ * Dual-mode (Clerk migration · Phase 3 / T0):
+ *   1. If `env.CLERK_ISSUER` is set, try Clerk JWKS verify first.
+ *   2. Fall back to Supabase `GET /auth/v1/user` for legacy tokens.
+ *
+ * Returns null on any failure. Never throws.
+ */
+export async function verifyJwt(
+  jwt: string,
+  env: {
+    SUPABASE_URL: string;
+    SUPABASE_ANON_KEY: string;
+    CLERK_ISSUER?: string;
+  },
+): Promise<string | null> {
+  if (env.CLERK_ISSUER) {
+    const clerkUserId = await verifyClerkJwt(jwt, env);
+    if (clerkUserId) return clerkUserId;
+  }
+
+
   if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) return null;
   const url = `${env.SUPABASE_URL.replace(/\/$/, '')}/auth/v1/user`;
   try {
