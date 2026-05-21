@@ -103,10 +103,17 @@ describe('routeBrainDump — grocery + body + cycle + finance', () => {
     expect(log.length).toBeGreaterThan(0);
   });
 
-  it('"exercise: walked 30 min" → habits.items', () => {
+  // Phantom-fix (2026-05-21): habits brain-dump text now lands in the
+  // slice HabitsApp/HabitsModule actually read (`shared.habits_v2`, the
+  // StoredHabit[] list), not the unread `habits.items` bucket.
+  it('"exercise: walked 30 min" → shared.habits_v2 (NOT habits.items)', () => {
     routeBrainDump('exercise: walked 30 min', store, FIXED_NOW);
-    const habits = store.get<GenericItem[]>('habits', 'items', []);
+    const habits = store.get<Array<{ name: string; cueTime: string }>>(
+      'shared', 'habits_v2', [],
+    );
     expect(habits.length).toBeGreaterThan(0);
+    expect(habits[0].name).toContain('exercise');
+    expect(store.get<GenericItem[]>('habits', 'items', [])).toHaveLength(0);
   });
 
   it('"pay the rent" → finance.bills (finance sub-classification)', () => {
@@ -130,22 +137,161 @@ describe('routeBrainDump — pets / admin / sleep', () => {
   let store: ReturnType<typeof makeStore>;
   beforeEach(() => { store = makeStore(); });
 
-  it('"tontin needs hay" → pets.items', () => {
+  // Phantom-fix (2026-05-21): pets brain-dump text now lands in the slice
+  // the UI actually reads (`pets.observations`, not `pets.items`).
+  it('"tontin needs hay" → pets.observations (NOT pets.items)', () => {
     routeBrainDump('tontin needs hay', store, FIXED_NOW);
-    const pets = store.get<GenericItem[]>('pets', 'items', []);
-    expect(pets.length).toBeGreaterThan(0);
+    const obs = store.get<Array<{ id: string; text: string; pet_id: string; tags: string[] }>>(
+      'pets', 'observations', [],
+    );
+    expect(obs.length).toBeGreaterThan(0);
+    expect(obs[0].text).toContain('tontin');
+    expect(obs[0].pet_id).toBe(''); // unattached until user resolves
+    expect(Array.isArray(obs[0].tags)).toBe(true);
+    // The phantom slice MUST stay empty — that was the silent-loss path.
+    expect(store.get<GenericItem[]>('pets', 'items', [])).toHaveLength(0);
   });
 
-  it('"renew passport" → admin.items', () => {
+  // Phantom-fix: admin → admin.tasks (the slice AdminApp/AdminModule read).
+  it('"renew passport" → admin.tasks (NOT admin.items)', () => {
     routeBrainDump('renew passport', store, FIXED_NOW);
-    const admin = store.get<GenericItem[]>('admin', 'items', []);
-    expect(admin.length).toBeGreaterThan(0);
+    const tasks = store.get<Array<{ id: string; label: string; state: string; status: string }>>(
+      'admin', 'tasks', [],
+    );
+    expect(tasks.length).toBeGreaterThan(0);
+    expect(tasks[0].label).toContain('renew passport');
+    expect(tasks[0].state).toBe('open');
+    expect(store.get<GenericItem[]>('admin', 'items', [])).toHaveLength(0);
   });
 
   it('"so tired tonight, going to bed" → sleep.items', () => {
     routeBrainDump('so tired tonight, going to bed', store, FIXED_NOW);
     const sleep = store.get<GenericItem[]>('sleep', 'items', []);
     expect(sleep.length).toBeGreaterThan(0);
+  });
+});
+
+// ─── Phantom-fix (2026-05-21) ─────────────────────────────────────────────────
+//
+// Five modules used to silently lose brain-dump input: the dispatcher's
+// default fallthrough wrote to `<module>.items`, but the UI didn't read it.
+// Coverage below pins each fix to the slice the UI actually subscribes to,
+// plus the "no UI surface → dump.items" reroute for health + reminders.
+
+describe('phantom-fix · explicit handlers land in UI-read slices', () => {
+  let store: ReturnType<typeof makeStore>;
+  beforeEach(() => { store = makeStore(); });
+
+  // ── pets ─────────────────────────────────────────────────────────────
+  it('synthetic pets action lands in pets.observations with StoredObservation shape', () => {
+    dispatchAction(
+      { module: 'pets', action: 'add', data: 'guinea pig hay refilled' },
+      store, FIXED_NOW,
+    );
+    type Obs = {
+      id: string; pet_id: string; text: string; tags: string[];
+      kind: string; created_at: number; occurred_at: number;
+    };
+    const obs = store.get<Obs[]>('pets', 'observations', []);
+    expect(obs).toHaveLength(1);
+    expect(obs[0].kind).toBe('note');
+    expect(obs[0].created_at).toBe(FIXED_NOW);
+    expect(obs[0].occurred_at).toBe(FIXED_NOW);
+    expect(obs[0].tags).toEqual([]);
+    expect(store.get<unknown[]>('pets', 'items', [])).toHaveLength(0);
+  });
+
+  // ── admin ────────────────────────────────────────────────────────────
+  it('synthetic admin action lands in admin.tasks with AdminItem shape', () => {
+    dispatchAction(
+      { module: 'admin', action: 'add', data: 'book dentist' },
+      store, FIXED_NOW,
+    );
+    type Task = {
+      id: string; label: string; title: string;
+      state: string; status: string; created_at: number; ts: number;
+    };
+    const tasks = store.get<Task[]>('admin', 'tasks', []);
+    expect(tasks).toHaveLength(1);
+    expect(tasks[0].label).toBe('book dentist');
+    expect(tasks[0].title).toBe('book dentist');
+    expect(tasks[0].state).toBe('open');
+    expect(tasks[0].status).toBe('open');
+    expect(tasks[0].created_at).toBe(FIXED_NOW);
+    expect(tasks[0].ts).toBe(FIXED_NOW);
+    expect(store.get<unknown[]>('admin', 'items', [])).toHaveLength(0);
+  });
+
+  // ── habits ───────────────────────────────────────────────────────────
+  it('synthetic habits action lands in shared.habits_v2 with StoredHabit shape', () => {
+    dispatchAction(
+      { module: 'habits', action: 'add', data: 'stretch after coffee' },
+      store, FIXED_NOW,
+    );
+    type Habit = {
+      id: string; name: string; cue: string;
+      cueTime: 'morning' | 'anytime' | 'evening';
+      completions: Array<{ ts: number }>;
+    };
+    const habits = store.get<Habit[]>('shared', 'habits_v2', []);
+    expect(habits).toHaveLength(1);
+    expect(habits[0].name).toBe('stretch after coffee');
+    expect(habits[0].cueTime).toBe('anytime');
+    expect(habits[0].completions).toEqual([]);
+    expect(habits[0].id.startsWith('h_')).toBe(true);
+    expect(store.get<unknown[]>('habits', 'items', [])).toHaveLength(0);
+  });
+
+  it('a second habits action appends to shared.habits_v2 (does not clobber)', () => {
+    dispatchAction({ module: 'habits', action: 'add', data: 'a' }, store, FIXED_NOW);
+    dispatchAction({ module: 'habits', action: 'add', data: 'b' }, store, FIXED_NOW);
+    const habits = store.get<Array<{ name: string }>>('shared', 'habits_v2', []);
+    expect(habits.map((h) => h.name)).toEqual(['a', 'b']);
+  });
+
+  // ── health ───────────────────────────────────────────────────────────
+  // No `health` UI surface exists; route to dump.items so it surfaces in
+  // the brain-dump archive instead of vanishing into `health.items`.
+  it('synthetic health action reroutes to dump.items (NOT health.items)', () => {
+    dispatchAction(
+      { module: 'health', action: 'add', data: 'sprained my ankle on the stairs' },
+      store, FIXED_NOW,
+    );
+    const dump = store.get<GenericItem[]>('dump', 'items', []);
+    expect(dump).toHaveLength(1);
+    expect(dump[0].text).toContain('sprained');
+    expect(store.get<unknown[]>('health', 'items', [])).toHaveLength(0);
+  });
+
+  it('keyword-routed "sprained my ankle" → dump.items via health reroute', () => {
+    routeBrainDump('sprained my ankle today', store, FIXED_NOW);
+    const dump = store.get<GenericItem[]>('dump', 'items', []);
+    expect(dump.length).toBeGreaterThan(0);
+    expect(store.get<unknown[]>('health', 'items', [])).toHaveLength(0);
+  });
+
+  // ── reminders ───────────────────────────────────────────────────────
+  // fallbackRoute no longer emits `reminders` actions — reminder scheduling
+  // runs upstream in useApplyBrainDump via parseReminder. Verify the
+  // keyword path does not produce an orphan `reminders.items` row.
+  it('"remind me to call mama tomorrow" → no reminders.items orphan row', () => {
+    const r = routeBrainDump('remind me to call mama tomorrow', store, FIXED_NOW);
+    expect(r.modulesHit).not.toContain('reminders');
+    expect(store.get<unknown[]>('reminders', 'items', [])).toHaveLength(0);
+  });
+
+  it('a synthetic `reminders` action still lands in reminders.items via the default fallthrough (back-compat for direct callers)', () => {
+    // The ModuleName union still includes 'reminders' so older callers
+    // that build the Action by hand keep working — the default branch
+    // just writes the generic shape. This is the SAFE behaviour now that
+    // the keyword router no longer manufactures these actions itself.
+    dispatchAction(
+      { module: 'reminders', action: 'add', data: 'call mama' },
+      store, FIXED_NOW,
+    );
+    const items = store.get<GenericItem[]>('reminders', 'items', []);
+    expect(items).toHaveLength(1);
+    expect(items[0].text).toBe('call mama');
   });
 });
 

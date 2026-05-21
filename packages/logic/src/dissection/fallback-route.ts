@@ -9,11 +9,17 @@ import type { Action, AnswerRoute, ModuleName, Route } from './types';
 
 // ─── keyword map (EN + TR) ───────────────────────────────────────────────────
 
+// NOTE — no `reminders` entry. Reminder semantics are handled UPSTREAM in
+// apps/web/src/hooks/useApplyBrainDump.ts: parseReminder() runs before the
+// keyword router and, on a hit, schedules the reminder via
+// reminderScheduler.add() (which writes the reminders store slice + emits
+// `void:reminder:scheduled` for the iOS local-notification bridge). If we
+// also routed `reminders` here, dispatchAction's default fallthrough would
+// write the same text into `reminders.items` — a slice no UI module reads,
+// so the entry would silently vanish (the "phantom reminders" bug). Time-
+// only phrases the parser misses ("tomorrow morning") harmlessly fall
+// through to dump.items via the catch-all at the bottom of fallbackRoute.
 const KEYWORD_MAP: Record<string, readonly string[]> = {
-  reminders: [
-    'remind me','reminder','remind ',' at ','tonight at','tomorrow at','in the morning','in the afternoon','in the evening','next monday','next tuesday','next wednesday','next thursday','next friday','next saturday','next sunday',
-    'hatırlat','unutma','saat ','yarın','önümüzdeki','pazartesi','salı','çarşamba','perşembe','cuma','cumartesi','pazar','sabah ','akşam ','gece ','öğleden sonra','birazdan','sonra',
-  ],
   grocery: [
     'egg','milk','bread','coffee','buy','grocery','food','cook','recipe','snack','fruit','vegetable','meat','cheese','rice','pasta','oil','sugar','flour','tea','juice','cereal','yogurt','butter','chicken','fish','beef','tomato','onion','garlic','potato','banana','apple','toilet paper','paper towel','soap','shampoo','detergent','sponge',
     'yumurta','süt','ekmek','kahve','aldım','alacağım','ihtiyaç','market','yemek','pişir','sebze','meyve','peynir','pirinç','yoğurt','tereyağ','tavuk','domates','soğan','sarımsak','patates','muz','elma','çay','makarna','tuvalet kağıdı','şampuan','sabun','deterjan',
