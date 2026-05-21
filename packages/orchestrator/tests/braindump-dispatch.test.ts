@@ -7,9 +7,10 @@
  * slice — not in a generic <module>.items bucket.
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { createStore, createMemoryAdapter } from '@ollie/store';
 import { routeBrainDump, dispatchAction } from '../src/braindump-dispatch';
+import type { GroceryPurchaseEvent } from '../src/braindump-dispatch';
 
 const FIXED_NOW = new Date('2026-05-14T12:00:00Z').getTime();
 
@@ -309,6 +310,164 @@ describe('routeBrainDump — questions / unknown / answer-route', () => {
     routeBrainDump('asdf qwerty zxcv', store, FIXED_NOW);
     const dump = store.get<GenericItem[]>('dump', 'items', []);
     expect(dump.length).toBeGreaterThan(0);
+  });
+});
+
+// ─── Grocery purchase history (05-ADAPTIVE-REPLENISHMENT spec) ───────────────
+//
+// recordGroceryPurchase callback is injected via DispatchOptions. Tests use a
+// memory recorder so no network call is required.
+//
+// NOTE: kind='add' AI-routing tests are async (the AI path is fire-and-forget).
+// We use a manual mock for callGroceryRoute via _setAiProxyBaseUrl + a local
+// fetch mock so the async path resolves in the test event loop.
+
+describe('dispatchAction · grocery purchase history callbacks', () => {
+  let store: ReturnType<typeof makeStore>;
+  let recorded: GroceryPurchaseEvent[];
+  let recordGroceryPurchase: (e: GroceryPurchaseEvent) => void;
+
+  beforeEach(() => {
+    store = makeStore();
+    recorded = [];
+    recordGroceryPurchase = (e) => recorded.push(e);
+  });
+
+  // TC1: kind='log' (pantry_add) → 1 event, source=pantry_add
+  it('kind=log fires recordGroceryPurchase with source=pantry_add', () => {
+    dispatchAction(
+      { module: 'grocery', action: 'log', data: 'bought milk' },
+      store,
+      FIXED_NOW,
+      { recordGroceryPurchase },
+    );
+    expect(recorded).toHaveLength(1);
+    expect(recorded[0].source).toBe('pantry_add');
+    expect(recorded[0].canonical).toBe('bought milk');
+    expect(recorded[0].ts).toBe(FIXED_NOW);
+  });
+
+  // TC5: multiple kind='log' calls → multiple events, each with own ts
+  it('multiple kind=log calls produce independent events', () => {
+    dispatchAction(
+      { module: 'grocery', action: 'log', data: 'eggs' },
+      store,
+      FIXED_NOW,
+      { recordGroceryPurchase },
+    );
+    dispatchAction(
+      { module: 'grocery', action: 'log', data: 'butter' },
+      store,
+      FIXED_NOW + 1000,
+      { recordGroceryPurchase },
+    );
+    expect(recorded).toHaveLength(2);
+    expect(recorded[0].canonical).toBe('eggs');
+    expect(recorded[0].ts).toBe(FIXED_NOW);
+    expect(recorded[1].canonical).toBe('butter');
+    expect(recorded[1].ts).toBe(FIXED_NOW + 1000);
+  });
+
+  // TC2: AI returns items[{target:'pantry', canonical:'milk'}] → 1 event, source=ai_inferred
+  it('kind=add AI pantry result fires recordGroceryPurchase with source=ai_inferred', async () => {
+    const fakeFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        source: 'cache_hit',
+        latencyMs: 50,
+        language: 'en',
+        classification: {
+          items: [{ name: 'milk', canonical: 'milk', category: 'dairy', intent: 'buy', target: 'pantry' }],
+        },
+      }),
+    });
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = fakeFetch as unknown as typeof fetch;
+
+    dispatchAction(
+      { module: 'grocery', action: 'add', data: 'got milk' },
+      store,
+      FIXED_NOW,
+      { recordGroceryPurchase, aiProxyBaseUrl: 'https://test-proxy' },
+    );
+
+    // Let the async AI path settle
+    await new Promise((r) => setTimeout(r, 10));
+
+    globalThis.fetch = originalFetch;
+
+    // Exactly 1 event, pantry item
+    const pantryEvents = recorded.filter((e) => e.source === 'ai_inferred');
+    expect(pantryEvents).toHaveLength(1);
+    expect(pantryEvents[0].canonical).toBe('milk');
+    expect(pantryEvents[0].source).toBe('ai_inferred');
+  });
+
+  // TC3: AI returns 2 items (1 pantry, 1 shopping) → 1 event for pantry only
+  it('kind=add with mixed targets fires 1 event for pantry item only', async () => {
+    const fakeFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        source: 'gemini_miss',
+        latencyMs: 200,
+        language: 'en',
+        classification: {
+          items: [
+            { name: 'milk', canonical: 'milk', category: 'dairy', intent: 'buy', target: 'pantry' },
+            { name: 'eggs', canonical: 'eggs', category: 'protein', intent: 'buy', target: 'shopping' },
+          ],
+        },
+      }),
+    });
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = fakeFetch as unknown as typeof fetch;
+
+    dispatchAction(
+      { module: 'grocery', action: 'add', data: 'milk and eggs' },
+      store,
+      FIXED_NOW,
+      { recordGroceryPurchase, aiProxyBaseUrl: 'https://test-proxy' },
+    );
+
+    await new Promise((r) => setTimeout(r, 10));
+    globalThis.fetch = originalFetch;
+
+    const pantryEvents = recorded.filter((e) => e.source === 'ai_inferred');
+    expect(pantryEvents).toHaveLength(1);
+    expect(pantryEvents[0].canonical).toBe('milk');
+    // shopping item must NOT produce an event
+    expect(recorded.filter((e) => e.canonical === 'eggs')).toHaveLength(0);
+  });
+
+  // TC4: AI fails (returns null) → 0 events
+  it('kind=add when AI fails produces 0 purchase events', async () => {
+    const fakeFetch = vi.fn().mockRejectedValue(new Error('network'));
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = fakeFetch as unknown as typeof fetch;
+
+    dispatchAction(
+      { module: 'grocery', action: 'add', data: 'some groceries' },
+      store,
+      FIXED_NOW,
+      { recordGroceryPurchase, aiProxyBaseUrl: 'https://test-proxy' },
+    );
+
+    await new Promise((r) => setTimeout(r, 20));
+    globalThis.fetch = originalFetch;
+
+    expect(recorded).toHaveLength(0);
+  });
+
+  // Callback omitted → no throw
+  it('kind=log without recordGroceryPurchase opt does not throw', () => {
+    expect(() =>
+      dispatchAction(
+        { module: 'grocery', action: 'log', data: 'rice' },
+        store,
+        FIXED_NOW,
+        {},
+      ),
+    ).not.toThrow();
   });
 });
 

@@ -98,6 +98,7 @@ export type {
   DispatchLocale,
   DispatchOptions,
   FinanceSlice,
+  GroceryPurchaseEvent,
 } from './braindump-dispatch';
 export {
   createMatterRoutingOrchestrator,

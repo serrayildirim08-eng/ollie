@@ -14,10 +14,19 @@ import { IconChevronDown, v2 } from '../../money-v2/v2';
 import { ShelfBar } from '../components/ShelfBar';
 import { pantryVM } from '../selectors';
 import type { GrocerySlices, PantryShelf, ShelfTier } from '../selectors';
+import { ReplenishmentBadge } from '../../../components/ReplenishmentBadge';
+import { staticEstimate } from '../../../hooks/useReplenishment';
+import type { ReplenishmentEstimate } from '../../../hooks/useReplenishment';
 
 export interface PantryViewProps {
   now: number;
   slices: GrocerySlices;
+  /**
+   * Per-canonical replenishment estimates, keyed by canonical name.
+   * Caller (`GroceryFace`) sources from `useReplenishment`; the row
+   * resolves with `staticEstimate(canonical)` when a key is absent.
+   */
+  estimates: Map<string, ReplenishmentEstimate>;
 }
 
 const SHELF_NAME_COLOR: Record<ShelfTier, string> = {
@@ -25,13 +34,8 @@ const SHELF_NAME_COLOR: Record<ShelfTier, string> = {
   watching: v2.accent,
   stocked: v2.mute,
 };
-const DAYS_COLOR: Record<ShelfTier, string> = {
-  critical: v2.umber,
-  watching: v2.accent,
-  stocked: v2.mute,
-};
 
-export function PantryView({ now, slices }: PantryViewProps) {
+export function PantryView({ now, slices, estimates }: PantryViewProps) {
   const vm = useMemo(() => pantryVM(slices, now), [slices, now]);
   const [stockedFolded, setStockedFolded] = useState(false);
 
@@ -108,6 +112,7 @@ export function PantryView({ now, slices }: PantryViewProps) {
           <Shelf
             key={shelf.tier}
             shelf={shelf}
+            estimates={estimates}
             folded={shelf.tier === 'stocked' && stockedFolded}
             onToggleFold={
               shelf.tier === 'stocked'
@@ -157,13 +162,15 @@ export function PantryView({ now, slices }: PantryViewProps) {
 
 interface ShelfProps {
   shelf: PantryShelf;
+  /** the live replenishment estimates, keyed by canonical */
+  estimates: Map<string, ReplenishmentEstimate>;
   /** true when the (stocked) shelf is collapsed */
   folded: boolean;
   /** present only for the stocked shelf — the fold toggle */
   onToggleFold?: () => void;
 }
 
-function Shelf({ shelf, folded, onToggleFold }: ShelfProps) {
+function Shelf({ shelf, estimates, folded, onToggleFold }: ShelfProps) {
   return (
     <div style={{ marginTop: 24 }}>
       {/* the shelf header */}
@@ -210,68 +217,73 @@ function Shelf({ shelf, folded, onToggleFold }: ShelfProps) {
 
       {/* the items — hidden when the shelf is folded */}
       {!folded &&
-        shelf.rows.map((row, i) => (
-          <div
-            key={row.id}
-            style={{
-              boxSizing: 'border-box',
-              borderTop: `1px solid ${v2.line}`,
-              borderBottom:
-                i === shelf.rows.length - 1 ? `1px solid ${v2.line}` : 'none',
-              padding: '15px 2px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 14,
-            }}
-          >
+        shelf.rows.map((row, i) => {
+          // resolve the row's replenishment estimate, falling back to the
+          // static map when the worker has no observed history for it yet
+          const estimate =
+            estimates.get(row.canonical) ?? staticEstimate(row.canonical);
+          return (
             <div
+              key={row.id}
               style={{
-                flex: 1,
-                minWidth: 0,
+                boxSizing: 'border-box',
+                borderTop: `1px solid ${v2.line}`,
+                borderBottom:
+                  i === shelf.rows.length - 1 ? `1px solid ${v2.line}` : 'none',
+                padding: '15px 2px',
                 display: 'flex',
-                flexDirection: 'column',
-                gap: 8,
+                alignItems: 'center',
+                gap: 14,
               }}
             >
-              <span
+              <div
                 style={{
-                  fontSize: 15,
-                  color: v2.ink,
-                  fontWeight: 500,
-                  letterSpacing: '-0.012em',
+                  flex: 1,
+                  minWidth: 0,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 8,
                 }}
               >
-                {row.name}
-              </span>
-              <ShelfBar fill={row.fill} tier={row.tier} />
+                <span
+                  style={{
+                    fontSize: 15,
+                    color: v2.ink,
+                    fontWeight: 500,
+                    letterSpacing: '-0.012em',
+                  }}
+                >
+                  {row.name}
+                </span>
+                <ShelfBar fill={row.fill} tier={row.tier} />
+              </div>
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'flex-end',
+                  gap: 2,
+                  minWidth: 64,
+                  flexShrink: 0,
+                  textAlign: 'right',
+                }}
+              >
+                <ReplenishmentBadge estimate={estimate} />
+                <small
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 500,
+                    color: v2.mute,
+                    letterSpacing: '0.02em',
+                  }}
+                >
+                  {/* pantry voice: "use it" / "left" caption — preserved */}
+                  {row.daysSub}
+                </small>
+              </div>
             </div>
-            <span
-              style={{
-                fontSize: 13,
-                fontWeight: 600,
-                letterSpacing: '-0.01em',
-                textAlign: 'right',
-                minWidth: 52,
-                flexShrink: 0,
-                color: DAYS_COLOR[row.tier],
-              }}
-            >
-              {row.daysLabel}
-              <small
-                style={{
-                  display: 'block',
-                  fontSize: 10,
-                  fontWeight: 500,
-                  color: v2.mute,
-                  letterSpacing: '0.02em',
-                  marginTop: 1,
-                }}
-              >
-                {row.daysSub}
-              </small>
-            </span>
-          </div>
-        ))}
+          );
+        })}
 
       {/* the fold affordance — only the stocked shelf carries one */}
       {onToggleFold && (

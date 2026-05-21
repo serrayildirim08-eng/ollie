@@ -97,6 +97,8 @@ export function shelfLifeDays(p: GroceryStoredPantryItem): number {
 export interface ShopRow {
   id: string;
   name: string;
+  /** the canonical key for replenishment lookup (lowercased itemKey) */
+  canonical: string;
   /** the soft quantity line ("1 bottle", "2L", "in pantry", or '') */
   qty: string;
   /** a struck, got-it line — checked off into the pantry */
@@ -146,6 +148,7 @@ export function shopVM(slices: GrocerySlices, now: number): ShopVM {
   const rows: ShopRow[] = [...open, ...got].map((it, i) => ({
     id: it.id ?? `g-row-${i}`,
     name: itemName(it),
+    canonical: itemKey(it),
     qty: shopQtyLine(it),
     got: Boolean(it.checked),
   }));
@@ -190,6 +193,8 @@ export type ShelfTier = 'critical' | 'watching' | 'stocked';
 export interface PantryRow {
   id: string;
   name: string;
+  /** the canonical key for replenishment lookup (lowercased itemKey) */
+  canonical: string;
   /** which shelf it lives on */
   tier: ShelfTier;
   /** % of shelf life remaining, 0..1 — the fill-bar width */
@@ -249,6 +254,7 @@ export function pantryVM(slices: GrocerySlices, now: number): PantryVM {
     const row: PantryRow = {
       id: p.id ?? `g-pan-${i}`,
       name: itemName(p),
+      canonical: itemKey(p),
       tier,
       fill,
       daysLabel: label,

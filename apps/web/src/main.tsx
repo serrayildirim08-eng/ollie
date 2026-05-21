@@ -11,6 +11,7 @@ import { bootAccount } from './lib/account-boot';
 import { installDeeplinkHandler } from './lib/capacitor-deeplink';
 import { captureInviteFromUrl } from './lib/invite';
 import { installGroceryRoutingMockFromURL } from './devtools/groceryRoutingMock';
+import { installReplenishmentMockFromURL } from './devtools/replenishmentMock';
 
 // Sentry — error tracking. Capacitor SDK wraps the React SDK so we get
 // JS errors + native iOS crashes from the same project. MUST init before
@@ -63,6 +64,11 @@ void installDeeplinkHandler();
 // sequence so SortedToast + PendingHair can be exercised without the
 // backend AI router being live. No-op when the param is absent.
 installGroceryRoutingMockFromURL();
+
+// Devtool — `?mock=replenish_<fixture>` seeds the useReplenishment cache
+// so the adaptive-replenishment badge can be exercised across confidence
+// states without the worker `/replenishment/:user` endpoint being live.
+installReplenishmentMockFromURL();
 import './design/tokens.css';
 import './design/animations.css';
 import './design/breakpoints.css';

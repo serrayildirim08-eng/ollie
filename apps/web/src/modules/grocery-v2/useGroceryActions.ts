@@ -26,6 +26,7 @@ import { parseGroceryItem, ALIAS_TABLE } from '@ollie/logic/grocery';
 import type { ParsedGroceryItem } from '@ollie/logic/grocery';
 import { useStoreSlice } from '../../store';
 import { mkId } from '../../lib/mkId';
+import type { GroceryPurchaseEvent } from '@ollie/orchestrator';
 import type {
   GroceryShoppingItem,
   GroceryStoredPantryItem,
@@ -50,6 +51,16 @@ export interface GroceryActions {
   teach: (rawWord: string, canonical: string) => void;
 }
 
+export interface UseGroceryActionsOptions {
+  /**
+   * Optional sink for grocery purchase events. When provided, `checkOff`
+   * fires this callback fire-and-forget with source='shop_checked'.
+   * Injected by the caller (applyRoute shim) so the hook stays testable
+   * without a live worker connection.
+   */
+  recordGroceryPurchase?: (event: GroceryPurchaseEvent) => void;
+}
+
 /** the alias-table shelf life for a canonical name, else the default */
 function shelfFor(name: string): number {
   return ALIAS_TABLE[name.toLowerCase()]?.shelfLifeDays ?? DEFAULT_SHELF_DAYS;
@@ -64,7 +75,7 @@ function safeParse(text: string): ParsedGroceryItem | null {
   }
 }
 
-export function useGroceryActions(now: number): GroceryActions {
+export function useGroceryActions(now: number, opts: UseGroceryActionsOptions = {}): GroceryActions {
   const [items, setItems] = useStoreSlice<GroceryShoppingItem[]>(
     'grocery',
     'items',
@@ -158,6 +169,11 @@ export function useGroceryActions(now: number): GroceryActions {
       const it = itemList().find((i) => i.id === id);
       if (!it) return;
       const name = String(it.normalizedName ?? it.name ?? 'item');
+      // canonical: the AI-resolved canonical from the store item (set when
+      // AI routing ran) or fall back to normalizedName / raw name.
+      const canonical = String(
+        (it as { canonical?: string }).canonical ?? it.normalizedName ?? it.name ?? 'item',
+      );
       setItems(itemList().filter((i) => i.id !== id));
       setPantry([
         ...pantryList(),
@@ -171,8 +187,18 @@ export function useGroceryActions(now: number): GroceryActions {
           shelfLifeDays: shelfFor(name),
         },
       ]);
+      // Purchase history — fire-and-forget, never throw.
+      try {
+        opts.recordGroceryPurchase?.({
+          canonical,
+          qty: it.qty,
+          unit: it.unit,
+          source: 'shop_checked',
+          ts: now,
+        });
+      } catch { /* fire-and-forget */ }
     },
-    [itemList, pantryList, setItems, setPantry, now],
+    [itemList, pantryList, setItems, setPantry, now, opts],
   );
 
   const dropItem = useCallback(

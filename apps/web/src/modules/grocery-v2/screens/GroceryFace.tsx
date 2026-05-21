@@ -23,6 +23,10 @@ import { ModeSwitch, type GroceryMode } from '../components/ModeSwitch';
 import { ShopView } from './ShopView';
 import { PantryView } from './PantryView';
 import { FeedMeView } from './FeedMeView';
+import { useReplenishment } from '../../../hooks/useReplenishment';
+import { getAuthUserId } from '../../../lib/account-boot';
+import { recordGroceryPurchase } from '../../../hooks/applyRoute';
+import type { GroceryPurchaseEvent } from '@ollie/orchestrator';
 
 export interface GroceryFaceProps {
   now: number;
@@ -44,7 +48,24 @@ export function GroceryFace({
   onSafe,
 }: GroceryFaceProps) {
   const slices = useGrocerySlices();
-  const actions = useGroceryActions(now);
+  // Pull per-user replenishment estimates. `null` userId (signed-out)
+  // returns an empty Map — the badge sites then fall back to the static
+  // shelf-life floor per item.
+  const userId = getAuthUserId();
+  const { estimates, refresh } = useReplenishment(userId);
+
+  // checkOff → fire-and-forget purchase write, then refresh the estimates
+  // so the next render reflects the freshly-extended cadence. This is the
+  // backend-junior-2 coordination point: the same `recordGroceryPurchase`
+  // shim that `applyRoute` uses for AI-routed dumps fires here for the
+  // manual checkbox flip, and the Map re-pulls.
+  const actions = useGroceryActions(now, {
+    recordGroceryPurchase: (ev: GroceryPurchaseEvent) => {
+      void recordGroceryPurchase(ev).finally(() => {
+        refresh();
+      });
+    },
+  });
   // a stable ref so child views can read fresh slices without prop churn
   const groceryActions = useMemo(() => actions, [actions]);
 
@@ -57,11 +78,14 @@ export function GroceryFace({
           now={now}
           slices={slices}
           actions={groceryActions}
+          estimates={estimates}
           onAdd={onAdd}
           onPatterns={onPatterns}
         />
       )}
-      {mode === 'pantry' && <PantryView now={now} slices={slices} />}
+      {mode === 'pantry' && (
+        <PantryView now={now} slices={slices} estimates={estimates} />
+      )}
       {mode === 'feed' && (
         <FeedMeView now={now} slices={slices} actions={groceryActions} />
       )}

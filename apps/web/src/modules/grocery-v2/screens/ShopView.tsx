@@ -26,16 +26,33 @@ import {
 import { shopVM } from '../selectors';
 import type { GrocerySlices } from '../selectors';
 import type { GroceryActions } from '../useGroceryActions';
+import { ReplenishmentBadge } from '../../../components/ReplenishmentBadge';
+import { staticEstimate } from '../../../hooks/useReplenishment';
+import type { ReplenishmentEstimate } from '../../../hooks/useReplenishment';
 
 export interface ShopViewProps {
   now: number;
   slices: GrocerySlices;
   actions: GroceryActions;
+  /**
+   * Per-canonical replenishment estimates, keyed by canonical name.
+   * The open shop rows show the badge so the reader sees how soon they
+   * tend to need this item again. Falls back to `staticEstimate` per row
+   * when the worker has no observed history yet.
+   */
+  estimates: Map<string, ReplenishmentEstimate>;
   onAdd: () => void;
   onPatterns: () => void;
 }
 
-export function ShopView({ now, slices, actions, onAdd, onPatterns }: ShopViewProps) {
+export function ShopView({
+  now,
+  slices,
+  actions,
+  estimates,
+  onAdd,
+  onPatterns,
+}: ShopViewProps) {
   const vm = useMemo(() => shopVM(slices, now), [slices, now]);
 
   if (vm.cold) return <ColdShop onAdd={onAdd} />;
@@ -118,19 +135,38 @@ export function ShopView({ now, slices, actions, onAdd, onPatterns }: ShopViewPr
             >
               {row.name}
             </span>
-            {row.qty && (
-              <span
-                style={{
-                  fontSize: 13,
-                  fontWeight: row.got ? 600 : 500,
-                  letterSpacing: '0.01em',
-                  color: row.got ? v2.sage : v2.mute,
-                  flexShrink: 0,
-                }}
-              >
-                {row.qty}
-              </span>
-            )}
+            {/* the right-side column: replenishment badge above the qty
+                line. The badge only shows on still-open rows — a checked-off
+                row reads "in pantry" via the qty line below. */}
+            <span
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'flex-end',
+                gap: 2,
+                flexShrink: 0,
+              }}
+            >
+              {!row.got && (
+                <ReplenishmentBadge
+                  estimate={
+                    estimates.get(row.canonical) ?? staticEstimate(row.canonical)
+                  }
+                />
+              )}
+              {row.qty && (
+                <span
+                  style={{
+                    fontSize: 13,
+                    fontWeight: row.got ? 600 : 500,
+                    letterSpacing: '0.01em',
+                    color: row.got ? v2.sage : v2.mute,
+                  }}
+                >
+                  {row.qty}
+                </span>
+              )}
+            </span>
           </button>
         ))}
       </div>
