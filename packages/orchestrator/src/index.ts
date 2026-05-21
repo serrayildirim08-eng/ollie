@@ -94,6 +94,8 @@ export type {
   GroceryRoutingResult,
   GroceryRoutingSource,
   GroceryListContext,
+  GroceryMutationEntry,
+  GroceryMutationReverse,
 } from './braindump-dispatch';
 
 export interface RootOrchestrator extends Orchestrator {
