@@ -9,6 +9,7 @@ import { installSavingsDigestLoop } from './lib/savings-digest';
 import { bootAccount } from './lib/account-boot';
 import { installDeeplinkHandler } from './lib/capacitor-deeplink';
 import { captureInviteFromUrl } from './lib/invite';
+import { installGroceryRoutingMockFromURL } from './devtools/groceryRoutingMock';
 
 // Sentry — error tracking. Capacitor SDK wraps the React SDK so we get
 // JS errors + native iOS crashes from the same project. MUST init before
@@ -56,6 +57,11 @@ captureInviteFromUrl();
 // iOS Siri App Intents → URL scheme → MicButton (Sprint 4 · E3).
 // No-op on web/desktop; Capacitor native only.
 void installDeeplinkHandler();
+
+// Devtool — `?mock=grocery_<fixture>` triggers a canned grocery routing
+// sequence so SortedToast + PendingHair can be exercised without the
+// backend AI router being live. No-op when the param is absent.
+installGroceryRoutingMockFromURL();
 import './design/tokens.css';
 import './design/animations.css';
 import './design/breakpoints.css';
