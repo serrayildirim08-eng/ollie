@@ -157,6 +157,27 @@ async function callGroceryRoute(
  */
 export type DispatchLocale = 'en' | 'es' | 'tr';
 
+/**
+ * A single grocery purchase event — written when an item lands in the pantry
+ * slice via any of the three trigger paths (pantry dump, AI routing, shop
+ * checkbox). Forwarded fire-and-forget to the worker's POST /grocery/purchase
+ * endpoint.
+ *
+ * Contract (for backend-senior's /grocery/purchase worker endpoint):
+ *   canonical: string        — AI-resolved canonical or raw name if unknown
+ *   qty?:      number        — optional quantity provided by the user
+ *   unit?:     string        — optional unit (e.g. "l", "bottle", "count")
+ *   source:    'pantry_add' | 'shop_checked' | 'ai_inferred'
+ *   ts:        number        — Unix epoch ms of the purchase event
+ */
+export interface GroceryPurchaseEvent {
+  canonical: string;
+  qty?: number;
+  unit?: string;
+  source: 'pantry_add' | 'shop_checked' | 'ai_inferred';
+  ts: number;
+}
+
 export interface DispatchOptions {
   /** Resolver for the active locale at emit time. Defaults to 'en'. */
   getLocale?: () => DispatchLocale;
@@ -169,6 +190,14 @@ export interface DispatchOptions {
    * Override the AI proxy base URL (tests + dev). Defaults to production worker.
    */
   aiProxyBaseUrl?: string;
+  /**
+   * Optional sink for grocery purchase events. Called fire-and-forget when a
+   * grocery item lands in the pantry slice (kind='log', kind='add' AI-routed
+   * to pantry, or shop checkbox flip handled by the caller). The callback
+   * forwards to the worker's POST /grocery/purchase endpoint. Tests inject a
+   * memory recorder.
+   */
+  recordGroceryPurchase?: (event: GroceryPurchaseEvent) => void;
 }
 
 function newId(): string {
@@ -339,7 +368,7 @@ export function dispatchAction(
         // need to MOVE the data, not just emit a notification. Remove the
         // placeholder shopping item by id, then re-distribute AI items into
         // the right slice (shopping vs pantry).
-        store.update<Array<{ id: string; name: string; ts: number; checked: boolean }>>(
+        store.update<Array<{ id: string; name: string; canonical?: string; ts: number; checked: boolean }>>(
           'grocery',
           'items',
           (cur) => (cur ?? []).filter((it) => it.id !== id),
@@ -347,16 +376,38 @@ export function dispatchAction(
         for (const aiItem of result.items) {
           const aiId = newId();
           if (aiItem.target === 'pantry') {
-            store.update<Array<{ id: string; name: string; ts: number; boughtTs: number }>>(
+            store.update<Array<{ id: string; name: string; canonical?: string; ts: number; boughtTs: number }>>(
               'grocery',
               'pantry',
-              (cur) => [...(cur ?? []), { id: aiId, name: aiItem.name, ts, boughtTs: ts }],
+              (cur) => [...(cur ?? []), {
+                id: aiId,
+                name: aiItem.name,
+                canonical: aiItem.canonical ?? undefined,
+                ts,
+                boughtTs: ts,
+              }],
             );
+            // Purchase history — use AI-resolved canonical when available.
+            try {
+              opts.recordGroceryPurchase?.({
+                canonical: aiItem.canonical ?? aiItem.name,
+                qty: aiItem.qty,
+                unit: aiItem.unit,
+                source: 'ai_inferred',
+                ts,
+              });
+            } catch { /* fire-and-forget */ }
           } else {
-            store.update<Array<{ id: string; name: string; ts: number; checked: boolean }>>(
+            store.update<Array<{ id: string; name: string; canonical?: string; ts: number; checked: boolean }>>(
               'grocery',
               'items',
-              (cur) => [...(cur ?? []), { id: aiId, name: aiItem.name, ts, checked: false }],
+              (cur) => [...(cur ?? []), {
+                id: aiId,
+                name: aiItem.name,
+                canonical: aiItem.canonical ?? undefined,
+                ts,
+                checked: false,
+              }],
             );
           }
         }
@@ -400,6 +451,11 @@ export function dispatchAction(
       (cur) => [...(cur ?? []), { id, name: data, ts, boughtTs: ts }],
     );
     emitResearchRow('home_records', id, data, ts, getLocale());
+
+    // Purchase history — raw name (no AI on pantry_add path, worker normalises).
+    try {
+      opts.recordGroceryPurchase?.({ canonical: data, source: 'pantry_add', ts });
+    } catch { /* fire-and-forget, never throw from dispatcher */ }
 
     // Async AI routing for pantry log (intent=pantry).
     if (opts.aiProxyBaseUrl) _setAiProxyBaseUrl(opts.aiProxyBaseUrl);
