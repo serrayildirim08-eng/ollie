@@ -62,7 +62,27 @@ queue = "ollie-enrich-queue"
 # SUPABASE_SERVICE_ROLE   — server-only key (used by /ingest-event + invites)
 # SUPABASE_ANON_KEY       — public anon key. Used to verify user JWTs on the
 #                           invite endpoints AND on the telemetry endpoints
-#                           (/ingest-event, /label, /enrich-dump). REQUIRED —
-#                           those endpoints reject every request without it.
+#                           (/ingest-event, /label, /enrich-dump). REQUIRED
+#                           while the Supabase fallback exists; remove only
+#                           when CLERK_ISSUER is set AND every Supabase session
+#                           has aged out.
+# CLERK_ISSUER            — Clerk migration · Phase 3 (T0). e.g.
+#                           https://faithful-stag-15.clerk.accounts.dev. When
+#                           set, the worker verifies Clerk session JWTs via
+#                           JWKS (`${CLERK_ISSUER}/.well-known/jwks.json`) and
+#                           accepts the Clerk `sub` claim as the verified user
+#                           id. Supabase verify stays as a fallback for legacy
+#                           sessions until they age out. To set:
+#                             wrangler secret put CLERK_ISSUER
+#                           (paste the issuer URL with no trailing slash).
 # INVITE_BASE_URL         — optional; e.g. https://ollie.app. Defaults to ollie.app
 #                           when unset. Used in /generate-invite share_url.
+#
+# ── T2 /route/:module secrets ──────────────────────────────────────────────────
+# VOYAGE_API_KEY          — Voyage AI key for multilingual-2 embeddings.
+#                           wrangler secret put VOYAGE_API_KEY
+# GEMINI_API_KEY          — Google AI Studio key for Gemini 2.5 Flash.
+#                           wrangler secret put GEMINI_API_KEY
+# T0_JWT_ENFORCED         — Set to "1" once T0 (Clerk JWT) ships end-to-end.
+#                           Until then the /route/:module endpoint is open.
+#                           wrangler secret put T0_JWT_ENFORCED  (value: 1)

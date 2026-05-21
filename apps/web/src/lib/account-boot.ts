@@ -40,6 +40,7 @@ import type { VaultClient } from '@ollie/auth';
 import { createResearchStream } from '@ollie/research-stream';
 import type { ResearchClient } from '@ollie/research-stream';
 import * as events from '@ollie/events';
+import { readClerkJwt, readClerkUserId } from './clerk-auth-bridge';
 import { store } from '../store';
 
 interface ViteEnv {
@@ -111,22 +112,26 @@ export function getAccount(): AccountBootHandles | null {
 /**
  * The bearer token for authenticated backend calls.
  *
- * Phase 1 (Clerk migration): returns null. Supabase no longer mints our
- * JWT, and the Cloudflare workers do not yet verify Clerk tokens. Callers
- * (invite, enrich-dump, /label, server jobs) treat null as "skip the
- * request" — their documented best-effort degrade. Re-wired to the Clerk
- * session token in Phase 3, when the workers verify Clerk JWTs.
+ * Clerk migration · Phase 3 (T0, 2026-05-21): wired to the Clerk session
+ * token via the `clerk-auth-bridge` ref. The ClerkAuthBridge React
+ * component (mounted in App.tsx) subscribes to `useAuth().getToken` and
+ * refreshes this ref whenever Clerk rotates the session. Returns null when:
+ *   - the user is not signed in yet
+ *   - the bridge has not yet pushed its first token (the millisecond
+ *     window right after sign-in — callers already treat null as
+ *     "skip the request", which is the documented degrade path)
  */
 export function getAuthJwt(): string | null {
-  return null;
+  return readClerkJwt();
 }
 
 /**
  * The signed-in user's id for backend payloads (push-token mirroring,
- * server jobs). Phase 1: null — re-wired to the Clerk user id in Phase 2.
+ * server jobs). Clerk migration · Phase 3: returns the Clerk user id
+ * (`user_<…>`). Null when unsigned-in.
  */
 export function getAuthUserId(): string | null {
-  return null;
+  return readClerkUserId();
 }
 
 /**
@@ -153,11 +158,11 @@ export function bootAccount(): AccountBootHandles {
     api,
     endpointUrl: env.VITE_RESEARCH_ENDPOINT,
     ingestUrl: env.VITE_AI_WORKER_URL,
-    // Phase 1 (Clerk migration): the /ingest-event worker still expects a
-    // Supabase JWT, which we no longer mint. Hand it null — flushes degrade
-    // to local-only. Re-wired to the Clerk session token in Phase 3, when
-    // the workers verify Clerk JWTs.
-    getJwt: () => null,
+    // Clerk migration · Phase 3 (T0): wired to the Clerk session token via
+    // the bridge ref. Returns null until the bridge first writes, which is
+    // the same documented best-effort degrade as before — research.track()
+    // queues locally and flushes once a token is available.
+    getJwt: () => readClerkJwt(),
   });
   // Start the research flush loop unconditionally; track() is a no-op
   // until consent is granted, so the loop is harmless when off.

@@ -16,7 +16,19 @@
  */
 
 import { AppRouter } from './router';
+import { ClerkAuthBridge } from './components/ClerkAuthBridge';
 
 export function App() {
-  return <AppRouter />;
+  return (
+    <>
+      {/*
+        ClerkAuthBridge pumps the active Clerk session JWT into a sync
+        module-scope ref so non-React modules (account-boot.getAuthJwt,
+        aiRoute, /label, /enrich-dump, /generate-invite) can read it
+        without going async. Renders nothing.
+      */}
+      <ClerkAuthBridge />
+      <AppRouter />
+    </>
+  );
 }

@@ -14,7 +14,9 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { SignJWT, exportJWK, generateKeyPair } from 'jose';
 import worker from '../src/index';
+import { _resetClerkJwksCache } from '../src/clerk-verify';
 
 type WorkerEnv = Parameters<typeof worker.fetch>[1];
 
@@ -153,6 +155,137 @@ describe('telemetry auth gate · valid JWT reaches the handler', () => {
     );
     expect(resp.status).not.toBe(401);
     expect(resp.status).toBe(200);
+  });
+});
+
+// ─── Clerk dual-mode path ─────────────────────────────────────────────────
+//
+// When CLERK_ISSUER is set, the worker tries Clerk JWKS verify first and
+// falls back to Supabase. A valid Clerk JWT must be accepted without ever
+// hitting /auth/v1/user; the Clerk `sub` claim becomes the user id used
+// for rate-limit keying.
+
+const CLERK_ISSUER = 'https://faithful-stag-15.clerk.accounts.dev';
+const CLERK_JWKS_URL = `${CLERK_ISSUER}/.well-known/jwks.json`;
+
+interface ClerkKeyMaterial {
+  privateKey: CryptoKey;
+  publicJwk: Record<string, unknown>;
+  kid: string;
+}
+
+async function makeClerkKey(): Promise<ClerkKeyMaterial> {
+  const { publicKey, privateKey } = await generateKeyPair('ES256', { extractable: true });
+  const publicJwk = await exportJWK(publicKey);
+  const kid = 'clerk-test-kid';
+  publicJwk.kid = kid;
+  publicJwk.alg = 'ES256';
+  publicJwk.use = 'sig';
+  return { privateKey, publicJwk, kid };
+}
+
+async function mintClerkJwt(
+  k: ClerkKeyMaterial,
+  sub: string,
+): Promise<string> {
+  const now = Math.floor(Date.now() / 1000);
+  return new SignJWT({})
+    .setProtectedHeader({ alg: 'ES256', kid: k.kid })
+    .setSubject(sub)
+    .setIssuer(CLERK_ISSUER)
+    .setIssuedAt(now)
+    .setExpirationTime(now + 60)
+    .sign(k.privateKey);
+}
+
+function mockClerkPath(
+  publicJwk: Record<string, unknown>,
+): ReturnType<typeof vi.spyOn> {
+  return vi.spyOn(globalThis, 'fetch').mockImplementation(
+    async (input: RequestInfo | URL): Promise<Response> => {
+      const url = String(input);
+      if (url === CLERK_JWKS_URL) {
+        return new Response(JSON.stringify({ keys: [publicJwk] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      // Supabase /auth/v1/user — should NOT be hit when Clerk verify
+      // succeeds. If a test reaches here we want it visible.
+      if (url.endsWith('/auth/v1/user')) {
+        return new Response('', { status: 401 });
+      }
+      // Handler downstream — succeed so the request completes.
+      return new Response(null, { status: 201 });
+    },
+  );
+}
+
+describe('telemetry auth gate · Clerk JWT (dual-mode)', () => {
+  let spy: ReturnType<typeof vi.spyOn> | null = null;
+
+  beforeEach(() => {
+    _resetClerkJwksCache();
+  });
+
+  afterEach(() => {
+    spy?.mockRestore();
+    spy = null;
+  });
+
+  it('/ingest-event accepts a valid Clerk JWT', async () => {
+    const k = await makeClerkKey();
+    spy = mockClerkPath(k.publicJwk);
+    const jwt = await mintClerkJwt(k, 'user_clerk_42');
+
+    const env = makeEnv() as unknown as Record<string, unknown>;
+    env.CLERK_ISSUER = CLERK_ISSUER;
+
+    const resp = await worker.fetch(
+      makeReq(
+        '/ingest-event',
+        { table: 'retention_events', row: { user_hash: 'h' } },
+        { authorization: `Bearer ${jwt}` },
+      ),
+      env as unknown as WorkerEnv,
+    );
+    expect(resp.status).toBe(200);
+  });
+
+  it('/enrich-dump rejects a forged Clerk JWT (signed by a foreign key)', async () => {
+    const real = await makeClerkKey();
+    const forged = await makeClerkKey();
+    spy = mockClerkPath(real.publicJwk);
+    // Token uses the real kid but is signed by the foreign key.
+    const tampered = await new SignJWT({})
+      .setProtectedHeader({ alg: 'ES256', kid: real.kid })
+      .setSubject('user_evil')
+      .setIssuer(CLERK_ISSUER)
+      .setIssuedAt(Math.floor(Date.now() / 1000))
+      .setExpirationTime(Math.floor(Date.now() / 1000) + 60)
+      .sign(forged.privateKey);
+
+    const env = makeEnv() as unknown as Record<string, unknown>;
+    env.CLERK_ISSUER = CLERK_ISSUER;
+
+    const resp = await worker.fetch(
+      makeReq(
+        '/enrich-dump',
+        {
+          user_hash: 'h',
+          device_id: 'd',
+          event_ts: '2026-05-16T00:00:00Z',
+          locale: 'en',
+          country: 'INTL',
+          modality: 'text',
+          raw_text: 'hello',
+          app_version: 'test',
+        },
+        { authorization: `Bearer ${tampered}` },
+      ),
+      env as unknown as WorkerEnv,
+    );
+    expect(resp.status).toBe(401);
   });
 });
 
