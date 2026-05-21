@@ -18,8 +18,48 @@
 
 import type { Action } from '@ollie/logic/dissection';
 import type { Store } from '@ollie/store';
-import { dispatchAction, type DispatchLocale, type DispatchOptions, type GroceryPurchaseEvent } from '@ollie/orchestrator';
+import {
+  dispatchAction,
+  type DispatchLocale,
+  type DispatchOptions,
+  type GroceryListContext,
+  type GroceryPurchaseEvent,
+} from '@ollie/orchestrator';
 import { getAuthJwt } from '../lib/account-boot';
+
+/** Hard cap on items shipped in the worker prompt — matches LIST_CONTEXT_CAP. */
+const GROCERY_CONTEXT_CAP = 50;
+
+/**
+ * Capture the user's live shopping + pantry slices for the worker. The
+ * worker uses these to disambiguate mutation commands ("remove pasta",
+ * "got everything except eggs", "I finished the milk"). Capped at 50
+ * entries per side to keep prompt tokens bounded — recency wins
+ * (the freshest end of the list is what the user is talking about).
+ */
+interface StoredGroceryItem {
+  name: string;
+  canonical?: string | null;
+}
+
+function buildGroceryContext(store: Store): GroceryListContext {
+  const shopping = store.get<StoredGroceryItem[]>('grocery', 'items', []);
+  const pantry = store.get<StoredGroceryItem[]>('grocery', 'pantry', []);
+
+  const tail = <T,>(arr: T[]): T[] =>
+    arr.length <= GROCERY_CONTEXT_CAP ? arr : arr.slice(arr.length - GROCERY_CONTEXT_CAP);
+
+  return {
+    shoppingItems: tail(shopping).map((it) => ({
+      name: it.name,
+      canonical: it.canonical ?? null,
+    })),
+    pantryItems: tail(pantry).map((it) => ({
+      name: it.name,
+      canonical: it.canonical ?? null,
+    })),
+  };
+}
 
 /**
  * Resolve the ai-proxy worker URL from Vite env. Frontend-only: the
@@ -71,6 +111,12 @@ export function applyRoute(
   const token = getAuthJwt();
   if (token) opts.authToken = token;
   opts.recordGroceryPurchase = (ev) => { void recordGroceryPurchase(ev); };
+  // Mutation (2026-05-22): the dispatcher pulls live shopping + pantry
+  // context synchronously at dispatch time. Only wire this for grocery
+  // routes — other modules don't read it.
+  if (route.module === 'grocery') {
+    opts.getGroceryContext = () => buildGroceryContext(store);
+  }
   dispatchAction(route, store, Date.now(), opts);
 }
 
