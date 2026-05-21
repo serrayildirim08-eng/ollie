@@ -332,9 +332,130 @@ export function dispatchAction(
     return;
   }
 
+  // ── pets ────────────────────────────────────────────────────────────
+  // Phantom-fix (2026-05-21): the default fallthrough wrote pets data to
+  // `pets.items` — a slice no UI surface reads. PetsApp / PetsModule both
+  // read `pets.observations` (alongside pets, care_log, care_gaps,
+  // health_flags, milestones — see apps/web/src/modules/pets-v2/
+  // usePetsSlices.ts). Land brain-dump pet text there with the schema the
+  // selector expects (StoredObservation). `pet_id: ''` is intentional —
+  // unrouted observations are unattached until the user (or a future
+  // upstream resolver) ties them to a specific pet; the UI tolerates the
+  // empty id and just shows the text.
+  if (module === 'pets') {
+    const id = newId();
+    store.update<Array<{
+      id: string;
+      pet_id: string;
+      text: string;
+      tags: string[];
+      kind: 'note';
+      created_at: number;
+      occurred_at: number;
+    }>>(
+      'pets',
+      'observations',
+      (cur) => [...(cur ?? []), {
+        id,
+        pet_id: '',
+        text: data,
+        tags: [],
+        kind: 'note',
+        created_at: ts,
+        occurred_at: ts,
+      }],
+    );
+    emitResearchRow('home_records', id, data, ts, getLocale());
+    return;
+  }
+
+  // ── admin ───────────────────────────────────────────────────────────
+  // Phantom-fix (2026-05-21): default fallthrough wrote to `admin.items`;
+  // AdminApp / AdminModule both read `admin.tasks` (see
+  // apps/web/src/modules/admin-v2/useAdminSlices.ts). Land brain-dump
+  // admin text there with the AdminItem shape — `label` is the canonical
+  // field, `title` is kept for the legacy module's older rows.
+  if (module === 'admin') {
+    const id = newId();
+    store.update<Array<{
+      id: string;
+      label: string;
+      title: string;
+      state: string;
+      status: string;
+      created_at: number;
+      ts: number;
+    }>>(
+      'admin',
+      'tasks',
+      (cur) => [...(cur ?? []), {
+        id,
+        label: data,
+        title: data,
+        state: 'open',
+        status: 'open',
+        created_at: ts,
+        ts,
+      }],
+    );
+    emitResearchRow('home_records', id, data, ts, getLocale());
+    return;
+  }
+
+  // ── habits ──────────────────────────────────────────────────────────
+  // Phantom-fix (2026-05-21): default fallthrough wrote to `habits.items`;
+  // HabitsApp / HabitsModule both read `shared.habits_v2` (StoredHabit[];
+  // see apps/web/src/modules/habits-v2/useHabitsSlices.ts). A brain-dump
+  // habit line is treated as the user adding a new tracked habit: append
+  // a fresh `StoredHabit` with an empty completions log, default cue, and
+  // an `anytime` cueTime bucket. Existing seeded habits are preserved.
+  if (module === 'habits') {
+    const id = `h_${newId().slice(0, 10)}`;
+    store.update<Array<{
+      id: string;
+      name: string;
+      cue: string;
+      cueTime: 'morning' | 'anytime' | 'evening';
+      completions: Array<{ ts: number }>;
+    }>>(
+      'shared',
+      'habits_v2',
+      (cur) => [...(cur ?? []), {
+        id,
+        name: data,
+        cue: '',
+        cueTime: 'anytime',
+        completions: [],
+      }],
+    );
+    emitResearchRow('home_records', id, data, ts, getLocale());
+    return;
+  }
+
+  // ── health → dump ───────────────────────────────────────────────────
+  // Phantom-fix (2026-05-21): the `health` module has NO UI surface in
+  // the v2 app (no apps/web/src/modules/health* dir), so writing to
+  // `health.items` is a guaranteed silent loss. Reroute to `dump.items`
+  // so the entry surfaces in the brain-dump archive and lands in the
+  // brain_dump_log corpus table (which is also where the keyword router
+  // sends ambiguous health text via the emotion-fallback path).
+  if (module === 'health') {
+    const id = newId();
+    store.update<Array<{ id: string; text: string; ts: number }>>(
+      'dump',
+      'items',
+      (cur) => [...(cur ?? []), { id, text: data, ts }],
+    );
+    emitResearchRow('brain_dump_log', id, data, ts, getLocale());
+    return;
+  }
+
   // ── default: <module>.items generic shape ────────────────────────────
-  // dump → brain_dump_log; admin/sleep/habits/pets/health/reminders/…
-  // → home_records.
+  // dump → brain_dump_log. Other modules with no explicit handler above
+  // (sleep, the legacy `reminders` ModuleName kept for type back-compat)
+  // → home_records. The `reminders` keyword entry is no longer emitted
+  // by fallbackRoute (the phantom-fix landed there too); reminder
+  // scheduling runs upstream in useApplyBrainDump via parseReminder.
   const id = newId();
   store.update<Array<{ id: string; text: string; ts: number }>>(
     module,
