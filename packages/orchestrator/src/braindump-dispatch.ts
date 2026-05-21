@@ -85,8 +85,12 @@ export function _setAiProxyBaseUrl(url: string): void {
   _aiProxyBaseUrl = url;
 }
 
-/** Timeout for /route/grocery call. Falls back to keyword logic on timeout. */
-const ROUTE_TIMEOUT_MS = 3000;
+/** Timeout for /route/grocery call. Falls back to keyword logic on timeout.
+ *  Voyage embed (~500ms) + Gemini classify (cold start ~3-5s) + Supabase RPC
+ *  (~200ms) stack to ~5-6s on a miss; cache hits return <300ms. 10s gives the
+ *  first-touch Gemini call headroom — subsequent same/similar phrases hit the
+ *  pgvector cache and are effectively instant. */
+const ROUTE_TIMEOUT_MS = 10000;
 
 /**
  * Call /route/grocery on the ai-proxy worker. Returns null on any error or
@@ -327,7 +331,35 @@ export function dispatchAction(
     void (async () => {
       const result = await callGroceryRoute(data, id, opts.authToken);
       const now2 = Date.now();
-      if (result) {
+      if (result && result.items.length > 0) {
+        // AI succeeded — reconcile the keyword's synchronous shopping-write
+        // against the AI's classification. The keyword path always writes
+        // the raw text to `grocery.items` (shopping) so the UI has instant
+        // feedback. When AI returns and says "actually this is pantry" we
+        // need to MOVE the data, not just emit a notification. Remove the
+        // placeholder shopping item by id, then re-distribute AI items into
+        // the right slice (shopping vs pantry).
+        store.update<Array<{ id: string; name: string; ts: number; checked: boolean }>>(
+          'grocery',
+          'items',
+          (cur) => (cur ?? []).filter((it) => it.id !== id),
+        );
+        for (const aiItem of result.items) {
+          const aiId = newId();
+          if (aiItem.target === 'pantry') {
+            store.update<Array<{ id: string; name: string; ts: number; boughtTs: number }>>(
+              'grocery',
+              'pantry',
+              (cur) => [...(cur ?? []), { id: aiId, name: aiItem.name, ts, boughtTs: ts }],
+            );
+          } else {
+            store.update<Array<{ id: string; name: string; ts: number; checked: boolean }>>(
+              'grocery',
+              'items',
+              (cur) => [...(cur ?? []), { id: aiId, name: aiItem.name, ts, checked: false }],
+            );
+          }
+        }
         try {
           events.emit('grocery:routed', {
             idempotency_key: id,
@@ -343,7 +375,8 @@ export function dispatchAction(
           });
         } catch { /* non-fatal */ }
       } else {
-        // Fallback — keyword path already applied; emit with fallback source.
+        // Fallback — keyword path already applied (item sits in shopping);
+        // emit with fallback source so SortedToast shows the "offline" state.
         try {
           events.emit('grocery:routed', {
             idempotency_key: id,
