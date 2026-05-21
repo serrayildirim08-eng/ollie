@@ -59,7 +59,7 @@ export interface ModuleConfig<C> {
 // Full alias table lives in @ollie/logic/grocery/data.ts.
 // We list the canonical keys here so Gemini can normalize to them.
 
-const CANONICAL_ITEMS = [
+export const CANONICAL_ITEMS = [
   'milk','yogurt','cheese','feta','butter','cream','egg','mozzarella','parmesan',
   'chicken','ground beef','beef','lamb','pork','fish','shrimp','sausage','bacon',
   'ham','salami','tomato','onion','garlic','potato','sweet potato','carrot',
@@ -115,7 +115,7 @@ const CATEGORIES = [
   'frozen','snacks','supplements','personal_care','period_products','other',
 ];
 
-const SHELF_LIFE_MAP: Record<string, number> = {
+export const SHELF_LIFE_MAP: Record<string, number> = {
   milk: 7, yogurt: 21, cheese: 30, feta: 30, butter: 60, cream: 10, egg: 28,
   mozzarella: 14, parmesan: 90,
   chicken: 2, 'ground beef': 2, beef: 4, lamb: 4, pork: 4, fish: 2, shrimp: 2,

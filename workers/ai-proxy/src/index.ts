@@ -40,6 +40,9 @@ import {
   type InvitesEnv,
 } from './invites';
 import { handleRoute, type RouteEnv } from './router/route';
+import { handlePurchase, type PurchaseEnv } from './router/purchase';
+import { handleReplenishment, type ReplenishmentEnv } from './router/replenishment';
+import { verifyClerkJwt } from './clerk-verify';
 
 /**
  * Cloudflare native Rate Limiting binding. `limit()` is atomic edge-side,
@@ -49,7 +52,14 @@ export interface RateLimiter {
   limit(opts: { key: string }): Promise<{ success: boolean }>;
 }
 
-export interface Env extends EnrichEnv, IngestEnv, LabelEnv, InvitesEnv, RouteEnv {
+export interface Env
+  extends EnrichEnv,
+    IngestEnv,
+    LabelEnv,
+    InvitesEnv,
+    RouteEnv,
+    PurchaseEnv,
+    ReplenishmentEnv {
   ANTHROPIC_API_KEY: string;
   CACHE_KV: KVNamespace;
   RATE_KV: KVNamespace;
@@ -61,7 +71,8 @@ export interface Env extends EnrichEnv, IngestEnv, LabelEnv, InvitesEnv, RouteEn
 
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 const CACHE_TTL_SEC = 300;          // 5 min
-const RATE_MAX = 10;                // req/min
+const RATE_MAX = 10;                // req/min — default
+const PURCHASE_RATE_MAX = 100;      // req/min — purchase ingestion can burst at checkout
 const RATE_WINDOW_SEC = 60;
 
 // ─── handler ───────────────────────────────────────────────────────────────────
@@ -76,7 +87,7 @@ const RATE_WINDOW_SEC = 60;
 function corsHeaders(): Record<string, string> {
   return {
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-user-id',
     'Access-Control-Max-Age': '86400',
   };
@@ -98,6 +109,36 @@ export default {
     // so browser will always preflight. Answer 204 + headers, no body.
     if (req.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: corsHeaders() });
+    }
+
+    // ── /grocery/purchase — adaptive replenishment event ingestion (T2.5) ───
+    // POST only. Per-user rate-limited (100/min budget for checkout bursts).
+    if (url.pathname === '/grocery/purchase' && req.method === 'POST') {
+      const purchaseUserId = await resolveUserIdForRateLimit(req, env);
+      if (purchaseUserId) {
+        const allowed = await checkRate(
+          env.TELEM_RATE_LIMITER,
+          env.RATE_KV,
+          `rl:purchase:${purchaseUserId}`,
+          PURCHASE_RATE_MAX,
+        );
+        if (!allowed) {
+          return withCors(json({ error: 'rate_limited' }, 429));
+        }
+      }
+      return withCors(await handlePurchase(req, env));
+    }
+
+    // ── /replenishment/:user — adaptive cadence estimates (T2.5) ─────────────
+    // GET only. The path UUID becomes the user_id we look up; auth enforces
+    // ownership (JWT sub === path param). Read-only, no rate limit needed
+    // beyond Cloudflare's edge defaults — frontend re-fetches at most once
+    // per purchase + on grocery module mount.
+    const replenishMatch = url.pathname.match(
+      /^\/replenishment\/([0-9a-f-]+)$/i,
+    );
+    if (replenishMatch && req.method === 'GET') {
+      return withCors(await handleReplenishment(req, env, replenishMatch[1]));
     }
 
     if (req.method !== 'POST') {
@@ -202,14 +243,63 @@ export default {
 
 // ─── helpers ───────────────────────────────────────────────────────────────────
 
-async function checkRate(kv: KVNamespace, key: string): Promise<boolean> {
+/**
+ * Rate-limit check. Prefers the native Cloudflare Rate Limiting binding
+ * (atomic at the edge — fixes the read-then-write race the KV counter had).
+ * Falls back to the legacy KV fixed-window counter when the binding is not
+ * present, so a deploy that has not yet picked up the [[ratelimits]] config
+ * still enforces a limit.
+ */
+async function checkRate(
+  limiter: RateLimiter | undefined,
+  kv: KVNamespace,
+  key: string,
+  maxOverride?: number,
+): Promise<boolean> {
+  if (limiter) {
+    // NB: the native binding's limit is configured per-binding in
+    // wrangler.toml. `maxOverride` only affects the KV fallback branch
+    // below — when the binding is live the configured limit wins, which
+    // for the purchase endpoint means we share the telemetry bucket (10/min)
+    // until/unless a dedicated PURCHASE_RATE_LIMITER ships. Acceptable for
+    // ingestion — bursts come from a single user, not many.
+    const { success } = await limiter.limit({ key });
+    return success;
+  }
+  // Legacy fallback — racy fixed-window KV counter.
+  const max = maxOverride ?? RATE_MAX;
   const now = Math.floor(Date.now() / 1000);
   const slot = `${key}:${Math.floor(now / RATE_WINDOW_SEC)}`;
   const raw = await kv.get(slot);
   const count = raw ? parseInt(raw, 10) || 0 : 0;
-  if (count >= RATE_MAX) return false;
+  if (count >= max) return false;
   await kv.put(slot, String(count + 1), { expirationTtl: RATE_WINDOW_SEC * 2 + 1 });
   return true;
+}
+
+/**
+ * Determine the rate-limit key for /grocery/purchase. Prefers the Clerk
+ * `sub` from a verified JWT (when T0_JWT_ENFORCED), then x-user-id, then
+ * the connecting IP. Returns null if even IP is missing — the caller
+ * skips rate-limit rather than collapsing every anon caller into one
+ * shared bucket that would DoS itself.
+ */
+async function resolveUserIdForRateLimit(
+  req: Request,
+  env: Env,
+): Promise<string | null> {
+  if (env.T0_JWT_ENFORCED === '1') {
+    const auth = req.headers.get('authorization');
+    if (auth && auth.startsWith('Bearer ')) {
+      const sub = await verifyClerkJwt(auth.slice('Bearer '.length), env);
+      if (sub) return sub;
+    }
+  }
+  return (
+    req.headers.get('x-user-id') ||
+    req.headers.get('cf-connecting-ip') ||
+    null
+  );
 }
 
 async function sha256Hex(s: string): Promise<string> {

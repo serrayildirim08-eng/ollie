@@ -18,7 +18,7 @@
 
 import type { Action } from '@ollie/logic/dissection';
 import type { Store } from '@ollie/store';
-import { dispatchAction, type DispatchLocale, type DispatchOptions } from '@ollie/orchestrator';
+import { dispatchAction, type DispatchLocale, type DispatchOptions, type GroceryPurchaseEvent } from '@ollie/orchestrator';
 import { getAuthJwt } from '../lib/account-boot';
 
 /**
@@ -30,6 +30,27 @@ const AI_PROXY_URL =
   (import.meta as unknown as { env?: { VITE_AI_WORKER_URL?: string; VITE_AI_PROXY_URL?: string } })
     .env?.VITE_AI_WORKER_URL ??
   (import.meta as unknown as { env?: { VITE_AI_PROXY_URL?: string } }).env?.VITE_AI_PROXY_URL;
+
+/**
+ * Fire-and-forget POST to the ai-proxy worker's /grocery/purchase endpoint.
+ * Survives page unload via `keepalive: true`. Never throws — telemetry sink.
+ */
+async function recordGroceryPurchase(ev: GroceryPurchaseEvent): Promise<void> {
+  const baseUrl = AI_PROXY_URL;
+  if (!baseUrl) return;
+  const token = getAuthJwt();
+  try {
+    await fetch(`${baseUrl}/grocery/purchase`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(ev),
+      keepalive: true,
+    });
+  } catch { /* fire-and-forget — telemetry sink */ }
+}
 
 /**
  * Apply a single routed Action to the store via the canonical dispatcher.
@@ -49,5 +70,12 @@ export function applyRoute(
   if (AI_PROXY_URL) opts.aiProxyBaseUrl = AI_PROXY_URL;
   const token = getAuthJwt();
   if (token) opts.authToken = token;
+  opts.recordGroceryPurchase = (ev) => { void recordGroceryPurchase(ev); };
   dispatchAction(route, store, Date.now(), opts);
 }
+
+/**
+ * Exported for consumers that wire the grocery checkOff handler directly
+ * (e.g. useGroceryActions in grocery-v2).
+ */
+export { recordGroceryPurchase };
