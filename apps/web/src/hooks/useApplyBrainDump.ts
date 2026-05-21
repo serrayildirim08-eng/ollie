@@ -105,10 +105,39 @@ export function useApplyBrainDump(): (text: string, fromRect?: DOMRect) => Promi
       // The app UI ships en + es only (Locale type); tr is not reachable.
       const dispatchLocale: 'en' | 'es' | 'tr' = locale === 'es' ? 'es' : 'en';
 
+      // Grocery routing UX moved to SortedToast (2026-05-21). When a dump
+      // routes ONLY to grocery we suppress the generic chipFly + summary
+      // toast pair entirely — the popup carries the confirmation. Mixed
+      // dumps (e.g. grocery + sleep) still get chips for the non-grocery
+      // modules so the user sees the multi-module fan-out.
+      const groceryOnly =
+        actions.length > 0 && actions.every((r) => r.module === 'grocery');
+
+      // Emit the routing-pending signal as the FIRST act so PendingHair +
+      // SortedToast can begin their pending state immediately. The backend
+      // T2 producer will emit the matching `grocery:routed` once the AI
+      // router (cache hit or Gemini) resolves. We send a synthetic
+      // idempotency_key here so the dump-level scope still aligns.
+      if (groceryOnly) {
+        const idempotency_key =
+          'gdump_' + Math.random().toString(36).slice(2);
+        emit('grocery:routing:pending', {
+          idempotency_key,
+          raw: text,
+          ts: Date.now(),
+        });
+      }
+
       actions.forEach((route, i) => {
         modulesHit.add(route.module);
 
-        if (fromRect) {
+        // chipFly suppression: skip grocery chips when the dump is grocery-only.
+        // For mixed-target dumps the grocery chip still flies (the SortedToast
+        // can still surface separately once routed:grocery resolves; the chip
+        // here is the "module fan-out" signal, not the "item sorted" signal).
+        const suppressChip = groceryOnly && route.module === 'grocery';
+
+        if (fromRect && !suppressChip) {
           // Stagger chips by 70 ms per route.
           chipPromises.push(
             new Promise<void>((resolve) => {
@@ -128,8 +157,12 @@ export function useApplyBrainDump(): (text: string, fromRect?: DOMRect) => Promi
       }
 
       // ── 4. Summary toast ──────────────────────────────────────────────────
-      const moduleList = [...modulesHit].join(', ');
-      toast.show(`routed → ${moduleList}`, { module: actions[0].module });
+      // Grocery-only dumps get the SortedToast (driven by the routing
+      // events above) instead of the generic "routed → grocery" toast.
+      if (!groceryOnly) {
+        const moduleList = [...modulesHit].join(', ');
+        toast.show(`routed · ${moduleList}`, { module: actions[0].module });
+      }
 
       // ── 5. Server enrichment (fire-and-forget) ────────────────────────────
       // Gated by consent inside the research client; if consent is off this
