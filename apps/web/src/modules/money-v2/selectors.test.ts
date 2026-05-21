@@ -136,6 +136,54 @@ describe('safeToSpendVM', () => {
     expect(vm.amount).toBe(312);
     expect(vm.horizonDays).toBe(11);
   });
+
+  // Sentry SF-1148/1149 regression guards — `band` was reaching the
+  // `.cold_start` access as null/undefined/malformed in prod. The
+  // defensive guards in safeToSpendVM must collapse every shape to the
+  // calm cold-start VM, not throw.
+  it('does not throw when slices.safeToSpend is undefined', () => {
+    const slices = emptySlices();
+    (slices as { safeToSpend: unknown }).safeToSpend = undefined;
+    const vm = safeToSpendVM(slices, NOW);
+    expect(vm.coldStart).toBe(true);
+    expect(vm.amount).toBeNull();
+  });
+
+  it('does not throw when the entire slices object is missing', () => {
+    const vm = safeToSpendVM(undefined as unknown as FinanceSlices, NOW);
+    expect(vm.coldStart).toBe(true);
+    expect(vm.amount).toBeNull();
+    expect(vm.horizonDays).toBe(7);
+  });
+
+  it('treats a non-null band with missing cold_start as cold-start (no throw)', () => {
+    const slices = emptySlices();
+    // Simulate a partially-migrated persisted band (no cold_start field,
+    // no numeric central). The face must not render NaN.
+    (slices as { safeToSpend: unknown }).safeToSpend = {
+      band: [0, 0],
+      horizonDays: 7,
+      contributing_patterns: [],
+    };
+    const vm = safeToSpendVM(slices, NOW);
+    expect(vm.coldStart).toBe(true);
+    expect(vm.amount).toBeNull();
+  });
+
+  it('treats a band with NaN central as cold-start', () => {
+    const slices = emptySlices();
+    slices.safeToSpend = {
+      central: NaN,
+      sigma: 0,
+      band: [0, 0],
+      horizonDays: 7,
+      cold_start: false,
+      contributing_patterns: [],
+    };
+    const vm = safeToSpendVM(slices, NOW);
+    expect(vm.coldStart).toBe(true);
+    expect(vm.amount).toBeNull();
+  });
 });
 
 describe('incomeVM', () => {
