@@ -19,6 +19,7 @@ import { chipFly } from '../components/ChipFly';
 import { useToast } from '../components/ToastContext';
 import { applyRoute } from './applyRoute';
 import { parseReminder } from '@ollie/router';
+import { popUndo } from '../lib/grocery-undo-stack';
 // Audit-fix #3: import the shared scheduler instance from store.ts
 // instead of creating a second instance. Two schedulers with their
 // own timer maps couldn't cancel each other's schedules (audit H4).
@@ -48,6 +49,34 @@ export function useApplyBrainDump(): (text: string, fromRect?: DOMRect) => Promi
 
   return useCallback(
     async (text: string, fromRect?: DOMRect): Promise<void> => {
+      // ── 0. Undo short-circuit ──────────────────────────────────────────────
+      // Recognised undo triggers bypass AI routing entirely and pop the stack.
+      // EN + TR + ES variants all land here. No AI fetch, no store write.
+      const trimmed = text.trim().toLowerCase();
+      const UNDO_TRIGGERS = [
+        'undo',
+        'geri al',
+        'actually no',
+        'wait no',
+        'wait, no',
+        'oops',
+        'nvm',
+        'never mind',
+        'cancel that',
+        'iptal',
+        'cancela',
+      ] as const;
+      if ((UNDO_TRIGGERS as ReadonlyArray<string>).includes(trimmed)) {
+        const entry = popUndo();
+        if (entry) {
+          entry.undo();
+          emit('grocery:undone', { description: entry.description, mode: entry.mode, ts: Date.now() });
+        } else {
+          emit('grocery:undone', { description: '', mode: 'add' as const, ts: Date.now() });
+        }
+        return;
+      }
+
       // ── 1. Crisis guard ────────────────────────────────────────────────────
       // Crisis / method-seeking text is never routed, never enriched, never
       // persisted with content — it stops here and the user is sent to the

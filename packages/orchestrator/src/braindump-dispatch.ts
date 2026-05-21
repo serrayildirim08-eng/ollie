@@ -236,6 +236,39 @@ export interface GroceryPurchaseEvent {
   ts: number;
 }
 
+// ─── Grocery mutation undo types ─────────────────────────────────────────────
+//
+// These types are emitted by applyGroceryMutations via onGroceryMutation so
+// the frontend can build an undo() closure and push it onto the session stack.
+// The orchestrator stays pure — it never touches grocery-undo-stack directly.
+
+/** Snapshot data needed to reverse a single mutation variant. */
+export type GroceryMutationReverse =
+  | {
+      kind: 'restore_to_items';
+      item: { id: string; name: string; canonical?: string | null; ts: number; checked: boolean };
+    }
+  | {
+      kind: 'restore_to_pantry';
+      item: { id: string; name: string; canonical?: string | null; ts: number; boughtTs: number };
+    }
+  | { kind: 'remove_from_items'; ids: string[] }
+  | { kind: 'remove_from_pantry'; ids: string[] }
+  | { kind: 'set_checked'; updates: Array<{ id: string; checked: boolean }> }
+  | { kind: 'composite'; steps: GroceryMutationReverse[] };
+
+/**
+ * Emitted by applyGroceryMutations after each mutation lands in the store.
+ * Frontend wires onGroceryMutation to grocery-undo-stack.pushUndo(). Each
+ * entry carries a snapshot so the frontend can build the undo() closure.
+ */
+export interface GroceryMutationEntry {
+  ts: number;
+  mode: 'add' | 'remove' | 'check' | 'move_to_pantry';
+  description: string;
+  reverse: GroceryMutationReverse;
+}
+
 export interface DispatchOptions {
   /** Resolver for the active locale at emit time. Defaults to 'en'. */
   getLocale?: () => DispatchLocale;
@@ -266,6 +299,14 @@ export interface DispatchOptions {
    * on the applier side, just less reliable).
    */
   getGroceryContext?: () => GroceryListContext;
+  /**
+   * Called by applyGroceryMutations after each mutation lands in the store.
+   * Frontend wires this to grocery-undo-stack.pushUndo(). Each entry carries
+   * a reverse snapshot so the frontend can build the undo() closure since only
+   * the frontend holds the store reference. Orchestrator stays pure — never
+   * touches the undo stack itself.
+   */
+  onGroceryMutation?: (entry: GroceryMutationEntry) => void;
 }
 
 function newId(): string {
@@ -389,6 +430,14 @@ export function applyGroceryMutations(
               ts,
             });
           } catch { /* fire-and-forget */ }
+          try {
+            opts.onGroceryMutation?.({
+              ts,
+              mode: 'add',
+              description: `added ${aiItem.name} to pantry`,
+              reverse: { kind: 'remove_from_pantry', ids: [newRowId] },
+            });
+          } catch { /* fire-and-forget */ }
         } else {
           store.update<Array<{ id: string; name: string; canonical?: string; ts: number; checked: boolean }>>(
             'grocery',
@@ -401,13 +450,22 @@ export function applyGroceryMutations(
               checked: false,
             }],
           );
+          try {
+            opts.onGroceryMutation?.({
+              ts,
+              mode: 'add',
+              description: `added ${aiItem.name} to shop`,
+              reverse: { kind: 'remove_from_items', ids: [newRowId] },
+            });
+          } catch { /* fire-and-forget */ }
         }
         break;
       }
 
       case 'remove': {
         if (aiItem.target === 'pantry') {
-          store.update<Array<{ id: string; name: string; canonical?: string | null; ts: number; boughtTs?: number }>>(
+          let snapshot: { id: string; name: string; canonical?: string | null; ts: number; boughtTs: number } | null = null;
+          store.update<Array<{ id: string; name: string; canonical?: string | null; ts: number; boughtTs: number }>>(
             'grocery',
             'pantry',
             (cur) => {
@@ -415,10 +473,32 @@ export function applyGroceryMutations(
               // Remove the FIRST matching item. Silent no-op if no match.
               const idx = arr.findIndex((it) => matchItem(it, aiItem));
               if (idx < 0) return arr;
+              snapshot = arr[idx];
               return [...arr.slice(0, idx), ...arr.slice(idx + 1)];
             },
           );
+          if (snapshot !== null) {
+            const snap = snapshot as { id: string; name: string; canonical?: string | null; ts: number; boughtTs: number };
+            try {
+              opts.onGroceryMutation?.({
+                ts,
+                mode: 'remove',
+                description: `removed ${snap.name} from pantry`,
+                reverse: {
+                  kind: 'restore_to_pantry',
+                  item: {
+                    id: snap.id,
+                    name: snap.name,
+                    canonical: snap.canonical ?? null,
+                    ts: snap.ts,
+                    boughtTs: snap.boughtTs,
+                  },
+                },
+              });
+            } catch { /* fire-and-forget */ }
+          }
         } else {
+          let snapshot: { id: string; name: string; canonical?: string | null; ts: number; checked: boolean } | null = null;
           store.update<Array<{ id: string; name: string; canonical?: string | null; ts: number; checked: boolean }>>(
             'grocery',
             'items',
@@ -426,14 +506,37 @@ export function applyGroceryMutations(
               const arr = cur ?? [];
               const idx = arr.findIndex((it) => matchItem(it, aiItem));
               if (idx < 0) return arr;
+              snapshot = arr[idx];
               return [...arr.slice(0, idx), ...arr.slice(idx + 1)];
             },
           );
+          if (snapshot !== null) {
+            const snap = snapshot as { id: string; name: string; canonical?: string | null; ts: number; checked: boolean };
+            try {
+              opts.onGroceryMutation?.({
+                ts,
+                mode: 'remove',
+                description: `removed ${snap.name} from shop`,
+                reverse: {
+                  kind: 'restore_to_items',
+                  item: {
+                    id: snap.id,
+                    name: snap.name,
+                    canonical: snap.canonical ?? null,
+                    ts: snap.ts,
+                    checked: snap.checked,
+                  },
+                },
+              });
+            } catch { /* fire-and-forget */ }
+          }
         }
         break;
       }
 
       case 'check': {
+        // Snapshot pre-state checked values before mutating.
+        const preCheckUpdates: Array<{ id: string; checked: boolean }> = [];
         store.update<Array<{ id: string; name: string; canonical?: string | null; ts: number; checked: boolean }>>(
           'grocery',
           'items',
@@ -445,6 +548,7 @@ export function applyGroceryMutations(
             // except" few-shot pattern).
             const idx = arr.findIndex((it) => !it.checked && matchItem(it, aiItem));
             if (idx < 0) return arr;
+            preCheckUpdates.push({ id: arr[idx].id, checked: arr[idx].checked });
             return arr.map((it, i) => (i === idx ? { ...it, checked: true } : it));
           },
         );
@@ -458,10 +562,22 @@ export function applyGroceryMutations(
             ts,
           });
         } catch { /* fire-and-forget */ }
+        if (preCheckUpdates.length > 0) {
+          try {
+            opts.onGroceryMutation?.({
+              ts,
+              mode: 'check',
+              description: `checked ${preCheckUpdates.length} item${preCheckUpdates.length === 1 ? '' : 's'} off shop`,
+              reverse: { kind: 'set_checked', updates: preCheckUpdates },
+            });
+          } catch { /* fire-and-forget */ }
+        }
         break;
       }
 
       case 'move_to_pantry': {
+        // Snapshot shopping item before removal.
+        let shopSnapshot: { id: string; name: string; canonical?: string | null; ts: number; checked: boolean } | null = null;
         // Remove from shopping (silent on no-match — user might be
         // confirming possession of something never on the list).
         store.update<Array<{ id: string; name: string; canonical?: string | null; ts: number; checked: boolean }>>(
@@ -471,6 +587,7 @@ export function applyGroceryMutations(
             const arr = cur ?? [];
             const idx = arr.findIndex((it) => matchItem(it, aiItem));
             if (idx < 0) return arr;
+            shopSnapshot = arr[idx];
             return [...arr.slice(0, idx), ...arr.slice(idx + 1)];
           },
         );
@@ -495,6 +612,32 @@ export function applyGroceryMutations(
             unit: aiItem.unit,
             source: 'ai_inferred',
             ts,
+          });
+        } catch { /* fire-and-forget */ }
+        // Build composite reverse: remove the pantry entry + restore the
+        // shopping item (if it was there before).
+        try {
+          const reverseSteps: GroceryMutationReverse[] = [
+            { kind: 'remove_from_pantry', ids: [pantryRowId] },
+          ];
+          if (shopSnapshot !== null) {
+            const snap = shopSnapshot as { id: string; name: string; canonical?: string | null; ts: number; checked: boolean };
+            reverseSteps.push({
+              kind: 'restore_to_items',
+              item: {
+                id: snap.id,
+                name: snap.name,
+                canonical: snap.canonical ?? null,
+                ts: snap.ts,
+                checked: snap.checked,
+              },
+            });
+          }
+          opts.onGroceryMutation?.({
+            ts,
+            mode: 'move_to_pantry',
+            description: `moved ${aiItem.name} → pantry`,
+            reverse: { kind: 'composite', steps: reverseSteps },
           });
         } catch { /* fire-and-forget */ }
         break;

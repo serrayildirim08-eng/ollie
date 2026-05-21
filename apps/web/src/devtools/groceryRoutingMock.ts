@@ -39,6 +39,53 @@ import type {
   GroceryRoutingSource,
 } from '../hooks/useGroceryRouting';
 
+// ─── Mutation fixture shape ───────────────────────────────────────────────────
+
+export interface GroceryMutationFixture {
+  key: string;
+  label: string;
+  event: 'grocery:mutation' | 'grocery:undone';
+  payload: Record<string, unknown>;
+}
+
+export const GROCERY_MUTATION_FIXTURES: Record<string, GroceryMutationFixture> = {
+  grocery_removed: {
+    key: 'grocery_removed',
+    label: 'removed · pasta from shopping',
+    event: 'grocery:mutation',
+    payload: { mode: 'removed', itemName: 'pasta', slice: 'shopping', ts: 0 },
+  },
+  grocery_moved: {
+    key: 'grocery_moved',
+    label: 'moved · olive oil to pantry',
+    event: 'grocery:mutation',
+    payload: { mode: 'moved', itemName: 'olive oil', ts: 0 },
+  },
+  grocery_checked_3: {
+    key: 'grocery_checked_3',
+    label: 'checked · 3 items off shop',
+    event: 'grocery:mutation',
+    payload: { mode: 'checked', itemCount: 3, ts: 0 },
+  },
+  grocery_undone: {
+    key: 'grocery_undone',
+    label: 'undone · last mutation reversed',
+    event: 'grocery:undone',
+    payload: { description: 'removed: pasta from shopping', mode: 'remove', ts: 0 },
+  },
+};
+
+export const MUTATION_FIXTURE_KEYS = Object.keys(GROCERY_MUTATION_FIXTURES);
+
+/** Play a mutation mock fixture — emits the right event with a fresh ts. */
+export function playGroceryMutationFixture(key: string): void {
+  const fix = GROCERY_MUTATION_FIXTURES[key];
+  if (!fix) {
+    throw new Error(`[groceryRoutingMock] unknown mutation fixture "${key}"`);
+  }
+  emit(fix.event, { ...fix.payload, ts: Date.now() });
+}
+
 // ─── Fixture shape ────────────────────────────────────────────────────────────
 
 export interface GroceryRoutingFixture {
@@ -239,7 +286,7 @@ export function playGroceryRoutingFixture(
 
 // ─── ?mock=… install ──────────────────────────────────────────────────────────
 
-const ALLOWED_PARAMS = new Set(
+const ALLOWED_ROUTING_PARAMS = new Set(
   FIXTURE_KEYS.map((k) => `grocery_${k}`).concat(FIXTURE_KEYS),
 );
 
@@ -248,12 +295,29 @@ const ALLOWED_PARAMS = new Set(
  * `?mock=grocery_<fixture>` or `?mock=<fixture>` from the current URL
  * and plays the matching fixture on the next tick. No-op when the param
  * is missing or doesn't match an allowed key.
+ *
+ * Supported params:
+ *   Routing fixtures: ?mock=grocery_single, ?mock=single, …
+ *   Mutation fixtures: ?mock=grocery_removed, ?mock=grocery_moved,
+ *                      ?mock=grocery_checked_3, ?mock=grocery_undone
  */
 export function installGroceryRoutingMockFromURL(): void {
   if (typeof window === 'undefined') return;
   const params = new URLSearchParams(window.location.search);
   const raw = params.get('mock');
-  if (!raw || !ALLOWED_PARAMS.has(raw)) return;
+  if (!raw) return;
+
+  // Mutation fixture check first — these keys are prefixed with "grocery_"
+  // and live in GROCERY_MUTATION_FIXTURES.
+  if (GROCERY_MUTATION_FIXTURES[raw]) {
+    setTimeout(() => {
+      playGroceryMutationFixture(raw);
+    }, 50);
+    return;
+  }
+
+  // Routing fixture check.
+  if (!ALLOWED_ROUTING_PARAMS.has(raw)) return;
   const key = raw.startsWith('grocery_') ? raw.slice('grocery_'.length) : raw;
   if (!GROCERY_ROUTING_FIXTURES[key]) return;
   // Defer one tick so the React tree (and any subscribed hook) is mounted.

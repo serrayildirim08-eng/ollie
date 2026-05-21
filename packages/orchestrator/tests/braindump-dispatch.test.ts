@@ -9,8 +9,8 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { createStore, createMemoryAdapter } from '@ollie/store';
-import { routeBrainDump, dispatchAction } from '../src/braindump-dispatch';
-import type { GroceryPurchaseEvent } from '../src/braindump-dispatch';
+import { routeBrainDump, dispatchAction, applyGroceryMutations } from '../src/braindump-dispatch';
+import type { GroceryPurchaseEvent, GroceryMutationEntry, GroceryRoutedItem } from '../src/braindump-dispatch';
 
 const FIXED_NOW = new Date('2026-05-14T12:00:00Z').getTime();
 
@@ -562,5 +562,137 @@ describe('dispatchAction · body.episodes (merged from applyRoute)', () => {
   it('unclassified body input → body.items', () => {
     dispatchAction({ module: 'body', action: 'log', data: 'went for a walk' }, store, FIXED_NOW);
     expect(store.get<GenericItem[]>('body', 'items', [])).toHaveLength(1);
+  });
+});
+
+// ─── onGroceryMutation callback tests (2026-05-22) ───────────────────────────
+//
+// Verify applyGroceryMutations emits the correct GroceryMutationEntry for
+// each action variant. All tests use applyGroceryMutations directly so
+// there's no network dependency.
+
+describe('applyGroceryMutations · onGroceryMutation callback', () => {
+  let store: ReturnType<typeof makeStore>;
+  let emitted: GroceryMutationEntry[];
+  let onGroceryMutation: (entry: GroceryMutationEntry) => void;
+
+  type ShoppingItem = { id: string; name: string; canonical?: string | null; ts: number; checked: boolean };
+  type PantryItem = { id: string; name: string; canonical?: string | null; ts: number; boughtTs: number };
+
+  beforeEach(() => {
+    store = makeStore();
+    emitted = [];
+    onGroceryMutation = (e) => emitted.push(e);
+  });
+
+  // TC-M1: remove action emits correct entry with restore_to_items reverse
+  it('remove action emits entry with restore_to_items reverse', () => {
+    // Seed a shopping item
+    store.update<ShoppingItem[]>('grocery', 'items', () => [
+      { id: 'item-1', name: 'pasta', canonical: 'pasta', ts: FIXED_NOW, checked: false },
+    ]);
+
+    const items: GroceryRoutedItem[] = [{
+      name: 'pasta',
+      canonical: 'pasta',
+      category: 'dry-goods',
+      intent: 'remove',
+      target: 'shopping',
+      action: 'remove',
+    }];
+
+    applyGroceryMutations(items, store, FIXED_NOW, { onGroceryMutation });
+
+    expect(emitted).toHaveLength(1);
+    expect(emitted[0].mode).toBe('remove');
+    expect(emitted[0].description).toContain('pasta');
+    expect(emitted[0].description).toContain('shop');
+    expect(emitted[0].reverse.kind).toBe('restore_to_items');
+    if (emitted[0].reverse.kind === 'restore_to_items') {
+      expect(emitted[0].reverse.item.name).toBe('pasta');
+      expect(emitted[0].reverse.item.id).toBe('item-1');
+    }
+    // Item must be gone from the store
+    expect(store.get<ShoppingItem[]>('grocery', 'items', [])).toHaveLength(0);
+  });
+
+  // TC-M2: check action emits entry with set_checked reverse (pre-state snapshot)
+  it('check action emits entry with set_checked reverse carrying pre-state', () => {
+    store.update<ShoppingItem[]>('grocery', 'items', () => [
+      { id: 'item-2', name: 'bread', canonical: 'bread', ts: FIXED_NOW, checked: false },
+    ]);
+
+    const items: GroceryRoutedItem[] = [{
+      name: 'bread',
+      canonical: 'bread',
+      category: 'bakery',
+      intent: 'check',
+      target: 'shopping',
+      action: 'check',
+    }];
+
+    applyGroceryMutations(items, store, FIXED_NOW, { onGroceryMutation });
+
+    expect(emitted).toHaveLength(1);
+    expect(emitted[0].mode).toBe('check');
+    expect(emitted[0].reverse.kind).toBe('set_checked');
+    if (emitted[0].reverse.kind === 'set_checked') {
+      expect(emitted[0].reverse.updates).toHaveLength(1);
+      // Pre-state was checked=false
+      expect(emitted[0].reverse.updates[0]).toEqual({ id: 'item-2', checked: false });
+    }
+    // Item should now be checked in store
+    const after = store.get<ShoppingItem[]>('grocery', 'items', []);
+    expect(after[0].checked).toBe(true);
+  });
+
+  // TC-M3: move_to_pantry emits composite reverse
+  it('move_to_pantry emits composite reverse with remove_from_pantry + restore_to_items', () => {
+    store.update<ShoppingItem[]>('grocery', 'items', () => [
+      { id: 'item-3', name: 'milk', canonical: 'milk', ts: FIXED_NOW, checked: false },
+    ]);
+
+    const items: GroceryRoutedItem[] = [{
+      name: 'milk',
+      canonical: 'milk',
+      category: 'dairy',
+      intent: 'move_to_pantry',
+      target: 'shopping',
+      action: 'move_to_pantry',
+    }];
+
+    applyGroceryMutations(items, store, FIXED_NOW, { onGroceryMutation });
+
+    expect(emitted).toHaveLength(1);
+    expect(emitted[0].mode).toBe('move_to_pantry');
+    expect(emitted[0].description).toContain('milk');
+    expect(emitted[0].description).toContain('pantry');
+    expect(emitted[0].reverse.kind).toBe('composite');
+    if (emitted[0].reverse.kind === 'composite') {
+      const kinds = emitted[0].reverse.steps.map((s) => s.kind);
+      expect(kinds).toContain('remove_from_pantry');
+      expect(kinds).toContain('restore_to_items');
+    }
+    // Shop should be empty, pantry should have 1
+    expect(store.get<ShoppingItem[]>('grocery', 'items', [])).toHaveLength(0);
+    expect(store.get<PantryItem[]>('grocery', 'pantry', [])).toHaveLength(1);
+  });
+
+  // TC-M4: plain add with no mutation text does NOT skip the callback (still emits for add)
+  it('add action emits entry with remove_from_items reverse', () => {
+    const items: GroceryRoutedItem[] = [{
+      name: 'eggs',
+      canonical: 'eggs',
+      category: 'protein',
+      intent: 'add',
+      target: 'shopping',
+      action: 'add',
+    }];
+
+    applyGroceryMutations(items, store, FIXED_NOW, { onGroceryMutation });
+
+    expect(emitted).toHaveLength(1);
+    expect(emitted[0].mode).toBe('add');
+    expect(emitted[0].reverse.kind).toBe('remove_from_items');
   });
 });

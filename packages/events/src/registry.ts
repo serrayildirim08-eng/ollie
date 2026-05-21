@@ -50,6 +50,22 @@ export const REGISTRY: Registry = {
   'grocery:routing:pending':       { payload: '{ idempotency_key: string, raw: string, ts: number }' },
   'grocery:routed':                { payload: '{ idempotency_key: string, raw: string, items: Array<{ name: string, target: "shopping"|"pantry", recipe_parent?: string }>, source: "cache"|"gemini"|"fallback", latency_ms: number, ts: number, error?: string }' },
 
+  // ─── grocery · mutation feedback (SortedToast modes) ────────────
+  // Emitted by the frontend applyRoute layer after a mutation command
+  // (remove / check / move_to_pantry) is confirmed by the AI result.
+  // `mode` maps directly to SortedToastMode. `slice` is "shopping" or
+  // "pantry" — used by the toast copy template ("removed: X from shopping").
+  // `itemName` is the AI-resolved name; `itemCount` is for multi-item
+  // mutations (mode='checked': "checked: N items off shop").
+  'grocery:mutation':              { payload: '{ mode: "removed"|"moved"|"checked", itemName?: string, itemCount?: number, slice?: "shopping"|"pantry", ts: number }' },
+
+  // ─── grocery · undo stack (SortedToast undone mode) ─────────────
+  // Emitted by frontend-junior-1 after popUndo() + undo() executes.
+  // `description` is the human-readable label from GroceryUndoEntry
+  // (e.g. "removed: pasta from shopping"). `mode` is the original
+  // mutation kind; empty description means the stack was already empty.
+  'grocery:undone':                { payload: '{ description: string, mode: "add" | "remove" | "check" | "move_to_pantry", ts: number }' },
+
   // ─── grocery · Feed Me v2 (frontend hook + telemetry contract) ──
   // Spec: docs/handoffs/feed-me/00-SPEC.md. The frontend FeedMeView
   // emits all four; backend is free to ignore. Reserved for research

@@ -109,6 +109,8 @@ export type {
   GroceryRoutingResult,
   GroceryRoutingSource,
   GroceryListContext,
+  GroceryMutationEntry,
+  GroceryMutationReverse,
 } from './braindump-dispatch';
 export {
   createMatterRoutingOrchestrator,

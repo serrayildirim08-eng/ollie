@@ -153,3 +153,193 @@ describe('SortedToast · 9-fixture smoke render', () => {
     });
   }
 });
+
+// ─── Mutation mode tests ──────────────────────────────────────────────────────
+
+const NOOP_RESULT: GroceryRoutingResult = {
+  idempotency_key: 'noop',
+  raw: '',
+  items: [],
+  source: 'cache',
+  latency_ms: 0,
+  ts: 0,
+};
+
+describe('SortedToast · mutation modes', () => {
+  it('mode=removed renders × icon + correct copy', () => {
+    const { container, unmount } = mount(
+      <SortedToast
+        result={NOOP_RESULT}
+        mode="removed"
+        itemName="pasta"
+        slice="shopping"
+        ttl={0}
+        inline
+      />,
+    );
+    const el = container.querySelector('[data-grocery-sorted-toast]');
+    expect(el?.getAttribute('data-mode')).toBe('removed');
+    // SVG cross is present (aria-hidden, so check container for the svg)
+    expect(container.querySelector('svg')).not.toBeNull();
+    // Copy
+    expect(container.textContent).toContain('removed');
+    expect(container.textContent).toContain('pasta');
+    expect(container.textContent).toContain('shopping');
+    unmount();
+  });
+
+  it('mode=moved renders arrow icon + "moved: X pantry"', () => {
+    const { container, unmount } = mount(
+      <SortedToast
+        result={NOOP_RESULT}
+        mode="moved"
+        itemName="olive oil"
+        ttl={0}
+        inline
+      />,
+    );
+    expect(container.querySelector('[data-mode="moved"]')).not.toBeNull();
+    expect(container.querySelector('svg')).not.toBeNull();
+    expect(container.textContent).toContain('moved');
+    expect(container.textContent).toContain('olive oil');
+    expect(container.textContent?.toLowerCase()).toContain('pantry');
+    unmount();
+  });
+
+  it('mode=checked singular: "checked: 1 item off shop"', () => {
+    const { container, unmount } = mount(
+      <SortedToast
+        result={NOOP_RESULT}
+        mode="checked"
+        itemCount={1}
+        ttl={0}
+        inline
+      />,
+    );
+    expect(container.textContent).toContain('1 item off shop');
+    // must NOT say "items" (plural)
+    expect(container.textContent).not.toContain('1 items');
+    unmount();
+  });
+
+  it('mode=checked plural: "checked: 3 items off shop"', () => {
+    const { container, unmount } = mount(
+      <SortedToast
+        result={NOOP_RESULT}
+        mode="checked"
+        itemCount={3}
+        ttl={0}
+        inline
+      />,
+    );
+    expect(container.textContent).toContain('3 items off shop');
+    unmount();
+  });
+
+  it('mode=undone renders undo icon + description copy', () => {
+    const { container, unmount } = mount(
+      <SortedToast
+        result={NOOP_RESULT}
+        mode="undone"
+        description="removed: pasta from shopping"
+        ttl={0}
+        inline
+      />,
+    );
+    expect(container.querySelector('[data-mode="undone"]')).not.toBeNull();
+    expect(container.querySelector('svg')).not.toBeNull();
+    expect(container.textContent).toContain('undone');
+    expect(container.textContent).toContain('removed: pasta from shopping');
+    unmount();
+  });
+
+  it('mode=sorted (default) — backward compat: existing routing layout', () => {
+    const { container, unmount } = mount(
+      <SortedToast
+        result={resultFromFixture('single')}
+        mode="sorted"
+        ttl={0}
+        inline
+      />,
+    );
+    // routing layout data-layout should be set; data-mode='sorted'
+    expect(container.querySelector('[data-mode="sorted"]')).not.toBeNull();
+    expect(container.querySelector('[data-layout="single"]')).not.toBeNull();
+    unmount();
+  });
+
+  it('prefers-reduced-motion: no entrance animation class (inline mode always static)', () => {
+    // inline=true means no portal, position=relative — animation does not run.
+    // The @media rule is in the style tag; assert it exists in the DOM.
+    const { container, unmount } = mount(
+      <SortedToast result={NOOP_RESULT} mode="removed" itemName="milk" ttl={0} inline />,
+    );
+    const styleEl = container.querySelector('style');
+    expect(styleEl?.textContent).toContain('prefers-reduced-motion');
+    unmount();
+  });
+
+  it('aria-label for mode=removed is descriptive', () => {
+    const { container, unmount } = mount(
+      <SortedToast
+        result={NOOP_RESULT}
+        mode="removed"
+        itemName="eggs"
+        slice="shopping"
+        ttl={0}
+        inline
+      />,
+    );
+    const el = container.querySelector('[data-grocery-sorted-toast]');
+    const label = el?.getAttribute('aria-label') ?? '';
+    expect(label.toLowerCase()).toContain('eggs');
+    expect(label.toLowerCase()).toContain('shopping');
+    unmount();
+  });
+
+  it('aria-label for mode=moved is descriptive', () => {
+    const { container, unmount } = mount(
+      <SortedToast
+        result={NOOP_RESULT}
+        mode="moved"
+        itemName="butter"
+        ttl={0}
+        inline
+      />,
+    );
+    const el = container.querySelector('[data-grocery-sorted-toast]');
+    expect(el?.getAttribute('aria-label')?.toLowerCase()).toContain('butter');
+    expect(el?.getAttribute('aria-label')?.toLowerCase()).toContain('pantry');
+    unmount();
+  });
+
+  it('aria-label for mode=checked uses singular/plural correctly', () => {
+    const { container: c1, unmount: u1 } = mount(
+      <SortedToast result={NOOP_RESULT} mode="checked" itemCount={1} ttl={0} inline />,
+    );
+    expect(c1.querySelector('[data-grocery-sorted-toast]')?.getAttribute('aria-label')).toContain('1 item');
+    u1();
+
+    const { container: c2, unmount: u2 } = mount(
+      <SortedToast result={NOOP_RESULT} mode="checked" itemCount={5} ttl={0} inline />,
+    );
+    expect(c2.querySelector('[data-grocery-sorted-toast]')?.getAttribute('aria-label')).toContain('5 items');
+    u2();
+  });
+
+  it('aria-label for mode=undone includes description', () => {
+    const { container, unmount } = mount(
+      <SortedToast
+        result={NOOP_RESULT}
+        mode="undone"
+        description="removed: pasta"
+        ttl={0}
+        inline
+      />,
+    );
+    expect(
+      container.querySelector('[data-grocery-sorted-toast]')?.getAttribute('aria-label'),
+    ).toContain('removed: pasta');
+    unmount();
+  });
+});

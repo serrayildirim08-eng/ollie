@@ -40,6 +40,9 @@ export const SHAPES: Record<string, ShapeSpec> = {
   'grocery:routing:pending':   { idempotency_key: 'string', raw: 'string', ts: 'number' },
   'grocery:routed':            { idempotency_key: 'string', raw: 'string', items: 'array', source: 'string', latency_ms: 'number', ts: 'number', 'error?': 'string' },
 
+  // grocery · undo stack (2026-05-22)
+  'grocery:undone':            { description: 'string', mode: 'string', ts: 'number' },
+
   // Feed Me v2 telemetry (2026-05-22 · docs/handoffs/feed-me/00-SPEC.md)
   'feedme:requested':          { pantryCount: 'number', diet: 'string', feedTarget: 'string', ts: 'number' },
   'feedme:suggested':          { source: 'string', count: 'number', latencyMs: 'number', ts: 'number' },
