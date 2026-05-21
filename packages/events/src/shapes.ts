@@ -35,6 +35,12 @@ export const SHAPES: Record<string, ShapeSpec> = {
   'void:crisis:detected':      { text: 'string', matchedLine: 'string', ts: 'number' },
   'research:row_written':      { row_id: 'string', table: 'string', text: 'string', locale: 'string', ts: 'number' },
 
+  // T2 2026-05-21 · grocery AI routing (co-owned with frontend pod;
+  //   `error?` added for the fallback/AI-down path that the SortedToast
+  //   error-layout subscribes to).
+  'grocery:routing:pending':   { idempotency_key: 'string', raw: 'string', ts: 'number' },
+  'grocery:routed':            { idempotency_key: 'string', raw: 'string', items: 'array', source: 'string', latency_ms: 'number', ts: 'number', 'error?': 'string' },
+
   // Sprint 3 / D1 burhan
   'burhan:element_added':      { id: 'string', type: 'string', source_module: 'string', source_event_id: 'string', ts: 'number' },
 
@@ -105,6 +111,7 @@ export const SHAPES: Record<string, ShapeSpec> = {
     copy: 'string',
     ts: 'number',
   },
+
 };
 
 export type ValidationResult = { ok: true } | { ok: false; reason: string };

@@ -127,8 +127,7 @@ export async function handleRoute(
   try {
     embedding = await voyageEmbed(cleanText, env.VOYAGE_API_KEY);
   } catch (err) {
-    const detail = err instanceof Error ? err.message : String(err);
-    return upstreamError('voyage_embed_failed', 502, detail, { module });
+    return upstreamError('voyage_embed_failed', 502, err, { module });
   }
 
   // 3. pgvector cache lookup
@@ -166,8 +165,7 @@ export async function handleRoute(
     classification = result.classification;
     language = result.language;
   } catch (err) {
-    const detail = err instanceof Error ? err.message : String(err);
-    return upstreamError('gemini_classify_failed', 502, detail, { module });
+    return upstreamError('gemini_classify_failed', 502, err, { module });
   }
 
   // 5. Cache write (fire-and-forget)
