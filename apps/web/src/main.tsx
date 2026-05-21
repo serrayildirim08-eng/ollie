@@ -12,6 +12,7 @@ import { installDeeplinkHandler } from './lib/capacitor-deeplink';
 import { captureInviteFromUrl } from './lib/invite';
 import { installGroceryRoutingMockFromURL } from './devtools/groceryRoutingMock';
 import { installReplenishmentMockFromURL } from './devtools/replenishmentMock';
+import { installFeedMeMockFromURL } from './devtools/feedMeMock';
 
 // Sentry — error tracking. Capacitor SDK wraps the React SDK so we get
 // JS errors + native iOS crashes from the same project. MUST init before
@@ -69,6 +70,11 @@ installGroceryRoutingMockFromURL();
 // so the adaptive-replenishment badge can be exercised across confidence
 // states without the worker `/replenishment/:user` endpoint being live.
 installReplenishmentMockFromURL();
+
+// Devtool — `?mock=feedme_<fixture>` seeds the useFeedMe cache so the
+// 3-card Feed Me face can be exercised across user / pet / loading /
+// fallback / empty states without the worker `/feed-me/:user` endpoint.
+installFeedMeMockFromURL();
 import './design/tokens.css';
 import './design/animations.css';
 import './design/breakpoints.css';
