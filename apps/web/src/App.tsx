@@ -8,18 +8,15 @@
  *   - `app-services.tsx`  — shared services context + cross-cutting effects
  *   - `app-gates.ts`      — the four auth/consent/research/onboarding gates
  *
- * `ToastProvider` stays at the very top because `AppServicesProvider`
- * (mounted inside `AppRouter`) consumes `useToast()` for the void:toast
- * bridge effect.
+ * `ToastProvider` lives inside `AppRouter` (router.tsx), co-located with
+ * `AppServicesProvider` which is the sole consumer of `useToast()`. This
+ * makes the provider/consumer coupling explicit and prevents the
+ * "useToast must be inside <ToastProvider>" class of error regardless of
+ * which entry point mounts `AppRouter`.
  */
 
-import { ToastProvider } from './components/ToastContext';
 import { AppRouter } from './router';
 
 export function App() {
-  return (
-    <ToastProvider>
-      <AppRouter />
-    </ToastProvider>
-  );
+  return <AppRouter />;
 }
