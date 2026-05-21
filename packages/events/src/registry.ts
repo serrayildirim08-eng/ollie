@@ -36,6 +36,19 @@ export const REGISTRY: Registry = {
   'grocery:duplicate_detected':    { payload: '{ name: string, days_since_purchase: number, ts: number }' },
   'grocery:pattern_detected':      { payload: '{ pattern: string, confidence: string, sample_n: number, ts: number }' },
 
+  // ─── grocery · AI routing (frontend hook + SortedToast contract) ─
+  // Backend agent (T0/T1/T2) will own the producer side. Frontend
+  // subscribes via apps/web/src/hooks/useGroceryRouting.ts. The shape
+  // string below is the contract — backend should match it 1:1 when
+  // they finalize packages/events/src/grocery-routing.ts.
+  // `pending` fires synchronously on submit (instant UI feedback);
+  // `routed` fires once the router (cache hit or Gemini call) returns.
+  // `source` distinguishes instant cache-hits ("cache") from
+  // delayed Gemini calls ("gemini") and the deterministic fallback
+  // path ("fallback") that runs when AI is offline / cost-capped.
+  'grocery:routing:pending':       { payload: '{ idempotency_key: string, raw: string, ts: number }' },
+  'grocery:routed':                { payload: '{ idempotency_key: string, raw: string, items: Array<{ name: string, target: "shopping"|"pantry", recipe_parent?: string }>, source: "cache"|"gemini"|"fallback", latency_ms: number, ts: number, error?: string }' },
+
   // ─── cycle prediction & flags ───────────────────────────────────
   'void:cycle:symptom_logged':     { payload: '{ ts: number, tags: string[], moduleContext: string }' },
   'void:cycle:asks_changed':       { payload: '{ asks: string[], ts: number }' },
