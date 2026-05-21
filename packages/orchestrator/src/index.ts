@@ -92,13 +92,23 @@ export type {
 } from './body-correlations';
 export { runBodySignalsPass } from './body-signals';
 export type { RunBodySignalsOpts } from './body-signals';
-export { routeBrainDump, dispatchAction } from './braindump-dispatch';
+export {
+  routeBrainDump,
+  dispatchAction,
+  applyGroceryMutations,
+  matchItem,
+} from './braindump-dispatch';
 export type {
   RouteBrainDumpResult,
   DispatchLocale,
   DispatchOptions,
   FinanceSlice,
   GroceryPurchaseEvent,
+  GroceryRoutedItem,
+  GroceryRoutedAction,
+  GroceryRoutingResult,
+  GroceryRoutingSource,
+  GroceryListContext,
 } from './braindump-dispatch';
 export {
   createMatterRoutingOrchestrator,
