@@ -527,7 +527,30 @@ importers:
 
   packages/truelayer: {}
 
+  packages/worker-http:
+    dependencies:
+      itty-router:
+        specifier: ^5.0.18
+        version: 5.0.23
+    devDependencies:
+      '@cloudflare/workers-types':
+        specifier: ^4.20250906.0
+        version: 4.20260510.1
+      typescript:
+        specifier: ^5.6.0
+        version: 5.8.3
+      vitest:
+        specifier: ^2.1.9
+        version: 2.1.9(@types/node@25.6.2)(jsdom@29.1.1)
+
   workers/ai-proxy:
+    dependencies:
+      '@ollie/worker-http':
+        specifier: workspace:*
+        version: link:../../packages/worker-http
+      jose:
+        specifier: ^6.2.3
+        version: 6.2.3
     devDependencies:
       '@cloudflare/workers-types':
         specifier: ^4.20250906.0
@@ -3473,6 +3496,9 @@ packages:
     peerDependencies:
       react: '>=18.0'
 
+  itty-router@5.0.23:
+    resolution: {integrity: sha512-i49WU+SNPrwOZA4Z61En1RYd5h2Lcqa+5IvCpMrNi4dxymzJK15ozUUnRrWIUAv95Zamd4eJPAot2UvHRrQg7w==}
+
   jackspeak@3.4.3:
     resolution: {integrity: sha512-OGlZQpz2yfahA/Rd1Y8Cd9SIEsqvXkLVoSw/cgwhnhFMDbsQFeZYoJJ7bIZBS9BcamUW96asq/npPWugM+RQBw==}
 
@@ -3480,6 +3506,9 @@ packages:
     resolution: {integrity: sha512-wpHYzhxiVQL+IV05BLE2Xn34zW1S223hvjtqk0+gsPrwd/8JNLXJgZZM/iPFsYc1xyphF+6M6EvdE5E9MBGkDA==}
     engines: {node: '>=10'}
     hasBin: true
+
+  jose@6.2.3:
+    resolution: {integrity: sha512-YYVDInQKFJfR/xa3ojUTl8c2KoTwiL1R5Wg9YCydwH0x0B9grbzlg5HC7mMjCtUJjbQ/YnGEZIhI5tCgfTb4Hw==}
 
   js-tokens@4.0.0:
     resolution: {integrity: sha512-RdJUflcE3cUzKiMqQgsCu06FPu9UdIJO0beYbPhHN4k6apgJtifcoCtT9bcxOpYBtpD2kCM6Sbzg4CausW/PKQ==}
@@ -7092,7 +7121,7 @@ snapshots:
   config-file-ts@0.2.8-rc1:
     dependencies:
       glob: 10.5.0
-      typescript: 5.9.3
+      typescript: 5.8.3
 
   console-control-strings@1.1.0: {}
 
@@ -7879,6 +7908,8 @@ snapshots:
     transitivePeerDependencies:
       - '@types/react'
 
+  itty-router@5.0.23: {}
+
   jackspeak@3.4.3:
     dependencies:
       '@isaacs/cliui': 8.0.2
@@ -7890,6 +7921,8 @@ snapshots:
       async: 3.2.6
       filelist: 1.0.6
       picocolors: 1.1.1
+
+  jose@6.2.3: {}
 
   js-tokens@4.0.0: {}
 
