@@ -112,7 +112,7 @@ let bootedHandles: AuthHandles | null = null;
 function bootHandles(): AuthHandles {
   if (bootedHandles) return bootedHandles;
   const env = readEnv();
-  const store = createStore(browserAdapter());
+  const store = createStore(browserAdapter);
   const api = createOllieAPI({
     anthropicProxy: env.VITE_ANTHROPIC_PROXY_URL,
     supabaseUrl: env.VITE_SUPABASE_URL,
