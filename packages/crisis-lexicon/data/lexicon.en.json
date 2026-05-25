@@ -1,0 +1,72 @@
+{
+  "language": "en",
+  "version": "0.1.0",
+  "last_reviewed_by": "PENDING_SERRA_APPROVAL",
+  "last_reviewed_at": "2026-05-25",
+  "tiers": {
+    "1": [
+      { "pattern": "can'?t\\s+take\\s+(?:it|this)\\s+anymore", "type": "regex", "flags": "i", "note": "exhaustion → distress", "sources": ["988-2024", "CTL-Taxonomy"] },
+      { "pattern": "what'?s\\s+the\\s+point", "type": "regex", "flags": "i", "note": "hopelessness signal", "sources": ["Joiner-2005"] },
+      { "pattern": "no\\s+hope\\s+(?:left|anymore)", "type": "regex", "flags": "i", "note": "hopelessness", "sources": ["Joiner-2005"] },
+      { "pattern": "tired\\s+of\\s+(?:living|everything|it\\s+all)", "type": "regex", "flags": "i", "note": "exhaustion + nihilism overlap", "sources": ["CTL-Taxonomy"] },
+      { "pattern": "nothing\\s+matters\\s+anymore", "type": "regex", "flags": "i", "sources": ["CTL-Taxonomy"] }
+    ],
+    "2": [
+      { "pattern": "want\\s+to\\s+die", "type": "regex", "flags": "i", "note": "core ideation", "sources": ["988-2024", "DSM-5"] },
+      { "pattern": "don'?t\\s+want\\s+to\\s+(?:live|be\\s+here|exist)", "type": "regex", "flags": "i", "sources": ["988-2024"] },
+      { "pattern": "wish\\s+(?:i\\s+(?:was|were)\\s+dead|i\\s+wasn'?t\\s+(?:born|here)|i\\s+could\\s+disappear)", "type": "regex", "flags": "i", "sources": ["DSM-5"] },
+      { "pattern": "kill\\s+myself", "type": "regex", "flags": "i", "sources": ["988-2024"] },
+      { "pattern": "end\\s+(?:it|my\\s+life|things)", "type": "regex", "flags": "i", "note": "phrasal ideation", "sources": ["CTL-Taxonomy"] },
+      { "pattern": "ending\\s+it\\s+all", "type": "regex", "flags": "i", "sources": ["CTL-Taxonomy"] },
+      { "pattern": "suicid\\w*", "type": "regex", "flags": "i", "note": "covers suicidal/suicide/suicidality", "sources": ["DSM-5", "WHO-2012"] },
+      { "pattern": "self.?harm(?:ing)?", "type": "regex", "flags": "i", "sources": ["DSM-5"] },
+      { "pattern": "harming\\s+myself", "type": "regex", "flags": "i", "sources": ["DSM-5"] },
+      { "pattern": "hurt\\s+myself", "type": "regex", "flags": "i", "note": "broad — could be accident; tier 2 flags + UI confirm", "sources": ["DSM-5"] }
+    ],
+    "3": [
+      { "pattern": "how\\s+many\\s+(?:pills|tylenol|advil|tablets|ibuprofen|acetaminophen)", "type": "regex", "flags": "i", "note": "dose-seeking", "sources": ["Klonsky-May-2014", "WHO-2012"] },
+      { "pattern": "(?:easiest|painless|best)\\s+way\\s+to\\s+(?:die|go|end|kill)", "type": "regex", "flags": "i", "sources": ["Klonsky-May-2014"] },
+      { "pattern": "lethal\\s+dose", "type": "regex", "flags": "i", "sources": ["WHO-2012"] },
+      { "pattern": "ld50", "type": "literal", "note": "pharmacology term, near-explicit method-seeking", "sources": ["WHO-2012"] },
+      { "pattern": "buy\\s+a\\s+(?:gun|firearm|rope|noose)", "type": "regex", "flags": "i", "sources": ["WHO-2012"] },
+      { "pattern": "jump\\s+(?:off|from)\\s+(?:a\\s+)?(?:bridge|building|roof|cliff)", "type": "regex", "flags": "i", "sources": ["WHO-2012"] },
+      { "pattern": "tie\\s+a\\s+noose", "type": "regex", "flags": "i", "sources": ["WHO-2012"] },
+      { "pattern": "how\\s+to\\s+(?:hang|overdose|drown)\\s+myself", "type": "regex", "flags": "i", "sources": ["Klonsky-May-2014"] }
+    ],
+    "4": [
+      { "pattern": "tonight\\s+is\\s+the\\s+night", "type": "regex", "flags": "i", "note": "temporal commitment", "sources": ["Klonsky-May-2014"] },
+      { "pattern": "(?:doing|gonna\\s+do)\\s+it\\s+(?:tonight|today|now)", "type": "regex", "flags": "i", "sources": ["Klonsky-May-2014"] },
+      { "pattern": "(?:i'?ve\\s+got|i\\s+have)\\s+the\\s+pills", "type": "regex", "flags": "i", "sources": ["WHO-2012"] },
+      { "pattern": "loaded\\s+the\\s+gun", "type": "regex", "flags": "i", "sources": ["WHO-2012"] },
+      { "pattern": "tied\\s+the\\s+noose", "type": "regex", "flags": "i", "sources": ["WHO-2012"] },
+      { "pattern": "saying\\s+goodbye", "type": "regex", "flags": "i", "note": "may be benign; tier 4 + UI confirm", "sources": ["CTL-Taxonomy"] },
+      { "pattern": "(?:this\\s+is|that'?s)\\s+(?:my\\s+)?goodbye", "type": "regex", "flags": "i", "sources": ["CTL-Taxonomy"] },
+      { "pattern": "won'?t\\s+be\\s+here\\s+tomorrow", "type": "regex", "flags": "i", "sources": ["CTL-Taxonomy"] }
+    ]
+  },
+  "exclusions": [
+    "kill it on the dance floor",
+    "killing it at work",
+    "killing it",
+    "knock yourself out",
+    "die laughing",
+    "dying to see",
+    "dying to know",
+    "dead serious",
+    "dead tired",
+    "going to die laughing",
+    "kill two birds",
+    "kill time",
+    "kill the joke",
+    "to die for",
+    "saying goodbye to the year"
+  ],
+  "citations": [
+    { "id": "988-2024", "title": "988 Suicide & Crisis Lifeline (US)", "url": "https://988lifeline.org/", "year": 2024 },
+    { "id": "CTL-Taxonomy", "title": "Crisis Text Line public clinical taxonomy", "url": "https://www.crisistextline.org/", "year": 2024 },
+    { "id": "WHO-2012", "title": "WHO Public Health Action for the Prevention of Suicide: A Framework", "url": "https://www.who.int/publications/i/item/9789241503570", "year": 2012 },
+    { "id": "Klonsky-May-2014", "title": "Klonsky ED, May AM — The Three-Step Theory (3ST) of suicide", "url": "https://doi.org/10.1521/ijct.2015.8.2.114", "year": 2014 },
+    { "id": "Joiner-2005", "title": "Joiner TE — Why People Die By Suicide (Interpersonal-Psychological Theory)", "year": 2005 },
+    { "id": "DSM-5", "title": "Diagnostic and Statistical Manual of Mental Disorders, 5th ed. — Suicidal Behavior Disorder", "year": 2013 }
+  ]
+}
