@@ -199,3 +199,52 @@ describe('@ollie/pii-scrub · 100-sample golden', () => {
     expect(fpRate).toBeLessThan(0.05);
   });
 });
+
+// ─── audit item #3 · capitalization heuristic for names not in wordlist ──────
+
+describe('@ollie/pii-scrub · capitalized-name heuristic (audit #3)', () => {
+  it('redacts a capitalized first+last name NOT in the wordlist', () => {
+    // "Tyrnauq Velkorin" — neither token is on the compiled wordlist.
+    const { scrubbed, redactions } = scrubPII('lunch with Tyrnauq Velkorin tomorrow', 'en');
+    expect(scrubbed).not.toContain('Tyrnauq');
+    expect(scrubbed).not.toContain('Velkorin');
+    expect(redactions.filter((r) => r.type === 'NAME')).toHaveLength(2);
+  });
+
+  it('redacts a single capitalized name after a name-trigger word', () => {
+    const { scrubbed } = scrubPII('met Devendra at the cafe', 'en');
+    expect(scrubbed).not.toContain('Devendra');
+    expect(scrubbed).toContain('[NAME]');
+  });
+
+  it('does NOT redact a lone capitalized word with no name context', () => {
+    // No trigger word, not part of a capitalized run — left alone so
+    // brand names (kept on purpose) and sentence-initial words survive.
+    const { redactions } = scrubPII('Spotify renewed again this month', 'en');
+    expect(redactions.filter((r) => r.type === 'NAME')).toHaveLength(0);
+  });
+
+  it('does NOT redact a capitalized geographic / stoplist word', () => {
+    const { redactions } = scrubPII('flying from London with friends', 'en');
+    expect(redactions.filter((r) => r.type === 'NAME')).toHaveLength(0);
+  });
+
+  it('does NOT redact a sentence-initial common word', () => {
+    const { redactions } = scrubPII('Tomorrow I need to call the dentist', 'en');
+    expect(redactions.filter((r) => r.type === 'NAME')).toHaveLength(0);
+  });
+
+  it('handles Turkish capitalized names with diacritics', () => {
+    const { scrubbed, redactions } = scrubPII('Çağrı Öztürk ile toplantı var', 'tr');
+    expect(scrubbed).not.toContain('Çağrı');
+    expect(scrubbed).not.toContain('Öztürk');
+    expect(redactions.filter((r) => r.type === 'NAME').length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('all-lowercase corpus is unaffected by the heuristic (no regression)', () => {
+    // The heuristic only fires on capitalized tokens; lowercase input
+    // still relies purely on the wordlist pass.
+    const { redactions } = scrubPII('matcha latte and olive oil for dinner', 'en');
+    expect(redactions.filter((r) => r.type === 'NAME')).toHaveLength(0);
+  });
+});
