@@ -15,6 +15,7 @@
  */
 
 import { captureInviteFromDeeplink } from './invite';
+import { OLLIE_SEED_EVENT } from './seed';
 
 interface CapApp {
   addListener: (event: string, cb: (data: { url: string }) => void) => Promise<{ remove: () => void }>;
@@ -53,6 +54,15 @@ export function handleUrl(url: string): void {
   if (path === 'capture') {
     // MicButton listens for this and calls start().
     try { window.dispatchEvent(new CustomEvent(SIRI_CAPTURE_EVENT, { detail: { source: 'siri' } })); }
+    catch { /* noop */ }
+    return;
+  }
+
+  // 2026-05-25 dogfood seed — `ollie://seed?payload=<b64-json>` writes to the
+  // store on next boot. App.tsx listens for OLLIE_SEED_EVENT and applies via
+  // applySeedFromString, which gates on `ollie.debug.seed_enabled='1'`.
+  if (path === 'seed') {
+    try { window.dispatchEvent(new CustomEvent(OLLIE_SEED_EVENT, { detail: { url } })); }
     catch { /* noop */ }
     return;
   }
