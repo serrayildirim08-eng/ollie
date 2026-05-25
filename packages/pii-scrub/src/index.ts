@@ -24,7 +24,7 @@
  * counts shape used by golden tests + observability.
  */
 
-import { isLikelyName, type Locale } from './wordlists';
+import { isLikelyName, isCommonCapitalizedWord, type Locale } from './wordlists';
 
 export type { Locale } from './wordlists';
 
@@ -133,5 +133,120 @@ export function scrubPII(text: string, locale: Locale): ScrubResult {
     return word;
   });
 
+  // 7b. Names — capitalization heuristic (audit item #3).
+  //
+  // The wordlist pass only catches the ~300 names per locale that are
+  // compiled in; a real name not on the list ("Tyrnauq", an uncommon
+  // surname) passed straight through to the research corpus unredacted.
+  //
+  // Heuristic: a Capitalized word is likely a person name when it is part
+  // of a Capitalized RUN of 2+ words (first + last) OR is preceded by a
+  // name-introducing trigger ("met Sarah", "from Devendra"). We do NOT
+  // flag a lone capitalized word with no such context — that is where
+  // brand names (kept on purpose) and sentence-initial words live, so the
+  // restriction keeps the false-positive rate low.
+  //
+  // Residual risk (documented, accepted for v0):
+  //   - all-lowercase names with no wordlist hit still slip through
+  //     (voice-to-text often lowercases) — wordlist remains the only net
+  //     for that path;
+  //   - a capitalized two-word brand at mid-sentence ("Crunchy Nut") can
+  //     be over-redacted — rare, and over-redaction is the safe failure
+  //     direction for a privacy gate;
+  //   - sentence-initial single names ("Sarah came over.") are missed
+  //     unless wordlisted — acceptable, single-token + sentence start is
+  //     too FP-prone to flag.
+  out = applyCapitalizedNameHeuristic(out, redactions);
+
   return { scrubbed: out, redactions };
+}
+
+// Words that are routinely capitalized but are NOT person names — sentence
+// starters, weekdays, months, pronoun "I". Lowercased for comparison.
+const CAP_NOT_NAME = new Set([
+  'i', 'the', 'a', 'an', 'and', 'but', 'or', 'so', 'then', 'now', 'today',
+  'tomorrow', 'yesterday', 'tonight', 'this', 'that', 'my', 'we', 'they',
+  'he', 'she', 'it', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday',
+  'saturday', 'sunday', 'january', 'february', 'march', 'april', 'may',
+  'june', 'july', 'august', 'september', 'october', 'november', 'december',
+  // Spanish / Turkish sentence starters + days
+  'el', 'la', 'los', 'las', 'hoy', 'ayer', 'manana', 'lunes', 'martes',
+  'miercoles', 'jueves', 'viernes', 'sabado', 'domingo',
+  'bugun', 'yarin', 'dun', 'pazartesi', 'sali', 'carsamba', 'persembe',
+  'cuma', 'cumartesi', 'pazar',
+]);
+
+// Trigger words that commonly precede a person name in a brain dump.
+const NAME_TRIGGERS = new Set([
+  'met', 'meet', 'meeting', 'with', 'from', 'told', 'tell', 'called',
+  'call', 'calling', 'texted', 'text', 'emailed', 'saw', 'asked', 'ask',
+  'thanks', 'thank', 'about', 'and', 'see', 'visit', 'visited',
+  // es
+  'con', 'de', 'llamo', 'vi', 'dijo',
+  // tr
+  'ile', 'aradi', 'dedi',
+]);
+
+/** True for a token like "Sarah" / "Öztürk" — leading uppercase, rest lower. */
+function isCapitalizedToken(tok: string): boolean {
+  if (tok.length < 3) return false;
+  const first = tok[0];
+  if (first !== first.toUpperCase() || first === first.toLowerCase()) return false;
+  const rest = tok.slice(1);
+  return rest === rest.toLowerCase();
+}
+
+/**
+ * Flag capitalized words that look like person names by context.
+ * Operates on the already-regex-scrubbed text; rewrites name tokens to
+ * [NAME] and pushes a NAME redaction for each.
+ */
+function applyCapitalizedNameHeuristic(text: string, redactions: Redaction[]): string {
+  // Tokenise preserving separators so we can rebuild the string verbatim.
+  const parts = text.split(/([^A-Za-zÀ-ÿĞğŞşİıÇçÖöÜü]+)/);
+  // Even indexes are word tokens, odd indexes are separators.
+  const words: string[] = [];
+  for (let i = 0; i < parts.length; i += 2) words.push(parts[i] ?? '');
+
+  // A word is a name CANDIDATE when it is a capitalized token we want to
+  // consider redacting.
+  const isNameWord = words.map(
+    (w) => isCapitalizedToken(w) && !CAP_NOT_NAME.has(w.toLowerCase()) && !isCommonCapitalizedWord(w),
+  );
+  // A word is a name ANCHOR when, for run-detection, it counts as an
+  // adjacent name — that is a candidate OR an already-redacted [NAME]
+  // placeholder left by the wordlist pass. Treating the placeholder as an
+  // anchor lets the OTHER token in a first+last pair still be caught
+  // (e.g. wordlist redacts "Öztürk", heuristic still catches "Çağrı").
+  const isAnchor = words.map((w, i) => {
+    if (isNameWord[i]) return true;
+    const before = parts[i * 2 - 1] ?? '';
+    const after = parts[i * 2 + 1] ?? '';
+    return w === 'NAME' && before.endsWith('[') && after.startsWith(']');
+  });
+  const flagged = new Array<boolean>(words.length).fill(false);
+
+  for (let i = 0; i < words.length; i++) {
+    if (!isNameWord[i]) continue;
+    // (1) part of a capitalized run of 2+ name-like words (an adjacent
+    // already-redacted [NAME] also counts as a run member).
+    if (isAnchor[i - 1] || isAnchor[i + 1]) {
+      flagged[i] = true;
+      continue;
+    }
+    // (2) immediately preceded by a name-introducing trigger word.
+    for (let j = i - 1; j >= 0; j--) {
+      const prev = words[j];
+      if (prev === '') continue; // skip empty token between separators
+      if (NAME_TRIGGERS.has(prev.toLowerCase())) flagged[i] = true;
+      break;
+    }
+  }
+
+  for (let i = 0; i < words.length; i++) {
+    if (!flagged[i]) continue;
+    redactions.push({ type: 'NAME', original: words[i] });
+    parts[i * 2] = '[NAME]';
+  }
+  return parts.join('');
 }
