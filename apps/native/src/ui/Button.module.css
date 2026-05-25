@@ -1,0 +1,142 @@
+/* Button — Ollie UI primitive */
+
+.btn {
+  /* Reset */
+  appearance: none;
+  border: none;
+  background: none;
+  margin: 0;
+  padding: 0;
+  cursor: pointer;
+  font-family: inherit;
+  text-decoration: none;
+
+  /* Layout */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ollie-space-sm);
+
+  /* Shape */
+  border-radius: var(--ollie-radius-lg);
+
+  /* Typography */
+  font-weight: var(--ollie-weight-medium);
+  letter-spacing: var(--ollie-tracking-wide);
+  text-transform: uppercase;
+  white-space: nowrap;
+
+  /* Motion */
+  transition:
+    background-color var(--ollie-duration-fast) var(--ollie-easing-standard),
+    color            var(--ollie-duration-fast) var(--ollie-easing-standard),
+    border-color     var(--ollie-duration-fast) var(--ollie-easing-standard),
+    opacity          var(--ollie-duration-fast) var(--ollie-easing-standard);
+
+  /* Accessibility */
+  position: relative;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Focus visible — always, no outline: none hacks */
+.btn:focus-visible {
+  outline: 2px solid var(--ollie-sage);
+  outline-offset: 3px;
+}
+
+/* ── Sizes ────────────────────────────────────────────────────────────────── */
+
+.sm {
+  font-size: 11px;
+  padding: 8px 16px;
+  min-height: 36px; /* ADHD: always large enough to tap */
+}
+
+.md {
+  font-size: 12px;
+  padding: 12px 24px;
+  min-height: 44px;
+}
+
+.lg {
+  font-size: 13px;
+  padding: 16px 32px;
+  min-height: 52px;
+}
+
+/* ── Variants ─────────────────────────────────────────────────────────────── */
+
+/* primary — sage fill */
+.primary {
+  background-color: var(--ollie-sage);
+  color: var(--ollie-cream);
+  border: 1px solid var(--ollie-sage);
+}
+
+.primary:hover:not(:disabled):not(.loading) {
+  background-color: var(--ollie-sage-dim);
+  border-color: var(--ollie-sage-dim);
+}
+
+.primary:active:not(:disabled):not(.loading) {
+  background-color: var(--ollie-sage-dim);
+  opacity: 0.85;
+}
+
+/* secondary — outline */
+.secondary {
+  background-color: transparent;
+  color: var(--ollie-ink-mid);
+  border: 1px solid var(--ollie-ceramic-dim);
+}
+
+.secondary:hover:not(:disabled):not(.loading) {
+  background-color: var(--ollie-ceramic);
+  border-color: var(--ollie-ink-light);
+}
+
+.secondary:active:not(:disabled):not(.loading) {
+  background-color: var(--ollie-ceramic-dim);
+}
+
+/* ghost — no border, text only */
+.ghost {
+  background-color: transparent;
+  color: var(--ollie-sage);
+  border: 1px solid transparent;
+}
+
+.ghost:hover:not(:disabled):not(.loading) {
+  background-color: var(--ollie-sage-light);
+}
+
+.ghost:active:not(:disabled):not(.loading) {
+  background-color: var(--ollie-sage-light);
+  opacity: 0.8;
+}
+
+/* ── States ───────────────────────────────────────────────────────────────── */
+
+.btn:disabled,
+.loading {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Loading spinner — pure CSS, no SVG dependency */
+.spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 1.5px solid currentColor;
+  border-top-color: transparent;
+  border-radius: var(--ollie-radius-full);
+  animation: spin var(--ollie-duration-slow) linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

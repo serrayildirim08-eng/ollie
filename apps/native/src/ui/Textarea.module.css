@@ -1,0 +1,71 @@
+/* Textarea — Ollie UI primitive, brain-dump style */
+
+.wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ollie-space-xs);
+  width: 100%;
+}
+
+.textarea {
+  appearance: none;
+  background: transparent;
+  width: 100%;
+  box-sizing: border-box;
+  font-family: inherit;
+  font-size: var(--ollie-size-body);
+  font-weight: var(--ollie-weight-normal);
+  color: var(--ollie-ink-dark);
+  line-height: var(--ollie-leading);
+
+  /* Generous padding — dump mode = needs breathing room */
+  padding: var(--ollie-space-md);
+
+  /* Soft border — full box for multiline context */
+  border: 1px solid var(--ollie-ceramic-dim);
+  border-radius: var(--ollie-radius-lg);
+
+  outline: none;
+  resize: none; /* auto-grow handles height */
+
+  /* Auto-grow: field-sizing is the modern way; JS fallback in component */
+  field-sizing: content;
+  min-height: 96px;
+  max-height: 480px;
+  overflow-y: auto;
+
+  transition:
+    border-color var(--ollie-duration-fast) var(--ollie-easing-standard),
+    background-color var(--ollie-duration-fast) var(--ollie-easing-standard);
+}
+
+.textarea::placeholder {
+  color: var(--ollie-ink-light);
+  font-weight: var(--ollie-weight-light);
+}
+
+.textarea:focus {
+  border-color: var(--ollie-sage);
+  background-color: var(--ollie-ceramic);
+}
+
+/* Error state */
+.textareaError {
+  border-color: var(--ollie-error-border);
+}
+
+.textareaError:focus {
+  border-color: var(--ollie-error-border);
+  background-color: var(--ollie-error-bg);
+}
+
+.errorMsg {
+  font-size: var(--ollie-size-caption);
+  color: var(--ollie-error-text);
+  letter-spacing: var(--ollie-tracking-wide);
+}
+
+.textarea:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
