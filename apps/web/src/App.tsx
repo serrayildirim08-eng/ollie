@@ -31,6 +31,7 @@ import { readUserHash } from './lib/user-hash';
 import { getDeviceId, getAppVersion } from './lib/device';
 import { createConsentSync } from './lib/consent-sync';
 import { Day30Prompt } from './components/Day30Prompt';
+import { applySeedFromString, OLLIE_SEED_EVENT } from './lib/seed';
 
 // ─── lazy page imports ────────────────────────────────────────────────────────
 
@@ -310,6 +311,38 @@ function AppInner() {
     const unsub = store.subscribeKey('shared', 'reduce_motion_today', applyReduceMotion);
     return () => { try { unsub(); } catch { /* noop */ } };
   }, []);
+
+  // 2026-05-25 dogfood seed — apply `#seed=<b64>` from URL on boot, and listen
+  // for `ollie://seed?payload=...` deep links during a session. Gated by
+  // localStorage['ollie.debug.seed_enabled']='1'; deduped by payload fingerprint
+  // so reloading the page after a seeded write doesn't double-apply.
+  React.useEffect(() => {
+    const handlers = {
+      store,
+      onSuccess: (note: string | undefined, n: number) => {
+        toast.show(`seeded ${n} write${n === 1 ? '' : 's'}${note ? ` — ${note}` : ''}`,
+          { module: 'debug' });
+      },
+      onError: (errs: string[]) => {
+        toast.show(`seed error: ${errs[0]}`, { module: 'debug' });
+      },
+      onDeduped: (note: string | undefined) => {
+        toast.show(`seed already applied${note ? ` — ${note}` : ''}`, { module: 'debug' });
+      },
+      onDisabled: () => {
+        toast.show('seed disabled — enable via localStorage flag', { module: 'debug' });
+      },
+    };
+    if (typeof window !== 'undefined' && window.location?.hash) {
+      applySeedFromString(window.location.hash, handlers);
+    }
+    function onDeeplink(evt: Event) {
+      const detail = (evt as CustomEvent<{ url?: string }>).detail;
+      if (detail?.url) applySeedFromString(detail.url, handlers);
+    }
+    window.addEventListener(OLLIE_SEED_EVENT, onDeeplink);
+    return () => window.removeEventListener(OLLIE_SEED_EVENT, onDeeplink);
+  }, [toast]);
 
   const apply = useApplyBrainDump();
 
