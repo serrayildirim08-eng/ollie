@@ -1,0 +1,69 @@
+{
+  "language": "es",
+  "version": "0.1.0",
+  "last_reviewed_by": "PENDING_SERRA_APPROVAL",
+  "last_reviewed_at": "2026-05-25",
+  "tiers": {
+    "1": [
+      { "pattern": "no\\s+puedo\\s+m[áa]s", "type": "regex", "flags": "i", "note": "can't go on", "sources": ["988-2024", "CTL-Taxonomy"] },
+      { "pattern": "no\\s+tengo\\s+esperanza", "type": "regex", "flags": "i", "note": "no hope", "sources": ["Joiner-2005"] },
+      { "pattern": "nada\\s+tiene\\s+sentido", "type": "regex", "flags": "i", "note": "nothing matters", "sources": ["CTL-Taxonomy"] },
+      { "pattern": "(?:estoy|me\\s+siento)\\s+(?:cansad[oa])\\s+de\\s+(?:todo|vivir|la\\s+vida)", "type": "regex", "flags": "i", "note": "tired of everything / living", "sources": ["CTL-Taxonomy"] },
+      { "pattern": "ya\\s+no\\s+aguanto\\s+(?:m[áa]s|esto)", "type": "regex", "flags": "i", "note": "can't take it anymore", "sources": ["988-2024"] }
+    ],
+    "2": [
+      { "pattern": "quiero\\s+morir(?:me)?", "type": "regex", "flags": "i", "note": "want to die", "sources": ["988-2024", "DSM-5"] },
+      { "pattern": "no\\s+quiero\\s+(?:vivir|estar\\s+aqu[íi]|existir)", "type": "regex", "flags": "i", "sources": ["988-2024"] },
+      { "pattern": "ojal[áa]\\s+(?:estuviera\\s+muert[oa]|no\\s+hubiera\\s+nacido|me\\s+muriera)", "type": "regex", "flags": "i", "note": "wish I were dead / hadn't been born", "sources": ["DSM-5"] },
+      { "pattern": "(?:matarme|me\\s+quiero\\s+matar|quiero\\s+matarme)", "type": "regex", "flags": "i", "note": "kill myself", "sources": ["988-2024"] },
+      { "pattern": "acabar\\s+con\\s+mi\\s+vida", "type": "regex", "flags": "i", "note": "end my life", "sources": ["CTL-Taxonomy"] },
+      { "pattern": "quitarme\\s+la\\s+vida", "type": "regex", "flags": "i", "note": "take my (own) life", "sources": ["CTL-Taxonomy"] },
+      { "pattern": "suicid\\w*", "type": "regex", "flags": "i", "note": "suicidio / suicidarse / suicida", "sources": ["DSM-5", "WHO-2012"] },
+      { "pattern": "hacerme\\s+da[ñn]o", "type": "regex", "flags": "i", "note": "harm myself", "sources": ["DSM-5"] },
+      { "pattern": "lastimarme(?:\\s+a\\s+m[íi]\\s+misma?)?", "type": "regex", "flags": "i", "note": "hurt myself", "sources": ["DSM-5"] },
+      { "pattern": "autolesion(?:arme|[áa]ndome|[áa]ndome|es)", "type": "regex", "flags": "i", "note": "self-injure", "sources": ["DSM-5"] },
+      { "pattern": "estoy\\s+mejor\\s+muert[oa]", "type": "regex", "flags": "i", "note": "better off dead", "sources": ["DSM-5"] }
+    ],
+    "3": [
+      { "pattern": "cu[áa]ntas\\s+(?:pastillas|pastilles|p[íi]ldoras|aspirinas|tylenol|paracetamol|ibuprofeno)", "type": "regex", "flags": "i", "note": "how many pills", "sources": ["Klonsky-May-2014", "WHO-2012"] },
+      { "pattern": "(?:dosis|cantidad)\\s+(?:letal|mortal|fatal)", "type": "regex", "flags": "i", "note": "lethal dose", "sources": ["WHO-2012"] },
+      { "pattern": "(?:manera|forma|m[ée]todo)\\s+(?:m[áa]s\\s+)?(?:f[áa]cil|indolor[oa]|r[áa]pid[oa])\\s+de\\s+(?:morir|matarme|suicid)", "type": "regex", "flags": "i", "note": "easiest / painless way to die / kill self", "sources": ["Klonsky-May-2014"] },
+      { "pattern": "saltar\\s+(?:del\\s+puente|desde\\s+(?:un\\s+)?(?:edificio|puente|techo|acantilado))", "type": "regex", "flags": "i", "note": "jump off bridge / building", "sources": ["WHO-2012"] },
+      { "pattern": "(?:comprar|conseguir)\\s+(?:una\\s+)?(?:pistola|arma|cuerda)", "type": "regex", "flags": "i", "note": "buy gun / rope", "sources": ["WHO-2012"] },
+      { "pattern": "ahorcarme", "type": "regex", "flags": "i", "note": "hang myself", "sources": ["WHO-2012"] }
+    ],
+    "4": [
+      { "pattern": "esta\\s+noche\\s+(?:lo\\s+)?(?:hago|me\\s+voy|termino)", "type": "regex", "flags": "i", "note": "doing it tonight", "sources": ["Klonsky-May-2014"] },
+      { "pattern": "(?:ma[ñn]ana\\s+ya\\s+)?no\\s+(?:estar[ée]|voy\\s+a\\s+estar)\\s+(?:aqu[íi]|ma[ñn]ana)", "type": "regex", "flags": "i", "note": "won't be here tomorrow", "sources": ["CTL-Taxonomy"] },
+      { "pattern": "(?:tengo|conseguí|consegui)\\s+(?:las\\s+)?(?:pastillas|p[íi]ldoras)", "type": "regex", "flags": "i", "note": "have the pills", "sources": ["WHO-2012"] },
+      { "pattern": "(?:cargué|cargue)\\s+(?:el\\s+arma|la\\s+pistola)", "type": "regex", "flags": "i", "note": "loaded the gun", "sources": ["WHO-2012"] },
+      { "pattern": "despidi[ée]ndome", "type": "regex", "flags": "i", "note": "saying goodbye (gerund) — may be benign; UI confirm", "sources": ["CTL-Taxonomy"] },
+      { "pattern": "(?:este\\s+es|esta\\s+es)\\s+mi\\s+(?:adi[óo]s|despedida)", "type": "regex", "flags": "i", "note": "this is my goodbye", "sources": ["CTL-Taxonomy"] },
+      { "pattern": "[úu]ltima\\s+vez\\s+que\\s+(?:escribo|hablo)", "type": "regex", "flags": "i", "note": "last time writing / speaking", "sources": ["CTL-Taxonomy"] }
+    ]
+  },
+  "exclusions": [
+    "morirme de risa",
+    "muerto de risa",
+    "muerta de risa",
+    "matar el tiempo",
+    "matar dos pájaros",
+    "matar dos pajaros",
+    "para morirse",
+    "te mato",
+    "me muero por verte",
+    "me muero de hambre",
+    "morirse de hambre",
+    "estoy muerto de cansancio",
+    "estoy muerta de cansancio"
+  ],
+  "citations": [
+    { "id": "988-2024", "title": "988 Suicide & Crisis Lifeline (US) — Spanish (Línea 988)", "url": "https://988lineadeayuda.org/", "year": 2024 },
+    { "id": "CTL-Taxonomy", "title": "Crisis Text Line public clinical taxonomy — Spanish-language partner orgs", "url": "https://www.crisistextline.org/", "year": 2024 },
+    { "id": "WHO-2012", "title": "WHO Public Health Action for the Prevention of Suicide (Spanish ed.)", "url": "https://iris.who.int/handle/10665/89878", "year": 2012 },
+    { "id": "Klonsky-May-2014", "title": "Klonsky ED, May AM — Three-Step Theory of suicide (3ST)", "url": "https://doi.org/10.1521/ijct.2015.8.2.114", "year": 2014 },
+    { "id": "Joiner-2005", "title": "Joiner TE — Why People Die By Suicide", "year": 2005 },
+    { "id": "DSM-5", "title": "Diagnostic and Statistical Manual of Mental Disorders, 5th ed.", "year": 2013 },
+    { "id": "Cruz-Roja-Esp", "title": "Cruz Roja Española — Teléfono de la Esperanza (Spanish suicide hotline taxonomy)", "url": "https://telefonodelaesperanza.org/", "year": 2024 }
+  ]
+}

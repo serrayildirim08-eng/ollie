@@ -1,0 +1,63 @@
+{
+  "language": "tr",
+  "version": "0.1.0",
+  "last_reviewed_by": "PENDING_SERRA_APPROVAL",
+  "last_reviewed_at": "2026-05-25",
+  "tiers": {
+    "1": [
+      { "pattern": "dayanam[ıi]yorum\\s+art[ıi]k", "type": "regex", "flags": "i", "note": "can't take it anymore", "sources": ["988-2024", "CTL-Taxonomy"] },
+      { "pattern": "umut\\s+(?:yok|kalmad[ıi])", "type": "regex", "flags": "i", "note": "no hope (left)", "sources": ["Joiner-2005"] },
+      { "pattern": "hi[çc]bir\\s+anlam[ıi]\\s+yok", "type": "regex", "flags": "i", "note": "nothing has meaning anymore", "sources": ["CTL-Taxonomy"] },
+      { "pattern": "her\\s+[şs]eyden\\s+(?:b[ıi]kt[ıi]m|yoruldum)", "type": "regex", "flags": "i", "note": "tired of everything", "sources": ["CTL-Taxonomy"] }
+    ],
+    "2": [
+      { "pattern": "[öo]lmek\\s+istiyorum", "type": "regex", "flags": "i", "note": "want to die", "sources": ["988-2024", "DSM-5"] },
+      { "pattern": "ya[şs]amak\\s+istemiyorum", "type": "regex", "flags": "i", "note": "don't want to live", "sources": ["988-2024"] },
+      { "pattern": "olmak\\s+istemiyorum", "type": "regex", "flags": "i", "note": "don't want to be (here) — from legacy lexicon", "sources": ["988-2024"] },
+      { "pattern": "burada\\s+olmak\\s+istemiyorum", "type": "regex", "flags": "i", "note": "don't want to be here", "sources": ["988-2024"] },
+      { "pattern": "yokum\\s+daha\\s+iyi", "type": "regex", "flags": "i", "note": "better off gone — from legacy lexicon", "sources": ["CTL-Taxonomy"] },
+      { "pattern": "son\\s+verme(?:k\\s+istiyorum)?", "type": "regex", "flags": "i", "note": "end it (want to) — from legacy lexicon", "sources": ["CTL-Taxonomy"] },
+      { "pattern": "intihar\\w*", "type": "regex", "flags": "i", "note": "suicide + conjugations (intihar, intihar etmek, intihara) — from legacy", "sources": ["DSM-5", "WHO-2012"] },
+      { "pattern": "kendime\\s+zarar\\s+ver", "type": "regex", "flags": "i", "note": "harm myself — from legacy", "sources": ["DSM-5"] },
+      { "pattern": "(?:^|(?<=\\s))[öo]ld[üu]rmek?\\s+istiyorum", "type": "regex", "flags": "i", "note": "want to kill (myself implied) — from legacy unicode regex", "sources": ["988-2024"] },
+      { "pattern": "kendimi\\s+(?:[öo]ld[üu]rmek|yok\\s+etmek)", "type": "regex", "flags": "i", "note": "kill myself / annihilate myself", "sources": ["988-2024"] },
+      { "pattern": "ke[şs]ke\\s+(?:[öo]lseydim|do[gğ]mam[ıi][şs]\\s+olsayd[ıi]m)", "type": "regex", "flags": "i", "note": "wish I'd died / wasn't born", "sources": ["DSM-5"] }
+    ],
+    "3": [
+      { "pattern": "ka[çc]\\s+(?:tane\\s+)?(?:hap|ila[çc])", "type": "regex", "flags": "i", "note": "how many pills (TR has interrogative kaç + countable)", "sources": ["Klonsky-May-2014", "WHO-2012"] },
+      { "pattern": "en\\s+(?:kolay|a[gğ]r[ıi]s[ıi]z)\\s+(?:[öo]lme|intihar)", "type": "regex", "flags": "i", "note": "easiest / painless way to die-suicide", "sources": ["Klonsky-May-2014"] },
+      { "pattern": "k[öo]pr[üu]den\\s+atla", "type": "regex", "flags": "i", "note": "jump off bridge", "sources": ["WHO-2012"] },
+      { "pattern": "as[ıi]lmak", "type": "regex", "flags": "i", "note": "to hang (oneself)", "sources": ["WHO-2012"] },
+      { "pattern": "(?:ip|silah|tabanca)\\s+ald[ıi]m", "type": "regex", "flags": "i", "note": "bought rope / gun", "sources": ["WHO-2012"] },
+      { "pattern": "[öo]ld[üu]r[üu]c[üu]\\s+doz", "type": "regex", "flags": "i", "note": "lethal dose", "sources": ["WHO-2012"] }
+    ],
+    "4": [
+      { "pattern": "bu\\s+(?:gece|ak[şs]am)\\s+yapaca[gğ][ıi]m", "type": "regex", "flags": "i", "note": "doing it tonight", "sources": ["Klonsky-May-2014"] },
+      { "pattern": "yar[ıi]n\\s+(?:burada\\s+)?olmayaca[gğ][ıi]m", "type": "regex", "flags": "i", "note": "won't be here tomorrow", "sources": ["CTL-Taxonomy"] },
+      { "pattern": "ila[çc](?:lar)?[ıi]?\\s+ald[ıi]m", "type": "regex", "flags": "i", "note": "have the pills / took the pills (context-dependent — UI confirm)", "sources": ["WHO-2012"] },
+      { "pattern": "ipi\\s+ba[gğ]lad[ıi]m", "type": "regex", "flags": "i", "note": "tied the rope", "sources": ["WHO-2012"] },
+      { "pattern": "vedala[şs][ıi]yorum", "type": "regex", "flags": "i", "note": "saying goodbye — may be benign; UI confirm", "sources": ["CTL-Taxonomy"] },
+      { "pattern": "son\\s+kez\\s+yaz[ıi]yorum", "type": "regex", "flags": "i", "note": "writing for the last time", "sources": ["CTL-Taxonomy"] }
+    ]
+  },
+  "exclusions": [
+    "intihar etmem",
+    "intihar saçmalığı",
+    "asılmak için yer yok",
+    "kafayı yedim",
+    "kafayı yiyeceğim",
+    "gülmekten öldüm",
+    "öldüm güldüm",
+    "vakit öldürmek",
+    "iki taşla bir kuş"
+  ],
+  "citations": [
+    { "id": "988-2024", "title": "988 Suicide & Crisis Lifeline (US) — TR translations via Crisis Text Line", "url": "https://988lifeline.org/", "year": 2024 },
+    { "id": "CTL-Taxonomy", "title": "Crisis Text Line public clinical taxonomy (TR coverage via partner orgs)", "url": "https://www.crisistextline.org/", "year": 2024 },
+    { "id": "WHO-2012", "title": "WHO Public Health Action for the Prevention of Suicide: A Framework (TR translation: T.C. Sağlık Bakanlığı)", "url": "https://www.who.int/publications/i/item/9789241503570", "year": 2012 },
+    { "id": "Klonsky-May-2014", "title": "Klonsky ED, May AM — Three-Step Theory (3ST) of suicide", "url": "https://doi.org/10.1521/ijct.2015.8.2.114", "year": 2014 },
+    { "id": "Joiner-2005", "title": "Joiner TE — Why People Die By Suicide", "year": 2005 },
+    { "id": "DSM-5", "title": "Diagnostic and Statistical Manual of Mental Disorders, 5th ed.", "year": 2013 },
+    { "id": "TR-Sağlık-2023", "title": "T.C. Sağlık Bakanlığı, İntihar Önleme Yol Haritası (Turkish Ministry of Health, Suicide Prevention Roadmap)", "year": 2023 }
+  ]
+}
