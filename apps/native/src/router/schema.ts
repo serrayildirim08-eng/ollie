@@ -118,7 +118,14 @@ export type BodyAction =
   | { module: 'body'; action: 'log_supplement'; name: string; dose?: string }
   | { module: 'body'; action: 'log_episode'; kind: string; duration?: string }
   | { module: 'body'; action: 'log_posture' }
-  | { module: 'body'; action: 'log_hunger' };
+  | { module: 'body'; action: 'log_hunger' }
+  /**
+   * Movement / exercise. Primary route for "went on a 20 min walk", "stretched",
+   * "did 10 reps". MAY multi-route to habits.complete in parallel when the user
+   * has a corresponding habit registered (see ARCH_DECISION_NEEDED.md →
+   * "movement routes to BOTH body and habits per context"). Downstream concern.
+   */
+  | { module: 'body'; action: 'log_movement'; type: 'walk' | 'stretch' | 'lift' | string; duration_min?: number };
 
 // ── WORK ─────────────────────────────────────────────────────────────
 
@@ -136,7 +143,13 @@ export type AdminAction =
   | { module: 'admin'; action: 'create_phone_task'; person: string; reason?: string }
   | { module: 'admin'; action: 'schedule_appointment'; what: string; date?: string }
   | { module: 'admin'; action: 'log_paperwork'; what: string }
-  | { module: 'admin'; action: 'recurring_decision'; what: string };
+  | { module: 'admin'; action: 'recurring_decision'; what: string }
+  /**
+   * Renewal events that need staged cues at -90/-30/-7 days before due_date.
+   * Distinct from `recurring_decision` (which is about repeating choices like
+   * subscription continuation), this is paperwork-with-expiry. Cofounder brief.
+   */
+  | { module: 'admin'; action: 'log_renewal'; renewal_type: 'passport' | 'license' | 'lease' | 'insurance' | string; due_date?: string };
 
 // ── PETS ─────────────────────────────────────────────────────────────
 
@@ -144,7 +157,13 @@ export type PetsAction =
   | { module: 'pets'; action: 'log_care'; petName?: string; what: string }
   | { module: 'pets'; action: 'log_observation'; petName?: string; note: string }
   | { module: 'pets'; action: 'log_vet'; petName?: string; reason?: string }
-  | { module: 'pets'; action: 'log_feed'; petName?: string };
+  | { module: 'pets'; action: 'log_feed'; petName?: string }
+  /**
+   * Supplement logging — critical for guinea pigs (Tontin, Pinpon) who need
+   * daily vitamin C (scurvy risk on missed doses). Tracked explicitly with
+   * a typed `supplement` slot rather than folded into generic `log_care`.
+   */
+  | { module: 'pets'; action: 'log_supplement'; supplement: 'vitamin_c' | 'vitamin_d' | 'calcium' | string; dose?: string; petName?: string; pet_id?: string };
 
 // ── CYCLE ────────────────────────────────────────────────────────────
 
@@ -167,7 +186,13 @@ export type FinanceAction =
 export type SleepAction =
   | { module: 'sleep'; action: 'log_sleep'; bedtime?: string; wake?: string; quality?: 1 | 2 | 3 | 4 | 5 }
   | { module: 'sleep'; action: 'wind_down_note'; note: string }
-  | { module: 'sleep'; action: 'dream_log'; text: string };
+  | { module: 'sleep'; action: 'dream_log'; text: string }
+  /**
+   * Insomnia — semantically distinct from `log_sleep` with quality 1.
+   * "Didn't sleep at all" vs "slept 4h badly" are different downstream
+   * (insomnia detector pattern, sleep-onset analysis, etc.).
+   */
+  | { module: 'sleep'; action: 'log_insomnia'; duration_attempted_min?: number; woke_count?: number };
 
 // ── HABITS ───────────────────────────────────────────────────────────
 
@@ -191,7 +216,13 @@ export type GroceryAction =
   | { module: 'grocery'; action: 'pantry_use'; item: string }
   | { module: 'grocery'; action: 'shopping_list_add'; item: string }
   | { module: 'grocery'; action: 'meal_request'; query: string }
-  | { module: 'grocery'; action: 'recipe_cooked'; name: string };
+  | { module: 'grocery'; action: 'recipe_cooked'; name: string }
+  /**
+   * "Running low" warning — distinct from `shopping_list_add` (which is
+   * "buy this next trip"). The flag triggers a soft cue without committing
+   * the item to the active shopping list.
+   */
+  | { module: 'grocery'; action: 'pantry_low_flag'; item: string };
 
 // ── MEDICATION ───────────────────────────────────────────────────────
 

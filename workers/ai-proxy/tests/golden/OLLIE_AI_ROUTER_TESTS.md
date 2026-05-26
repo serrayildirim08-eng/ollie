@@ -20,10 +20,10 @@ intent, expected output rewritten to v2 `RouterOutput` shape.
 | `add_to_grocery`  | `grocery`      | `add`                | `shopping_list_add`  | future intent |
 |                   |                | `log_purchase`       | `pantry_add`         | past tense → now have |
 |                   |                | `mark_out`           | `shopping_list_add`  | out → need to buy |
-|                   |                | `mark_low`           | `shopping_list_add`  | low → need to top up |
+|                   |                | `mark_low`           | `pantry_low_flag`    | running low warning |
 |                   |                | `remove`             | — DROP               | no v2 remove action |
 | `log_pet_event`   | `pets`         | `log_feeding`        | `log_feed`           | |
-|                   |                | `log_vitamin`        | `log_care`           | vitamin = care |
+|                   |                | `log_vitamin`        | `log_supplement`     | typed supplement, scurvy risk |
 |                   |                | `log_observation`    | `log_observation`    | |
 |                   |                | `log_vet`            | `log_vet`            | |
 |                   |                | `log_milestone`      | `log_observation`    | closest |
@@ -36,7 +36,7 @@ intent, expected output rewritten to v2 `RouterOutput` shape.
 |                   |                | `query`              | — DROP               | brain-dump ≠ query channel |
 | `log_habit`       | `habits`       | `log_done`           | `complete`           | |
 | `log_sleep`       | `sleep`        | `log_sleep`          | `log_sleep`          | |
-|                   |                | `log_insomnia`       | `log_sleep`          | quality_1_10=1, duration_hrs=0 |
+|                   |                | `log_insomnia`       | `log_insomnia`       | dedicated v2 action — distinct from log_sleep quality=1 |
 | `log_cycle_event` | `cycle`        | `log_period_start`   | `log_period_start`   | |
 |                   |                | `log_cramps`         | `log_symptom`        | symptom=cramps |
 |                   |                | `log_pms`            | `log_symptom`        | symptom=pms |
@@ -45,14 +45,14 @@ intent, expected output rewritten to v2 `RouterOutput` shape.
 |                   |                | `log_meeting`        | `log_meeting`        | |
 |                   |                | `add_deadline`       | `log_deadline`       | |
 | `add_goal`        | `goals`        | `add_goal`           | `create_goal`        | |
-| `add_admin_task`  | `admin`        | `add_renewal`        | `recurring_decision` | renewal is recurring |
+| `add_admin_task`  | `admin`        | `add_renewal`        | `log_renewal`        | dedicated v2 action; staged cues at -90/-30/-7d |
 |                   |                | `add_appointment`    | `schedule_appointment` | |
 |                   |                | `add_repair`         | `create_task`        | |
 |                   |                | `add_paperwork`      | `log_paperwork`      | |
 | `query_astrology` | — DROP         | —                    | —                    | no v2 astrology module |
 | `log_body`        | `body`         | `log_water`          | `log_water`          | |
 |                   |                | `log_supplement`     | `log_supplement`     | |
-|                   |                | `log_walk`           | `complete` (habits)  | movement = habit |
+|                   |                | `log_walk`           | `log_movement`       | dedicated v2 action; MAY parallel-route to habits.complete if habit registered (see ARCH_DECISION_NEEDED.md) |
 | `log_medication`  | `medication`   | `log_taken`          | `log_dose`           | |
 |                   |                | `mark_overdue`       | `missed_dose`        | |
 | `log_to_dump`     | `dump_only`    | `log`                | `archive_only`       | mood_tag dropped (no field) |
@@ -127,9 +127,9 @@ on Gemini's judgment). The `needsConfirm` flag is derived, not directly asserted
       "expected_fragments": [
         { "module": "pets", "payload": { "module": "pets", "action": "log_feed", "petName": "tontin" }, "min_confidence": 0.7 }
       ] },
-    { "id": "T11_pet_both", "input": "gave the pigs vitamin C",
+    { "id": "T11_pet_both", "note": "Guinea pigs need daily vitamin C — scurvy risk. Use log_supplement, not log_care.", "input": "gave the pigs vitamin C",
       "expected_fragments": [
-        { "module": "pets", "payload": { "module": "pets", "action": "log_care", "petName": "pigs", "what": "vitamin C" }, "min_confidence": 0.7 }
+        { "module": "pets", "payload": { "module": "pets", "action": "log_supplement", "supplement": "vitamin_c", "petName": "pigs" }, "min_confidence": 0.75 }
       ] },
     { "id": "T12_pet_supplies_to_grocery", "note": "Pet supplies route to GROCERY, not pets.", "input": "need more hay",
       "expected_fragments": [
@@ -175,9 +175,9 @@ on Gemini's judgment). The `needsConfirm` flag is derived, not directly asserted
       "expected_fragments": [
         { "module": "sleep", "payload": { "module": "sleep", "action": "log_sleep", "quality": 2 }, "min_confidence": 0.7 }
       ] },
-    { "id": "T24_insomnia", "input": "didn't sleep at all",
+    { "id": "T24_insomnia", "note": "Dedicated v2 log_insomnia action — distinct from log_sleep quality=1.", "input": "didn't sleep at all",
       "expected_fragments": [
-        { "module": "sleep", "payload": { "module": "sleep", "action": "log_sleep", "quality": 1 }, "min_confidence": 0.7 }
+        { "module": "sleep", "payload": { "module": "sleep", "action": "log_insomnia", "duration_attempted_min": 0 }, "min_confidence": 0.75 }
       ] },
     { "id": "T25_cycle_start", "input": "got my period",
       "expected_fragments": [
@@ -220,9 +220,9 @@ on Gemini's judgment). The `needsConfirm` flag is derived, not directly asserted
       "expected_fragments": [
         { "module": "goals", "payload": { "module": "goals", "action": "create_goal", "what": "move to netherlands" }, "min_confidence": 0.7 }
       ] },
-    { "id": "T35_admin_passport", "input": "passport renewal",
+    { "id": "T35_admin_passport", "note": "Dedicated v2 log_renewal action — triggers -90/-30/-7d staged cues.", "input": "passport renewal",
       "expected_fragments": [
-        { "module": "admin", "payload": { "module": "admin", "action": "recurring_decision", "what": "passport renewal" }, "min_confidence": 0.6 }
+        { "module": "admin", "payload": { "module": "admin", "action": "log_renewal", "renewal_type": "passport" }, "min_confidence": 0.75 }
       ] },
     { "id": "T36_admin_dentist", "input": "dentist on tuesday",
       "expected_fragments": [
@@ -240,9 +240,9 @@ on Gemini's judgment). The `needsConfirm` flag is derived, not directly asserted
       "expected_fragments": [
         { "module": "body", "payload": { "module": "body", "action": "log_supplement", "name": "vitamins" }, "min_confidence": 0.7 }
       ] },
-    { "id": "T42_body_walk", "note": "v2 moves walk into habits (movement = habit).", "input": "went on a 20 min walk",
+    { "id": "T42_body_walk", "note": "v2 body.log_movement is the PRIMARY route. Downstream MAY also fire habits.complete if a 'walk' habit is registered — not asserted here (per ARCH_DECISION_NEEDED).", "input": "went on a 20 min walk",
       "expected_fragments": [
-        { "module": "habits", "payload": { "module": "habits", "action": "complete", "habitName": "walk" }, "min_confidence": 0.65 }
+        { "module": "body", "payload": { "module": "body", "action": "log_movement", "type": "walk", "duration_min": 20 }, "min_confidence": 0.75 }
       ] },
     { "id": "T43_melatonin_to_body", "note": "Melatonin = supplement, NOT medication by default.", "input": "took melatonin",
       "expected_fragments": [
