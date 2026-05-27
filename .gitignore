@@ -25,3 +25,9 @@ workers/cron/supabase/
 # Originals live elsewhere (Meshy AI / cloud storage), too large for git.
 assets/*.glb
 assets/*/*.glb
+
+# Claude Code agent state (worktrees, sessions, cache — multi-GB, never ship)
+.claude/
+
+# Cofounder/pitch presentation artifacts (regenerated, not source of truth)
+OLLIE_COFOUNDER_PRESENTATION.*
