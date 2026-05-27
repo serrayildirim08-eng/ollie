@@ -31,3 +31,6 @@ assets/*/*.glb
 
 # Cofounder/pitch presentation artifacts (regenerated, not source of truth)
 OLLIE_COFOUNDER_PRESENTATION.*
+
+# Swift Package Manager build output (apps/desktop/native helpers)
+.build/
