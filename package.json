@@ -14,11 +14,8 @@
     "ios:sync": "pnpm --filter @ollie/ios sync",
     "ios:open": "pnpm --filter @ollie/ios open",
     "ios:run": "pnpm --filter @ollie/ios run",
-    "electron:dev": "pnpm --filter @ollie/desktop dev",
-    "electron:build:mac": "pnpm --filter @ollie/desktop build:mac",
-    "electron:build:win": "pnpm --filter @ollie/desktop build:win",
-    "electron:build:linux": "pnpm --filter @ollie/desktop build:linux",
-    "electron:build:all": "pnpm --filter @ollie/desktop build:all"
+    "tauri:dev": "pnpm --filter native tauri dev",
+    "tauri:build": "pnpm --filter native tauri build"
   },
   "devDependencies": {
     "typescript": "^5.6.0"
