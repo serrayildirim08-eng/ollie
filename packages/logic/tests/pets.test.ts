@@ -10,7 +10,6 @@ import {
   generateGuiltTripCopy,
   todayForecast,
   pickPreface,
-  pickVocabTerm,
   isAdoptversary,
   parsePetMention,
   parseAwayIntent,
@@ -384,6 +383,7 @@ describe('scheduleVetCues', () => {
   });
 
   it('returns null for invalid item', () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     expect(scheduleVetCues({} as any, { now: NOW })).toBeNull();
   });
 });
@@ -398,6 +398,7 @@ describe('detectVetAdherenceDelay', () => {
       { at: NOW - 5 * DAY },
     ];
     const state: PetsState = {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       vet_schedule: [{ id: 'v1', pet_id: 'pet-1', kind: 'annual', cadence_days: 365, last_completed_at: NOW - 600 * DAY, cues: cues as any }],
     };
     const results = detectVetAdherenceDelay(state, { now: NOW, minRunLength: 3, consent: true });

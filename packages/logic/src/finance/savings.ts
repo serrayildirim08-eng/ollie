@@ -13,8 +13,6 @@
  * orchestrator's derived slice.
  */
 
-const DAY_MS = 86_400_000;
-
 export interface Cancellation {
   id: string;
   merchant: string;

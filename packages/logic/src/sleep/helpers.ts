@@ -3,7 +3,14 @@
  *
  * Shared pure utility functions used across sleep sub-modules.
  * No I/O. No DOM. No wall-clock reads.
+ *
+ * The numeric kernels (_mean / _median / _stdev) delegate to the canonical
+ * `../stats` module — single source of truth. The `number | null` API shape
+ * is preserved so callers don't change.
  */
+
+import { mean as meanCore, median as medianCore, sampleSd as sampleSdCore } from '../stats';
+import { dayKey } from '../util';
 
 /** Parse a time-of-day string ("22:30", "10pm", "2am") → minutes since midnight, or null. */
 export function parseTimeOfDay(str: string | undefined | null): number | null {
@@ -45,37 +52,31 @@ export function formatTime(minutes: number): string {
   return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
 }
 
-/** Format ms timestamp as ISO date "YYYY-MM-DD". */
+/**
+ * Format a ms timestamp as a local-time ISO date `YYYY-MM-DD`.
+ * Delegates to the shared `../util` day-key helper (single source of truth).
+ */
 export function isoDate(ms: number): string {
-  const d = new Date(ms);
-  return (
-    d.getFullYear() +
-    '-' +
-    String(d.getMonth() + 1).padStart(2, '0') +
-    '-' +
-    String(d.getDate()).padStart(2, '0')
-  );
+  return dayKey(ms);
 }
 
 /** Median of a numeric array. Returns null on empty input. */
+/** Median of a numeric array. Returns null on empty input. Even-length safe. */
 export function _median(a: number[]): number | null {
   if (!Array.isArray(a) || a.length === 0) return null;
-  const s = a.slice().sort((x, y) => x - y);
-  const n = s.length;
-  return n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2;
+  return medianCore(a);
 }
 
 /** Mean of a numeric array. Returns null on empty input. */
 export function _mean(a: number[] | null | undefined): number | null {
   if (!a || !a.length) return null;
-  return a.reduce((s, x) => s + x, 0) / a.length;
+  return meanCore(a);
 }
 
 /** Sample standard deviation. Returns 0 for fewer than 2 values. */
 export function _stdev(a: number[] | null | undefined): number {
   if (!a || a.length < 2) return 0;
-  const m = _mean(a)!;
-  return Math.sqrt(a.reduce((s, x) => s + (x - m) ** 2, 0) / (a.length - 1));
+  return sampleSdCore(a);
 }
 
 /** Compute bedtime epoch (ms) for a given night_of date + bedtime string.

@@ -9,6 +9,7 @@
 
 import type { StoredEntry, SearchResult } from './types';
 import { STOPWORDS } from './constants';
+import { levenshtein } from '../util';
 
 export function tokenize(text: unknown): string[] {
   return String(text ?? '')
@@ -20,21 +21,12 @@ export function tokenize(text: unknown): string[] {
 /**
  * Fast edit-distance-1 check (exact or 1 sub/ins/del).
  * Returns 0, 1, or 2 (≥2 = definitely more than 1 edit).
+ *
+ * Delegates to the shared capped Levenshtein (`../util`); the cap of 1
+ * means anything beyond a single edit returns 2.
  */
 export function levenshtein1(a: string, b: string): number {
-  if (a === b) return 0;
-  if (Math.abs(a.length - b.length) > 1) return 2;
-  let i = 0, j = 0, diffs = 0;
-  while (i < a.length && j < b.length) {
-    if (a[i] === b[j]) { i++; j++; continue; }
-    diffs++;
-    if (diffs > 1) return 2;
-    if (a.length === b.length) { i++; j++; }
-    else if (a.length > b.length) i++;
-    else j++;
-  }
-  if (i < a.length || j < b.length) diffs++;
-  return diffs;
+  return levenshtein(a, b, 1);
 }
 
 /**

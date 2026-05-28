@@ -20,6 +20,7 @@
 import { resolveNow, tokens, goalLabel } from './helpers';
 import { SOURCES } from './sources';
 import { EXTERNAL_TRIGGER_RE, ANTI_GOAL_RE } from './lexicons';
+import { DAY_MS } from '../util';
 import type {
   GoalsHistory,
   GoalsOpts,
@@ -67,7 +68,7 @@ export function detectContagion(
   const now = resolveNow(history, opts);
   const windowDays = typeof o.windowDays === 'number' ? o.windowDays : 3;
   const minMatches = typeof o.minMatches === 'number' ? o.minMatches : 1;
-  const windowStart = now - windowDays * 86400000;
+  const windowStart = now - windowDays * DAY_MS;
 
   const dumps = Array.isArray(history?.dumps) ? history!.dumps! : [];
   if (dumps.length === 0) return null;
@@ -346,7 +347,7 @@ export function detectAntiGoalOpportunity(
   if (!_consentOnGoals(o)) return null;
   const now = resolveNow(history, opts);
   const stuckDays = typeof o.stuckDays === 'number' ? o.stuckDays : 14;
-  const stuckMs = stuckDays * 86400000;
+  const stuckMs = stuckDays * DAY_MS;
   const goals = Array.isArray(history?.goals) ? history!.goals! : [];
   const sessions = Array.isArray(history?.sessions) ? history!.sessions! : [];
   if (goals.length === 0) return null;
@@ -408,7 +409,7 @@ export function detectAntiGoalInDump(
   if (!_consentOnGoals(o)) return null;
   const now = resolveNow(history, opts);
   const windowDays = typeof o.windowDays === 'number' ? o.windowDays : 7;
-  const windowStart = now - windowDays * 86400000;
+  const windowStart = now - windowDays * DAY_MS;
   const dumps = Array.isArray(history?.dumps) ? history!.dumps! : [];
   if (dumps.length === 0) return null;
 
@@ -495,7 +496,7 @@ export function detectExperimentCandidate(
   if (!_consentOnGoals(o)) return null;
   const now = resolveNow(history, opts);
   const stuckWeeks = typeof o.stuckWeeks === 'number' ? o.stuckWeeks : 4;
-  const stuckMs = stuckWeeks * 7 * 86400000;
+  const stuckMs = stuckWeeks * 7 * DAY_MS;
   const goals = Array.isArray(history?.goals) ? history!.goals! : [];
   const sessions = Array.isArray(history?.sessions) ? history!.sessions! : [];
   if (goals.length === 0) return null;
@@ -517,7 +518,7 @@ export function detectExperimentCandidate(
       ?? (typeof g.created_at === 'number' ? g.created_at : now);
     const sinceMs = now - lastDoingTs;
     if (sinceMs < stuckMs) continue;
-    const weeksStuck = Math.floor(sinceMs / (7 * 86400000));
+    const weeksStuck = Math.floor(sinceMs / (7 * DAY_MS));
     const hasHypothesis = typeof g.hypothesis === 'string' && g.hypothesis.trim().length > 0;
     const label = goalLabel(g);
 

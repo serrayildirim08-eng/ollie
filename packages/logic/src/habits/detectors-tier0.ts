@@ -24,6 +24,7 @@ import {
   completionsInWindow,
   buildDayCompletionMap,
 } from './helpers';
+import { DAY_MS } from '../util';
 
 // ─── externalization-gap ──────────────────────────────────────────────
 
@@ -38,7 +39,7 @@ export function detectExternalizationGap(
   const windowDays = o.windowDays ?? 14;
   const minHabitsPerSide = o.minHabitsPerSide ?? 2;
   const minRatioGap = typeof o.minRatioGap === 'number' ? o.minRatioGap : 0.6;
-  const windowStart = now - windowDays * 86400000;
+  const windowStart = now - windowDays * DAY_MS;
 
   const arr = history.habits ?? [];
   const cued: number[] = [], uncued: number[] = [];
@@ -94,7 +95,7 @@ export function detectLutealCollapseLegacy(
   const minOtherDays = o.minOtherDays ?? 8;
   const minDropRatio = typeof o.minDropRatio === 'number' ? o.minDropRatio : 0.7;
   const windowDays = o.windowDays ?? 60;
-  const windowStart = now - windowDays * 86400000;
+  const windowStart = now - windowDays * DAY_MS;
 
   const arr = history.habits ?? [];
   const phases = history.cyclePhases ?? [];
@@ -109,7 +110,7 @@ export function detectLutealCollapseLegacy(
     if ('start' in p && 'end' in p && 'name' in p) {
       const s = Math.max(p.start, windowStart);
       const e = Math.min(p.end, now);
-      for (let t = s; t <= e; t += 86400000) dayPhase.set(dayKey(t), p.name);
+      for (let t = s; t <= e; t += DAY_MS) dayPhase.set(dayKey(t), p.name);
     }
   }
 
@@ -164,7 +165,7 @@ export function detectStressCollapseLegacy(
   const minStressDays = o.minStressDays ?? 3;
   const minDropRatio = typeof o.minDropRatio === 'number' ? o.minDropRatio : 0.6;
   const windowDays = o.windowDays ?? 60;
-  const windowStart = now - windowDays * 86400000;
+  const windowStart = now - windowDays * DAY_MS;
 
   const arr = history.habits ?? [];
   const dumps = history.dumps ?? [];
@@ -186,12 +187,12 @@ export function detectStressCollapseLegacy(
   for (const k of stressDays) {
     const t = Date.parse(k + 'T12:00:00');
     if (isNaN(t)) continue;
-    postStressDays.add(dayKey(t + 86400000));
+    postStressDays.add(dayKey(t + DAY_MS));
   }
 
   let postCompletions = 0, postDays = 0;
   let baselineCompletions = 0, baselineDays = 0;
-  for (let t = windowStart; t <= now; t += 86400000) {
+  for (let t = windowStart; t <= now; t += DAY_MS) {
     const k = dayKey(t);
     const cs = dayCompletions.get(k) ?? 0;
     if (postStressDays.has(k)) { postCompletions += cs; postDays++; }
@@ -241,7 +242,7 @@ export function detectSensoryFlag(
   const minSensoryDays = o.minSensoryDays ?? 3;
   const minDropRatio = typeof o.minDropRatio === 'number' ? o.minDropRatio : 0.6;
   const windowDays = o.windowDays ?? 60;
-  const windowStart = now - windowDays * 86400000;
+  const windowStart = now - windowDays * DAY_MS;
 
   const arr = history.habits ?? [];
   const dumps = history.dumps ?? [];
@@ -259,7 +260,7 @@ export function detectSensoryFlag(
   if (sensoryDays.size < minSensoryDays) return null;
 
   let sensoryCompletions = 0, baselineCompletions = 0, baselineDays = 0;
-  for (let t = windowStart; t <= now; t += 86400000) {
+  for (let t = windowStart; t <= now; t += DAY_MS) {
     const k = dayKey(t);
     const cs = dayCompletions.get(k) ?? 0;
     if (sensoryDays.has(k)) sensoryCompletions += cs;
@@ -298,8 +299,8 @@ export function detectInterestHijackLegacy(
   const minHabits = o.minHabits ?? 3;
   const collapseThreshold = typeof o.collapseThreshold === 'number' ? o.collapseThreshold : 0.25;
   const requireRatio = typeof o.requireRatio === 'number' ? o.requireRatio : 0.5;
-  const recentWindow = (o.recentDays ?? 7) * 86400000;
-  const baselineWindow = (o.baselineDays ?? 30) * 86400000;
+  const recentWindow = (o.recentDays ?? 7) * DAY_MS;
+  const baselineWindow = (o.baselineDays ?? 30) * DAY_MS;
 
   const arr = history.habits ?? [];
   if (arr.length < minHabits) return null;
@@ -338,7 +339,7 @@ export function detectFreshStartCrashLegacy(
     : Date.now();
   const minMentions = o.minMentions ?? 3;
   const windowDays = o.windowDays ?? 90;
-  const windowStart = now - windowDays * 86400000;
+  const windowStart = now - windowDays * DAY_MS;
 
   const dumps = history.dumps ?? [];
   if (dumps.length === 0) return null;
@@ -374,7 +375,7 @@ export function detectIdentityTraitFramingLegacy(
   const windowDays = o.windowDays ?? 30;
   const minTotal = o.minTotal ?? 7;
   const minRatio = typeof o.minRatio === 'number' ? o.minRatio : 2.0;
-  const windowStart = now - windowDays * 86400000;
+  const windowStart = now - windowDays * DAY_MS;
 
   const dumps = history.dumps ?? [];
   if (dumps.length === 0) return null;
@@ -417,7 +418,7 @@ export function detectBodyVsCognitiveLegacy(
   const windowDays = o.windowDays ?? 28;
   const minPerSide = o.minPerSide ?? 2;
   const minGapPct = typeof o.minGapPct === 'number' ? o.minGapPct : 0.25;
-  const windowStart = now - windowDays * 86400000;
+  const windowStart = now - windowDays * DAY_MS;
 
   const arr = history.habits ?? [];
   const body: number[] = [], cog: number[] = [];
@@ -468,8 +469,8 @@ export function detectHabitDriftLegacy(
   const arr = history.habits ?? [];
   if (arr.length < minHabits) return null;
 
-  const recentStart = now - halfDays * 86400000;
-  const priorStart = now - 2 * halfDays * 86400000;
+  const recentStart = now - halfDays * DAY_MS;
+  const priorStart = now - 2 * halfDays * DAY_MS;
 
   let recentTotal = 0, priorTotal = 0;
   for (const h of arr) {
@@ -506,14 +507,14 @@ export function detectFrictionSignatureLegacy(
     : Date.now();
   const windowDays = o.windowDays ?? 90;
   const minSpread = typeof o.minSpread === 'number' ? o.minSpread : 0.3;
-  const windowStart = now - windowDays * 86400000;
+  const windowStart = now - windowDays * DAY_MS;
 
   const arr = history.habits ?? [];
   if (arr.length === 0) return null;
 
   const dowCount = [0, 0, 0, 0, 0, 0, 0];
   const dowDays = [0, 0, 0, 0, 0, 0, 0];
-  for (let t = windowStart; t <= now; t += 86400000) {
+  for (let t = windowStart; t <= now; t += DAY_MS) {
     dowDays[new Date(t).getDay()]++;
   }
   for (const h of arr) {
@@ -558,7 +559,7 @@ export function detectSleepHabitCouplingLegacy(
   const minShortNights = o.minShortNights ?? 7;
   const minDropRatio = typeof o.minDropRatio === 'number' ? o.minDropRatio : 0.6;
   const shortHoursThreshold = o.shortHoursThreshold ?? 6;
-  const windowStart = now - windowDays * 86400000;
+  const windowStart = now - windowDays * DAY_MS;
 
   const arr = history.habits ?? [];
   const sleep = history.sleepRecords ?? [];
@@ -573,12 +574,12 @@ export function detectSleepHabitCouplingLegacy(
     if (r.hours >= shortHoursThreshold) continue;
     const t = Date.parse(r.night_of + 'T12:00:00');
     if (isNaN(t) || t < windowStart || t > now) continue;
-    shortNights.add(dayKey(t + 86400000));
+    shortNights.add(dayKey(t + DAY_MS));
   }
   if (shortNights.size < minShortNights) return null;
 
   let postCompletions = 0, postDays = 0, baselineCompletions = 0, baselineDays = 0;
-  for (let t = windowStart; t <= now; t += 86400000) {
+  for (let t = windowStart; t <= now; t += DAY_MS) {
     const k = dayKey(t);
     const cs = dayCompletions.get(k) ?? 0;
     if (shortNights.has(k)) { postCompletions += cs; postDays++; }
@@ -616,7 +617,7 @@ export function detectHabitRebirthLegacy(
   const minRestarts = o.minRestarts ?? 3;
   const minGapDays = o.minGapDays ?? 7;
   const windowDays = o.windowDays ?? 60;
-  const windowStart = now - windowDays * 86400000;
+  const windowStart = now - windowDays * DAY_MS;
 
   const arr = history.habits ?? [];
   let restarts = 0;
@@ -626,7 +627,7 @@ export function detectHabitRebirthLegacy(
       .map(e => e.ts)
       .sort((a, b) => a - b);
     for (let i = 1; i < c.length; i++) {
-      if ((c[i] - c[i - 1]) >= minGapDays * 86400000) restarts++;
+      if ((c[i] - c[i - 1]) >= minGapDays * DAY_MS) restarts++;
     }
   }
   if (restarts < minRestarts) return null;
@@ -654,7 +655,7 @@ export function detectSelfTalkCouplingLegacy(
   const minNegDays = o.minNegDays ?? 3;
   const minDropRatio = typeof o.minDropRatio === 'number' ? o.minDropRatio : 0.7;
   const followDays = o.followDays ?? 3;
-  const windowStart = now - windowDays * 86400000;
+  const windowStart = now - windowDays * DAY_MS;
 
   const arr = history.habits ?? [];
   const dumps = history.dumps ?? [];
@@ -675,11 +676,11 @@ export function detectSelfTalkCouplingLegacy(
   for (const k of negDays) {
     const t = Date.parse(k + 'T12:00:00');
     if (isNaN(t)) continue;
-    for (let i = 1; i <= followDays; i++) followSet.add(dayKey(t + i * 86400000));
+    for (let i = 1; i <= followDays; i++) followSet.add(dayKey(t + i * DAY_MS));
   }
 
   let postCompletions = 0, postDays = 0, baselineCompletions = 0, baselineDays = 0;
-  for (let t = windowStart; t <= now; t += 86400000) {
+  for (let t = windowStart; t <= now; t += DAY_MS) {
     const k = dayKey(t);
     const cs = dayCompletions.get(k) ?? 0;
     if (followSet.has(k)) { postCompletions += cs; postDays++; }

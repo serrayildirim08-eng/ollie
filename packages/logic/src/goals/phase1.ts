@@ -13,6 +13,7 @@
 import { resolveNow, tokens } from './helpers';
 import { SOURCES } from './sources';
 import { LOW_MOOD_RE } from './lexicons';
+import { DAY_MS } from '../util';
 import type {
   DumpHistory,
   GoalsHistory,
@@ -35,8 +36,8 @@ export function detectLowMood(
   const o = opts || {};
   const now = resolveNow(history, opts);
   const windowDays = typeof o.windowDays === 'number' ? o.windowDays : 7;
-  const windowStart = now - windowDays * 86400000;
-  const recentStart = now - 2 * 86400000;
+  const windowStart = now - windowDays * DAY_MS;
+  const recentStart = now - 2 * DAY_MS;
   const min7d = typeof o.min7d === 'number' ? o.min7d : 3;
   const min48h = typeof o.min48h === 'number' ? o.min48h : 2;
   const lockHours = typeof o.lockHours === 'number' ? o.lockHours : 72;
@@ -91,7 +92,7 @@ export function detectObstacleEcho(
   const now = resolveNow(history, opts);
   const windowDays = typeof o.windowDays === 'number' ? o.windowDays : 7;
   const minMatches = typeof o.minMatches === 'number' ? o.minMatches : 2;
-  const windowStart = now - windowDays * 86400000;
+  const windowStart = now - windowDays * DAY_MS;
 
   const goals = Array.isArray(history?.goals) ? history!.goals! : [];
   const dumps = Array.isArray(history?.dumps) ? history!.dumps! : [];
@@ -148,7 +149,7 @@ export function detectPreMortemEcho(
   const windowDays = typeof o.windowDays === 'number' ? o.windowDays : 7;
   const minMatches = typeof o.minMatches === 'number' ? o.minMatches : 3;
   const minAgeDays = typeof o.minAgeDays === 'number' ? o.minAgeDays : 30;
-  const windowStart = now - windowDays * 86400000;
+  const windowStart = now - windowDays * DAY_MS;
 
   const goals = Array.isArray(history?.goals) ? history!.goals! : [];
   const dumps = Array.isArray(history?.dumps) ? history!.dumps! : [];
@@ -161,7 +162,7 @@ export function detectPreMortemEcho(
     if (!premortem) continue;
     const createdAt = typeof g.created_at === 'number' ? g.created_at : null;
     if (createdAt === null) continue;
-    const earliestEcho = createdAt + minAgeDays * 86400000;
+    const earliestEcho = createdAt + minAgeDays * DAY_MS;
     const pmTokens = new Set(tokens(premortem));
     if (pmTokens.size === 0) continue;
 

@@ -5,22 +5,28 @@ import {
   minutesInBed,
   formatTime,
   isoDate,
-  bedtimeEpochFor,
   parseSleepDump,
   mergeRecord,
   sleepEfficiency,
   resolveTarget,
   deriveSleepStats,
   computeSleepDebt,
+  detectSleepOnsetGap,
+  detectWeekendRecoveryIllusion,
+  detectCyclePhaseSleepCoupling,
+  detectStimulantSleepDebt,
   detectBedtimeDrift,
   detectDSPSPattern,
   detectShortSleepRun,
   detectRevengeBedtime,
   detectCaffeineCutoff,
-  detectSleepOnsetGap,
-  detectWeekendRecoveryIllusion,
-  detectCyclePhaseSleepCoupling,
-  detectStimulantSleepDebt,
+  detectBedtimeMindRacing,
+  detectWindDownFriction,
+  detectMedicationTimingDrift,
+  detectChronotherapyProgress,
+  detectSleepCyclePattern,
+  detectSleepFocusPattern,
+  detectSleepDumpMoodPattern,
   forecastTonightHeuristic,
   scoreInsomniaSurvey,
   insomniaSeverityBand,
@@ -495,5 +501,464 @@ describe('scoreInsomniaSurvey', () => {
   it('returns null for non-array / nullish input', () => {
     expect(scoreInsomniaSurvey(null, NOW)).toBeNull();
     expect(scoreInsomniaSurvey(undefined, NOW)).toBeNull();
+  });
+});
+
+// ─── previously-untested detectors ───────────────────────────────────
+
+/** Build a YYYY-MM-DD key `n` consecutive days after 2026-01-01. */
+function nightKey(dayIndex: number): string {
+  const d = new Date(Date.UTC(2026, 0, 1));
+  d.setUTCDate(d.getUTCDate() + dayIndex);
+  return d.toISOString().slice(0, 10);
+}
+
+// ─── detectBedtimeDrift ───────────────────────────────────────────────
+
+describe('detectBedtimeDrift', () => {
+  it('returns null for empty / too few records', () => {
+    expect(detectBedtimeDrift([])).toBeNull();
+    const recs = Array.from({ length: 4 }, (_, i) => makeRecord(nightKey(i), 420, '23:00'));
+    expect(detectBedtimeDrift(recs)).toBeNull();
+  });
+
+  it('surfaces a steady "later" drift when bedtime climbs each night', () => {
+    // 14 nights, bedtime walks from 22:00 → ~23:30 (clean linear trend)
+    const recs = Array.from({ length: 14 }, (_, i) => {
+      const min = 22 * 60 + i * 7;
+      const hh = String(Math.floor(min / 60)).padStart(2, '0');
+      const mm = String(min % 60).padStart(2, '0');
+      return makeRecord(nightKey(i), 420, `${hh}:${mm}`);
+    });
+    const result = detectBedtimeDrift(recs);
+    expect(result).not.toBeNull();
+    expect(result?.direction).toBe('later');
+    expect(result?.slope).toBeGreaterThan(0);
+    expect(result?.r2).toBeGreaterThanOrEqual(0.3);
+  });
+
+  it('returns null when bedtime is flat (no linear trend / low r2)', () => {
+    const recs = Array.from({ length: 14 }, (_, i) => makeRecord(nightKey(i), 420, '23:00'));
+    expect(detectBedtimeDrift(recs)).toBeNull();
+  });
+});
+
+// ─── detectDSPSPattern ────────────────────────────────────────────────
+
+describe('detectDSPSPattern', () => {
+  it('returns null with fewer than 14 usable records', () => {
+    const recs = Array.from({ length: 10 }, (_, i) => makeRecord(nightKey(i), 480, '03:00', '11:00'));
+    expect(detectDSPSPattern(recs)).toBeNull();
+  });
+
+  it('surfaces when most nights have a very late bedtime and late wake', () => {
+    // 16 nights: bedtime 03:00 (after midnight → < 360 min), wake 11:00 (>= 600)
+    const recs = Array.from({ length: 16 }, (_, i) => makeRecord(nightKey(i), 480, '03:00', '11:00'));
+    const result = detectDSPSPattern(recs);
+    expect(result).not.toBeNull();
+    expect(result?.lateBedtimeFraction).toBeGreaterThanOrEqual(0.5);
+  });
+
+  it('returns null when wake time is early (no phase delay)', () => {
+    // late bedtime but wake 07:00 (< 600 min) → not DSPS
+    const recs = Array.from({ length: 16 }, (_, i) => makeRecord(nightKey(i), 240, '03:00', '07:00'));
+    expect(detectDSPSPattern(recs)).toBeNull();
+  });
+});
+
+// ─── detectShortSleepRun ──────────────────────────────────────────────
+
+describe('detectShortSleepRun', () => {
+  it('returns null for empty input', () => {
+    expect(detectShortSleepRun([])).toBeNull();
+  });
+
+  it('surfaces the longest run of consecutive sub-threshold nights', () => {
+    // 6 nights at 4h (< 5h threshold) → run of 6
+    const recs = Array.from({ length: 6 }, (_, i) => makeRecord(nightKey(i), 4 * 60));
+    const result = detectShortSleepRun(recs, 5, 5);
+    expect(result).not.toBeNull();
+    expect(result?.runNights).toBe(6);
+  });
+
+  it('threshold: a 4-night run is below minRun=5 → null', () => {
+    const recs = Array.from({ length: 4 }, (_, i) => makeRecord(nightKey(i), 4 * 60));
+    expect(detectShortSleepRun(recs, 5, 5)).toBeNull();
+  });
+
+  it('a normal night resets the run counter', () => {
+    // 3 short, 1 normal, 3 short → longest run is 3, below minRun=5
+    const tst = [240, 240, 240, 480, 240, 240, 240];
+    const recs = tst.map((m, i) => makeRecord(nightKey(i), m));
+    expect(detectShortSleepRun(recs, 5, 5)).toBeNull();
+  });
+});
+
+// ─── detectRevengeBedtime ─────────────────────────────────────────────
+
+describe('detectRevengeBedtime', () => {
+  it('returns null for malformed history (missing logs)', () => {
+    expect(detectRevengeBedtime({
+      now: Date.now(), sleepRecords: [], actionLog: [], targetBedtime: '23:00',
+    })).toBeNull();
+    // @ts-expect-error intentional missing now
+    expect(detectRevengeBedtime({ sleepRecords: [], actionLog: [], targetBedtime: '23:00' })).toBeNull();
+  });
+
+  it('surfaces sustained post-target activity across the window', () => {
+    const W = 14;
+    const recs: SleepRecord[] = [];
+    const actionLog: Array<{ ts: number }> = [];
+    // For each night: target 23:00, actual bedtime 00:30, with phone events
+    // every 4 min from 23:05 → 00:25 (sustained activity ~30 min+).
+    for (let i = 0; i < W; i++) {
+      const night = nightKey(i);
+      recs.push(makeRecord(night, 360, '00:30'));
+      const dayStart = new Date(night + 'T00:00:00').getTime();
+      const targetTs = dayStart + 23 * 60 * 60000;
+      for (let t = 5; t <= 80; t += 4) actionLog.push({ ts: targetTs + t * 60000 });
+    }
+    const now = new Date(nightKey(W) + 'T12:00:00').getTime();
+    const result = detectRevengeBedtime({ now, sleepRecords: recs, actionLog, targetBedtime: '23:00' });
+    expect(result).not.toBeNull();
+    expect(result?.pattern).toBe('revenge_bedtime');
+    expect(result?.median_delay_min).toBeGreaterThanOrEqual(30);
+  });
+
+  it('returns null when there is no post-target activity', () => {
+    const W = 14;
+    const recs = Array.from({ length: W }, (_, i) => makeRecord(nightKey(i), 420, '23:05'));
+    const now = new Date(nightKey(W) + 'T12:00:00').getTime();
+    expect(detectRevengeBedtime({
+      now, sleepRecords: recs, actionLog: [], targetBedtime: '23:00',
+    })).toBeNull();
+  });
+});
+
+// ─── detectCaffeineCutoff ─────────────────────────────────────────────
+
+describe('detectCaffeineCutoff', () => {
+  it('returns null for malformed history', () => {
+    // @ts-expect-error intentional missing now
+    expect(detectCaffeineCutoff({ dumps: [], sleepRecords: [] })).toBeNull();
+  });
+
+  it('surfaces when caffeine repeatedly lands within the cutoff gap', () => {
+    const recs: SleepRecord[] = [];
+    const dumps: Array<{ ts: number; text: string }> = [];
+    // 16 nights: bedtime 23:00, coffee logged at 20:00 same evening → 3h gap
+    for (let i = 0; i < 16; i++) {
+      const night = nightKey(i);
+      recs.push(makeRecord(night, 420, '23:00'));
+      const dayStart = new Date(night + 'T00:00:00').getTime();
+      dumps.push({ ts: dayStart + 20 * 60 * 60000, text: 'late coffee again' });
+    }
+    const now = new Date(nightKey(17) + 'T12:00:00').getTime();
+    const result = detectCaffeineCutoff({ now, sleepRecords: recs, dumps });
+    expect(result).not.toBeNull();
+    expect(result?.pattern).toBe('caffeine_cutoff');
+    expect(result?.median_gap_hours).toBeLessThan(6);
+  });
+
+  it('returns null when caffeine is always well before the cutoff', () => {
+    const recs: SleepRecord[] = [];
+    const dumps: Array<{ ts: number; text: string }> = [];
+    // coffee at 08:00, bedtime 23:00 → 15h gap, no violation
+    for (let i = 0; i < 16; i++) {
+      const night = nightKey(i);
+      recs.push(makeRecord(night, 420, '23:00'));
+      const dayStart = new Date(night + 'T00:00:00').getTime();
+      dumps.push({ ts: dayStart + 8 * 60 * 60000, text: 'morning coffee' });
+    }
+    const now = new Date(nightKey(17) + 'T12:00:00').getTime();
+    expect(detectCaffeineCutoff({ now, sleepRecords: recs, dumps })).toBeNull();
+  });
+});
+
+// ─── detectBedtimeMindRacing ──────────────────────────────────────────
+
+describe('detectBedtimeMindRacing', () => {
+  it('returns null for malformed history', () => {
+    // @ts-expect-error intentional missing dumps
+    expect(detectBedtimeMindRacing({ now: Date.now(), sleepRecords: [] })).toBeNull();
+  });
+
+  it('surfaces when ruminative dumps cluster around bedtime', () => {
+    const recs: SleepRecord[] = [];
+    const dumps: Array<{ ts: number; text: string }> = [];
+    for (let i = 0; i < 14; i++) {
+      const night = nightKey(i);
+      recs.push(makeRecord(night, 420, '23:00'));
+      // bedtime epoch: night 23:00
+      const dayStart = new Date(night + 'T00:00:00').getTime();
+      const bedtimeMs = dayStart + 23 * 60 * 60000;
+      dumps.push({ ts: bedtimeMs - 20 * 60000, text: 'kafamda dön. susmuyo. kapanmıyor.' });
+    }
+    const now = new Date(nightKey(15) + 'T12:00:00').getTime();
+    const result = detectBedtimeMindRacing({ now, sleepRecords: recs, dumps });
+    expect(result).not.toBeNull();
+    expect(result?.pattern).toBe('bedtime_mind_racing');
+  });
+
+  it('returns null when bedtime dumps are calm / non-ruminative', () => {
+    const recs: SleepRecord[] = [];
+    const dumps: Array<{ ts: number; text: string }> = [];
+    for (let i = 0; i < 14; i++) {
+      const night = nightKey(i);
+      recs.push(makeRecord(night, 420, '23:00'));
+      const dayStart = new Date(night + 'T00:00:00').getTime();
+      const bedtimeMs = dayStart + 23 * 60 * 60000;
+      dumps.push({ ts: bedtimeMs - 20 * 60000, text: 'good day. tired. goodnight.' });
+    }
+    const now = new Date(nightKey(15) + 'T12:00:00').getTime();
+    expect(detectBedtimeMindRacing({ now, sleepRecords: recs, dumps })).toBeNull();
+  });
+});
+
+// ─── detectWindDownFriction ───────────────────────────────────────────
+
+describe('detectWindDownFriction', () => {
+  it('returns null when opted_in is not true', () => {
+    const r = detectWindDownFriction({
+      // @ts-expect-error opted_in must be true for this detector
+      opted_in: false, now: Date.now(), sleepRecords: [], windDownLog: [], targetBedtime: '23:00',
+    });
+    expect(r).toBeNull();
+  });
+
+  it('surfaces the stuck step when wind-down routinely overshoots', () => {
+    const recs: SleepRecord[] = [];
+    const windDownLog: Array<{ ts: number; step_id: string; step_label: string; action: 'checked' }> = [];
+    // 14 nights: target 22:00, actual bedtime 23:30; one 'shower' step
+    // checked at 22:10 every night → ~80 min total wind-down.
+    for (let i = 0; i < 14; i++) {
+      const night = nightKey(i);
+      recs.push(makeRecord(night, 420, '23:30'));
+      const dayStart = new Date(night + 'T00:00:00').getTime();
+      windDownLog.push({
+        ts: dayStart + 22 * 60 * 60000 + 10 * 60000,
+        step_id: 'shower', step_label: 'shower', action: 'checked',
+      });
+    }
+    const now = new Date(nightKey(15) + 'T12:00:00').getTime();
+    const result = detectWindDownFriction({
+      opted_in: true, now, sleepRecords: recs, windDownLog, targetBedtime: '22:00',
+    });
+    expect(result).not.toBeNull();
+    expect(result?.pattern).toBe('wind_down_friction');
+    expect(result?.stuck_step_id).toBe('shower');
+  });
+});
+
+// ─── detectMedicationTimingDrift ──────────────────────────────────────
+
+describe('detectMedicationTimingDrift', () => {
+  it('returns null when opted_in is not true', () => {
+    const r = detectMedicationTimingDrift({
+      // @ts-expect-error opted_in must be true
+      opted_in: false, now: Date.now(), sleepRecords: [], medsLog: [],
+    });
+    expect(r).toBeNull();
+  });
+
+  it('surfaces a widening med-to-bedtime gap over three weeks', () => {
+    const recs: SleepRecord[] = [];
+    const medsLog: Array<{ ts: number }> = [];
+    // 20 nights. Meds taken at a fixed morning time; bedtime walks LATER
+    // each night so the meds→bedtime gap widens.
+    for (let i = 0; i < 20; i++) {
+      const night = nightKey(i);
+      const btMin = 22 * 60 + i * 12;          // 22:00 → drifting later
+      const hh = String(Math.floor(btMin / 60) % 24).padStart(2, '0');
+      const mm = String(btMin % 60).padStart(2, '0');
+      recs.push(makeRecord(night, 360, `${hh}:${mm}`));
+      const dayStart = new Date(night + 'T00:00:00').getTime();
+      medsLog.push({ ts: dayStart + 8 * 60 * 60000 });
+    }
+    const now = new Date(nightKey(21) + 'T12:00:00').getTime();
+    const result = detectMedicationTimingDrift({
+      opted_in: true, now, sleepRecords: recs, medsLog,
+    });
+    expect(result).not.toBeNull();
+    expect(result?.pattern).toBe('medication_timing_drift');
+    expect(result?.direction).toBe('widening');
+  });
+
+  it('returns null when too few paired nights', () => {
+    const recs = Array.from({ length: 5 }, (_, i) => makeRecord(nightKey(i), 420, '23:00'));
+    const medsLog = recs.map((_, i) => ({
+      ts: new Date(nightKey(i) + 'T00:00:00').getTime() + 8 * 60 * 60000,
+    }));
+    const now = new Date(nightKey(7) + 'T12:00:00').getTime();
+    expect(detectMedicationTimingDrift({
+      opted_in: true, now, sleepRecords: recs, medsLog,
+    })).toBeNull();
+  });
+});
+
+// ─── detectChronotherapyProgress ──────────────────────────────────────
+
+describe('detectChronotherapyProgress', () => {
+  it('returns null when opted_in is not true', () => {
+    const r = detectChronotherapyProgress({
+      // @ts-expect-error opted_in must be true
+      opted_in: false, now: Date.now(), sleepRecords: [],
+      chronotherapy: { active: true, target_bedtime: '22:00' },
+    });
+    expect(r).toBeNull();
+  });
+
+  it('returns null when chronotherapy is inactive', () => {
+    const recs = Array.from({ length: 16 }, (_, i) => makeRecord(nightKey(i), 420, '23:00'));
+    expect(detectChronotherapyProgress({
+      opted_in: true, now: Date.now(), sleepRecords: recs,
+      chronotherapy: { active: false, target_bedtime: '22:00' },
+    })).toBeNull();
+  });
+
+  it('reports a "forward" shift when bedtime moves earlier toward target', () => {
+    // 16 nights: first 7 around 00:30, last 7 around 23:00 → moved earlier.
+    const recs: SleepRecord[] = [];
+    for (let i = 0; i < 16; i++) {
+      const btMin = i < 8 ? 30 : 23 * 60;     // 00:30 early nights, 23:00 later
+      const hh = String(Math.floor(btMin / 60)).padStart(2, '0');
+      const mm = String(btMin % 60).padStart(2, '0');
+      recs.push(makeRecord(nightKey(i), 420, `${hh}:${mm}`));
+    }
+    const result = detectChronotherapyProgress({
+      opted_in: true, now: Date.now(), sleepRecords: recs,
+      chronotherapy: { active: true, target_bedtime: '22:00' },
+    });
+    expect(result).not.toBeNull();
+    expect(result?.pattern).toBe('chronotherapy_progress');
+    expect(result?.direction).toBe('forward');
+  });
+});
+
+// ─── detectSleepCyclePattern ──────────────────────────────────────────
+
+describe('detectSleepCyclePattern', () => {
+  it('returns null when opted_in is not true', () => {
+    const r = detectSleepCyclePattern({
+      // @ts-expect-error opted_in must be true
+      opted_in: false, now: Date.now(), sleepRecords: [], cycles: [],
+    });
+    expect(r).toBeNull();
+  });
+
+  it('surfaces a luteal-vs-follicular bedtime shift', () => {
+    // One 28-day cycle starting 2026-01-01, ovulation day 14.
+    // Days 1-14 follicular (bedtime 22:30), days 15-28 luteal (bedtime 00:00).
+    const cycles = [{ start_date: nightKey(0), length_days: 28, ovulation_day: 14 }];
+    const recs: SleepRecord[] = [];
+    for (let i = 0; i < 28; i++) {
+      const isLuteal = i >= 14;
+      recs.push(makeRecord(nightKey(i), 420, isLuteal ? '00:00' : '22:30'));
+    }
+    const result = detectSleepCyclePattern({
+      opted_in: true, now: Date.now(), sleepRecords: recs, cycles,
+    }, { window_cycles: 1 });
+    expect(result).not.toBeNull();
+    expect(result?.pattern).toBe('sleep_cycle_phase_shift');
+    expect(result?.shift_minutes).toBeGreaterThanOrEqual(30);
+  });
+
+  it('returns null when fewer than minCycles cycles are present', () => {
+    const cycles = [{ start_date: nightKey(0), length_days: 28, ovulation_day: 14 }];
+    const recs = Array.from({ length: 28 }, (_, i) => makeRecord(nightKey(i), 420, '23:00'));
+    expect(detectSleepCyclePattern({
+      opted_in: true, now: Date.now(), sleepRecords: recs, cycles,
+    })).toBeNull();
+  });
+});
+
+// ─── detectSleepFocusPattern ──────────────────────────────────────────
+
+describe('detectSleepFocusPattern', () => {
+  it('returns null when opted_in is not true', () => {
+    const r = detectSleepFocusPattern({
+      // @ts-expect-error opted_in must be true
+      opted_in: false, now: Date.now(), sleepRecords: [], focusLog: [],
+    });
+    expect(r).toBeNull();
+  });
+
+  it('surfaces a peak-focus-hour shift after short-sleep nights', () => {
+    const recs: SleepRecord[] = [];
+    const focusLog: Array<{ at: number }> = [];
+    // 30 nights. Even-index nights short (4h), odd normal (8h). Focus the
+    // next day peaks at 16:00 after short nights, 10:00 after normal.
+    for (let i = 0; i < 30; i++) {
+      const isShort = i % 2 === 0;
+      recs.push(makeRecord(nightKey(i), isShort ? 4 * 60 : 8 * 60));
+      const nextDayStart = new Date(nightKey(i + 1) + 'T00:00:00').getTime();
+      focusLog.push({ at: nextDayStart + (isShort ? 16 : 10) * 60 * 60000 });
+    }
+    const result = detectSleepFocusPattern({
+      opted_in: true, now: Date.now(), sleepRecords: recs, focusLog,
+    });
+    expect(result).not.toBeNull();
+    expect(result?.pattern).toBe('sleep_focus_shift');
+    expect(result?.hour_shift).toBeGreaterThanOrEqual(2);
+  });
+
+  it('returns null when peak focus hours barely move', () => {
+    const recs: SleepRecord[] = [];
+    const focusLog: Array<{ at: number }> = [];
+    for (let i = 0; i < 30; i++) {
+      const isShort = i % 2 === 0;
+      recs.push(makeRecord(nightKey(i), isShort ? 4 * 60 : 8 * 60));
+      const nextDayStart = new Date(nightKey(i + 1) + 'T00:00:00').getTime();
+      focusLog.push({ at: nextDayStart + 11 * 60 * 60000 });
+    }
+    expect(detectSleepFocusPattern({
+      opted_in: true, now: Date.now(), sleepRecords: recs, focusLog,
+    })).toBeNull();
+  });
+});
+
+// ─── detectSleepDumpMoodPattern ───────────────────────────────────────
+
+describe('detectSleepDumpMoodPattern', () => {
+  it('returns null when opted_in is not true', () => {
+    const r = detectSleepDumpMoodPattern({
+      // @ts-expect-error opted_in must be true
+      opted_in: false, now: Date.now(), sleepRecords: [], dumps: [],
+    });
+    expect(r).toBeNull();
+  });
+
+  it('surfaces heavier overwhelm language after poor-sleep nights', () => {
+    const recs: SleepRecord[] = [];
+    const dumps: Array<{ ts: number; text: string }> = [];
+    // 30 nights. Even short (5h → poor), odd 8h (normal). The day after a
+    // poor night, the dump is overwhelmed; after a normal night it's calm.
+    for (let i = 0; i < 30; i++) {
+      const isPoor = i % 2 === 0;
+      recs.push(makeRecord(nightKey(i), isPoor ? 5 * 60 : 8 * 60, '23:00'));
+      // dump window opens 24h after bedtime
+      const dayStart = new Date(nightKey(i) + 'T00:00:00').getTime();
+      const dumpTs = dayStart + 23 * 60 * 60000 + 30 * 60 * 60000; // bedtime + 30h
+      dumps.push({
+        ts: dumpTs,
+        text: isPoor
+          ? 'overwhelmed. so much. too much. drowning.'
+          : 'calm day. steady. fine.',
+      });
+    }
+    const result = detectSleepDumpMoodPattern({
+      opted_in: true, now: Date.now(), sleepRecords: recs, dumps,
+    });
+    expect(result).not.toBeNull();
+    expect(result?.pattern).toBe('sleep_dump_mood_shift');
+    expect(result?.poor_sleep_overwhelm_ratio).toBeGreaterThan(result!.normal_sleep_overwhelm_ratio);
+  });
+
+  it('returns null when there are too few paired dumps', () => {
+    const recs = Array.from({ length: 4 }, (_, i) => makeRecord(nightKey(i), 5 * 60, '23:00'));
+    const dumps = [{ ts: Date.now(), text: 'overwhelmed too much' }];
+    expect(detectSleepDumpMoodPattern({
+      opted_in: true, now: Date.now(), sleepRecords: recs, dumps,
+    })).toBeNull();
   });
 });

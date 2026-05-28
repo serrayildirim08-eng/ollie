@@ -1,9 +1,11 @@
 /**
  * @ollie/logic · work constants
+ *
+ * Day/hour lengths come from the shared `../util` module — single source
+ * of truth. Re-exported as `DAY` / `HOUR` so the work barrel API is unchanged.
  */
 
-export const DAY = 86_400_000;
-export const HOUR = 3_600_000;
+export { DAY_MS as DAY, HOUR_MS as HOUR } from '../util';
 
 /** Days before deadline at which event-cues fire. */
 export const DEADLINE_CUE_OFFSETS_DAYS: readonly number[] = [7, 2, 1] as const;
