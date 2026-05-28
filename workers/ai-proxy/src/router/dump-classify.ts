@@ -110,19 +110,36 @@ export async function classifyFragment(
     throw new Error(`classify gemini ${res.status}: ${detail.slice(0, 300)}`);
   }
 
-  const data = (await res.json()) as {
+  const rawBody = await res.text();
+  let data: {
     candidates?: Array<{
       content?: { parts?: Array<{ text?: string }> };
+      finishReason?: string;
     }>;
+    promptFeedback?: unknown;
   };
+  try {
+    data = JSON.parse(rawBody);
+  } catch {
+    throw new Error(`classify gemini bad outer json: ${rawBody.slice(0, 300)}`);
+  }
 
   const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-  const parsed = JSON.parse(rawText) as {
+  if (!rawText) {
+    const finish = data?.candidates?.[0]?.finishReason ?? 'no_candidate';
+    throw new Error(`classify gemini empty text (finish=${finish}): ${rawBody.slice(0, 300)}`);
+  }
+  let parsed: {
     module: Module;
     action: string;
     confidence: number;
     payload: Record<string, unknown>;
   };
+  try {
+    parsed = JSON.parse(rawText);
+  } catch {
+    throw new Error(`classify gemini bad inner json: ${rawText.slice(0, 300)}`);
+  }
 
   return {
     module: parsed.module,

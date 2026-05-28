@@ -1,0 +1,755 @@
+{
+  "passRate": 1.282051282051282,
+  "results": [
+    {
+      "id": "T06_turkish_grocery",
+      "input": "süt almam lazım",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"ac67c261-7995-4be4-92e0-22669974a201\"}"
+      ],
+      "ms": 1208
+    },
+    {
+      "id": "T03_out_of",
+      "input": "out of toilet paper",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"d18e2170-9d0f-452f-a791-ddcdb2559f59\"}"
+      ],
+      "ms": 1408
+    },
+    {
+      "id": "T01_pasta_bug",
+      "input": "I need to buy pasta",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"5a17ff8a-28a9-4356-a2c3-bde193e6d9b4\"}"
+      ],
+      "ms": 1752
+    },
+    {
+      "id": "T02_past_tense_grocery",
+      "input": "bought milk",
+      "pass": false,
+      "reasons": [
+        "WRONG_MODULE: expected grocery, got finance"
+      ],
+      "fragments": [
+        {
+          "text": "bought milk",
+          "language": "en",
+          "module": "finance",
+          "payload": {
+            "module": "finance",
+            "action": "log_transaction"
+          },
+          "confidence": 0.9,
+          "needsConfirm": false,
+          "source": "ai"
+        }
+      ],
+      "ms": 1729
+    },
+    {
+      "id": "T07_spanish_grocery",
+      "input": "necesito comprar leche",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"191e4760-e4d2-43d1-8923-845967f7536d\"}"
+      ],
+      "ms": 769
+    },
+    {
+      "id": "T05_quantity",
+      "input": "got 2 dozen eggs",
+      "pass": true,
+      "reasons": [],
+      "fragments": [
+        {
+          "text": "got 2 dozen eggs",
+          "language": "unknown",
+          "module": "grocery",
+          "payload": {
+            "module": "grocery",
+            "action": "pantry_add"
+          },
+          "confidence": 0.9,
+          "needsConfirm": false,
+          "source": "ai"
+        }
+      ],
+      "ms": 2247
+    },
+    {
+      "id": "T10_pet_feeding",
+      "input": "fed tontin",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"36246df1-f9ff-4742-b9f7-b44ac2ff7ad7\"}"
+      ],
+      "ms": 597
+    },
+    {
+      "id": "T11_pet_both",
+      "input": "gave the pigs vitamin C",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"c71311d2-b858-4830-a6f0-58f196c3902c\"}"
+      ],
+      "ms": 730
+    },
+    {
+      "id": "T04_gen_z_abbrev",
+      "input": "tp",
+      "pass": false,
+      "reasons": [
+        "WRONG_MODULE: expected grocery, got dump_only"
+      ],
+      "fragments": [
+        {
+          "text": "tp",
+          "language": "en",
+          "module": "dump_only",
+          "payload": {
+            "module": "dump_only",
+            "action": "archive_only",
+            "reason": "low_confidence",
+            "originalGuess": {
+              "module": "dump_only",
+              "payload": {
+                "module": "dump_only",
+                "action": "archive_only"
+              }
+            }
+          },
+          "confidence": 0.5,
+          "needsConfirm": false,
+          "source": "ai"
+        }
+      ],
+      "ms": 2566
+    },
+    {
+      "id": "T12_pet_supplies_to_grocery",
+      "input": "need more hay",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"f9b3f68b-7bde-46ec-ab59-052cacfd30bb\"}"
+      ],
+      "ms": 634
+    },
+    {
+      "id": "T13_finance_bill",
+      "input": "rent is due",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"9c0df52b-2eeb-43db-824f-4a97ade74cc1\"}"
+      ],
+      "ms": 624
+    },
+    {
+      "id": "T14_finance_paid",
+      "input": "paid rent",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"7c9cbbda-e3d2-45bd-9aa8-09fef7d8f806\"}"
+      ],
+      "ms": 617
+    },
+    {
+      "id": "T16_finance_subscription",
+      "input": "netflix is $15/mo",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"32a7cec2-a1bf-41e9-84b6-76ae26506173\"}"
+      ],
+      "ms": 632
+    },
+    {
+      "id": "T15_finance_receipt",
+      "input": "spent $40 on impulse stuff at sephora",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"645bbb13-51c2-42bb-ac77-e15473e8c34a\"}"
+      ],
+      "ms": 736
+    },
+    {
+      "id": "T18_finance_stock_disambig",
+      "input": "buy stock in nvda",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"eb7bc50e-15fc-4bf2-a97d-3a089440b5b1\"}"
+      ],
+      "ms": 681
+    },
+    {
+      "id": "T19_habit_done",
+      "input": "did yoga",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"b35e8246-42bd-4600-ba81-5e112a3fed34\"}"
+      ],
+      "ms": 589
+    },
+    {
+      "id": "T20_habit_meditate_duration",
+      "input": "meditated for 10 minutes",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"3b60e60c-dd82-4ab2-9d1d-a055eb49f836\"}"
+      ],
+      "ms": 611
+    },
+    {
+      "id": "T22_sleep_duration",
+      "input": "slept 7 hours",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"4e97b3b5-6594-4edd-8c09-814610b65b39\"}"
+      ],
+      "ms": 618
+    },
+    {
+      "id": "T21_habit_dishes",
+      "input": "dishes done",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"680151c1-5999-48f5-b485-05fe09066852\"}"
+      ],
+      "ms": 630
+    },
+    {
+      "id": "T23_sleep_quality_qualitative",
+      "input": "slept like trash",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"27e3df21-0bdf-469d-a3e4-79b4a4782af3\"}"
+      ],
+      "ms": 629
+    },
+    {
+      "id": "T24_insomnia",
+      "input": "didn't sleep at all",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"161d8f9c-a3ab-4a24-8740-b620b953d6d6\"}"
+      ],
+      "ms": 640
+    },
+    {
+      "id": "T25_cycle_start",
+      "input": "got my period",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"29adf60a-49c1-408f-aa1e-84337214f3c8\"}"
+      ],
+      "ms": 596
+    },
+    {
+      "id": "T27_cycle_emotion_multi",
+      "input": "feel horrible and started my period",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"3f7314b1-ae58-4bc2-bd57-64c04d4c655f\"}"
+      ],
+      "ms": 611
+    },
+    {
+      "id": "T28_period_drama_disambig",
+      "input": "period drama tonight",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"8236d3ff-b196-4ff9-bea5-83c1bb333c6b\"}"
+      ],
+      "ms": 600
+    },
+    {
+      "id": "T29_work_task",
+      "input": "send invoice to client",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"52e723c5-eee0-436a-848d-9dfdb3b90ba4\"}"
+      ],
+      "ms": 599
+    },
+    {
+      "id": "T30_work_focus",
+      "input": "pomodoro done",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"eed0e977-5db8-4670-b871-e4d8991f57e3\"}"
+      ],
+      "ms": 587
+    },
+    {
+      "id": "T09_multi_grocery",
+      "input": "bought milk, eggs, and bread",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"bcb04efd-d5cc-4f8d-86cb-83d69057e9c5\"}"
+      ],
+      "ms": 3372
+    },
+    {
+      "id": "T31_work_meeting",
+      "input": "meeting with sarah at 3",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"2dec9cf0-e9b8-49ca-ac0d-5c3c6d02126e\"}"
+      ],
+      "ms": 792
+    },
+    {
+      "id": "T32_project_pasta_real_work",
+      "input": "project pasta deadline friday",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"bea8b685-de70-4952-b663-472dfccf2a01\"}"
+      ],
+      "ms": 708
+    },
+    {
+      "id": "T26_cycle_cramps",
+      "input": "killer cramps",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"7e970f13-61ce-45b2-a589-8b7a064c8222\"}"
+      ],
+      "ms": 1435
+    },
+    {
+      "id": "T33_goal_with_date",
+      "input": "save 50k by year end",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"00a6647d-a0d0-491e-b61b-6b4c2389a906\"}"
+      ],
+      "ms": 707
+    },
+    {
+      "id": "T34_goal_move",
+      "input": "want to move to netherlands by july",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"0b2762c1-fa6b-414c-bb88-32de14387423\"}"
+      ],
+      "ms": 690
+    },
+    {
+      "id": "T35_admin_passport",
+      "input": "passport renewal",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"7b3f31aa-b069-420a-9a83-3b9537fd7973\"}"
+      ],
+      "ms": 694
+    },
+    {
+      "id": "T37_admin_plumber",
+      "input": "plumber needs to come",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"a2ea4657-e677-4063-a3f8-15a4247a48ed\"}"
+      ],
+      "ms": 684
+    },
+    {
+      "id": "T36_admin_dentist",
+      "input": "dentist on tuesday",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"ba301e6f-b732-4c19-b525-a6a9cd4d8692\"}"
+      ],
+      "ms": 688
+    },
+    {
+      "id": "T40_body_water",
+      "input": "3 glasses of water",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"c8b00e3b-baf1-43e5-9888-00f116c49f95\"}"
+      ],
+      "ms": 665
+    },
+    {
+      "id": "T41_body_supplement",
+      "input": "took my vitamins",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"bf1f422f-326c-4356-8473-745fccee4608\"}"
+      ],
+      "ms": 591
+    },
+    {
+      "id": "T42_body_walk",
+      "input": "went on a 20 min walk",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"d89d104a-c118-4d21-91a9-9d3dbfafffcc\"}"
+      ],
+      "ms": 668
+    },
+    {
+      "id": "T43_melatonin_to_body",
+      "input": "took melatonin",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"97f9503a-5cb1-4dfc-9b19-9299df0dd0ee\"}"
+      ],
+      "ms": 630
+    },
+    {
+      "id": "T45_medication_overdue",
+      "input": "forgot my meds",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"6d34accf-8aa5-43ee-8bdd-db3cf4960497\"}"
+      ],
+      "ms": 603
+    },
+    {
+      "id": "T44_medication_adderall",
+      "input": "20mg adderall at 9am",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"28030e81-1c13-440f-b2c2-71be16101b91\"}"
+      ],
+      "ms": 606
+    },
+    {
+      "id": "T47_dump_ugh",
+      "input": "ugh",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"16f801ac-0743-4550-8d5c-adc6e003557a\"}"
+      ],
+      "ms": 625
+    },
+    {
+      "id": "T46_dump_feeling",
+      "input": "my brain feels like soup",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"250c8485-8c9b-4e42-8c13-141fecb32beb\"}"
+      ],
+      "ms": 778
+    },
+    {
+      "id": "T49_multi_chocolate_pms",
+      "input": "pms-ing hard, need chocolate",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"0aff7d2f-331d-428f-bccf-269fd873d691\"}"
+      ],
+      "ms": 642
+    },
+    {
+      "id": "T48_multi_3way",
+      "input": "bought milk, did yoga, period started",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"e79d73c6-b272-4d88-9583-be78ab4a88cb\"}"
+      ],
+      "ms": 722
+    },
+    {
+      "id": "T50_pet_a_dog_disambig",
+      "input": "pet a dog today",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"15794688-91c7-4427-bfa5-680aca8c8b9a\"}"
+      ],
+      "ms": 584
+    },
+    {
+      "id": "T51_typo_resilience",
+      "input": "toilet papre",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"0f16ea15-df33-44ac-8214-524a1b300454\"}"
+      ],
+      "ms": 613
+    },
+    {
+      "id": "T52_observation_skip",
+      "input": "we have plenty of rice",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"491ff454-07bf-4ad7-97da-672536905e1d\"}"
+      ],
+      "ms": 692
+    },
+    {
+      "id": "T54_back_hurts_not_body",
+      "input": "my back hurts",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"8f6a14f5-5a1b-4cb0-933f-b4e653d3417f\"}"
+      ],
+      "ms": 582
+    },
+    {
+      "id": "T53_skipped_workout",
+      "input": "skipped workout today",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"dd77ede8-1608-4179-b6f3-9772772767b8\"}"
+      ],
+      "ms": 631
+    },
+    {
+      "id": "T56_admin_visa_deadline",
+      "input": "visa application deadline 6/1",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"c37742a4-0f9d-48e8-9969-3207ad51132b\"}"
+      ],
+      "ms": 571
+    },
+    {
+      "id": "T57_turkish_meds",
+      "input": "ilacımı aldım",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"c86d1d91-1654-4558-918a-2f4ce4d0eaab\"}"
+      ],
+      "ms": 567
+    },
+    {
+      "id": "T58_turkish_workout",
+      "input": "spor yaptım",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"79ab0f73-75be-425c-9d91-f183646ee556\"}"
+      ],
+      "ms": 607
+    },
+    {
+      "id": "T59_spanish_period",
+      "input": "me bajó",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"97b317aa-aa28-4e8f-b165-a695817e3d6b\"}"
+      ],
+      "ms": 607
+    },
+    {
+      "id": "H01_grocery_simple",
+      "input": "buy eggs",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"57127b67-6e79-4b1f-bb48-1929996aacf8\"}"
+      ],
+      "ms": 683
+    },
+    {
+      "id": "T60_subscription_cancel_multi",
+      "input": "canceled gym membership",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"5711edb3-2d42-4ad7-8711-41a6b47a3cc4\"}"
+      ],
+      "ms": 686
+    },
+    {
+      "id": "H02_turkish_grocery",
+      "input": "süt almam lazım",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"c9781dce-8442-48c2-b2a7-d3b47a153d2a\"}"
+      ],
+      "ms": 627
+    },
+    {
+      "id": "H04_finance_rent",
+      "input": "rent is due",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"6884d1ef-3d36-4935-8bee-6d9488c43060\"}"
+      ],
+      "ms": 633
+    },
+    {
+      "id": "H05_pasta_short",
+      "input": "i need pasta",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"edf1b513-6a65-4f32-add0-8a325ca49d2d\"}"
+      ],
+      "ms": 592
+    },
+    {
+      "id": "H07_love_pasta_dump",
+      "input": "I love pasta",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"4b737a5f-8310-49ea-a1a8-09d23615ea89\"}"
+      ],
+      "ms": 574
+    },
+    {
+      "id": "H11_pet_fed",
+      "input": "fed tontin",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"37611f09-d3a8-416d-880e-85cc0711f328\"}"
+      ],
+      "ms": 597
+    },
+    {
+      "id": "H08_pasta_bug_full",
+      "input": "I need to buy pasta",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"25519659-7578-4b0e-89dc-6c9ae18afc55\"}"
+      ],
+      "ms": 690
+    },
+    {
+      "id": "H06_softened_intent",
+      "input": "I'm thinking about maybe getting some pasta",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"e6425d36-19c2-4c57-85b0-e5f14ccd6e03\"}"
+      ],
+      "ms": 786
+    },
+    {
+      "id": "H12_habit_yoga_known",
+      "input": "did yoga",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"eac551c6-7e97-40df-9eac-e1afb781d9b8\"}"
+      ],
+      "ms": 601
+    },
+    {
+      "id": "H13_unfamiliar_habit",
+      "input": "did some weird dance thing",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"33d3611d-8d53-437d-98e6-af33cd4567c9\"}"
+      ],
+      "ms": 723
+    },
+    {
+      "id": "H14_body_water_3_glasses",
+      "input": "3 glasses of water",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"2f26bd4d-7cc4-4965-8c1c-6c3ddd08f336\"}"
+      ],
+      "ms": 613
+    },
+    {
+      "id": "H15_dump_ugh_fast",
+      "input": "ugh",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"039377ae-d663-4055-8d8b-3d7e7fcb505d\"}"
+      ],
+      "ms": 593
+    },
+    {
+      "id": "H17_medication_meds",
+      "input": "took my meds",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"b68bdb02-6fbe-49a9-9ee7-019e7eb83e6f\"}"
+      ],
+      "ms": 606
+    },
+    {
+      "id": "H16_finance_paid_rent",
+      "input": "paid rent",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"f77f3a8f-2517-4e4e-b630-2751a9fa7023\"}"
+      ],
+      "ms": 647
+    },
+    {
+      "id": "H18_work_meeting",
+      "input": "meeting at 3",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"52adc48b-9ee7-4047-af35-64a62b694835\"}"
+      ],
+      "ms": 675
+    },
+    {
+      "id": "H19_cycle_start",
+      "input": "period started",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"a8a8d7e1-4ab1-4a4e-a561-bc5bb97cfecf\"}"
+      ],
+      "ms": 595
+    },
+    {
+      "id": "H21_spanish_grocery",
+      "input": "necesito comprar leche",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"92e39485-b0b4-42d8-9569-cdbe32d1c12c\"}"
+      ],
+      "ms": 578
+    },
+    {
+      "id": "H20_admin_dentist",
+      "input": "dentist tuesday",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"efd1ef03-f4fb-46cd-b047-b31000392f50\"}"
+      ],
+      "ms": 593
+    },
+    {
+      "id": "H25_low_confidence_demotion",
+      "input": "the thing",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"ee529881-28ea-4173-810f-6fd98806b8eb\"}"
+      ],
+      "ms": 596
+    },
+    {
+      "id": "H27_heavy_typos",
+      "input": "i ned to by pst",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"6aaef9d4-ffa0-4e74-a1a0-aee500a13911\"}"
+      ],
+      "ms": 625
+    },
+    {
+      "id": "H29_emotional_dump",
+      "input": "i hate everything today",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"3d036050-eb3c-4bd5-9a55-4ab96627b40a\"}"
+      ],
+      "ms": 627
+    },
+    {
+      "id": "H30_pets_disambig_verb",
+      "input": "pet a dog today",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"4f5e82f0-ddf2-4a79-a587-ccb3d6ba8b80\"}"
+      ],
+      "ms": 586
+    },
+    {
+      "id": "TG06_empty_input_demoted",
+      "input": "...",
+      "pass": false,
+      "reasons": [
+        "HTTP_ERROR: 502 {\"error\":\"gemini_classify_failed\",\"request_id\":\"4fe09b02-d58a-469c-bd39-f622e9035961\"}"
+      ],
+      "ms": 601
+    }
+  ]
+}
