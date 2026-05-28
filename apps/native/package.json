@@ -16,6 +16,7 @@
     "@fontsource/dm-serif-display": "^5.2.8",
     "@ollie/api": "workspace:*",
     "@ollie/auth": "workspace:*",
+    "@ollie/cadence": "workspace:*",
     "@ollie/crypto": "workspace:*",
     "@ollie/store": "workspace:*",
     "@supabase/supabase-js": "^2.106.1",

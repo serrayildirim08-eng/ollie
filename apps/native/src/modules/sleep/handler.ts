@@ -27,6 +27,7 @@ export const sleepHandler: ModuleHandler<'sleep'> = {
           bedtime: p.bedtime ?? null,
           wake: p.wake ?? null,
           quality: p.quality ?? null,
+          hours: p.hours ?? null,
           occurredAt,
         });
         const hrs = ev.kind === 'sleep' ? ev.data.hoursSlept : null;

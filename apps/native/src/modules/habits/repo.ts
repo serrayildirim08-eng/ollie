@@ -14,6 +14,7 @@
  *   - Any gap of ≥2 missed days zeroes the streak going forward.
  */
 
+import { computeCadence, type CadenceEstimate } from '@ollie/cadence';
 import { sql } from '../../storage';
 import {
   normaliseHabitName,
@@ -279,3 +280,39 @@ function rowToEvent(r: HabitEventRow): HabitEvent {
     loggedAt: r.logged_at,
   };
 }
+
+// ─── cadence ──────────────────────────────────────────────────────────────
+//
+// Habit completions are append-only with `completed_at` — cadence reads
+// straight off `habits_completions`. Useful for "you usually do yoga
+// every 3 days; last one was 4 days ago" style surfaces.
+
+export const cadence = {
+  /**
+   * Cadence for one habit by name. Looks the habit up in the registry
+   * and computes cadence across its completion log.
+   *
+   * Returns a 'low-data' estimate when the habit isn't registered or has
+   * fewer than 2 completions on file.
+   */
+  async getCompletionCadenceFor(habitName: string): Promise<CadenceEstimate> {
+    const habit = await registry.findByName(habitName);
+    if (!habit) return computeCadence([]);
+    return cadence.getCompletionCadenceForId(habit.id);
+  },
+
+  /** Same as `getCompletionCadenceFor`, but keyed by habit id (cheaper). */
+  async getCompletionCadenceForId(habitId: string): Promise<CadenceEstimate> {
+    const cutoff = Date.now() - 400 * 24 * 60 * 60 * 1000;
+    const rows = await sql.select<HabitCompletionRow>(
+      `SELECT id, habit_id, completed_at
+       FROM habits_completions
+       WHERE habit_id = ? AND completed_at >= ?
+       ORDER BY completed_at ASC`,
+      [habitId, cutoff],
+    );
+    return computeCadence(
+      rows.map((r) => ({ ts: r.completed_at, label: r.habit_id })),
+    );
+  },
+};

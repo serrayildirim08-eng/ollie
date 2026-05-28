@@ -12,6 +12,7 @@
  *   - `lowFlag` is stored as 0/1.
  */
 
+import { computeCadence, type CadenceEstimate } from '@ollie/cadence';
 import { sql } from '../../storage';
 import {
   normaliseName,
@@ -39,6 +40,13 @@ interface ShoppingRow {
   quantity: number | null;
   unit: string | null;
   added_at: number;
+  [col: string]: unknown;
+}
+
+interface PurchaseLogRow {
+  id: string;
+  name: string;
+  logged_at: number;
   [col: string]: unknown;
 }
 
@@ -96,6 +104,7 @@ export const pantry = {
          WHERE id = ?`,
         [mergedQty, mergedUnit, now, row.id],
       );
+      await logPurchase(name, now);
       return {
         id: row.id,
         name: row.name,
@@ -112,6 +121,7 @@ export const pantry = {
        VALUES (?, ?, ?, ?, ?, 0)`,
       [id, name, quantity, unit, now],
     );
+    await logPurchase(name, now);
     return { id, name, quantity, unit, addedAt: now, lowFlag: false };
   },
 
@@ -256,3 +266,41 @@ function rowToShoppingItem(r: ShoppingRow): ShoppingItem {
     addedAt: r.added_at,
   };
 }
+
+// ─── cadence ──────────────────────────────────────────────────────────────
+//
+// Every time the user restocks a pantry item we append a row to
+// `grocery_purchase_log`. The local cadence layer reads that log and
+// turns the per-canonical timestamp stream into a CadenceEstimate.
+//
+// The pantry table can only ever hold the LATEST restock (rows upsert
+// by name), so we can't recover cadence from it after the fact. The
+// log is the source of truth for "how often do I buy X".
+
+async function logPurchase(name: string, ts: number): Promise<void> {
+  await sql.execute(
+    `INSERT INTO grocery_purchase_log (id, name, logged_at) VALUES (?, ?, ?)`,
+    [newId(), name, ts],
+  );
+}
+
+export const cadence = {
+  /**
+   * Cadence estimate for one canonical (e.g. "milk"). Returns a
+   * 'low-data' estimate when fewer than 2 restocks have been logged.
+   *
+   * Caller normalises the name themselves OR passes the raw label —
+   * we normalise defensively so screen + handler can both call this.
+   */
+  async getCadenceFor(canonical: string): Promise<CadenceEstimate> {
+    const name = normaliseName(canonical);
+    const rows = await sql.select<PurchaseLogRow>(
+      `SELECT id, name, logged_at
+       FROM grocery_purchase_log
+       WHERE name = ?
+       ORDER BY logged_at ASC`,
+      [name],
+    );
+    return computeCadence(rows.map((r) => ({ ts: r.logged_at, label: r.name })));
+  },
+};

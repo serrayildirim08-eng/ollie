@@ -11,8 +11,10 @@
  *   - `data` is stored as JSON text and parsed on read.
  */
 
+import { computeCadence, type CadenceEstimate } from '@ollie/cadence';
 import { sql } from '../../storage/sqlite';
 import {
+  normaliseLabel,
   startOfTodayMs,
   type BodyEvent,
   type BodyEventKind,
@@ -140,3 +142,74 @@ export const events = {
     return rows.length > 0 ? rowToEvent(rows[0]!) : null;
   },
 };
+
+// ─── cadence ──────────────────────────────────────────────────────────────
+//
+// Body events are append-only with `logged_at` timestamps, so cadence
+// reads directly off the events log — no separate history table needed.
+//
+// Movement events carry a free-text activity in `data.label` ("yoga",
+// "walk", "run", …). We filter by the normalised label so "Yoga" and
+// "yoga " collapse into the same series. Other kinds (water, supplement,
+// posture, hunger) are cadenced across all rows of that kind.
+
+export const cadence = {
+  /**
+   * Cadence for one movement activity (e.g. "yoga", "walk"). Filters
+   * `body_events` rows where `kind = 'movement'` and the normalised
+   * `data.label` matches.
+   */
+  async getMovementCadenceFor(activity: string): Promise<CadenceEstimate> {
+    const want = normaliseLabel(activity);
+    if (!want) return computeCadence([]);
+    const rows = await sql.select<BodyEventRow>(
+      `SELECT id, kind, data, logged_at
+       FROM body_events
+       WHERE kind = 'movement'
+       ORDER BY logged_at ASC`,
+    );
+    const series = rows
+      .map((r) => {
+        const label = normaliseLabel(extractLabel(r.data));
+        return label === want ? { ts: r.logged_at, label } : null;
+      })
+      .filter((x): x is { ts: number; label: string } => x !== null);
+    return computeCadence(series);
+  },
+
+  /** Cadence over every water row (each row = one glass-ish moment). */
+  async getWaterCadence(): Promise<CadenceEstimate> {
+    return cadenceForKind('water');
+  },
+
+  /** Cadence over every supplement row, all labels collapsed. */
+  async getSupplementCadence(): Promise<CadenceEstimate> {
+    return cadenceForKind('supplement');
+  },
+};
+
+async function cadenceForKind(kind: BodyEventKind): Promise<CadenceEstimate> {
+  const rows = await sql.select<BodyEventRow>(
+    `SELECT id, kind, data, logged_at
+     FROM body_events
+     WHERE kind = ?
+     ORDER BY logged_at ASC`,
+    [kind],
+  );
+  return computeCadence(
+    rows.map((r) => ({ ts: r.logged_at, label: kind })),
+  );
+}
+
+function extractLabel(raw: string): string {
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      const v = (parsed as Record<string, unknown>)['label'];
+      if (typeof v === 'string') return v;
+    }
+  } catch {
+    // corrupted row — return empty so it never matches a real activity
+  }
+  return '';
+}

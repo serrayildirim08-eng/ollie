@@ -21,11 +21,16 @@
  */
 
 import { useCallback, useEffect, useId, useState } from 'react';
+import {
+  daysSinceLast,
+  medianIntervalDays,
+  type CadenceEstimate,
+} from '@ollie/cadence';
 import { Stack, Row } from '../../layout';
 import { Text } from '../../ui';
 import { colors, fontSizes, fontWeights, letterSpacings } from '../../theme/tokens';
 import { migrateBody } from './migrate';
-import { events as eventsRepo } from './repo';
+import { cadence as cadenceRepo, events as eventsRepo } from './repo';
 import {
   DEFAULT_GLASS_ML,
   getAmountMl,
@@ -34,6 +39,7 @@ import {
   getDurationMin,
   getLabel,
   getSeverity,
+  normaliseLabel,
   sectionForKind,
   startOfTodayMs,
   type BodyEvent,
@@ -54,6 +60,9 @@ export function BodyBox(): JSX.Element {
   const [items, setItems] = useState<BodyEvent[]>([]);
   const [waterTotalMl, setWaterTotalMl] = useState<number>(0);
   const [lastMovement, setLastMovement] = useState<BodyEvent | null>(null);
+  const [movementCadenceByActivity, setMovementCadenceByActivity] = useState<
+    Map<string, CadenceEstimate>
+  >(() => new Map());
   const [ready, setReady] = useState(false);
 
   const refresh = useCallback(async () => {
@@ -65,6 +74,21 @@ export function BodyBox(): JSX.Element {
     setItems(list);
     setWaterTotalMl(water);
     setLastMovement(movement);
+
+    // One cadence per distinct movement activity. We fan-out off the
+    // already-fetched event list so we don't ping the DB twice.
+    const activities = new Set<string>();
+    for (const e of list) {
+      if (e.kind !== 'movement') continue;
+      const label = normaliseLabel(getLabel(e));
+      if (label) activities.add(label);
+    }
+    const pairs = await Promise.all(
+      [...activities].map(
+        async (a) => [a, await cadenceRepo.getMovementCadenceFor(a)] as const,
+      ),
+    );
+    setMovementCadenceByActivity(new Map(pairs));
   }, []);
 
   useEffect(() => {
@@ -150,7 +174,12 @@ export function BodyBox(): JSX.Element {
 
               <ListSection label="movement" items={todaysMovement}>
                 {(e) => (
-                  <MovementRow key={e.id} event={e} onRemove={() => void handleRemove(e.id)} />
+                  <MovementRow
+                    key={e.id}
+                    event={e}
+                    cadence={movementCadenceByActivity.get(normaliseLabel(getLabel(e)))}
+                    onRemove={() => void handleRemove(e.id)}
+                  />
                 )}
               </ListSection>
 
@@ -427,19 +456,61 @@ function WaterRow({ event, onRemove }: { event: BodyEvent; onRemove: () => void 
 
 function MovementRow({
   event,
+  cadence,
   onRemove,
 }: {
   event: BodyEvent;
+  cadence: CadenceEstimate | undefined;
   onRemove: () => void;
 }): JSX.Element {
   const label = getLabel(event) || 'movement';
   const dur = getDurationMin(event);
   return (
-    <Row gap={12} align="baseline" justify="space-between">
-      <Text scale="body">{dur != null ? `${label} · ${dur} min` : label}</Text>
-      <RemoveButton onClick={onRemove} />
-    </Row>
+    <Stack gap={2}>
+      <Row gap={12} align="baseline" justify="space-between">
+        <Text scale="body">{dur != null ? `${label} · ${dur} min` : label}</Text>
+        <RemoveButton onClick={onRemove} />
+      </Row>
+      <CadenceHint estimate={cadence} subject={label} />
+    </Stack>
   );
+}
+
+/**
+ * One muted line under a movement row: "last yoga 4 days ago · usually
+ * every 3 days". Silent at low-data confidence — Serra prefers nothing
+ * to a misleading prediction.
+ */
+function CadenceHint({
+  estimate,
+  subject,
+}: {
+  estimate: CadenceEstimate | undefined;
+  subject: string;
+}): JSX.Element | null {
+  if (!estimate || estimate.confidence === 'low-data' || estimate.lastTs == null) {
+    return null;
+  }
+  const now = Date.now();
+  const since = daysSinceLast(estimate, now) ?? 0;
+  const every = medianIntervalDays(estimate);
+  const sinceLabel = formatDays(since);
+  const everyLabel = every >= 1 ? formatDays(every) : 'less than a day';
+  return (
+    <Text
+      scale="caption"
+      color={colors.inkFaint}
+      style={{ fontVariantCaps: 'all-small-caps', letterSpacing: '0.06em' }}
+    >
+      {`last ${subject} ${sinceLabel} ago · usually every ${everyLabel}`}
+    </Text>
+  );
+}
+
+function formatDays(d: number): string {
+  if (d < 1) return 'less than a day';
+  const rounded = Math.round(d);
+  return `${rounded} day${rounded === 1 ? '' : 's'}`;
 }
 
 function SymptomRow({
