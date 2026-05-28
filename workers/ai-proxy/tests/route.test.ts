@@ -5,13 +5,13 @@
  *   - Unknown module → 404
  *   - Missing/empty text → 400
  *   - Cache hit path (mock Voyage + mock Supabase RPC returning row)
- *   - Cache miss path (mock Voyage + mock Supabase RPC empty + mock Gemini)
+ *   - Cache miss path (mock Voyage + mock Supabase RPC empty + mock Groq)
  *   - Voyage failure → 502
- *   - Gemini failure → 502
+ *   - Groq failure → 502
  *   - T0_JWT_ENFORCED=1 with missing auth → 401
  *
  * Integration (T0 + T1 required, not run here):
- *   Real pgvector lookup + Gemini call needs deployed DB + API keys.
+ *   Real pgvector lookup + Groq call needs deployed DB + API keys.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -24,7 +24,7 @@ function makeEnv(overrides: Partial<RouteEnv> = {}): RouteEnv {
     SUPABASE_URL: 'https://test.supabase.co',
     SUPABASE_SERVICE_ROLE: 'service-role-key',
     VOYAGE_API_KEY: 'voy-test-key',
-    GEMINI_API_KEY: 'gem-test-key',
+    GROQ_API_KEY: 'groq-test-key',
     ...overrides,
   };
 }
@@ -96,7 +96,7 @@ function makeCacheHitFetch(): FetchMockFn {
   };
 }
 
-function makeGeminiFetch(classification: unknown): FetchMockFn {
+function makeGroqFetch(classification: unknown): FetchMockFn {
   return async (url) => {
     if (url.includes('voyageai.com')) {
       return new Response(
@@ -110,20 +110,24 @@ function makeGeminiFetch(classification: unknown): FetchMockFn {
         headers: { 'content-type': 'application/json' },
       });
     }
-    if (url.includes('generativelanguage.googleapis.com')) {
-      const geminiResp = {
-        candidates: [{
-          content: {
-            parts: [{
-              functionCall: {
+    if (url.includes('api.groq.com')) {
+      const groqResp = {
+        choices: [{
+          message: {
+            content: null,
+            tool_calls: [{
+              id: 'call_1',
+              type: 'function',
+              function: {
                 name: 'classify_grocery_items',
-                args: classification,
+                arguments: JSON.stringify(classification),
               },
             }],
           },
+          finish_reason: 'tool_calls',
         }],
       };
-      return new Response(JSON.stringify(geminiResp), {
+      return new Response(JSON.stringify(groqResp), {
         status: 200,
         headers: { 'content-type': 'application/json' },
       });
@@ -221,9 +225,9 @@ describe('/route/:module — routing', () => {
     expect(patchCalls.length).toBeGreaterThanOrEqual(1);
   });
 
-  // ── cache miss → Gemini ───────────────────────────────────────────────────
+  // ── cache miss → Groq ─────────────────────────────────────────────────────
 
-  it('cache miss: calls Gemini, returns source=gemini_miss', async () => {
+  it('cache miss: calls Groq, returns source=groq_miss', async () => {
     const classification = {
       intent: 'acquire',
       language: 'en',
@@ -232,14 +236,14 @@ describe('/route/:module — routing', () => {
         { name: 'bread', canonical: 'bread', category: 'pantry', intent: 'acquire', target: 'shopping', shelfLifeDays: 7 },
       ],
     };
-    fetchSpy.mockImplementation(makeGeminiFetch(classification) as unknown as typeof fetch);
+    fetchSpy.mockImplementation(makeGroqFetch(classification) as unknown as typeof fetch);
 
     const req = makeReq({ text: 'grab some bread', dumpId: 'dump-2' });
     const res = await handleRoute(req, makeEnv(), 'grocery');
 
     expect(res.status).toBe(200);
     const body = await res.json() as { source: string; language: string; classification: unknown };
-    expect(body.source).toBe('gemini_miss');
+    expect(body.source).toBe('groq_miss');
     expect(body.language).toBe('en');
     expect(body.classification).toBeTruthy();
   });
@@ -250,7 +254,7 @@ describe('/route/:module — routing', () => {
       language: 'tr',
       items: [{ name: 'süt', canonical: 'milk', category: 'dairy', intent: 'acquire', target: 'shopping' }],
     };
-    const fetchMock = vi.fn(makeGeminiFetch(classification) as unknown as typeof fetch);
+    const fetchMock = vi.fn(makeGroqFetch(classification) as unknown as typeof fetch);
     fetchSpy.mockImplementation(fetchMock);
 
     const req = makeReq({ text: 'süt almam lazım' });
@@ -284,7 +288,7 @@ describe('/route/:module — routing', () => {
     expect(body.error).toBe('voyage_embed_failed');
   });
 
-  it('gemini failure returns 502', async () => {
+  it('groq failure returns 502', async () => {
     fetchSpy.mockImplementation(async (url) => {
       if (typeof url === 'string' && url.includes('voyageai.com')) {
         return new Response(
@@ -295,7 +299,7 @@ describe('/route/:module — routing', () => {
       if (typeof url === 'string' && url.includes('routing_cache_lookup')) {
         return new Response(JSON.stringify([]), { status: 200 });
       }
-      if (typeof url === 'string' && url.includes('generativelanguage.googleapis.com')) {
+      if (typeof url === 'string' && url.includes('api.groq.com')) {
         return new Response('internal error', { status: 500 });
       }
       return new Response('ok', { status: 200 });
@@ -305,6 +309,6 @@ describe('/route/:module — routing', () => {
     const res = await handleRoute(req, makeEnv(), 'grocery');
     expect(res.status).toBe(502);
     const body = await res.json() as { error: string };
-    expect(body.error).toBe('gemini_classify_failed');
+    expect(body.error).toBe('groq_classify_failed');
   });
 });

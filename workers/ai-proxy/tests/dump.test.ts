@@ -4,7 +4,7 @@
  * One end-to-end happy path: "süt aldım" → grocery routing → pantry_add(milk).
  * Full 140-test golden suite runs separately once this baseline confirms.
  *
- * Mocks: fetch (Voyage + Gemini Flash + Clerk JWKS), Vectorize index (cache miss).
+ * Mocks: fetch (Voyage + Groq + Clerk JWKS), Vectorize index (cache miss).
  * Clerk JWT verification is bypassed by stubbing fetch to return a valid JWKS
  * and using a hand-rolled signed token (handled by mocking verifyClerkJwt's
  * underlying jose call). For the smoke test we mock `verifyClerkJwt` directly.
@@ -30,7 +30,7 @@ function makeVectorize(): VectorizeIndex {
 function makeEnv(overrides: Partial<DumpRouteEnv> = {}): DumpRouteEnv {
   return {
     VOYAGE_API_KEY: 'voy-test-key',
-    GEMINI_API_KEY: 'gem-test-key',
+    GROQ_API_KEY: 'groq-test-key',
     CLERK_ISSUER: 'https://faithful-stag-15.clerk.accounts.dev',
     VECTORIZE_INDEX: makeVectorize(),
     ...overrides,
@@ -64,8 +64,8 @@ beforeEach(() => {
         headers: { 'content-type': 'application/json' },
       });
     }
-    // Gemini Flash — classify endpoint (no pass-2 needed for "süt aldım" — 2 words)
-    if (url.includes('generativelanguage.googleapis.com') && url.includes('gemini-2.5-flash')) {
+    // Groq — classify endpoint (no pass-2 needed for "süt aldım" — 2 words)
+    if (url.includes('api.groq.com')) {
       const fakeClassification = {
         module: 'grocery',
         action: 'pantry_add',
@@ -74,9 +74,10 @@ beforeEach(() => {
       };
       return new Response(
         JSON.stringify({
-          candidates: [
+          choices: [
             {
-              content: { parts: [{ text: JSON.stringify(fakeClassification) }] },
+              message: { content: JSON.stringify(fakeClassification) },
+              finish_reason: 'stop',
             },
           ],
         }),

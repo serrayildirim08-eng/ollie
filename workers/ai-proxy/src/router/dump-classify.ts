@@ -1,5 +1,5 @@
 /**
- * Per-fragment classification · Gemini 2.5 Flash with response_schema
+ * Per-fragment classification · Groq Llama 3.3 70B with JSON mode
  * (Decision C — structured output, no try/catch parse).
  *
  * Input: one fragment + its detected language.
@@ -11,12 +11,11 @@
  * function returns.
  */
 
+import { groqChat } from '../groq';
 import type { FragmentLanguage, Module } from './dump-schema';
 
-const GEMINI_MODEL = 'gemini-2.5-flash';
-const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
-
-// Allowed Module values (kept here for the response_schema enum).
+// Allowed Module values (enumerated in the system prompt so the model
+// stays on the rails even though Groq's JSON mode doesn't enforce a schema).
 const MODULES: Module[] = [
   'work',
   'admin',
@@ -57,23 +56,15 @@ Action disambiguation hints:
 - admin.log_renewal (paperwork-with-expiry: passport, license, lease, insurance) vs recurring_decision (repeating choices like subscriptions)
 - body.log_movement (walk/stretch/lift with duration) — primary for physical activity
 
-Return a JSON object with: module, action, payload (free-form fields specific to the action), confidence (0..1).
+Respond with a JSON object EXACTLY matching this shape (no extra keys, no prose):
+{
+  "module": one of [${MODULES.join(', ')}],
+  "action": string (one of the actions listed for the chosen module),
+  "confidence": number between 0 and 1,
+  "payload": object with action-specific fields
+}
 
 Be conservative — if a fragment is ambiguous, pick dump_only with confidence 0.5. Errors of caution land the user in a "want to confirm?" UI, errors of over-confidence land bad data in a module.`;
-
-const RESPONSE_SCHEMA = {
-  type: 'object',
-  required: ['module', 'action', 'confidence', 'payload'],
-  properties: {
-    module: {
-      type: 'string',
-      enum: MODULES,
-    },
-    action: { type: 'string', minLength: 1 },
-    confidence: { type: 'number', minimum: 0, maximum: 1 },
-    payload: { type: 'object' },
-  },
-} as const;
 
 export interface ClassifyResult {
   module: Module;
@@ -86,49 +77,28 @@ export async function classifyFragment(
   language: FragmentLanguage,
   apiKey: string,
 ): Promise<ClassifyResult> {
-  const url = `${GEMINI_API_BASE}/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
-
   const userMessage = `Fragment language: ${language}\nFragment: ${fragmentText}`;
 
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-      contents: [{ role: 'user', parts: [{ text: userMessage }] }],
-      generationConfig: {
-        temperature: 0,
-        maxOutputTokens: 512,
-        responseMimeType: 'application/json',
-        responseSchema: RESPONSE_SCHEMA,
-      },
-    }),
-  });
+  const choice = await groqChat(
+    {
+      apiKey,
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content: userMessage },
+      ],
+      jsonMode: true,
+      maxTokens: 512,
+    },
+    'classify',
+  );
 
-  if (!res.ok) {
-    const detail = await res.text().catch(() => '');
-    throw new Error(`classify gemini ${res.status}: ${detail.slice(0, 300)}`);
-  }
-
-  const rawBody = await res.text();
-  let data: {
-    candidates?: Array<{
-      content?: { parts?: Array<{ text?: string }> };
-      finishReason?: string;
-    }>;
-    promptFeedback?: unknown;
-  };
-  try {
-    data = JSON.parse(rawBody);
-  } catch {
-    throw new Error(`classify gemini bad outer json: ${rawBody.slice(0, 300)}`);
-  }
-
-  const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+  const rawText = choice.message.content ?? '';
   if (!rawText) {
-    const finish = data?.candidates?.[0]?.finishReason ?? 'no_candidate';
-    throw new Error(`classify gemini empty text (finish=${finish}): ${rawBody.slice(0, 300)}`);
+    throw new Error(
+      `classify groq empty content (finish=${choice.finish_reason})`,
+    );
   }
+
   let parsed: {
     module: Module;
     action: string;
@@ -138,7 +108,7 @@ export async function classifyFragment(
   try {
     parsed = JSON.parse(rawText);
   } catch {
-    throw new Error(`classify gemini bad inner json: ${rawText.slice(0, 300)}`);
+    throw new Error(`classify groq bad json: ${rawText.slice(0, 300)}`);
   }
 
   return {
