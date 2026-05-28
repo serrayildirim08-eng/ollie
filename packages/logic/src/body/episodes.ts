@@ -20,6 +20,8 @@ import type {
 } from './types';
 
 import { STRESS_RE } from './regexes';
+import { median as medianOf } from '../stats';
+import { DAY_MS, HOUR_MS, dayKey, resolveNow } from '../util';
 
 // ─── ID generation ────────────────────────────────────────────────────────────
 
@@ -101,7 +103,7 @@ export function normalizeEpisode(
   raw: unknown,
   opts?: { now?: number },
 ): Episode {
-  const now = typeof opts?.now === 'number' ? opts.now : Date.now();
+  const now = resolveNow(opts?.now);
   const o = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
 
   const num = (v: unknown): number | undefined =>
@@ -111,7 +113,7 @@ export function normalizeEpisode(
   const startedAt =
     num(o.started_at) ?? num(o.opened_at) ?? num(o.ts) ?? now;
 
-  let label = '';
+  let label: string;
   if (typeof o.label === 'string' && o.label.trim()) {
     label = o.label.trim();
   } else if (typeof o.text === 'string' && o.text.trim()) {
@@ -220,7 +222,7 @@ export function closeEpisode(
   episode: Episode,
   opts?: { now?: number },
 ): Episode {
-  const now = typeof opts?.now === 'number' ? opts.now : Date.now();
+  const now = resolveNow(opts?.now);
   return { ...episode, ended_at: now };
 }
 
@@ -236,14 +238,14 @@ export function activeEpisode(episodes: Episode[]): Episode | null {
 
 export function elapsedDays(episode: Episode, now: number): number {
   if (!episode || typeof episode.started_at !== 'number') return 0;
-  return Math.floor((now - episode.started_at) / 86400000);
+  return Math.floor((now - episode.started_at) / DAY_MS);
 }
 
 export function summarizeEpisode(
   episode: Episode,
   opts?: { now?: number },
 ): EpisodeSummary {
-  const now = typeof opts?.now === 'number' ? opts.now : Date.now();
+  const now = resolveNow(opts?.now);
   const end = typeof episode.ended_at === 'number' ? episode.ended_at : now;
   const start = typeof episode.started_at === 'number' ? episode.started_at : end;
   const sev = Array.isArray(episode.severity_log) ? episode.severity_log : [];
@@ -265,7 +267,7 @@ export function summarizeEpisode(
   }
 
   return {
-    duration_days: Math.floor((end - start) / 86400000),
+    duration_days: Math.floor((end - start) / DAY_MS),
     max_severity: max,
     mean_severity: mean,
     n_severity_logs: sev.length,
@@ -326,7 +328,7 @@ export function detectDurationDistribution(
   );
   if (closed.length < minHistory) return null;
 
-  const durations = closed.map(ep => (ep.ended_at! - ep.started_at) / 86400000);
+  const durations = closed.map(ep => (ep.ended_at! - ep.started_at) / DAY_MS);
   const n = durations.length;
   let sum = 0;
   for (const d of durations) sum += d;
@@ -342,7 +344,7 @@ export function detectDurationDistribution(
     if (typeof ep.started_at !== 'number') continue;
     if (!active || ep.started_at > active.started_at) active = ep;
   }
-  const currentDays = active ? (now - active.started_at) / 86400000 : null;
+  const currentDays = active ? (now - active.started_at) / DAY_MS : null;
   const threshold = mean + 1.5 * sd;
   if (currentDays == null || currentDays <= threshold) return null;
 
@@ -377,7 +379,6 @@ export function detectTriggerCorrelation(
   opts?: { now?: number; minEpisodes?: number; lookbackDays?: number; label?: string | null },
 ): EpisodeTriggerPattern | null {
   const o = opts || {};
-  const now = typeof o.now === 'number' ? o.now : Date.now();
   const minEpisodes = typeof o.minEpisodes === 'number' ? o.minEpisodes : 4;
   const lookbackDays = typeof o.lookbackDays === 'number' ? o.lookbackDays : 7;
   const label = o.label || null;
@@ -408,20 +409,18 @@ export function detectTriggerCorrelation(
     return cur;
   };
 
-  const dKey = (ts: number) => {
-    const d = new Date(ts);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  };
+  // Local-time day key — matches the local-tz keys used elsewhere in body.
+  const dKey = dayKey;
 
   let nLowSleep = 0, nStress = 0, nLuteal = 0;
   const totalEps = filtered.length;
   for (const ep of filtered) {
     const epStart = ep.started_at;
-    const winStart = epStart - lookbackDays * 86400000;
+    const winStart = epStart - lookbackDays * DAY_MS;
 
     let sleepSum = 0, sleepN = 0;
     for (let i = 0; i < lookbackDays; i++) {
-      const t = epStart - (i + 1) * 86400000;
+      const t = epStart - (i + 1) * DAY_MS;
       const k = dKey(t);
       if (sleepByDay[k] != null) { sleepSum += sleepByDay[k]; sleepN++; }
     }
@@ -438,7 +437,7 @@ export function detectTriggerCorrelation(
 
     let luteal = false;
     for (let i = 0; i <= lookbackDays; i++) {
-      const t = epStart - i * 86400000;
+      const t = epStart - i * DAY_MS;
       if (phaseAt(t) === 'luteal') { luteal = true; break; }
     }
     if (luteal) nLuteal++;
@@ -493,7 +492,7 @@ export function detectRecurrenceRhythm(
   const sorted = filtered.slice().sort((a, b) => a.started_at - b.started_at);
   const intervals: number[] = [];
   for (let i = 1; i < sorted.length; i++) {
-    intervals.push((sorted[i].started_at - sorted[i - 1].started_at) / 86400000);
+    intervals.push((sorted[i].started_at - sorted[i - 1].started_at) / DAY_MS);
   }
   if (intervals.length < 2) return null;
 
@@ -509,9 +508,9 @@ export function detectRecurrenceRhythm(
   if (cv > jitterTolerance) return null;
 
   const lastStart = sorted[sorted.length - 1].started_at;
-  const predictedNextTs = lastStart + mean * 86400000;
-  const daysUntilNext = Math.round((predictedNextTs - now) / 86400000);
-  const daysSince = Math.floor((now - lastStart) / 86400000);
+  const predictedNextTs = lastStart + mean * DAY_MS;
+  const daysUntilNext = Math.round((predictedNextTs - now) / DAY_MS);
+  const daysSince = Math.floor((now - lastStart) / DAY_MS);
 
   const labelOut = label || (sorted[0] && sorted[0].label) || 'episode';
   return {
@@ -560,11 +559,7 @@ export function detectMedicationAdherence(
     const intervals: number[] = [];
     for (let i = 1; i < ts.length; i++) intervals.push(ts[i] - ts[i - 1]);
     if (intervals.length === 0) continue;
-    const sorted = intervals.slice().sort((a, b) => a - b);
-    const mid = Math.floor(sorted.length / 2);
-    const median = sorted.length % 2 === 0
-      ? (sorted[mid - 1] + sorted[mid]) / 2
-      : sorted[mid];
+    const median = medianOf(intervals);
     if (!(median > 0)) continue;
     const lastTs = ts[ts.length - 1];
     const currentGap = now - lastTs;
@@ -577,8 +572,8 @@ export function detectMedicationAdherence(
   }
   if (!worst) return null;
 
-  const expectedHours = Math.round((worst.median / 3600000) * 10) / 10;
-  const currentHours = Math.round((worst.currentGap / 3600000) * 10) / 10;
+  const expectedHours = Math.round((worst.median / HOUR_MS) * 10) / 10;
+  const currentHours = Math.round((worst.currentGap / HOUR_MS) * 10) / 10;
   const ratio2 = Math.round(worst.ratio * 100) / 100;
 
   return {
@@ -660,11 +655,8 @@ export function generateDoctorSummary(
     const pad = (n: number) => String(n).padStart(2, '0');
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
   };
-  const fmtDay = (ts: number) => {
-    const d = new Date(ts);
-    const pad = (n: number) => String(n).padStart(2, '0');
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-  };
+  // Local-time day key — delegates to the shared util.
+  const fmtDay = dayKey;
 
   const lines: string[] = [];
   const namePrefix = (o.userName && String(o.userName).trim())
@@ -676,12 +668,12 @@ export function generateDoctorSummary(
 
   if (episode.ended_at) {
     lines.push('Ended: ' + fmtDate(episode.ended_at));
-    const days = Math.round((episode.ended_at - episode.started_at) / 86400000 * 10) / 10;
+    const days = Math.round((episode.ended_at - episode.started_at) / DAY_MS * 10) / 10;
     lines.push('Duration: ' + days + ' days');
   } else {
     lines.push('Status: still open');
     const now = typeof o.now === 'number' ? o.now : Date.now();
-    const days = Math.round((now - episode.started_at) / 86400000 * 10) / 10;
+    const days = Math.round((now - episode.started_at) / DAY_MS * 10) / 10;
     lines.push('Duration so far: ' + days + ' days');
   }
   if (episode.kind) lines.push('Type: ' + episode.kind);
@@ -726,7 +718,7 @@ export function generateDoctorSummary(
   }
 
   const onsetTs = episode.started_at;
-  const lookbackMs = (o.contextDays || 7) * 86400000;
+  const lookbackMs = (o.contextDays || 7) * DAY_MS;
   const winStart = onsetTs - lookbackMs;
 
   const sleepArr = (h.sleepRecords || []).filter(r => {

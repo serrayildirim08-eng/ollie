@@ -10,7 +10,7 @@
 import { pearson } from '../math';
 import type { Habit, HabitCompletion, SleepRecord } from '../../habits/types';
 
-const DAY_MS = 86_400_000;
+import { DAY_MS, dayKey, resolveNow } from '../../util';
 const DEFAULT_LOOKBACK_DAYS = 21;
 const DEFAULT_TARGET_HOURS = 7.5;
 
@@ -29,13 +29,8 @@ export interface CorrelateSleepDebtHabitsOpts {
   now?: number;
 }
 
-function localDateKey(ts: number): string {
-  const d = new Date(ts);
-  const y = d.getFullYear();
-  const mo = String(d.getMonth() + 1).padStart(2, '0');
-  const da = String(d.getDate()).padStart(2, '0');
-  return `${y}-${mo}-${da}`;
-}
+/** YYYY-MM-DD key in LOCAL tz — delegates to the shared util. */
+const localDateKey = dayKey;
 
 function noonEpochFromDateKey(key: string): number | null {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(key);
@@ -70,10 +65,10 @@ function sleepHoursByDay(records: readonly SleepRecord[]): Map<string, number> {
 
 function rollingDebtHours(
   sleepByDay: Map<string, number>,
-  dayKey: string,
+  dateKey: string,
   target: number,
 ): number {
-  const noon = noonEpochFromDateKey(dayKey);
+  const noon = noonEpochFromDateKey(dateKey);
   if (noon == null) return 0;
   let debt = 0;
   for (let i = 0; i < 7; i++) {
@@ -116,7 +111,7 @@ export function correlateSleepDebtAndHabits(
   habits: readonly Habit[] | undefined | null,
   opts?: CorrelateSleepDebtHabitsOpts,
 ): SleepDebtHabitsResult {
-  const now = opts?.now ?? Date.now();
+  const now = resolveNow(opts?.now);
   const lookback = opts?.lookbackDays ?? DEFAULT_LOOKBACK_DAYS;
   const minN = opts?.minSampleSize ?? 14;
   const thresholdRho = opts?.thresholdRho ?? 0.30;
@@ -140,15 +135,15 @@ export function correlateSleepDebtAndHabits(
     const noon = new Date(t);
     noon.setHours(12, 0, 0, 0);
     const noonMs = noon.getTime();
-    const dayKey = localDateKey(noonMs);
+    const dKey = localDateKey(noonMs);
 
     const active = activeHabitsOn(habits, noonMs);
     if (active < 3) continue;
 
-    const completed = compBy.get(dayKey) ?? 0;
+    const completed = compBy.get(dKey) ?? 0;
     const pct = Math.min(1, completed / active);
 
-    const debt = rollingDebtHours(sleepBy, dayKey, target);
+    const debt = rollingDebtHours(sleepBy, dKey, target);
 
     xs.push(debt);
     ys.push(pct);
@@ -164,7 +159,7 @@ export function correlateSleepDebtAndHabits(
     return { correlation: r, sampleSize: n, copy: '', ts: now };
   }
 
-  let copy = '';
+  let copy: string;
   if (r < 0) {
     const weeks = Math.max(1, Math.round(n / 7));
     copy = `habit completion drops as sleep debt climbs · ${weeks} week${weeks === 1 ? '' : 's'} of data`;

@@ -11,6 +11,8 @@
  *   - drift is named, not shamed. cite the principle.
  */
 
+import { DAY_MS, HOUR_MS, MINUTE_MS, dayKey } from '../util';
+
 export type MedicationKind = 'prescription' | 'vitamin' | 'supplement' | 'otc';
 
 export interface MedicationItem {
@@ -39,13 +41,9 @@ export interface MedicationState {
 // daily-state helpers
 // ──────────────────────────────────────────────────────────────────────────
 
+/** Format an epoch-ms timestamp as a local `YYYY-MM-DD` key. */
 export function isoDate(ts: number): string {
-  const d = new Date(ts);
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-
-function pad(n: number): string {
-  return n < 10 ? `0${n}` : String(n);
+  return dayKey(ts);
 }
 
 /** Has the user logged this medication at least once today? */
@@ -102,13 +100,13 @@ export function dueSlotsToday(
       if (t.date !== date) return false;
       const tts = Date.parse(`${t.date}T${t.time}`);
       // Match by being within the same slot window.
-      return Math.abs(tts - slotTs) < 60 * 60 * 1000;
+      return Math.abs(tts - slotTs) < HOUR_MS;
     });
     out.push({
       item_id: item.id,
       slot_hhmm: hhmm,
       slot_ts: slotTs,
-      overdue: !matched && now > slotTs + graceMinutes * 60_000,
+      overdue: !matched && now > slotTs + graceMinutes * MINUTE_MS,
     });
   }
   return out;
@@ -126,7 +124,7 @@ function parseHHmmOn(dayStartTs: number, hhmm: string): number | null {
   const h = Number(m[1]);
   const mn = Number(m[2]);
   if (h < 0 || h > 23 || mn < 0 || mn > 59) return null;
-  return dayStartTs + h * 3600_000 + mn * 60_000;
+  return dayStartTs + h * HOUR_MS + mn * MINUTE_MS;
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -162,9 +160,9 @@ export function adherenceReport(
   if (sched === 0) return null;
   const windowDays = opts.windowDays ?? 14;
   const threshold = opts.threshold ?? 0.5;
-  if (now - item.created_at < windowDays * 86_400_000) return null;
+  if (now - item.created_at < windowDays * DAY_MS) return null;
 
-  const startTs = startOfDay(now) - (windowDays - 1) * 86_400_000;
+  const startTs = startOfDay(now) - (windowDays - 1) * DAY_MS;
   const expected = sched * windowDays;
   let logged = 0;
   for (const t of item.taken ?? []) {

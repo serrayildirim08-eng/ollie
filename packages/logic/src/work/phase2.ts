@@ -22,6 +22,7 @@ import type {
 } from './types';
 import { HOUR } from './constants';
 import { consentOn, ordinal } from './helpers';
+import { median as medianOf } from '../stats';
 
 // ── W5 — Activation-Barrier Splitter (Steel 2007) ────────────────────
 
@@ -80,10 +81,7 @@ export function detectEstimationDrift(
   }
   if (ratios.length < minEntries) return null;
 
-  const sorted = ratios.slice().sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  const median =
-    sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+  const median = medianOf(ratios);
   if (median < 1.2) return null;
 
   const rounded = Math.round(median * 10) / 10;

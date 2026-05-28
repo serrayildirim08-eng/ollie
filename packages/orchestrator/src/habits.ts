@@ -32,7 +32,7 @@ import type { Unsubscribe } from '@ollie/events';
 import * as events from '@ollie/events';
 import type { NotificationSpec } from '@ollie/notifications';
 import { detectPatterns } from '@ollie/logic/habits';
-import type { AnyHabitsResult, Habit, HabitCompletion } from '@ollie/logic/habits';
+import type { Habit, HabitCompletion } from '@ollie/logic/habits';
 import type { Orchestrator } from './types';
 
 const DEBOUNCE_MS = 500;
@@ -56,7 +56,12 @@ export interface HabitsOrchestratorOptions {
 export function createHabitsOrchestrator(
   store: Store,
   opts: HabitsOrchestratorOptions = {},
-): Orchestrator & { recomputePatterns(): void; emitMorningCheck(): boolean } {
+): Orchestrator & {
+  recomputePatterns(): void;
+  emitMorningCheck(): boolean;
+  /** Test-only: current size of the in-memory completion-dedup Set. */
+  _emittedCompletionCount(): number;
+} {
   const getNow = opts.now ?? (() => Date.now());
   const scheduleNotification = opts.scheduleNotification ?? null;
 
@@ -70,6 +75,17 @@ export function createHabitsOrchestrator(
   function scanCompletions(): void {
     const now = getNow();
     const todayKey = new Date(now).toISOString().slice(0, 10);
+
+    // Prune stale day-keys. `emittedCompletions` only ever needs the
+    // current UTC day's keys — anything dated earlier can never dedup a
+    // future emit (the dedup key embeds todayKey). Without this the Set
+    // grows by one key per habit per day forever (only cleared on full
+    // teardown). Keys are `${habitId}:${YYYY-MM-DD}`.
+    for (const key of emittedCompletions) {
+      const day = key.slice(key.lastIndexOf(':') + 1);
+      if (day !== todayKey) emittedCompletions.delete(key);
+    }
+
     const habitsRaw = store.get<Array<Habit & { cueTime?: string }>>('shared', 'habits_v2', []) ?? [];
 
     for (const h of habitsRaw) {
@@ -336,5 +352,11 @@ export function createHabitsOrchestrator(
     initialized = false;
   }
 
-  return { init, teardown, recomputePatterns, emitMorningCheck };
+  return {
+    init,
+    teardown,
+    recomputePatterns,
+    emitMorningCheck,
+    _emittedCompletionCount: () => emittedCompletions.size,
+  };
 }

@@ -101,7 +101,7 @@ describe('burhan orchestrator', () => {
     // signals that other trackers use to decay state. None of these
     // should shrink the tree.
     events.emit('void:braindump:submitted', { v: 2, items: [], raw: '', ts: 999, idempotency_key: 'k', route_path: 'fallback' });
-    events.emit('habits:drift', { habit_id: 'h1', drop_pct: 50, ts: 999 });
+    events.emit('habits:luteal_collapse_detected', { drop_pct: 50, ts: 999 });
     events.emit('sleep:pacing_breach_detected', { severity: 'watch', run_length: 5, ts: 999 });
 
     expect(read().events).toHaveLength(before);

@@ -16,7 +16,7 @@ import type {
   Cadence,
 } from './types';
 import { jaroWinkler } from './jaro';
-import { daysBetween, fMedian, fMad, fMean } from './math';
+import { DAY_MS, daysBetween, fMedian, fMad, fMean } from './math';
 
 // ─── amount-band split ────────────────────────────────────────────────
 function splitByPriceBand(records: FinanceRecord[], tolerance: number): FinanceRecord[][] {
@@ -221,7 +221,7 @@ export function predictNextDue(p: RecurringPattern, _now: number): NextDuePredic
   if (!p?.last_at || !p.interval_days_median) {
     return { dueAt: null, confidence: 'low', rangeDays: null };
   }
-  const dueAt = p.last_at + p.interval_days_median * 86_400_000;
+  const dueAt = p.last_at + p.interval_days_median * DAY_MS;
   const mad = p.interval_days_mad || 0;
   const rangeDays = Number((1.4826 * mad).toFixed(1));
   return {
@@ -414,7 +414,7 @@ export function detectRecurringEarly(
         merchant_normalized: c.key,
         estimatedAmount: medAmt,
         estimatedInterval: medI || null,
-        nextDueDate: medI > 0 ? lastAt + medI * 86_400_000 : null,
+        nextDueDate: medI > 0 ? lastAt + medI * DAY_MS : null,
         confidence: 'high',
         category: classifyRecurringCategory(c.key, medAmt),
         evidence: {
@@ -438,7 +438,7 @@ export function detectRecurringEarly(
           merchant_normalized: c.key,
           estimatedAmount: medAmt,
           estimatedInterval: interval,
-          nextDueDate: lastAt + interval * 86_400_000,
+          nextDueDate: lastAt + interval * DAY_MS,
           confidence: 'medium',
           category: classifyRecurringCategory(c.key, medAmt),
           evidence: {

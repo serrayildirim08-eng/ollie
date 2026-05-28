@@ -101,29 +101,16 @@ describe('computeWeeklyReview', () => {
 
   it('skipped-day detection: workout habit skipped on tuesdays → surfaces "tuesdays"', () => {
     // Build a habit with completions on every day EXCEPT tuesday (day index 2)
-    const weekStart = new Date('2026-05-04T00:00:00').getTime(); // Mon May 4 — week starts Sun May 3
-
     // Use the Sunday that starts this week
     const sunStart = new Date('2026-05-03T00:00:00').getTime();
     const completions = [0, 1, 3, 4, 5, 6].map((d) => ({ // skip day 2 = tuesday
       ts: sunStart + d * DAY_MS + 9 * 3600_000,
     }));
 
-    const habits = [
-      { id: 'workout', name: 'workout', cueTime: 'morning', completions },
-      ...makeHabits(4, 7, sunStart), // 4 other habits fully completed
-    ];
-
-    const result = computeWeeklyReview({
-      now: sunStart + 6 * DAY_MS + 20 * 3600_000, // end of that sunday
-      habits,
-      sleepRecords: [],
-    });
-
-    // mostSkippedWeekday should be tuesday (only the workout habit was skipped on tuesday)
-    // With 5 habits total, tuesday has 1 skip — this is 1/5 = 20% of habits skipped.
-    // Our threshold is ceil(5/2) = 3. So with 1 skip it won't surface.
-    // Let's use 3 habits instead where tuesday is skipped by more than half
+    // mostSkippedWeekday should be tuesday (only the workout habit was skipped on tuesday).
+    // With 5 habits total, tuesday has 1 skip — 1/5 = 20%, below the ceil(5/2)=3
+    // threshold, so it won't surface. Use 3 habits where tuesday is skipped by
+    // more than half.
     const habits2 = [
       { id: 'w1', name: 'workout', completions },
       { id: 'w2', name: 'run', completions },
