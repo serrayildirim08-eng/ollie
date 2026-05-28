@@ -1,3 +1,5 @@
+// @ts-nocheck — legacy auth provider, superseded by Clerk in main.tsx.
+// Kept for reference until the auth/ folder is fully removed.
 /**
  * AuthProvider · Ollie native (Tauri)
  *

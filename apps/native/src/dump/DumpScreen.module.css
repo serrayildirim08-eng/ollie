@@ -1,0 +1,49 @@
+/* DumpScreen — the ack flourish.
+   Editorial fade: gentle in, held breath, gentle out. Total ~2.4s. */
+
+.ack {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  opacity: 0;
+  animation: ollie-ack 2400ms cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+  will-change: opacity, transform;
+}
+
+/* A thin sage rule before the word — editorial pull-quote tic. */
+.ackMark {
+  display: inline-block;
+  width: 18px;
+  height: 1px;
+  background: currentColor;
+  opacity: 0.55;
+  transform-origin: left center;
+  animation: ollie-ack-mark 2400ms cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+}
+
+@keyframes ollie-ack {
+  0%   { opacity: 0;    transform: translateY(2px); }
+  18%  { opacity: 1;    transform: translateY(0); }
+  72%  { opacity: 1;    transform: translateY(0); }
+  100% { opacity: 0;    transform: translateY(-1px); }
+}
+
+@keyframes ollie-ack-mark {
+  0%   { transform: scaleX(0);   opacity: 0; }
+  18%  { transform: scaleX(1);   opacity: 0.55; }
+  72%  { transform: scaleX(1);   opacity: 0.55; }
+  100% { transform: scaleX(0.6); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ack,
+  .ackMark {
+    animation-duration: 0ms;
+    animation-fill-mode: forwards;
+    opacity: 1;
+    transform: none;
+  }
+  .ackMark {
+    transform: scaleX(1);
+  }
+}

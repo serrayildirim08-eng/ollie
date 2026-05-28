@@ -1,44 +1,56 @@
-/* Text — Ollie type primitive */
+/* Text — Ollie type primitive.
+   Variables map to tokensToCssVars output:
+   --ollie-text-{display,h1,h2,h3,body,caption,kicker} +
+   --ollie-leading-{tight,display,headline,h2,body,caption} +
+   --ollie-weight-{light,regular,medium,bold} +
+   --ollie-tracking-{display,h1,h2,body,caps,caps-tight,caps-loose}. */
 
 .text {
   margin: 0;
   padding: 0;
-  font-family: inherit;
-  line-height: var(--ollie-leading);
-  letter-spacing: var(--ollie-tracking);
-  color: var(--ollie-ink-mid); /* default — overridable via color prop */
+  font-family: var(--ollie-font-sans);
+  line-height: var(--ollie-leading-body);
+  letter-spacing: var(--ollie-tracking-body);
+  color: var(--ollie-color-ink-soft);
 }
 
-/* ── Scale ────────────────────────────────────────────────────────────────── */
-
 .display {
-  font-size: var(--ollie-size-display);
-  font-weight: var(--ollie-weight-light);
-  line-height: var(--ollie-leading-tight);
-  letter-spacing: 0.02em;
+  font-family: var(--ollie-font-serif);
+  font-size: var(--ollie-text-display);
+  font-weight: var(--ollie-weight-regular);
+  line-height: var(--ollie-leading-display);
+  letter-spacing: var(--ollie-tracking-display);
+  color: var(--ollie-color-ink);
 }
 
 .title {
-  font-size: var(--ollie-size-title);
-  font-weight: var(--ollie-weight-light);
-  line-height: var(--ollie-leading-tight);
+  font-family: var(--ollie-font-serif);
+  font-size: var(--ollie-text-h1);
+  font-weight: var(--ollie-weight-regular);
+  line-height: var(--ollie-leading-headline);
+  letter-spacing: var(--ollie-tracking-h1);
+  color: var(--ollie-color-ink);
 }
 
 .heading {
-  font-size: var(--ollie-size-heading);
+  font-family: var(--ollie-font-serif);
+  font-size: var(--ollie-text-h2);
   font-weight: var(--ollie-weight-medium);
-  letter-spacing: var(--ollie-tracking);
+  line-height: var(--ollie-leading-h2);
+  letter-spacing: var(--ollie-tracking-h2);
+  color: var(--ollie-color-ink);
 }
 
 .body {
-  font-size: var(--ollie-size-body);
-  font-weight: var(--ollie-weight-normal);
+  font-size: var(--ollie-text-body);
+  font-weight: var(--ollie-weight-regular);
+  line-height: var(--ollie-leading-body);
 }
 
 .caption {
-  font-size: var(--ollie-size-caption);
-  font-weight: var(--ollie-weight-normal);
-  letter-spacing: var(--ollie-tracking-wide);
-  text-transform: uppercase;
-  color: var(--ollie-ink-light); /* captions default to muted */
+  font-size: var(--ollie-text-caption);
+  font-weight: var(--ollie-weight-regular);
+  line-height: var(--ollie-leading-caption);
+  letter-spacing: var(--ollie-tracking-caps);
+  color: var(--ollie-color-ink-faint);
 }
