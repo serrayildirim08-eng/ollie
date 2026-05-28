@@ -114,6 +114,11 @@ export const USER_SCOPED_TABLES: ReadonlyArray<{ table: string; column: 'user_id
   { table: 'plaid_inbox', column: 'user_id' },
   { table: 'plaid_items', column: 'user_id' },
   { table: 'scheduled_jobs', column: 'user_id' },
+  // F3 — push_tokens has `user_id uuid references auth.users(id) on
+  // delete cascade` (20260515000001_notification_delivery.sql). The FK
+  // cascade already erases it, but the explicit DELETE is what gives the
+  // GDPR audit an accurate per-table row count.
+  { table: 'push_tokens', column: 'user_id' },
   // profiles last among user-scoped tables — it's 1:1 with auth.users
   // and other tables can reference it transitively (none do today, but
   // future-proofs against schema drift).
