@@ -31,6 +31,7 @@ import type { CSSProperties } from 'react';
 import { Stack, Row } from '../../layout';
 import { Text } from '../../ui';
 import { colors, fonts } from '../../theme/tokens';
+import { WhenCaption } from '../../lib/WhenCaption';
 import { migrateCycle } from './migrate';
 import { cycleRepo } from './repo';
 import type { CurrentCycle, CycleEvent } from './types';
@@ -475,15 +476,13 @@ function EventRow({
   onRemove: () => void;
 }): JSX.Element {
   return (
-    <Row gap={12} align="baseline" justify="space-between">
-      <Text scale="body">
-        {label}
-        <Text as="span" scale="caption" color={colors.inkFaint} style={{ marginLeft: 8 }}>
-          · {formatWhen(occurredAt)}
-        </Text>
-      </Text>
-      <RemoveButton onClick={onRemove} />
-    </Row>
+    <Stack gap={2}>
+      <Row gap={12} align="baseline" justify="space-between">
+        <Text scale="body">{label}</Text>
+        <RemoveButton onClick={onRemove} />
+      </Row>
+      <WhenCaption ts={occurredAt} />
+    </Stack>
   );
 }
 
@@ -496,12 +495,15 @@ function HistoryRow({
 }): JSX.Element {
   const label = event.kind === 'period_start' ? 'period start' : 'period end';
   return (
-    <Row gap={12} align="baseline" justify="space-between">
-      <Text scale="caption" color={colors.inkFaint}>
-        {label} · {formatWhen(event.occurredAt)}
-      </Text>
-      <RemoveButton onClick={onRemove} />
-    </Row>
+    <Stack gap={2}>
+      <Row gap={12} align="baseline" justify="space-between">
+        <Text scale="caption" color={colors.inkFaint}>
+          {label}
+        </Text>
+        <RemoveButton onClick={onRemove} />
+      </Row>
+      <WhenCaption ts={event.occurredAt} />
+    </Stack>
   );
 }
 
@@ -527,12 +529,3 @@ function RemoveButton({ onClick }: { onClick: () => void }): JSX.Element {
   );
 }
 
-function formatWhen(ms: number): string {
-  const diffMs = Date.now() - ms;
-  const days = Math.floor(diffMs / (24 * 60 * 60 * 1000));
-  if (days <= 0) return 'today';
-  if (days === 1) return 'yesterday';
-  if (days < 7) return `${days}d ago`;
-  if (days < 30) return `${Math.floor(days / 7)}w ago`;
-  return `${Math.floor(days / 30)}mo ago`;
-}

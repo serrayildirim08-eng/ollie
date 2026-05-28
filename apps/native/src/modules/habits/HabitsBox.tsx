@@ -35,6 +35,7 @@ import {
 import { Stack, Row } from '../../layout';
 import { Text } from '../../ui';
 import { colors, fonts } from '../../theme/tokens';
+import { WhenCaption } from '../../lib/WhenCaption';
 import { migrateHabits } from './migrate';
 import { registry, completions, events, cadence as cadenceRepo, listHabitRows } from './repo';
 import type { HabitEvent, HabitRow, IdentityData, StreakBreakData } from './types';
@@ -177,13 +178,16 @@ export function HabitsBox(): JSX.Element {
                 nothing ticked yet today
               </Text>
             ) : (
-              <Stack gap={4}>
+              <Stack gap={6}>
                 {todayRows.map((r) => (
                   <Row key={r.habit.id} gap={12} align="baseline">
                     <Text scale="body" color={colors.sage}>
                       ·
                     </Text>
-                    <Text scale="body">{r.habit.name}</Text>
+                    <Stack gap={2}>
+                      <Text scale="body">{r.habit.name}</Text>
+                      <WhenCaption ts={r.lastCompletedAt} />
+                    </Stack>
                   </Row>
                 ))}
               </Stack>
@@ -223,6 +227,7 @@ export function HabitsBox(): JSX.Element {
                   <EventRow
                     key={e.id}
                     label={readIdentity(e).text}
+                    loggedAt={e.loggedAt}
                     onRemove={() => void handleRemoveEvent(e.id)}
                   />
                 ))}
@@ -245,6 +250,7 @@ export function HabitsBox(): JSX.Element {
                     <EventRow
                       key={e.id}
                       label={label}
+                      loggedAt={e.loggedAt}
                       onRemove={() => void handleRemoveEvent(e.id)}
                     />
                   );
@@ -701,6 +707,7 @@ function HabitRowView({
           <SmallButton label="remove" onClick={onRemove} />
         </Row>
       </Row>
+      <WhenCaption ts={row.lastCompletedAt} />
       <CadenceHint estimate={cadence} subject={row.habit.name} />
     </Stack>
   );
@@ -747,16 +754,21 @@ function formatDays(d: number): string {
 
 function EventRow({
   label,
+  loggedAt,
   onRemove,
 }: {
   label: string;
+  loggedAt: number;
   onRemove: () => void;
 }): JSX.Element {
   return (
-    <Row gap={12} align="baseline" justify="space-between">
-      <Text scale="body">{label}</Text>
-      <SmallButton label="remove" onClick={onRemove} />
-    </Row>
+    <Stack gap={2}>
+      <Row gap={12} align="baseline" justify="space-between">
+        <Text scale="body">{label}</Text>
+        <SmallButton label="remove" onClick={onRemove} />
+      </Row>
+      <WhenCaption ts={loggedAt} />
+    </Stack>
   );
 }
 

@@ -50,6 +50,7 @@ import {
 import { Stack, Row } from '../../layout';
 import { Text } from '../../ui';
 import { colors } from '../../theme/tokens';
+import { WhenCaption } from '../../lib/WhenCaption';
 import { migrateGrocery } from './migrate';
 import {
   cadence as cadenceRepo,
@@ -286,13 +287,23 @@ function ShopList({
             <span
               style={{
                 flex: 1,
-                fontSize: 17,
-                fontWeight: 400,
-                letterSpacing: '-0.01em',
-                color: colors.ink,
+                minWidth: 0,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 2,
               }}
             >
-              {row.name}
+              <span
+                style={{
+                  fontSize: 17,
+                  fontWeight: 400,
+                  letterSpacing: '-0.01em',
+                  color: colors.ink,
+                }}
+              >
+                {row.name}
+              </span>
+              <WhenCaption ts={row.addedAt} />
             </span>
             {qtyLabel(row.quantity, row.unit) && (
               <span
@@ -393,6 +404,7 @@ function PantryList({
                   {qtyLabel(item.quantity, item.unit)}
                 </span>
               )}
+              <WhenCaption ts={item.addedAt} />
               <CadenceHint estimate={cadenceByName.get(item.name)} />
             </Stack>
             <RemoveButton onClick={() => onRemove(item.id)} />

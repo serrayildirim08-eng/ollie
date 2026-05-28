@@ -27,6 +27,7 @@ import type { CSSProperties } from 'react';
 import { Stack, Row } from '../../layout';
 import { Text } from '../../ui';
 import { colors } from '../../theme/tokens';
+import { WhenCaption } from '../../lib/WhenCaption';
 import { migrateWork } from './migrate';
 import { tasks as tasksRepo, events as eventsRepo } from './repo';
 import type { WorkEvent, WorkTask } from './types';
@@ -331,29 +332,32 @@ function TaskRow({
   onRemove: () => void;
 }): JSX.Element {
   return (
-    <Row gap={12} align="baseline" justify="space-between">
-      <Row gap={12} align="baseline">
-        <Checkbox checked={item.done} onClick={onToggle} />
-        <Text
-          scale="body"
-          color={item.done ? colors.inkFaint : undefined}
-          style={item.done ? { textDecoration: 'line-through' } : undefined}
-        >
-          {item.text}
-          {item.project && (
-            <Text
-              as="span"
-              scale="caption"
-              color={colors.inkFaint}
-              style={{ marginLeft: 8 }}
-            >
-              · {item.project}
-            </Text>
-          )}
-        </Text>
+    <Stack gap={2}>
+      <Row gap={12} align="baseline" justify="space-between">
+        <Row gap={12} align="baseline">
+          <Checkbox checked={item.done} onClick={onToggle} />
+          <Text
+            scale="body"
+            color={item.done ? colors.inkFaint : undefined}
+            style={item.done ? { textDecoration: 'line-through' } : undefined}
+          >
+            {item.text}
+            {item.project && (
+              <Text
+                as="span"
+                scale="caption"
+                color={colors.inkFaint}
+                style={{ marginLeft: 8 }}
+              >
+                · {item.project}
+              </Text>
+            )}
+          </Text>
+        </Row>
+        <RemoveButton onClick={onRemove} />
       </Row>
-      <RemoveButton onClick={onRemove} />
-    </Row>
+      <WhenCaption ts={item.createdAt} style={{ marginLeft: 26 }} />
+    </Stack>
   );
 }
 
@@ -367,29 +371,32 @@ function DeadlineRow({
   onRemove: () => void;
 }): JSX.Element {
   return (
-    <Row gap={12} align="baseline" justify="space-between">
-      <Row gap={12} align="baseline">
-        <Checkbox checked={item.done} onClick={onToggle} />
-        <Text
-          scale="body"
-          color={item.done ? colors.inkFaint : undefined}
-          style={item.done ? { textDecoration: 'line-through' } : undefined}
-        >
-          {item.text}
-          {item.dueDate && (
-            <Text
-              as="span"
-              scale="caption"
-              color={colors.inkFaint}
-              style={{ marginLeft: 8 }}
-            >
-              · due {item.dueDate}
-            </Text>
-          )}
-        </Text>
+    <Stack gap={2}>
+      <Row gap={12} align="baseline" justify="space-between">
+        <Row gap={12} align="baseline">
+          <Checkbox checked={item.done} onClick={onToggle} />
+          <Text
+            scale="body"
+            color={item.done ? colors.inkFaint : undefined}
+            style={item.done ? { textDecoration: 'line-through' } : undefined}
+          >
+            {item.text}
+            {item.dueDate && (
+              <Text
+                as="span"
+                scale="caption"
+                color={colors.inkFaint}
+                style={{ marginLeft: 8 }}
+              >
+                · due {item.dueDate}
+              </Text>
+            )}
+          </Text>
+        </Row>
+        <RemoveButton onClick={onRemove} />
       </Row>
-      <RemoveButton onClick={onRemove} />
-    </Row>
+      <WhenCaption ts={item.createdAt} style={{ marginLeft: 26 }} />
+    </Stack>
   );
 }
 
@@ -401,20 +408,13 @@ function EventRow({
   onRemove: () => void;
 }): JSX.Element {
   return (
-    <Row gap={12} align="baseline" justify="space-between">
-      <Text scale="body">
-        {formatEvent(event)}
-        <Text
-          as="span"
-          scale="caption"
-          color={colors.inkFaint}
-          style={{ marginLeft: 8 }}
-        >
-          · {formatRelative(event.loggedAt)}
-        </Text>
-      </Text>
-      <RemoveButton onClick={onRemove} />
-    </Row>
+    <Stack gap={2}>
+      <Row gap={12} align="baseline" justify="space-between">
+        <Text scale="body">{formatEvent(event)}</Text>
+        <RemoveButton onClick={onRemove} />
+      </Row>
+      <WhenCaption ts={event.loggedAt} />
+    </Stack>
   );
 }
 
@@ -578,18 +578,6 @@ function formatEvent(event: WorkEvent): string {
     return `meeting · ${who}${mins}`;
   }
   return `distraction · ${d.what}`;
-}
-
-/** Loose relative-time formatter — minutes, hours, days. */
-function formatRelative(ms: number): string {
-  const diff = Date.now() - ms;
-  if (diff < 60_000) return 'just now';
-  const mins = Math.floor(diff / 60_000);
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
 }
 
 /** [start, end) ms window for the user's local day. */

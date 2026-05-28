@@ -62,6 +62,7 @@ import {
 import { Stack, Row } from '../../layout';
 import { Text } from '../../ui';
 import { colors } from '../../theme/tokens';
+import { WhenCaption } from '../../lib/WhenCaption';
 import { migrateAdmin } from './migrate';
 import { renewals as renewalsRepo, tasks as tasksRepo } from './repo';
 import {
@@ -627,20 +628,23 @@ function RenewalRow({
             opacity: overdue || dueSoon ? 1 : 0.6,
           }}
         />
-        <Text scale="body" color={colors.ink}>
-          {renewal.renewalType}
-          <Text
-            as="span"
-            scale="caption"
-            color={tagColor}
-            style={{
-              marginLeft: 8,
-              fontWeight: overdue || dueSoon ? 600 : 500,
-            }}
-          >
-            · {tag}
+        <Stack gap={2}>
+          <Text scale="body" color={colors.ink}>
+            {renewal.renewalType}
+            <Text
+              as="span"
+              scale="caption"
+              color={tagColor}
+              style={{
+                marginLeft: 8,
+                fontWeight: overdue || dueSoon ? 600 : 500,
+              }}
+            >
+              · {tag}
+            </Text>
           </Text>
-        </Text>
+          <WhenCaption ts={renewal.addedAt} />
+        </Stack>
       </Row>
       <RemoveButton onClick={onRemove} />
     </Row>
@@ -665,23 +669,26 @@ function TaskRow({
     <Row gap={12} align="center" justify="space-between">
       <Row gap={11} align="center" style={{ flex: 1, minWidth: 0 }}>
         <TickCircle done={task.done} onClick={onToggle} />
-        <Text
-          scale="body"
-          color={task.done ? colors.inkFaint : colors.ink}
-          style={task.done ? { textDecoration: 'line-through' } : undefined}
-        >
-          {label}
-          {secondary && (
-            <Text
-              as="span"
-              scale="caption"
-              color={colors.inkFaint}
-              style={{ marginLeft: 8 }}
-            >
-              {secondary}
-            </Text>
-          )}
-        </Text>
+        <Stack gap={2}>
+          <Text
+            scale="body"
+            color={task.done ? colors.inkFaint : colors.ink}
+            style={task.done ? { textDecoration: 'line-through' } : undefined}
+          >
+            {label}
+            {secondary && (
+              <Text
+                as="span"
+                scale="caption"
+                color={colors.inkFaint}
+                style={{ marginLeft: 8 }}
+              >
+                {secondary}
+              </Text>
+            )}
+          </Text>
+          <WhenCaption ts={task.createdAt} />
+        </Stack>
       </Row>
       <RemoveButton onClick={onRemove} />
     </Row>

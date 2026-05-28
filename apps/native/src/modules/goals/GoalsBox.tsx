@@ -30,6 +30,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Stack, Row } from '../../layout';
 import { Text } from '../../ui';
 import { colors, fonts, fontWeights } from '../../theme/tokens';
+import { WhenCaption } from '../../lib/WhenCaption';
 import { migrateGoals } from './migrate';
 import { goals as goalsRepo, events as eventsRepo } from './repo';
 import type { GoalEvent, GoalWithLatest } from './types';
@@ -481,6 +482,10 @@ function GoalRow({
   goal: GoalWithLatest;
   onRemove: () => void;
 }): JSX.Element {
+  // Prefer the latest progress timestamp (the freshest signal of activity)
+  // but fall back to the goal's own createdAt so cold rows still carry a
+  // when-stamp.
+  const whenTs = goal.latestProgress?.loggedAt ?? goal.createdAt;
   return (
     <Row gap={12} align="baseline" justify="space-between">
       <Stack gap={2}>
@@ -507,6 +512,7 @@ function GoalRow({
             {goal.why}
           </span>
         ) : null}
+        <WhenCaption ts={whenTs} />
       </Stack>
       <RemoveButton onClick={onRemove} />
     </Row>
@@ -521,12 +527,15 @@ function EventRow({
   onRemove: () => void;
 }): JSX.Element {
   return (
-    <Row gap={12} align="baseline" justify="space-between">
-      <Text scale="body" color={colors.ink}>
-        {event.text}
-      </Text>
-      <RemoveButton onClick={onRemove} />
-    </Row>
+    <Stack gap={2}>
+      <Row gap={12} align="baseline" justify="space-between">
+        <Text scale="body" color={colors.ink}>
+          {event.text}
+        </Text>
+        <RemoveButton onClick={onRemove} />
+      </Row>
+      <WhenCaption ts={event.loggedAt} />
+    </Stack>
   );
 }
 
