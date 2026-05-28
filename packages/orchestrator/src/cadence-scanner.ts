@@ -122,8 +122,81 @@ export const DEFAULT_CADENCE_COPY: Record<string, CadenceCopyTemplates> = {
       (l) => ({ title: `usual ${l} day is past` }),
     ],
   },
-  // Hooks for the 8 incoming modules — fill in as they ship.
-  // pets / finance / sleep / cycle / medication / pets / dump / matters.
+  // The 8 native modules wired into cadence per commit 77abb0e.
+  // Tone: editorial, factual, lowercase, no shame, no streak language,
+  // no exclamation marks. Body is omitted — title alone is enough.
+  sleep: {
+    category: 'PATTERN_ALERT',
+    actionUrl: '/sleep',
+    variants: [
+      (l) => ({ title: `${l} — shorter than your usual` }),
+      (l) => ({ title: `noticed sleep dipped` }),
+      (l) => ({ title: `last night ran short of average` }),
+    ],
+  },
+  pets: {
+    category: 'PATTERN_ALERT',
+    actionUrl: '/pets',
+    variants: [
+      (l) => ({ title: `${l} usually gets fed by now` }),
+      (l) => ({ title: `${l}'s feed window passed` }),
+      (l) => ({ title: `checking in on ${l}` }),
+    ],
+  },
+  finance: {
+    category: 'PATTERN_ALERT',
+    actionUrl: '/finance',
+    variants: [
+      (l) => ({ title: `${l} — usual time to pay` }),
+      (l) => ({ title: `${l} bill window` }),
+      (l) => ({ title: `noticed ${l} cycle hit` }),
+    ],
+  },
+  work: {
+    category: 'PATTERN_ALERT',
+    actionUrl: '/work',
+    variants: [
+      (l) => ({ title: `${l} has been quiet` }),
+      (l) => ({ title: `no focus session on ${l} lately` }),
+      (l) => ({ title: `deep work usually happens by now` }),
+    ],
+  },
+  goals: {
+    category: 'PATTERN_ALERT',
+    actionUrl: '/goals',
+    variants: [
+      (l) => ({ title: `${l} — last touched a while ago` }),
+      (l) => ({ title: `no progress on ${l} in a bit` }),
+      (l) => ({ title: `wanted to check in on ${l}` }),
+    ],
+  },
+  admin: {
+    category: 'PATTERN_ALERT',
+    actionUrl: '/admin',
+    variants: [
+      (l) => ({ title: `${l} renewal coming up` }),
+      (l) => ({ title: `${l} window is here` }),
+      (l) => ({ title: `${l} usually happens around now` }),
+    ],
+  },
+  cycle: {
+    category: 'PATTERN_ALERT',
+    actionUrl: '/cycle',
+    variants: [
+      (l) => ({ title: `${l} usually around now` }),
+      (l) => ({ title: `${l} window hit` }),
+      (l) => ({ title: `checking in on ${l}` }),
+    ],
+  },
+  medication: {
+    category: 'PATTERN_ALERT',
+    actionUrl: '/medication',
+    variants: [
+      (l) => ({ title: `no ${l} logged today` }),
+      (l) => ({ title: `${l} usually around now` }),
+      (l) => ({ title: `${l} window` }),
+    ],
+  },
 };
 
 // ─── persistence ────────────────────────────────────────────────────────
