@@ -59,6 +59,133 @@ Action disambiguation hints:
 - admin.log_renewal (paperwork-with-expiry: passport, license, lease, insurance) vs recurring_decision (repeating choices like subscriptions)
 - body.log_movement (walk/stretch/lift with duration) — primary for physical activity
 
+═══════════════════════════════════════════════════════════════════════
+PAYLOAD FIELD REQUIREMENTS · per action
+═══════════════════════════════════════════════════════════════════════
+Each action below lists the EXACT keys to put inside \`payload\`. Required keys MUST appear; optional keys appear only when the fragment supplies them. Never invent values; if a required string slot is unknown, fall back to the user's wording.
+
+── BODY ──
+- log_symptom: { symptom: string (REQUIRED), severity?: 1|2|3|4|5, bodyPart?: string }
+  Ex: "headache 7/10" → { symptom: "headache", severity: 4 } ; "başım ağrıyor" → { symptom: "headache" }
+- log_water: { amountMl?: number }
+  Ex: "drank 500ml water" → { amountMl: 500 } ; "2 bardak su içtim" → { amountMl: 500 } ; "had water" → { }
+- log_supplement: { name: string (REQUIRED), dose?: string }
+  Ex: "took vitamin D 1000iu" → { name: "vitamin D", dose: "1000iu" }
+- log_episode: { kind: string (REQUIRED), duration?: string }
+  Ex: "panic attack lasted 10 min" → { kind: "panic attack", duration: "10 min" }
+- log_posture: { } — no fields
+- log_hunger: { } — no fields
+- log_movement: { type: string (REQUIRED — "walk"/"stretch"/"lift"/"yoga"/"run"/"swim"/etc.), duration_min?: number }
+  Ex: "did yoga" → { type: "yoga" } ; "20 min walk" → { type: "walk", duration_min: 20 } ; "yoga yaptım 30dk" → { type: "yoga", duration_min: 30 } ; "hice estiramientos" → { type: "stretch" }
+
+── WORK ──
+- log_focus_session: { durationMin?: number, project?: string }
+  Ex: "90 min deep work on atelier" → { durationMin: 90, project: "atelier" }
+- create_task: { text: string (REQUIRED — the task itself), project?: string }
+  Ex: "need to write the PRD" → { text: "write the PRD" }
+- log_deadline: { text: string (REQUIRED), dueDate?: string (ISO yyyy-mm-dd preferred) }
+  Ex: "PRD due friday" → { text: "PRD", dueDate: "friday" }
+- log_meeting: { with?: string, durationMin?: number }
+  Ex: "30 min sync with boran" → { with: "boran", durationMin: 30 }
+- distraction_journal: { what: string (REQUIRED — what pulled them away) }
+  Ex: "got sucked into twitter again" → { what: "twitter" }
+
+── ADMIN ──
+- create_task: { text: string (REQUIRED) }
+  Ex: "need to renew library card" → { text: "renew library card" }
+- create_phone_task: { person: string (REQUIRED — who to call), reason?: string }
+  Ex: "call mom about christmas" → { person: "mom", reason: "christmas" } ; "anneyi ara" → { person: "mom" }
+- schedule_appointment: { what: string (REQUIRED), date?: string }
+  Ex: "dentist next tuesday" → { what: "dentist", date: "next tuesday" }
+- log_paperwork: { what: string (REQUIRED) }
+  Ex: "filed taxes" → { what: "taxes" }
+- recurring_decision: { what: string (REQUIRED) }
+  Ex: "keep netflix or cancel" → { what: "netflix subscription" }
+- log_renewal: { renewal_type: string (REQUIRED — "passport"/"license"/"lease"/"insurance"/etc.), due_date?: string }
+  Ex: "passport expires march" → { renewal_type: "passport", due_date: "march" }
+
+── PETS ──
+- log_care: { what: string (REQUIRED — what was done), petName?: string }
+  Ex: "brushed tontin" → { what: "brushed", petName: "tontin" } ; "pinpon'u banyo yaptım" → { what: "bath", petName: "pinpon" }
+- log_observation: { note: string (REQUIRED — what was noticed), petName?: string }
+  Ex: "tontin seems lethargic" → { note: "seems lethargic", petName: "tontin" }
+- log_vet: { reason?: string, petName?: string }
+  Ex: "vet for pinpon checkup" → { reason: "checkup", petName: "pinpon" }
+- log_feed: { petName?: string }
+  Ex: "fed tontin" → { petName: "tontin" }
+- log_supplement: { supplement: string (REQUIRED — "vitamin_c"/"vitamin_d"/"calcium"/etc.), dose?: string, petName?: string }
+  Ex: "gave tontin vitamin c" → { supplement: "vitamin_c", petName: "tontin" } ; "pinpon C vitamini" → { supplement: "vitamin_c", petName: "pinpon" }
+
+── CYCLE ──
+- log_period_start: { } — no fields
+- log_period_end: { } — no fields
+- log_symptom: { symptom: string (REQUIRED) }
+  Ex: "cramps bad today" → { symptom: "cramps" } ; "kramp girdim" → { symptom: "cramps" }
+- pill_logged: { } — no fields
+  Ex: "took my pill" → { }
+
+── FINANCE ──
+- log_transaction: { amount?: number, currency?: string, merchant?: string }
+  Ex: "spent $40 at sephora" → { amount: 40, currency: "USD", merchant: "sephora" }
+- add_bill: { merchant: string (REQUIRED), amount?: number, cadence?: "monthly"|"yearly"|"weekly" }
+  Ex: "rent is $1800/month" → { merchant: "rent", amount: 1800, cadence: "monthly" }
+- savings_note: { amount?: number, note?: string }
+  Ex: "moved 500 to savings" → { amount: 500 }
+- subscription_log: { name: string (REQUIRED) }
+  Ex: "renewed spotify" → { name: "spotify" }
+
+── SLEEP ──
+- log_sleep: { bedtime?: string, wake?: string, quality?: 1|2|3|4|5 }
+  Ex: "slept 11-7 well" → { bedtime: "23:00", wake: "07:00", quality: 4 } ; "8 saat uyudum iyi" → { quality: 4 } ; "got 5 hours" → { quality: 2 }
+  When the user gives only an hours count ("slept 8 hours"), prefer mapping to a quality estimate or omit numeric slots rather than inventing bedtime/wake.
+- wind_down_note: { note: string (REQUIRED) }
+  Ex: "read for 20 min before bed" → { note: "read for 20 min before bed" }
+- dream_log: { text: string (REQUIRED — the dream itself) }
+  Ex: "dreamt I was flying" → { text: "I was flying" }
+- log_insomnia: { duration_attempted_min?: number, woke_count?: number }
+  Ex: "couldn't sleep at all, lay there 2 hours" → { duration_attempted_min: 120 }
+
+── HABITS ──
+- complete: { habitName: string (REQUIRED — the habit done) }
+  Ex: "did my morning stretch" → { habitName: "morning stretch" } ; "meditation done" → { habitName: "meditation" }
+- streak_break_note: { habitName: string (REQUIRED), reason?: string }
+  Ex: "missed running today, too tired" → { habitName: "running", reason: "too tired" }
+- identity_statement: { text: string (REQUIRED — the affirmation/identity claim) }
+  Ex: "i am someone who writes daily" → { text: "i am someone who writes daily" }
+
+── GOALS ──
+- progress_note: { note: string (REQUIRED), goalName?: string }
+  Ex: "finished chapter 3 of the book" → { note: "finished chapter 3", goalName: "book" }
+- create_goal: { what: string (REQUIRED — the goal), why?: string }
+  Ex: "want to run a half marathon" → { what: "run a half marathon" }
+- milestone_hit: { milestone: string (REQUIRED), goalName?: string }
+  Ex: "hit 10k followers" → { milestone: "10k followers" }
+- obstacle_note: { obstacle: string (REQUIRED), goalName?: string }
+  Ex: "knee is acting up, blocking running" → { obstacle: "knee pain", goalName: "running" }
+
+── GROCERY ── (existing hints above already cover pricing/disambiguation)
+- pantry_add: { item: string (REQUIRED), quantity?: string, price?: number, currency?: string }
+- pantry_use: { item: string (REQUIRED) }
+- shopping_list_add: { item: string (REQUIRED) }
+- pantry_low_flag: { item: string (REQUIRED) }
+- meal_request: { query: string (REQUIRED — what they want to cook/eat) }
+  Ex: "what can I make with chicken and rice" → { query: "chicken and rice" }
+- recipe_cooked: { name: string (REQUIRED) }
+  Ex: "made pasta carbonara" → { name: "pasta carbonara" }
+
+── MEDICATION ──
+- log_dose: { medName: string (REQUIRED), dose?: string }
+  Ex: "took 50mg sertraline" → { medName: "sertraline", dose: "50mg" }
+- missed_dose: { medName: string (REQUIRED) }
+  Ex: "forgot my zoloft" → { medName: "zoloft" }
+- side_effect_note: { medName: string (REQUIRED), note: string (REQUIRED) }
+  Ex: "sertraline making me nauseous" → { medName: "sertraline", note: "nauseous" }
+
+── DUMP_ONLY ──
+- archive_only: { reason?: "no_module_match"|"low_confidence"|"user_only" }
+
+═══════════════════════════════════════════════════════════════════════
+
 Respond with a JSON object EXACTLY matching this shape (no extra keys, no prose):
 {
   "module": one of [${MODULES.join(', ')}],
