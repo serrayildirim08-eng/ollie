@@ -21,12 +21,17 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  daysSinceLast,
+  medianIntervalDays,
+  type CadenceEstimate,
+} from '@ollie/cadence';
 import { Stack, Row } from '../../layout';
 import { Text } from '../../ui';
 import { colors, fonts } from '../../theme/tokens';
 import { WhenCaption } from '../../lib/WhenCaption';
 import { migrateSleep } from './migrate';
-import { sleepRepo } from './repo';
+import { cadence as cadenceRepo, sleepRepo } from './repo';
 import type { SleepEvent } from './types';
 
 const SMCP_STYLE: React.CSSProperties = {
@@ -51,21 +56,24 @@ export function SleepBox(): JSX.Element {
   const [windDown, setWindDown] = useState<SleepEvent[]>([]);
   const [dreams, setDreams] = useState<SleepEvent[]>([]);
   const [insomnia, setInsomnia] = useState<SleepEvent[]>([]);
+  const [logCadence, setLogCadence] = useState<CadenceEstimate | null>(null);
   const [ready, setReady] = useState(false);
 
   const refresh = useCallback(async () => {
-    const [latestSleep, sleeps, winds, dreamRows, rough] = await Promise.all([
+    const [latestSleep, sleeps, winds, dreamRows, rough, cad] = await Promise.all([
       sleepRepo.latestSleep(),
       sleepRepo.listByKind('sleep', RECENT_SLEEP_LIMIT),
       sleepRepo.listByKind('wind_down', 20),
       sleepRepo.listByKind('dream', 20),
       sleepRepo.listByKind('insomnia', 20),
+      cadenceRepo.getSleepLogCadence(),
     ]);
     setLatest(latestSleep);
     setRecentSleep(sleeps);
     setWindDown(winds);
     setDreams(dreamRows);
     setInsomnia(rough);
+    setLogCadence(cad);
   }, []);
 
   useEffect(() => {
@@ -134,7 +142,7 @@ export function SleepBox(): JSX.Element {
       ) : (
         <Stack gap={56}>
           {/* HERO — the v2 sleep face's signature: one focus, big serif figure */}
-          <HeroSection latest={latest} weekBars={weekBars} />
+          <HeroSection latest={latest} weekBars={weekBars} logCadence={logCadence} />
 
           {/* recent week as a list — keeps the data behind the bars readable */}
           <ListSection
@@ -208,9 +216,11 @@ interface WeekBarDatum {
 function HeroSection({
   latest,
   weekBars,
+  logCadence,
 }: {
   latest: SleepEvent | null;
   weekBars: WeekBarDatum[];
+  logCadence: CadenceEstimate | null;
 }): JSX.Element {
   const sleepLatest = latest && latest.kind === 'sleep' ? latest : null;
   const totalMin =
@@ -228,9 +238,45 @@ function HeroSection({
         </Text>
         <Duration min={totalMin} />
         {sleepLatest && <SubLine event={sleepLatest} />}
+        <CadenceHint estimate={logCadence} />
       </Stack>
     </Stack>
   );
+}
+
+/**
+ * One muted line under the hero subline: "last logged 1 day ago · usually
+ * every 1 day". Silent at low-data — Serra's minimal UI prefers nothing
+ * to a misleading prediction.
+ */
+function CadenceHint({
+  estimate,
+}: {
+  estimate: CadenceEstimate | null;
+}): JSX.Element | null {
+  if (!estimate || estimate.confidence === 'low-data' || estimate.lastTs == null) {
+    return null;
+  }
+  const now = Date.now();
+  const since = daysSinceLast(estimate, now) ?? 0;
+  const every = medianIntervalDays(estimate);
+  const sinceLabel = formatDays(since);
+  const everyLabel = every >= 1 ? formatDays(every) : 'less than a day';
+  return (
+    <Text
+      scale="caption"
+      color={colors.inkFaint}
+      style={{ fontVariantCaps: 'all-small-caps', letterSpacing: '0.06em' }}
+    >
+      {`last logged ${sinceLabel} ago · usually every ${everyLabel}`}
+    </Text>
+  );
+}
+
+function formatDays(d: number): string {
+  if (d < 1) return 'less than a day';
+  const rounded = Math.round(d);
+  return `${rounded} day${rounded === 1 ? '' : 's'}`;
 }
 
 function Duration({ min }: { min: number | null }): JSX.Element {

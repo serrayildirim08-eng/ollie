@@ -27,12 +27,21 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  daysSinceLast,
+  medianIntervalDays,
+  type CadenceEstimate,
+} from '@ollie/cadence';
 import { Stack, Row } from '../../layout';
 import { Text } from '../../ui';
 import { colors, fonts, fontWeights } from '../../theme/tokens';
 import { WhenCaption } from '../../lib/WhenCaption';
 import { migrateGoals } from './migrate';
-import { goals as goalsRepo, events as eventsRepo } from './repo';
+import {
+  cadence as cadenceRepo,
+  events as eventsRepo,
+  goals as goalsRepo,
+} from './repo';
 import type { GoalEvent, GoalWithLatest } from './types';
 
 const SMCP_STYLE: React.CSSProperties = {
@@ -47,6 +56,9 @@ export function GoalsBox(): JSX.Element {
   const [milestones, setMilestones] = useState<GoalEvent[]>([]);
   const [obstacles, setObstacles] = useState<GoalEvent[]>([]);
   const [unassigned, setUnassigned] = useState<GoalEvent[]>([]);
+  const [progressCadence, setProgressCadence] = useState<Map<string, CadenceEstimate>>(
+    () => new Map(),
+  );
   const [ready, setReady] = useState(false);
   // which goal in the deck is in focus — the swipe index
   const [focus, setFocus] = useState(0);
@@ -62,6 +74,15 @@ export function GoalsBox(): JSX.Element {
     setMilestones(m);
     setObstacles(o);
     setUnassigned(u);
+
+    // Fan-out cadence reads — one per active goal. Keeps row render synchronous.
+    const pairs = await Promise.all(
+      g.map(
+        async (goal) =>
+          [goal.id, await cadenceRepo.getProgressCadenceFor(goal.id)] as const,
+      ),
+    );
+    setProgressCadence(new Map(pairs));
   }, []);
 
   useEffect(() => {
@@ -159,6 +180,7 @@ export function GoalsBox(): JSX.Element {
               <GoalRow
                 key={g.id}
                 goal={g}
+                cadence={progressCadence.get(g.id)}
                 onRemove={() => void handleRemoveGoal(g.id)}
               />
             )}
@@ -477,9 +499,11 @@ function ListSection<T>({
 
 function GoalRow({
   goal,
+  cadence,
   onRemove,
 }: {
   goal: GoalWithLatest;
+  cadence?: CadenceEstimate | undefined;
   onRemove: () => void;
 }): JSX.Element {
   // Prefer the latest progress timestamp (the freshest signal of activity)
@@ -513,10 +537,49 @@ function GoalRow({
           </span>
         ) : null}
         <WhenCaption ts={whenTs} />
+        {cadence && <CadenceHint estimate={cadence} subject={goal.name} />}
       </Stack>
       <RemoveButton onClick={onRemove} />
     </Row>
   );
+}
+
+/**
+ * Faint sub-line under a goal row: "last touched 3 days ago · usually
+ * every 5 days". Silent at low-data — Serra's minimal UI prefers nothing
+ * to a misleading prediction. Reads from progress events only — milestones
+ * and obstacles don't dilute the rhythm.
+ */
+function CadenceHint({
+  estimate,
+  subject: _subject,
+}: {
+  estimate: CadenceEstimate;
+  subject: string;
+}): JSX.Element | null {
+  if (estimate.confidence === 'low-data' || estimate.lastTs == null) {
+    return null;
+  }
+  const now = Date.now();
+  const since = daysSinceLast(estimate, now) ?? 0;
+  const every = medianIntervalDays(estimate);
+  const sinceLabel = formatDays(since);
+  const everyLabel = every >= 1 ? formatDays(every) : 'less than a day';
+  return (
+    <Text
+      scale="caption"
+      color={colors.inkFaint}
+      style={{ fontVariantCaps: 'all-small-caps', letterSpacing: '0.06em' }}
+    >
+      {`last touched ${sinceLabel} ago · usually every ${everyLabel}`}
+    </Text>
+  );
+}
+
+function formatDays(d: number): string {
+  if (d < 1) return 'less than a day';
+  const rounded = Math.round(d);
+  return `${rounded} day${rounded === 1 ? '' : 's'}`;
 }
 
 function EventRow({

@@ -13,6 +13,7 @@
  *   - All times are ms-since-epoch integers (SQLite INTEGER).
  */
 
+import { computeCadence, type CadenceEstimate } from '@ollie/cadence';
 import { sql } from '../../storage';
 import {
   normalisePetName,
@@ -201,3 +202,85 @@ function fallbackData(kind: PetEventKind): PetEventData {
       return { kind: 'supplement', supplement: '', dose: null };
   }
 }
+
+// ─── cadence ──────────────────────────────────────────────────────────────
+//
+// Pets events are append-only — every feed / supplement / vet log is a
+// fresh row keyed by `pet_name` + JSON `data`. The cadence signals we
+// surface in the UI:
+//
+//   - per-pet FEED rhythm  → "fed every 8 hours · usually every day"
+//   - per-pet SUPPLEMENT   → "vitamin c · last 1 day ago, usually daily"
+//
+// Care / observation / vet events vary too widely in shape to produce a
+// useful per-row cadence (one row carries a vet visit, the next a brush)
+// — we leave those silent.
+
+export const cadence = {
+  /**
+   * Feed cadence for one pet. Filters `pets_events` rows where
+   * `kind = 'feed'` and `pet_name` matches the normalised key.
+   *
+   * `petName` may be null (the user logged a feed without naming the pet);
+   * in that case we return cadence over every untagged feed row.
+   */
+  async getFeedCadenceFor(petName: string | null): Promise<CadenceEstimate> {
+    const key = normalisePetName(petName);
+    const rows = key
+      ? await sql.select<PetEventRow>(
+          `SELECT id, pet_name, kind, data, logged_at
+           FROM pets_events
+           WHERE kind = 'feed' AND pet_name = ?
+           ORDER BY logged_at ASC`,
+          [key],
+        )
+      : await sql.select<PetEventRow>(
+          `SELECT id, pet_name, kind, data, logged_at
+           FROM pets_events
+           WHERE kind = 'feed' AND pet_name IS NULL
+           ORDER BY logged_at ASC`,
+        );
+    return computeCadence(
+      rows.map((r) => ({ ts: r.logged_at, label: key ?? 'feed' })),
+    );
+  },
+
+  /**
+   * Supplement cadence for one (pet, supplement) pair. Filters by
+   * `kind = 'supplement'` + matching `pet_name` + matching JSON
+   * `data.supplement`. LIKE-scan over the JSON blob is fine here —
+   * pets generates small row volumes (a few logs per day).
+   */
+  async getSupplementCadenceFor(
+    petName: string | null,
+    supplement: string,
+  ): Promise<CadenceEstimate> {
+    const petKey = normalisePetName(petName);
+    const suppKey = normaliseSupplement(supplement);
+    if (!suppKey) return computeCadence([]);
+    const rows = petKey
+      ? await sql.select<PetEventRow>(
+          `SELECT id, pet_name, kind, data, logged_at
+           FROM pets_events
+           WHERE kind = 'supplement' AND pet_name = ?
+           ORDER BY logged_at ASC`,
+          [petKey],
+        )
+      : await sql.select<PetEventRow>(
+          `SELECT id, pet_name, kind, data, logged_at
+           FROM pets_events
+           WHERE kind = 'supplement' AND pet_name IS NULL
+           ORDER BY logged_at ASC`,
+        );
+    const series = rows
+      .map((r) => {
+        const parsed = safeParse(r.data);
+        if (parsed && parsed.kind === 'supplement' && parsed.supplement === suppKey) {
+          return { ts: r.logged_at, label: suppKey };
+        }
+        return null;
+      })
+      .filter((x): x is { ts: number; label: string } => x !== null);
+    return computeCadence(series);
+  },
+};

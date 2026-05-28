@@ -22,13 +22,19 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  daysSinceLast,
+  medianIntervalDays,
+  type CadenceEstimate,
+} from '@ollie/cadence';
 import { Stack, Row } from '../../layout';
 import { Text } from '../../ui';
 import { colors, fonts } from '../../theme/tokens';
 import { WhenCaption } from '../../lib/WhenCaption';
 import { migratePets } from './migrate';
-import { events as eventsRepo } from './repo';
+import { cadence as cadenceRepo, events as eventsRepo } from './repo';
 import {
+  normalisePetName,
   petNameLabel,
   supplementLabel,
   type PetEvent,
@@ -58,6 +64,15 @@ const PREFACE =
 export function PetsBox(): JSX.Element {
   const [allEvents, setAllEvents] = useState<PetEvent[]>([]);
   const [vitaminCAt, setVitaminCAt] = useState<number | null>(null);
+  // Two cadence maps keyed by the normalised pet name so each row can look
+  // up its own cadence without a per-render async fetch.
+  // For supplements, the key is "<petKey>::<supplementKey>".
+  const [feedCadence, setFeedCadence] = useState<Map<string, CadenceEstimate>>(
+    () => new Map(),
+  );
+  const [suppCadence, setSuppCadence] = useState<Map<string, CadenceEstimate>>(
+    () => new Map(),
+  );
   const [ready, setReady] = useState(false);
 
   const refresh = useCallback(async () => {
@@ -67,6 +82,38 @@ export function PetsBox(): JSX.Element {
     ]);
     setAllEvents(list);
     setVitaminCAt(lastVitC);
+
+    // Fan-out cadence reads in parallel — one per distinct (pet, feed) and
+    // one per distinct (pet, supplement) pair touched by the events list.
+    const feedKeys = new Set<string>();
+    const suppKeys = new Set<string>();
+    for (const e of list) {
+      const petKey = normalisePetName(e.petName) ?? '';
+      if (e.kind === 'feed') feedKeys.add(petKey);
+      if (e.kind === 'supplement' && e.data.kind === 'supplement') {
+        suppKeys.add(`${petKey}::${e.data.supplement}`);
+      }
+    }
+    const [feedPairs, suppPairs] = await Promise.all([
+      Promise.all(
+        Array.from(feedKeys).map(
+          async (k) =>
+            [k, await cadenceRepo.getFeedCadenceFor(k || null)] as const,
+        ),
+      ),
+      Promise.all(
+        Array.from(suppKeys).map(async (k) => {
+          const [petKey, supp] = k.split('::');
+          const cad = await cadenceRepo.getSupplementCadenceFor(
+            petKey || null,
+            supp ?? '',
+          );
+          return [k, cad] as const;
+        }),
+      ),
+    ]);
+    setFeedCadence(new Map(feedPairs));
+    setSuppCadence(new Map(suppPairs));
   }, []);
 
   useEffect(() => {
@@ -163,6 +210,8 @@ export function PetsBox(): JSX.Element {
                 primary={petNameLabel(e.petName)}
                 secondary="fed"
                 event={e}
+                cadence={feedCadence.get(normalisePetName(e.petName) ?? '')}
+                cadenceSubject={`${petNameLabel(e.petName)} fed`}
                 onRemove={() => void handleRemove(e.id)}
               />
             )}
@@ -205,15 +254,26 @@ export function PetsBox(): JSX.Element {
             label="supplements"
             empty="nothing logged — vitamin C matters for the pigs"
             items={supplements}
-            renderItem={(e) => (
-              <EventRow
-                key={e.id}
-                primary={petNameLabel(e.petName)}
-                secondary={supplementSummary(e)}
-                event={e}
-                onRemove={() => void handleRemove(e.id)}
-              />
-            )}
+            renderItem={(e) => {
+              const petKey = normalisePetName(e.petName) ?? '';
+              const suppKey =
+                e.data.kind === 'supplement' ? e.data.supplement : '';
+              return (
+                <EventRow
+                  key={e.id}
+                  primary={petNameLabel(e.petName)}
+                  secondary={supplementSummary(e)}
+                  event={e}
+                  cadence={suppCadence.get(`${petKey}::${suppKey}`)}
+                  cadenceSubject={
+                    e.data.kind === 'supplement'
+                      ? supplementLabel(e.data.supplement)
+                      : 'supplement'
+                  }
+                  onRemove={() => void handleRemove(e.id)}
+                />
+              );
+            }}
           />
         </Stack>
       )}
@@ -438,11 +498,15 @@ function EventRow({
   primary,
   secondary,
   event,
+  cadence,
+  cadenceSubject,
   onRemove,
 }: {
   primary: string;
   secondary: string;
   event: PetEvent;
+  cadence?: CadenceEstimate | undefined;
+  cadenceSubject?: string;
   onRemove: () => void;
 }): JSX.Element {
   return (
@@ -464,8 +528,48 @@ function EventRow({
         <RemoveButton onClick={onRemove} />
       </Row>
       <WhenCaption ts={event.loggedAt} />
+      {cadence && cadenceSubject && (
+        <CadenceHint estimate={cadence} subject={cadenceSubject} />
+      )}
     </Stack>
   );
+}
+
+/**
+ * Faint sub-line under a pets row: "last tontin fed 4 hours ago · usually
+ * every day". Silent at low-data confidence — Serra's minimal UI prefers
+ * nothing to a misleading prediction.
+ */
+function CadenceHint({
+  estimate,
+  subject,
+}: {
+  estimate: CadenceEstimate;
+  subject: string;
+}): JSX.Element | null {
+  if (estimate.confidence === 'low-data' || estimate.lastTs == null) {
+    return null;
+  }
+  const now = Date.now();
+  const since = daysSinceLast(estimate, now) ?? 0;
+  const every = medianIntervalDays(estimate);
+  const sinceLabel = formatDays(since);
+  const everyLabel = every >= 1 ? formatDays(every) : 'less than a day';
+  return (
+    <Text
+      scale="caption"
+      color={colors.inkFaint}
+      style={{ fontVariantCaps: 'all-small-caps', letterSpacing: '0.06em' }}
+    >
+      {`last ${subject} ${sinceLabel} ago · usually every ${everyLabel}`}
+    </Text>
+  );
+}
+
+function formatDays(d: number): string {
+  if (d < 1) return 'less than a day';
+  const rounded = Math.round(d);
+  return `${rounded} day${rounded === 1 ? '' : 's'}`;
 }
 
 function RemoveButton({ onClick }: { onClick: () => void }): JSX.Element {

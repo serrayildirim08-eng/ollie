@@ -15,6 +15,7 @@
  *     timestamp rather than piling identical rows.
  */
 
+import { computeCadence, type CadenceEstimate } from '@ollie/cadence';
 import { sql } from '../../storage';
 import type {
   FocusSessionData,
@@ -314,3 +315,37 @@ function numOrNull(v: unknown): number | null {
 function strOrNull(v: unknown): string | null {
   return typeof v === 'string' && v.length > 0 ? v : null;
 }
+
+// ─── cadence ──────────────────────────────────────────────────────────────
+//
+// Work tasks are open-row-deduped by normalised `text`; once a task is
+// toggled done, the next dump of the same text inserts a fresh row. So
+// the row stream for a recurring chore ("send invoice", "weekly check-in")
+// carries real cadence — gap = time between completions/dumps.
+//
+// We key by the same normalised `text` so the writer + the cadence
+// surface read consistently.
+
+export const cadence = {
+  /**
+   * Cadence for one recurring task by normalised text. Filters
+   * `work_tasks` rows where `text` matches.
+   *
+   * `text` may include surrounding whitespace; we apply `normaliseText` so
+   * "Send invoice " and "send invoice" collapse into the same series.
+   */
+  async getTaskCadenceFor(text: string): Promise<CadenceEstimate> {
+    const key = normaliseText(text);
+    if (!key) return computeCadence([]);
+    const rows = await sql.select<WorkTaskRow>(
+      `SELECT id, text, project, kind, due_date, done, created_at
+       FROM work_tasks
+       WHERE text = ?
+       ORDER BY created_at ASC`,
+      [key],
+    );
+    return computeCadence(
+      rows.map((r) => ({ ts: r.created_at, label: key })),
+    );
+  },
+};

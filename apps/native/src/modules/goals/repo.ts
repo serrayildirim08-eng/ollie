@@ -15,6 +15,7 @@
  *     the event still gets logged with `goal_id = NULL`.
  */
 
+import { computeCadence, type CadenceEstimate } from '@ollie/cadence';
 import { sql } from '../../storage';
 import {
   normaliseName,
@@ -208,3 +209,29 @@ function rowToEvent(r: EventRow): GoalEvent {
     loggedAt: r.logged_at,
   };
 }
+
+// ─── cadence ──────────────────────────────────────────────────────────────
+//
+// Goal progress events are append-only with `logged_at` timestamps and a
+// nullable `goal_id` foreign key. The useful cadence signal: "how often
+// am I touching this goal?" — keyed by `goal_id`, filtered to the
+// 'progress' kind so milestone / obstacle events don't dilute the rhythm.
+
+export const cadence = {
+  /**
+   * Cadence of progress events for one goal. Returns a 'low-data' estimate
+   * when fewer than 2 progress events exist for the goal.
+   */
+  async getProgressCadenceFor(goalId: string): Promise<CadenceEstimate> {
+    const rows = await sql.select<EventRow>(
+      `SELECT id, goal_id, kind, text, logged_at
+       FROM goals_events
+       WHERE goal_id = ? AND kind = 'progress'
+       ORDER BY logged_at ASC`,
+      [goalId],
+    );
+    return computeCadence(
+      rows.map((r) => ({ ts: r.logged_at, label: goalId })),
+    );
+  },
+};

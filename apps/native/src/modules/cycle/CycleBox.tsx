@@ -28,12 +28,17 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { CSSProperties } from 'react';
+import {
+  daysSinceLast,
+  medianIntervalDays,
+  type CadenceEstimate,
+} from '@ollie/cadence';
 import { Stack, Row } from '../../layout';
 import { Text } from '../../ui';
 import { colors, fonts } from '../../theme/tokens';
 import { WhenCaption } from '../../lib/WhenCaption';
 import { migrateCycle } from './migrate';
-import { cycleRepo } from './repo';
+import { cycleCadence, cycleRepo } from './repo';
 import type { CurrentCycle, CycleEvent } from './types';
 
 // ── visual constants ──────────────────────────────────────────────────────
@@ -76,19 +81,22 @@ export function CycleBox(): JSX.Element {
   const [symptoms, setSymptoms] = useState<CycleEvent[]>([]);
   const [pills, setPills] = useState<CycleEvent[]>([]);
   const [history, setHistory] = useState<CycleEvent[]>([]);
+  const [periodCadence, setPeriodCadence] = useState<CadenceEstimate | null>(null);
   const [ready, setReady] = useState(false);
 
   const refresh = useCallback(async () => {
-    const [cur, sym, pil, starts, ends] = await Promise.all([
+    const [cur, sym, pil, starts, ends, cad] = await Promise.all([
       cycleRepo.current(),
       cycleRepo.list('symptom', 10),
       cycleRepo.list('pill', 10),
       cycleRepo.list('period_start', 6),
       cycleRepo.list('period_end', 6),
+      cycleCadence.getPeriodCadence(),
     ]);
     setCurrent(cur);
     setSymptoms(sym);
     setPills(pil);
+    setPeriodCadence(cad);
     // Merge starts + ends, sort desc, keep top 6 — gives a chronological
     // view of "what landed lately on the period timeline".
     const merged = [...starts, ...ends]
@@ -192,6 +200,7 @@ export function CycleBox(): JSX.Element {
               showLutealArc={(current?.daysSinceStart ?? 0) >= BLEEDING_WINDOW_DAYS}
             />
             <NowLine current={current} />
+            <CadenceHint estimate={periodCadence} />
           </Stack>
 
           <ListSection
@@ -412,6 +421,42 @@ function CycleRing({
 }
 
 // ─── sections ─────────────────────────────────────────────────────────────
+
+/**
+ * Faint sub-line under the NowLine: "last period 26 days ago · usually
+ * every 28 days". Silent at low-data — Serra's minimal UI prefers nothing
+ * to a misleading prediction, and this is a sensitive surface where a
+ * wrong forecast is worse than silence.
+ */
+function CadenceHint({
+  estimate,
+}: {
+  estimate: CadenceEstimate | null;
+}): JSX.Element | null {
+  if (!estimate || estimate.confidence === 'low-data' || estimate.lastTs == null) {
+    return null;
+  }
+  const now = Date.now();
+  const since = daysSinceLast(estimate, now) ?? 0;
+  const every = medianIntervalDays(estimate);
+  const sinceLabel = formatDays(since);
+  const everyLabel = every >= 1 ? formatDays(every) : 'less than a day';
+  return (
+    <Text
+      scale="caption"
+      color={colors.inkFaint}
+      style={{ fontVariantCaps: 'all-small-caps', letterSpacing: '0.06em' }}
+    >
+      {`last period ${sinceLabel} ago · usually every ${everyLabel}`}
+    </Text>
+  );
+}
+
+function formatDays(d: number): string {
+  if (d < 1) return 'less than a day';
+  const rounded = Math.round(d);
+  return `${rounded} day${rounded === 1 ? '' : 's'}`;
+}
 
 function NowLine({ current }: { current: CurrentCycle | null }): JSX.Element {
   if (current === null) {

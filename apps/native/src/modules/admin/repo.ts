@@ -18,6 +18,7 @@
  *     without migrating the table.
  */
 
+import { computeCadence, type CadenceEstimate } from '@ollie/cadence';
 import { sql } from '../../storage';
 import type { AdminRenewal, AdminTask, AdminTaskData, AdminTaskKind } from './types';
 
@@ -162,3 +163,35 @@ function parseTaskData(raw: string | null, kind: AdminTaskKind): AdminTaskData {
     return { kind } as AdminTaskData;
   }
 }
+
+// ─── cadence ──────────────────────────────────────────────────────────────
+//
+// Admin renewals (passport / lease / insurance) are append-only with an
+// `added_at` timestamp. Cadence keyed by `renewal_type` reveals how often
+// the user logs the same renewal — usually annual+, so 'observed' is rare
+// but honest when it triggers.
+//
+// Admin TASKS aren't included here: their text is free-form ("call dentist"
+// / "scan tax docs") and the dedupe is by kind, not text — there's no
+// natural recurrence key to cadence on without false grouping.
+
+export const cadence = {
+  /**
+   * Cadence for one renewal type by string label ("passport", "lease").
+   * Case-sensitive — we match the value the writer stored verbatim.
+   */
+  async getRenewalCadenceFor(renewalType: string): Promise<CadenceEstimate> {
+    const key = renewalType.trim();
+    if (!key) return computeCadence([]);
+    const rows = await sql.select<RenewalRow>(
+      `SELECT id, renewal_type, due_date, added_at
+       FROM admin_renewals
+       WHERE renewal_type = ?
+       ORDER BY added_at ASC`,
+      [key],
+    );
+    return computeCadence(
+      rows.map((r) => ({ ts: r.added_at, label: key })),
+    );
+  },
+};
