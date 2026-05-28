@@ -21,7 +21,7 @@ async function getTauriStore() {
   try {
     const { load } = await import('@tauri-apps/plugin-store');
     // 'ollie.bin' is the on-disk store file inside the app data dir.
-    return await load('ollie.bin', { autoSave: true });
+    return await load('ollie.bin', { defaults: {}, autoSave: true });
   } catch {
     return null;
   }

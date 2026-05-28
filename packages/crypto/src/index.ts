@@ -218,7 +218,7 @@ export function bytesToBase64(bytes: Uint8Array): string {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const g: any = globalThis;
   if (typeof g.btoa === 'function') return g.btoa(bin);
-  return Buffer.from(bytes).toString('base64');
+  return g.Buffer.from(bytes).toString('base64');
 }
 
 export function base64ToBytes(b64: string): Uint8Array {
@@ -230,7 +230,7 @@ export function base64ToBytes(b64: string): Uint8Array {
     for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
     return out;
   }
-  return new Uint8Array(Buffer.from(b64, 'base64'));
+  return new Uint8Array(g.Buffer.from(b64, 'base64'));
 }
 
 // ──────────────────────────────────────────────────────────────────────────

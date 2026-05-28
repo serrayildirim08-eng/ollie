@@ -130,8 +130,8 @@ export const DEFAULT_CADENCE_COPY: Record<string, CadenceCopyTemplates> = {
     actionUrl: '/sleep',
     variants: [
       (l) => ({ title: `${l} — shorter than your usual` }),
-      (l) => ({ title: `noticed sleep dipped` }),
-      (l) => ({ title: `last night ran short of average` }),
+      (_l) => ({ title: `noticed sleep dipped` }),
+      (_l) => ({ title: `last night ran short of average` }),
     ],
   },
   pets: {
@@ -158,7 +158,7 @@ export const DEFAULT_CADENCE_COPY: Record<string, CadenceCopyTemplates> = {
     variants: [
       (l) => ({ title: `${l} has been quiet` }),
       (l) => ({ title: `no focus session on ${l} lately` }),
-      (l) => ({ title: `deep work usually happens by now` }),
+      (_l) => ({ title: `deep work usually happens by now` }),
     ],
   },
   goals: {
