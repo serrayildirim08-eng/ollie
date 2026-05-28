@@ -19,7 +19,7 @@ function makeFakeApi(handler: (method: string, url: string, body: unknown) => { 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     anthropic: { proxyUrl: null, route: vi.fn() as any },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    supabase: { url: null, anonKey: null, rest: { get: vi.fn() as any, upsert: vi.fn() as any, delete: vi.fn() as any }, auth: { signUp: vi.fn() as any, signInWithPassword: vi.fn() as any, refresh: vi.fn() as any, signOut: vi.fn() as any } },
+    supabase: { url: null, anonKey: null, rest: { get: vi.fn() as any, upsert: vi.fn() as any, delete: vi.fn() as any, rpc: vi.fn() as any }, auth: { signUp: vi.fn() as any, signInWithPassword: vi.fn() as any, refresh: vi.fn() as any, signOut: vi.fn() as any } },
   };
 }
 
@@ -132,7 +132,7 @@ describe('research-stream · capture', () => {
 describe('research-stream · flush', () => {
   it('POSTs queued events to endpoint then clears them', async () => {
     let received: unknown = null;
-    const api = makeFakeApi((m, _u, body) => {
+    const api = makeFakeApi((_m, _u, body) => {
       received = body;
       return { ok: true };
     });
@@ -167,6 +167,76 @@ describe('research-stream · flush', () => {
 
     await r.flush();
     expect(posted).toBe(0);
+  });
+});
+
+describe('research-stream · trackTable auth', () => {
+  it('sends Authorization: Bearer <jwt> on the /ingest-event POST', () => {
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({ url: String(input), init: init ?? {} });
+      return new Response('{}', { status: 200 });
+    }) as unknown as typeof fetch;
+    const api = makeFakeApi(() => ({ ok: true }));
+    const r = createResearchStream({
+      store,
+      api,
+      ingestUrl: 'https://ai-proxy.dev',
+      fetchImpl,
+      getJwt: () => 'jwt-abc',
+    });
+    r.grantConsent();
+    r.trackTable('retention_events', { user_hash: 'h', event_type: 'installed' });
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url).toBe('https://ai-proxy.dev/ingest-event');
+    const headers = calls[0].init.headers as Record<string, string>;
+    expect(headers.authorization).toBe('Bearer jwt-abc');
+  });
+
+  it('no-ops when getJwt is absent (no signed-in session)', () => {
+    const fetchImpl = vi.fn(async () => new Response('{}')) as unknown as typeof fetch;
+    const api = makeFakeApi(() => ({ ok: true }));
+    const r = createResearchStream({
+      store,
+      api,
+      ingestUrl: 'https://ai-proxy.dev',
+      fetchImpl,
+      // getJwt deliberately omitted
+    });
+    r.grantConsent();
+    r.trackTable('retention_events', { user_hash: 'h' });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('no-ops when getJwt returns null', () => {
+    const fetchImpl = vi.fn(async () => new Response('{}')) as unknown as typeof fetch;
+    const api = makeFakeApi(() => ({ ok: true }));
+    const r = createResearchStream({
+      store,
+      api,
+      ingestUrl: 'https://ai-proxy.dev',
+      fetchImpl,
+      getJwt: () => null,
+    });
+    r.grantConsent();
+    r.trackTable('retention_events', { user_hash: 'h' });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('no-ops when consent is off even with a JWT', () => {
+    const fetchImpl = vi.fn(async () => new Response('{}')) as unknown as typeof fetch;
+    const api = makeFakeApi(() => ({ ok: true }));
+    const r = createResearchStream({
+      store,
+      api,
+      ingestUrl: 'https://ai-proxy.dev',
+      fetchImpl,
+      getJwt: () => 'jwt-abc',
+    });
+    // no grantConsent()
+    r.trackTable('retention_events', { user_hash: 'h' });
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 });
 
