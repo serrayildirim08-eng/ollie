@@ -14,13 +14,12 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@ollie/api": "workspace:*",
     "@ollie/crypto": "workspace:*",
     "@ollie/events": "workspace:*",
     "@ollie/store": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.6.0",
-    "vitest": "^2.1.5"
+    "vitest": "^2.1.9"
   }
 }
