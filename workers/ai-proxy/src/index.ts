@@ -40,6 +40,7 @@ import {
   type InvitesEnv,
 } from './invites';
 import { handleRoute, type RouteEnv } from './router/route';
+import { handleDumpRoute, type DumpRouteEnv } from './router/dump';
 
 /**
  * Cloudflare native Rate Limiting binding. `limit()` is atomic edge-side,
@@ -49,7 +50,7 @@ export interface RateLimiter {
   limit(opts: { key: string }): Promise<{ success: boolean }>;
 }
 
-export interface Env extends EnrichEnv, IngestEnv, LabelEnv, InvitesEnv, RouteEnv {
+export interface Env extends EnrichEnv, IngestEnv, LabelEnv, InvitesEnv, RouteEnv, DumpRouteEnv {
   ANTHROPIC_API_KEY: string;
   CACHE_KV: KVNamespace;
   RATE_KV: KVNamespace;
@@ -68,6 +69,27 @@ const RATE_WINDOW_SEC = 60;
 
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
+    // ── CORS ─────────────────────────────────────────────────────────────────
+    // The native (Tauri) app + future web preview hit this worker cross-origin.
+    // Authorization header forces a preflight, so OPTIONS must return the full
+    // CORS headers OR the browser blocks the actual request as a network error.
+    // We respond `*` for origin because we never carry cookies — only the
+    // Bearer JWT — and clients use the default credentials: 'omit'.
+    if (req.method === 'OPTIONS') {
+      return new Response(null, {
+        status: 204,
+        headers: corsHeaders(),
+      });
+    }
+
+    // Run the actual dispatch + wrap whatever Response it returns with
+    // CORS headers. Inner function keeps the existing returns untouched.
+    const res = await handleRequest(req, env);
+    return withCors(res);
+  },
+};
+
+async function handleRequest(req: Request, env: Env): Promise<Response> {
     const url = new URL(req.url);
 
     if (req.method !== 'POST') {
@@ -94,6 +116,15 @@ export default {
     }
     if (url.pathname === '/claim-invite') {
       return handleClaimInvite(req, env);
+    }
+
+    // ── /route/dump — brain-dump universal router (Decision-locked v2) ───────
+    // Pipeline: pass-1 + pass-2 segmentation, per-fragment Voyage embed,
+    // Vectorize cache lookup, Gemini Flash classify (response_schema),
+    // parallel crisis check (all 3 lexicons), 3-tier confidence policy.
+    // Auth: Clerk JWT REQUIRED (not gated). User namespaces the cache.
+    if (url.pathname === '/route/dump') {
+      return handleDumpRoute(req, env);
     }
 
     // ── /route/:module — module-agnostic AI semantic routing (T2) ────────────
@@ -167,8 +198,30 @@ export default {
         'x-ollie-cache': 'miss',
       },
     });
-  },
-};
+}
+
+// ─── CORS helpers ──────────────────────────────────────────────────────────────
+
+function corsHeaders(): Record<string, string> {
+  return {
+    'access-control-allow-origin': '*',
+    'access-control-allow-methods': 'POST, OPTIONS',
+    'access-control-allow-headers': 'authorization, content-type, x-user-id, anthropic-beta',
+    'access-control-max-age': '86400',
+  };
+}
+
+function withCors(res: Response): Response {
+  const headers = new Headers(res.headers);
+  for (const [k, v] of Object.entries(corsHeaders())) {
+    headers.set(k, v);
+  }
+  return new Response(res.body, {
+    status: res.status,
+    statusText: res.statusText,
+    headers,
+  });
+}
 
 // ─── helpers ───────────────────────────────────────────────────────────────────
 

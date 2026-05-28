@@ -1,0 +1,26 @@
+{
+  "passRate": 100,
+  "results": [
+    {
+      "id": "T01_pasta_bug",
+      "input": "I need to buy pasta",
+      "pass": true,
+      "reasons": [],
+      "fragments": [
+        {
+          "text": "I need to buy pasta",
+          "language": "en",
+          "module": "grocery",
+          "payload": {
+            "module": "grocery",
+            "action": "shopping_list_add"
+          },
+          "confidence": 0.9,
+          "needsConfirm": false,
+          "source": "ai"
+        }
+      ],
+      "ms": 2754
+    }
+  ]
+}
