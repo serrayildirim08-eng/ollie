@@ -4,7 +4,7 @@
 
 export { habitsHandler } from './handler';
 export { migrateHabits } from './migrate';
-export { registry, completions, events, listHabitRows, computeStreak } from './repo';
+export { registry, completions, events, cadence, listHabitRows, computeStreak } from './repo';
 export { HabitsBox } from './HabitsBox';
 export type {
   Habit,

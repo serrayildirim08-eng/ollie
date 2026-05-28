@@ -41,11 +41,21 @@
  */
 
 import { useCallback, useEffect, useState, type CSSProperties } from 'react';
+import {
+  daysSinceLast,
+  isOverdue,
+  medianIntervalDays,
+  type CadenceEstimate,
+} from '@ollie/cadence';
 import { Stack, Row } from '../../layout';
 import { Text } from '../../ui';
 import { colors } from '../../theme/tokens';
 import { migrateGrocery } from './migrate';
-import { pantry as pantryRepo, shopping as shoppingRepo } from './repo';
+import {
+  cadence as cadenceRepo,
+  pantry as pantryRepo,
+  shopping as shoppingRepo,
+} from './repo';
 import type { PantryItem, ShoppingItem } from './types';
 
 // ─── style atoms ──────────────────────────────────────────────────────────
@@ -64,13 +74,24 @@ type Mode = 'shop' | 'pantry';
 export function GroceryBox(): JSX.Element {
   const [pantryItems, setPantryItems] = useState<PantryItem[]>([]);
   const [shoppingItems, setShoppingItems] = useState<ShoppingItem[]>([]);
+  const [cadenceByName, setCadenceByName] = useState<Map<string, CadenceEstimate>>(
+    () => new Map(),
+  );
   const [ready, setReady] = useState(false);
-  const [mode, setMode] = useState<Mode>('shop');
+  // Pantry is the default — it's the surface you live in most of the time.
+  // Shop mode is for the few minutes you're actually adding to the list.
+  const [mode, setMode] = useState<Mode>('pantry');
 
   const refresh = useCallback(async () => {
     const [p, s] = await Promise.all([pantryRepo.list(), shoppingRepo.list()]);
     setPantryItems(p);
     setShoppingItems(s);
+    // Fan-out cadence reads in parallel — one per pantry name. Keeps the
+    // pantry view a single state cycle (no per-row async in render).
+    const pairs = await Promise.all(
+      p.map(async (it) => [it.name, await cadenceRepo.getCadenceFor(it.name)] as const),
+    );
+    setCadenceByName(new Map(pairs));
   }, []);
 
   useEffect(() => {
@@ -109,20 +130,23 @@ export function GroceryBox(): JSX.Element {
     [refresh],
   );
 
+  // Checking a shopping row off means the user just bought it — move it
+  // from the shopping list into the pantry rather than just deleting.
   const handleCheckOffShopping = useCallback(
     async (id: string) => {
+      const target = shoppingItems.find((it) => it.id === id);
+      if (target) {
+        await pantryRepo.add({
+          name: target.name,
+          quantity: target.quantity,
+          unit: target.unit,
+        });
+      }
       await shoppingRepo.remove(id);
       await refresh();
     },
-    [refresh],
+    [refresh, shoppingItems],
   );
-
-  // Dev-mode test write — proves the storage path works without depending
-  // on the Gemini classifier. Hidden in production builds.
-  const handleDevInsert = useCallback(async () => {
-    await pantryRepo.add({ name: 'milk', quantity: 1, unit: 'liter' });
-    await refresh();
-  }, [refresh]);
 
   const openCount = shoppingItems.length;
   const pantryCount = pantryItems.length;
@@ -138,27 +162,6 @@ export function GroceryBox(): JSX.Element {
         <Text scale="body" color={colors.inkSoft} style={{ maxWidth: 460 }}>
           a list you talk to, a pantry that watches what you have.
         </Text>
-        {import.meta.env.DEV && (
-          <button
-            type="button"
-            onClick={() => void handleDevInsert()}
-            style={{
-              alignSelf: 'flex-start',
-              background: 'none',
-              border: `1px solid ${colors.hairline}`,
-              padding: '6px 12px',
-              color: colors.inkFaint,
-              cursor: 'pointer',
-              fontVariantCaps: 'all-small-caps',
-              letterSpacing: '0.08em',
-              fontSize: 11,
-              borderRadius: 0,
-              marginTop: 4,
-            }}
-          >
-            dev: insert test milk
-          </button>
-        )}
       </Stack>
 
       {/* the near-zero-chrome mode switch — three calm text segments,
@@ -179,6 +182,7 @@ export function GroceryBox(): JSX.Element {
         <PantryList
           items={pantryItems}
           totalCount={pantryCount}
+          cadenceByName={cadenceByName}
           onRemove={(id) => void handleRemovePantry(id)}
         />
       )}
@@ -320,10 +324,12 @@ function ShopList({
 function PantryList({
   items,
   totalCount,
+  cadenceByName,
   onRemove,
 }: {
   items: PantryItem[];
   totalCount: number;
+  cadenceByName: Map<string, CadenceEstimate>;
   onRemove: (id: string) => void;
 }): JSX.Element {
   if (items.length === 0) return <ColdPantry />;
@@ -387,6 +393,7 @@ function PantryList({
                   {qtyLabel(item.quantity, item.unit)}
                 </span>
               )}
+              <CadenceHint estimate={cadenceByName.get(item.name)} />
             </Stack>
             <RemoveButton onClick={() => onRemove(item.id)} />
           </Row>
@@ -584,6 +591,58 @@ function RemoveButton({ onClick }: { onClick: () => void }): JSX.Element {
 }
 
 // ─── helpers ──────────────────────────────────────────────────────────────
+
+/**
+ * One-line cadence prediction under a pantry row.
+ *
+ * Renders nothing when we don't yet have enough data ('low-data') — silence
+ * beats a wrong prediction on Serra's minimal UI. When we do have an
+ * estimate, the line reads one of three ways:
+ *   · "out soon · usually every 7 days"             — past nextExpectedTs
+ *   · "next around 7 days · usually weekly"         — upcoming
+ *   · also marks rare/stable patterns with a faint sage dot
+ */
+function CadenceHint({ estimate }: { estimate: CadenceEstimate | undefined }): JSX.Element | null {
+  if (!estimate || estimate.confidence === 'low-data' || estimate.lastTs == null) {
+    return null;
+  }
+  const now = Date.now();
+  const overdue = isOverdue(estimate, now);
+  const sinceDays = daysSinceLast(estimate, now) ?? 0;
+  const everyDays = medianIntervalDays(estimate);
+  const everyLabel = everyDays >= 1 ? `every ${formatDays(everyDays)}` : 'multiple times a day';
+
+  const text =
+    overdue === true
+      ? `might need ${pluralDays(Math.round(sinceDays - everyDays))} ago · usually ${everyLabel}`
+      : `last bought ${formatDays(sinceDays)} ago · usually ${everyLabel}`;
+
+  return (
+    <span
+      style={{
+        fontSize: 11,
+        color: overdue ? colors.amber : colors.inkFaint,
+        fontWeight: 500,
+        letterSpacing: '0.02em',
+        fontVariantCaps: 'all-small-caps',
+        marginTop: 2,
+      }}
+    >
+      {text}
+    </span>
+  );
+}
+
+function formatDays(d: number): string {
+  if (d < 1) return 'less than a day';
+  const rounded = Math.round(d);
+  return `${rounded} day${rounded === 1 ? '' : 's'}`;
+}
+
+function pluralDays(d: number): string {
+  if (d <= 0) return 'today';
+  return `${d} day${d === 1 ? '' : 's'}`;
+}
 
 function qtyLabel(quantity: number | null, unit: string | null): string {
   if (quantity == null && !unit) return '';

@@ -105,6 +105,7 @@ Each action below lists the EXACT keys to put inside \`payload\`. Required keys 
   Ex: "passport expires march" → { renewal_type: "passport", due_date: "march" }
 
 ── PETS ──
+NOTE on petName: ALWAYS the proper noun / actual pet name (Tontin, Olivia, Pinpon, Buddy). NEVER the species (cat/dog/guineapig/bunny). When the user says "i fed my guineapig tontin" the petName is "tontin", NOT "guineapig". Omit petName when only a species is mentioned ("fed the cat" → no petName).
 - log_care: { what: string (REQUIRED — what was done), petName?: string }
   Ex: "brushed tontin" → { what: "brushed", petName: "tontin" } ; "pinpon'u banyo yaptım" → { what: "bath", petName: "pinpon" }
 - log_observation: { note: string (REQUIRED — what was noticed), petName?: string }
@@ -112,7 +113,8 @@ Each action below lists the EXACT keys to put inside \`payload\`. Required keys 
 - log_vet: { reason?: string, petName?: string }
   Ex: "vet for pinpon checkup" → { reason: "checkup", petName: "pinpon" }
 - log_feed: { petName?: string }
-  Ex: "fed tontin" → { petName: "tontin" }
+  Ex: "fed tontin" → { petName: "tontin" } ; "i fed my guineapig tontin" → { petName: "tontin" } ; "fed the cat" → { } (no proper name given)
+  petName MUST be the proper noun / actual name (Tontin, Olivia, Buddy). NEVER use the species (cat/dog/guineapig/bunny) as petName. Omit petName when only a species is mentioned.
 - log_supplement: { supplement: string (REQUIRED — "vitamin_c"/"vitamin_d"/"calcium"/etc.), dose?: string, petName?: string }
   Ex: "gave tontin vitamin c" → { supplement: "vitamin_c", petName: "tontin" } ; "pinpon C vitamini" → { supplement: "vitamin_c", petName: "pinpon" }
 
@@ -135,9 +137,9 @@ Each action below lists the EXACT keys to put inside \`payload\`. Required keys 
   Ex: "renewed spotify" → { name: "spotify" }
 
 ── SLEEP ──
-- log_sleep: { bedtime?: string, wake?: string, quality?: 1|2|3|4|5 }
-  Ex: "slept 11-7 well" → { bedtime: "23:00", wake: "07:00", quality: 4 } ; "8 saat uyudum iyi" → { quality: 4 } ; "got 5 hours" → { quality: 2 }
-  When the user gives only an hours count ("slept 8 hours"), prefer mapping to a quality estimate or omit numeric slots rather than inventing bedtime/wake.
+- log_sleep: { bedtime?: string, wake?: string, quality?: 1|2|3|4|5, hours?: number }
+  Ex: "slept 11-7 well" → { bedtime: "23:00", wake: "07:00", quality: 4 } ; "8 saat uyudum iyi" → { hours: 8, quality: 4 } ; "slept 7 hours" → { hours: 7 } ; "got 5 hours" → { hours: 5 }
+  Always emit \`hours\` (number) when the user states a duration. Omit bedtime/wake unless the user gave explicit times. Quality only when the user expressed sleep quality ("well", "iyi", "badly").
 - wind_down_note: { note: string (REQUIRED) }
   Ex: "read for 20 min before bed" → { note: "read for 20 min before bed" }
 - dream_log: { text: string (REQUIRED — the dream itself) }

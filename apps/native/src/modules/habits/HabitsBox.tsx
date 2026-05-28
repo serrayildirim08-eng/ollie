@@ -27,11 +27,16 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  daysSinceLast,
+  medianIntervalDays,
+  type CadenceEstimate,
+} from '@ollie/cadence';
 import { Stack, Row } from '../../layout';
 import { Text } from '../../ui';
 import { colors, fonts } from '../../theme/tokens';
 import { migrateHabits } from './migrate';
-import { registry, completions, events, listHabitRows } from './repo';
+import { registry, completions, events, cadence as cadenceRepo, listHabitRows } from './repo';
 import type { HabitEvent, HabitRow, IdentityData, StreakBreakData } from './types';
 
 const SMCP_STYLE: React.CSSProperties = {
@@ -54,6 +59,9 @@ export function HabitsBox(): JSX.Element {
   const [rows, setRows] = useState<HabitRow[]>([]);
   const [identityEvents, setIdentityEvents] = useState<HabitEvent[]>([]);
   const [breakEvents, setBreakEvents] = useState<HabitEvent[]>([]);
+  const [cadenceById, setCadenceById] = useState<Map<string, CadenceEstimate>>(
+    () => new Map(),
+  );
   const [ready, setReady] = useState(false);
 
   const refresh = useCallback(async () => {
@@ -65,6 +73,14 @@ export function HabitsBox(): JSX.Element {
     setRows(r);
     setIdentityEvents(ident);
     setBreakEvents(brks);
+    // One cadence per registered habit. Fan out in parallel.
+    const pairs = await Promise.all(
+      r.map(
+        async (row) =>
+          [row.habit.id, await cadenceRepo.getCompletionCadenceForId(row.habit.id)] as const,
+      ),
+    );
+    setCadenceById(new Map(pairs));
   }, []);
 
   useEffect(() => {
@@ -186,6 +202,7 @@ export function HabitsBox(): JSX.Element {
                   <HabitRowView
                     key={r.habit.id}
                     row={r}
+                    cadence={cadenceById.get(r.habit.id)}
                     onMarkDone={() => void handleMarkDone(r.habit.name)}
                     onRemove={() => void handleRemoveHabit(r.habit.id)}
                   />
@@ -661,27 +678,71 @@ function Section({
 
 function HabitRowView({
   row,
+  cadence,
   onMarkDone,
   onRemove,
 }: {
   row: HabitRow;
+  cadence: CadenceEstimate | undefined;
   onMarkDone: () => void;
   onRemove: () => void;
 }): JSX.Element {
   return (
-    <Row gap={12} align="baseline" justify="space-between">
-      <Row gap={8} align="baseline">
-        <Text scale="body">{row.habit.name}</Text>
-        <Text as="span" scale="caption" color={colors.inkFaint}>
-          {row.streak > 0 ? `· ${row.streak} day${row.streak === 1 ? '' : 's'}` : '· —'}
-        </Text>
+    <Stack gap={2}>
+      <Row gap={12} align="baseline" justify="space-between">
+        <Row gap={8} align="baseline">
+          <Text scale="body">{row.habit.name}</Text>
+          <Text as="span" scale="caption" color={colors.inkFaint}>
+            {row.streak > 0 ? `· ${row.streak} day${row.streak === 1 ? '' : 's'}` : '· —'}
+          </Text>
+        </Row>
+        <Row gap={4} align="baseline">
+          {!row.completedToday && <SmallButton label="mark done" onClick={onMarkDone} />}
+          <SmallButton label="remove" onClick={onRemove} />
+        </Row>
       </Row>
-      <Row gap={4} align="baseline">
-        {!row.completedToday && <SmallButton label="mark done" onClick={onMarkDone} />}
-        <SmallButton label="remove" onClick={onRemove} />
-      </Row>
-    </Row>
+      <CadenceHint estimate={cadence} subject={row.habit.name} />
+    </Stack>
   );
+}
+
+/**
+ * One muted line under a habit row: "last 4 days ago · usually every 3
+ * days". Silent at low-data confidence — we don't predict on 0 or 1
+ * completion. Matches the BodyBox cadence-hint grammar.
+ */
+function CadenceHint({
+  estimate,
+  subject: _subject,
+}: {
+  estimate: CadenceEstimate | undefined;
+  subject: string;
+}): JSX.Element | null {
+  if (!estimate || estimate.confidence === 'low-data' || estimate.lastTs == null) {
+    return null;
+  }
+  const now = Date.now();
+  const since = daysSinceLast(estimate, now) ?? 0;
+  const every = medianIntervalDays(estimate);
+  return (
+    <Text
+      scale="caption"
+      color={colors.inkFaint}
+      style={{
+        fontVariantCaps: 'all-small-caps',
+        letterSpacing: '0.06em',
+        marginLeft: 0,
+      }}
+    >
+      {`last ${formatDays(since)} ago · usually every ${formatDays(every)}`}
+    </Text>
+  );
+}
+
+function formatDays(d: number): string {
+  if (d < 1) return 'less than a day';
+  const rounded = Math.round(d);
+  return `${rounded} day${rounded === 1 ? '' : 's'}`;
 }
 
 function EventRow({

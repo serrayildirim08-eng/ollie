@@ -188,7 +188,7 @@ export type FinanceAction =
 // ── SLEEP ────────────────────────────────────────────────────────────
 
 export type SleepAction =
-  | { module: 'sleep'; action: 'log_sleep'; bedtime?: string; wake?: string; quality?: 1 | 2 | 3 | 4 | 5 }
+  | { module: 'sleep'; action: 'log_sleep'; bedtime?: string; wake?: string; quality?: 1 | 2 | 3 | 4 | 5; hours?: number }
   | { module: 'sleep'; action: 'wind_down_note'; note: string }
   | { module: 'sleep'; action: 'dream_log'; text: string }
   /**

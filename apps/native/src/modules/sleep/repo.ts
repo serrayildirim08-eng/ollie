@@ -51,15 +51,17 @@ export const sleepRepo = {
     bedtime?: string | null;
     wake?: string | null;
     quality?: 1 | 2 | 3 | 4 | 5 | null;
+    hours?: number | null;
     occurredAt?: number;
   }): Promise<SleepEvent> {
     const id = newId();
     const occurredAt = input.occurredAt ?? Date.now();
+    const computedHours = hoursBetween(input.bedtime ?? null, input.wake ?? null);
     const data: SleepLogData = {
       bedtime: input.bedtime ?? null,
       wake: input.wake ?? null,
       quality: input.quality ?? null,
-      hoursSlept: hoursBetween(input.bedtime ?? null, input.wake ?? null),
+      hoursSlept: computedHours ?? input.hours ?? null,
     };
     await insertRow(id, 'sleep', data, occurredAt);
     return { id, kind: 'sleep', occurredAt, data };
