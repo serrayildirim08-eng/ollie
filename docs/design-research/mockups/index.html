@@ -1,0 +1,2741 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=1480" />
+<title>Ollie — UI mockup (v1)</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet" />
+<style>
+  /* -- tokens -- */
+  :root {
+    --bg-page:        #ECEAE4;     /* warm bone backdrop so device frames pop */
+    --bg-page-2:      #E3E0D8;
+    --bg-surface:     #FAFAF7;     /* card / app background */
+    --bg-elev:        #FFFFFF;
+    --bg-tint:        #F2F1ED;     /* row hover / muted block */
+    --bg-tint-2:      #ECEBE6;
+    --ink:            #1B1B1A;     /* primary text */
+    --ink-soft:       #4B4B48;     /* secondary text */
+    --ink-mute:       #8A8A85;     /* hint, captions */
+    --ink-faint:      #B8B7B1;     /* placeholders, dashed bars */
+    --hairline:       #DCDAD2;     /* 1px dividers */
+    --hairline-2:     #E7E5DD;
+    --sage:           #7C9E87;     /* accent — primary */
+    --sage-soft:      #C8D6CC;
+    --sage-tint:      #E8EFE9;
+    --pastel-blue:    #A6B6C8;     /* accent — secondary, reserved */
+    --pastel-blue-tint:#E3E9EF;
+    --amber:          #B8894B;     /* warning ink (not red) */
+    --amber-tint:     #F0E5D2;
+    --crisis-bg:      #F4E8DC;     /* warm crisis banner */
+    --crisis-ink:     #6A3F1C;
+    --shadow-card:    0 1px 2px rgba(20,20,18,.04), 0 8px 24px rgba(20,20,18,.06);
+    --shadow-device:  0 1px 1px rgba(20,20,18,.06), 0 24px 60px rgba(20,20,18,.16), 0 4px 12px rgba(20,20,18,.08);
+    --r-card:         14px;
+    --r-row:          10px;
+    --r-button:       10px;
+    --font-ui:        -apple-system, BlinkMacSystemFont, "Helvetica Neue", "SF Pro Text", "San Francisco", Arial, sans-serif;
+    --font-display:   -apple-system, BlinkMacSystemFont, "Helvetica Neue", "SF Pro Display", Arial, sans-serif;
+    --font-serif:     "Source Serif 4", "Iowan Old Style", Georgia, serif;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: var(--font-ui);
+    color: var(--ink);
+    background:
+      radial-gradient(1200px 600px at 20% 0%, #F2EFE7 0%, transparent 60%),
+      radial-gradient(900px 700px at 90% 30%, #E8E5DC 0%, transparent 60%),
+      var(--bg-page);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    line-height: 1.45;
+    font-size: 14px;
+  }
+
+  /* -- page chrome -- */
+  .page-header {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 40px 32px 24px;
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+    border-bottom: 1px solid var(--hairline);
+  }
+  .page-header h1 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 22px;
+    letter-spacing: -0.01em;
+    margin: 0;
+  }
+  .page-header .note {
+    color: var(--ink-mute);
+    font-size: 13px;
+  }
+  .toc {
+    max-width: 1400px;
+    margin: 16px auto 8px;
+    padding: 0 32px;
+    color: var(--ink-mute);
+    font-size: 12px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+  }
+  .toc a {
+    color: var(--ink-soft);
+    text-decoration: none;
+    border-bottom: 1px dashed var(--hairline);
+  }
+
+  /* -- screen group (one row per screen) -- */
+  .screen-group {
+    max-width: 1400px;
+    margin: 56px auto;
+    padding: 0 32px;
+  }
+  .screen-caption {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--ink-mute);
+    margin-bottom: 18px;
+  }
+  .screen-caption strong {
+    color: var(--ink);
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: none;
+    font-size: 14px;
+    margin-right: 10px;
+  }
+  .pair {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 420px;
+    gap: 36px;
+    align-items: start;
+  }
+  /* sub-row for empty state variant under populated */
+  .stack { display: flex; flex-direction: column; gap: 28px; }
+  .sub-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--ink-mute);
+    margin-bottom: 8px;
+  }
+
+  /* ============================================================
+     DESKTOP FRAME — fake browser chrome
+     ============================================================ */
+  .desktop {
+    background: var(--bg-elev);
+    border-radius: 14px;
+    box-shadow: var(--shadow-device);
+    overflow: hidden;
+    border: 1px solid var(--hairline);
+  }
+  .desktop .titlebar {
+    background: linear-gradient(180deg, #F1EFE9, #E7E5DD);
+    border-bottom: 1px solid var(--hairline);
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .traffic { display: flex; gap: 8px; }
+  .traffic span {
+    width: 12px; height: 12px; border-radius: 50%;
+    background: var(--ink-faint);
+  }
+  .traffic span.red    { background: #E97A6F; }
+  .traffic span.yellow { background: #E2B85B; }
+  .traffic span.green  { background: #8FB97A; }
+  .desktop .addressbar {
+    flex: 1;
+    margin: 0 12px;
+    height: 26px;
+    background: var(--bg-surface);
+    border: 1px solid var(--hairline);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    padding: 0 10px;
+    font-size: 12px;
+    color: var(--ink-mute);
+    gap: 8px;
+  }
+  .desktop .addressbar i { font-size: 10px; color: var(--ink-mute); }
+  .desktop .browser-actions { color: var(--ink-mute); display:flex; gap:14px; font-size: 13px; }
+
+  .desktop .viewport {
+    height: 760px;
+    background: var(--bg-surface);
+    display: grid;
+    grid-template-rows: auto 1fr;
+    overflow: hidden;
+  }
+
+  /* desktop top nav (Home / Modules / Settings) */
+  .topnav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 28px;
+    border-bottom: 1px solid var(--hairline);
+    background: var(--bg-elev);
+  }
+  .topnav .brand {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 15px;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .topnav .brand .dot {
+    width: 10px; height: 10px; border-radius: 50%; background: var(--sage);
+    display: inline-block;
+  }
+  .topnav nav {
+    display: flex;
+    gap: 8px;
+  }
+  .topnav .navlink {
+    color: var(--ink-soft);
+    text-decoration: none;
+    padding: 8px 14px;
+    border-radius: var(--r-button);
+    font-size: 14px;
+    min-height: 44px;
+    display: inline-flex; align-items: center;
+    position: relative;
+  }
+  .topnav .navlink.active {
+    color: var(--ink);
+    background: var(--bg-tint);
+  }
+  .topnav .navlink.active::after {
+    content: ""; position: absolute; left: 14px; right: 14px; bottom: 4px;
+    height: 1.5px; background: var(--sage);
+  }
+  .topnav .user {
+    width: 32px; height: 32px; border-radius: 50%;
+    background: var(--bg-tint-2);
+    display:inline-flex; align-items:center; justify-content:center;
+    color: var(--ink-soft); font-size: 13px;
+  }
+
+  /* ============================================================
+     IPHONE FRAME — 15 Pro portrait
+     ============================================================ */
+  .iphone {
+    width: 420px;
+    height: 860px;
+    background: #0B0B0A;
+    border-radius: 56px;
+    padding: 14px;
+    box-shadow: var(--shadow-device);
+    position: relative;
+  }
+  .iphone .screen {
+    width: 100%; height: 100%;
+    background: var(--bg-surface);
+    border-radius: 44px;
+    overflow: hidden;
+    position: relative;
+    display: grid;
+    grid-template-rows: 54px 1fr 86px;
+  }
+  /* iOS status bar */
+  .ios-status {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    padding: 18px 32px 8px;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--ink);
+    font-family: var(--font-display);
+    position: relative;
+    z-index: 2;
+  }
+  .ios-status .time { font-variant-numeric: tabular-nums; }
+  .ios-status .right { display:flex; align-items:center; gap:6px; font-size: 12px; }
+  /* Dynamic Island */
+  .island {
+    position: absolute;
+    top: 22px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 122px; height: 36px;
+    background: #0B0B0A;
+    border-radius: 22px;
+    z-index: 3;
+  }
+  /* phone body content */
+  .ios-body {
+    padding: 12px 18px 8px;
+    overflow: hidden;
+    position: relative;
+  }
+  /* phone bottom tab bar */
+  .tabbar {
+    background: var(--bg-elev);
+    border-top: 1px solid var(--hairline);
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    align-items: center;
+    padding: 8px 0 22px;
+  }
+  .tab {
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    color: var(--ink-mute);
+    min-height: 44px;
+    justify-content: center;
+    font-size: 11px;
+  }
+  .tab i { font-size: 16px; }
+  .tab.active { color: var(--ink); }
+  .tab.active i { color: var(--sage); }
+
+  /* ============================================================
+     SHARED UI PRIMITIVES
+     ============================================================ */
+  /* The list is no longer wrapped in a white card — editorial DNA prefers
+     hairlines + page margin. The .card class is now a top/bottom rule
+     pair only, no background, no radius, no shadow. Rows still divide
+     each other with hairlines. */
+  .card {
+    background: transparent;
+    border: none;
+    border-top: 1px solid var(--hairline-2);
+    border-bottom: 1px solid var(--hairline-2);
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 2px;
+    border-bottom: 1px solid var(--hairline-2);
+    font-size: 14px;
+    min-height: 44px;
+  }
+  .row:last-child { border-bottom: none; }
+  /* Editorial italic margin-aside under a section label — Kinfolk grammar. */
+  .aside {
+    font-family: var(--font-serif, Georgia, serif);
+    font-style: italic;
+    font-size: 14px;
+    color: var(--ink-mute);
+    margin: -2px 0 14px;
+    letter-spacing: 0.005em;
+  }
+
+  /* Accordion module header — inline expand/collapse, no separate page. */
+  .mod-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    width: 100%;
+    background: none;
+    border: none;
+    padding: 16px 0 12px;
+    cursor: pointer;
+    text-align: left;
+    color: inherit;
+    font-family: inherit;
+    border-bottom: 1px solid var(--hairline-2);
+  }
+  .mod-head .mod-name {
+    font-family: var(--font-serif, Georgia, serif);
+    font-weight: 400;
+    font-size: 26px;
+    color: var(--ink);
+    letter-spacing: -0.01em;
+  }
+  .mod-head .mod-glance {
+    font-family: var(--font-serif, Georgia, serif);
+    font-style: italic;
+    font-size: 14px;
+    color: var(--ink-mute);
+    margin-left: 16px;
+    text-align: right;
+  }
+  .mod-head .mod-chevron {
+    color: var(--ink-faint);
+    font-size: 13px;
+    margin-left: 12px;
+    transition: transform 200ms ease;
+  }
+  .mod-head.open .mod-chevron { transform: rotate(90deg); }
+  .mod-body { padding: 16px 0 28px; display: none; }
+  .mod-body.open { display: block; }
+  .row .qty { color: var(--ink-mute); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+  .row .grow { flex: 1; min-width: 0; }
+  .row .remove {
+    color: var(--ink-faint);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    width: 28px; height: 28px;
+    border-radius: 6px;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .row .remove:hover { background: var(--bg-tint); color: var(--ink-soft); }
+  .row .check {
+    width: 22px; height: 22px;
+    border: 1.5px solid var(--ink-faint);
+    border-radius: 6px;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: var(--sage);
+    background: var(--bg-elev);
+  }
+  .row.checked { color: var(--ink-mute); }
+  .row.checked .grow { text-decoration: line-through; text-decoration-color: var(--ink-faint); }
+  .row.checked .check { background: var(--sage-tint); border-color: var(--sage-soft); }
+
+  .section-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--ink-mute);
+    margin: 22px 4px 8px;
+    font-weight: 600;
+  }
+  .standfirst {
+    color: var(--ink-soft);
+    font-size: 14px;
+    margin: 6px 0 22px;
+    max-width: 56ch;
+  }
+  .crumb {
+    font-size: 11.5px;
+    color: var(--ink-mute);
+    letter-spacing: 0.06em;
+    margin-bottom: 6px;
+  }
+  .crumb .sep { color: var(--ink-faint); margin: 0 6px; }
+  .display-title {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 32px;
+    letter-spacing: -0.015em;
+    margin: 0;
+    line-height: 1.1;
+  }
+  .pill {
+    display: inline-flex; align-items:center; gap:6px;
+    padding: 3px 9px;
+    border-radius: 999px;
+    font-size: 11px;
+    background: var(--bg-tint);
+    color: var(--ink-soft);
+  }
+  .pill.low    { background: var(--amber-tint); color: var(--amber); }
+  .pill.sage   { background: var(--sage-tint); color: #3D6049; }
+  .pill.blue   { background: var(--pastel-blue-tint); color: #41566B; }
+  .pill.warn   { background: var(--amber-tint); color: var(--amber); }
+  .pill.muted  { background: var(--bg-tint); color: var(--ink-mute); }
+
+  .empty {
+    padding: 28px 22px;
+    text-align: center;
+    color: var(--ink-soft);
+  }
+  .empty .ex {
+    display: inline-block;
+    margin-top: 10px;
+    font-family: var(--font-serif);
+    font-style: italic;
+    color: var(--ink-mute);
+    font-size: 13.5px;
+  }
+
+  /* segmented control (grocery mode switch) */
+  .seg {
+    display: inline-flex;
+    background: var(--bg-tint);
+    border-radius: 999px;
+    padding: 3px;
+    gap: 2px;
+  }
+  .seg button {
+    background: transparent;
+    border: none;
+    padding: 8px 18px;
+    border-radius: 999px;
+    font-size: 13px;
+    color: var(--ink-soft);
+    cursor: pointer;
+    min-height: 44px;
+    font-family: var(--font-ui);
+  }
+  .seg button.on {
+    background: var(--bg-elev);
+    color: var(--ink);
+    box-shadow: 0 1px 2px rgba(0,0,0,.06);
+  }
+
+  /* hero block (used in module pages) */
+  .hero {
+    padding: 22px;
+    border-radius: var(--r-card);
+    background: var(--bg-elev);
+    border: 1px solid var(--hairline-2);
+    box-shadow: var(--shadow-card);
+    display: flex;
+    align-items: center;
+    gap: 22px;
+  }
+  .hero .big-num {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 44px;
+    letter-spacing: -0.015em;
+    line-height: 1;
+  }
+  .hero .big-num .ccy { font-size: 22px; color: var(--ink-mute); margin-right: 4px; vertical-align: 6px; font-weight: 500; }
+  .hero .caption {
+    color: var(--ink-mute);
+    font-size: 12.5px;
+    margin-top: 4px;
+  }
+
+  /* tumbler (body water) */
+  .tumbler {
+    width: 64px; height: 80px;
+    border: 2px solid var(--ink);
+    border-top: none;
+    border-radius: 6px 6px 18px 18px;
+    position: relative;
+    background: transparent;
+    overflow: hidden;
+  }
+  .tumbler::before {
+    /* lip */
+    content:""; position:absolute; top:-2px; left:-2px; right:-2px; height:0;
+    border-top: 2px solid var(--ink); border-radius: 6px 6px 0 0;
+  }
+  .tumbler .fill {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    background: linear-gradient(180deg, var(--pastel-blue-tint), var(--pastel-blue));
+    height: 50%;
+  }
+  .tumbler .count {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-display);
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--ink);
+  }
+
+  /* week-bar (sleep) */
+  .weekbar { display: flex; align-items: flex-end; gap: 8px; height: 56px; }
+  .weekbar .bar {
+    width: 14px; background: var(--ink-faint);
+    border-radius: 3px;
+  }
+  .weekbar .bar.dashed {
+    background: transparent;
+    border: 1.5px dashed var(--ink-faint);
+  }
+  .weekbar .bar.on { background: var(--ink); }
+
+  /* progress arc / phase ring — flat ring impression */
+  .ring {
+    width: 96px; height: 96px;
+    border-radius: 50%;
+    background:
+      conic-gradient(var(--sage) 0 70%, var(--bg-tint-2) 70% 100%);
+    position: relative;
+    flex: 0 0 auto;
+  }
+  .ring::after {
+    content: ""; position: absolute; inset: 10px;
+    background: var(--bg-elev);
+    border-radius: 50%;
+  }
+  .ring .center {
+    position: absolute; inset: 0;
+    display: flex; align-items:center; justify-content:center;
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 18px;
+    z-index: 1;
+  }
+  .ring.phase {
+    background:
+      conic-gradient(
+        var(--sage-soft) 0 30%,
+        var(--amber-tint) 30% 55%,
+        var(--pastel-blue-tint) 55% 80%,
+        var(--bg-tint-2) 80% 100%);
+  }
+  .ring.phase .marker {
+    position: absolute; left: 50%; top: -2px;
+    width: 10px; height: 10px;
+    background: var(--ink);
+    border-radius: 50%;
+    transform: translate(-50%, 0) rotate(72deg);
+    transform-origin: 50% 50px;
+    z-index: 2;
+  }
+  .ring.dose {
+    background: conic-gradient(var(--sage) 0 60%, var(--bg-tint-2) 60% 100%);
+  }
+
+  /* dose dots */
+  .dose-dots { display: flex; gap: 6px; align-items: center; }
+  .dose-dots .d { width: 12px; height: 12px; border-radius: 50%; background: var(--sage); }
+  .dose-dots .d.amber { background: var(--amber); }
+  .dose-dots .d.dashed { background: transparent; border: 1.5px dashed var(--ink-faint); }
+  .dose-dots .more { font-size: 12px; color: var(--ink-mute); margin-left: 4px; }
+
+  /* runway hairline */
+  .runway {
+    display: flex; flex-direction: column; gap: 4px;
+    color: var(--ink-mute); font-size: 11px;
+  }
+  .runway .line {
+    position: relative; height: 2px; background: var(--hairline);
+    margin: 8px 0;
+  }
+  .runway .line span {
+    position: absolute; top: -3px; width: 1.5px; height: 8px; background: var(--ink-soft);
+  }
+
+  /* status dot */
+  .status-dot {
+    display: inline-flex; align-items:center; gap: 6px;
+    font-size: 12px; color: var(--ink-mute);
+  }
+  .status-dot .d { width: 8px; height: 8px; border-radius: 50%; background: var(--sage); }
+  .status-dot .d.amber { background: var(--amber); }
+
+  /* dump screen primary input */
+  .dump-wrap {
+    max-width: 640px;
+    margin: 80px auto 0;
+    padding: 0 24px;
+    text-align: left;
+  }
+  .dump-prompt {
+    font-family: var(--font-serif);
+    font-style: italic;
+    color: var(--ink-soft);
+    font-size: 16px;
+    margin-bottom: 14px;
+  }
+  .dump-input {
+    width: 100%;
+    background: var(--bg-elev);
+    border: 1px solid var(--hairline);
+    border-radius: 14px;
+    padding: 16px 18px;
+    font-family: var(--font-ui);
+    font-size: 15.5px;
+    color: var(--ink);
+    resize: none;
+    line-height: 1.5;
+    min-height: 56px;
+    box-shadow: 0 1px 2px rgba(0,0,0,.03);
+  }
+  .dump-input::placeholder { color: var(--ink-faint); }
+  .dump-input:focus { outline: 2px solid var(--sage-soft); outline-offset: 0; }
+  .dump-actions {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-top: 10px;
+  }
+  .dump-hint { font-size: 12px; color: var(--ink-mute); }
+  .dump-send {
+    background: var(--ink);
+    color: var(--bg-elev);
+    border: none;
+    border-radius: var(--r-button);
+    padding: 10px 16px;
+    font-size: 13.5px;
+    min-height: 44px;
+    cursor: pointer;
+    display: inline-flex; align-items: center; gap: 8px;
+    font-family: var(--font-ui);
+  }
+  .dump-toast {
+    margin-top: 18px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--ink-soft);
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-size: 14px;
+  }
+  .dump-toast .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--sage); }
+  .dump-error {
+    margin-top: 10px;
+    color: var(--amber);
+    font-size: 12.5px;
+  }
+
+  /* crisis banner */
+  .crisis {
+    margin-top: 18px;
+    background: var(--crisis-bg);
+    color: var(--crisis-ink);
+    border: 1px solid #E3CFB1;
+    border-radius: 12px;
+    padding: 14px 16px;
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  .crisis i.bow { color: var(--crisis-ink); margin-top: 2px; }
+  .crisis a { color: var(--crisis-ink); text-decoration: underline; }
+  .crisis .dismiss {
+    background: transparent; border: none; color: var(--crisis-ink);
+    font-size: 13px; cursor: pointer; padding: 4px 8px; border-radius: 6px;
+  }
+
+  /* signin card */
+  .signin {
+    max-width: 380px;
+    margin: 80px auto 0;
+    padding: 0 24px;
+  }
+  .signin h2 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 24px;
+    margin: 0 0 6px;
+    letter-spacing: -0.01em;
+  }
+  .signin .sub {
+    color: var(--ink-mute);
+    font-size: 13.5px;
+    margin-bottom: 28px;
+  }
+  .signin label {
+    display: block;
+    font-size: 12px;
+    color: var(--ink-soft);
+    margin: 14px 0 6px;
+  }
+  .signin input {
+    width: 100%;
+    background: var(--bg-elev);
+    border: 1px solid var(--hairline);
+    border-radius: 10px;
+    padding: 12px 14px;
+    font-size: 14px;
+    color: var(--ink);
+    font-family: var(--font-ui);
+    min-height: 44px;
+  }
+  .signin .submit {
+    width: 100%;
+    margin-top: 20px;
+    background: var(--ink);
+    color: var(--bg-elev);
+    border: none;
+    border-radius: var(--r-button);
+    padding: 12px;
+    font-size: 14px;
+    cursor: pointer;
+    min-height: 44px;
+    font-family: var(--font-ui);
+  }
+  .signin .links {
+    display: flex; justify-content: space-between;
+    margin-top: 14px;
+    font-size: 12.5px;
+  }
+  .signin .links a { color: var(--ink-soft); text-decoration: none; border-bottom: 1px dashed var(--hairline); }
+  .signin .clerk-foot {
+    margin-top: 28px;
+    text-align: center;
+    color: var(--ink-faint);
+    font-size: 11px;
+  }
+
+  /* modules index grid */
+  .modules-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+    padding: 28px;
+  }
+  .module-card {
+    background: var(--bg-elev);
+    border: 1px solid var(--hairline-2);
+    border-radius: var(--r-card);
+    padding: 18px 18px 16px;
+    min-height: 110px;
+    display: flex; flex-direction: column; justify-content: space-between;
+    text-decoration: none;
+    color: var(--ink);
+    box-shadow: 0 1px 2px rgba(20,20,18,.03);
+  }
+  .module-card h3 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 17px;
+    margin: 0 0 6px;
+    letter-spacing: -0.005em;
+  }
+  .module-card p { margin: 0; font-size: 12.5px; color: var(--ink-mute); }
+  .module-card .glyph { color: var(--ink-faint); font-size: 14px; align-self: flex-end; }
+
+  /* settings */
+  .settings-list .row { padding-top: 16px; padding-bottom: 16px; }
+  .settings-list .row .label { flex: 1; }
+  .settings-list .sub { color: var(--ink-mute); font-size: 12px; }
+  .toggle {
+    width: 40px; height: 24px;
+    background: var(--bg-tint-2);
+    border-radius: 999px;
+    position: relative;
+  }
+  .toggle::after {
+    content: ""; position: absolute;
+    top: 2px; left: 2px;
+    width: 20px; height: 20px;
+    background: var(--bg-elev);
+    border-radius: 50%;
+    box-shadow: 0 1px 2px rgba(0,0,0,.18);
+  }
+  .toggle.on { background: var(--sage); }
+  .toggle.on::after { left: 18px; }
+
+  /* container that holds inner module page content */
+  .inner {
+    padding: 26px 28px 0;
+    overflow: hidden;
+  }
+  .inner-phone { padding: 0 4px; }
+
+  /* small responsive sanity for the mockup itself */
+  @media (max-width: 1280px) {
+    .pair { grid-template-columns: 1fr; justify-items: start; }
+    .iphone { margin-top: 16px; }
+  }
+
+  /* a11y: focus styles */
+  :focus-visible {
+    outline: 2px solid var(--sage);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+
+  /* dump screen on phone shrinks margins */
+  .ios-body .dump-wrap { margin-top: 30px; padding: 0 6px; }
+  .ios-body .signin    { margin-top: 30px; padding: 0 6px; }
+  .ios-body .inner-phone .crumb { margin-top: 4px; }
+  .ios-body h2.display-title { font-size: 28px; }
+
+  /* small notes inline */
+  .meta-line {
+    display: flex; gap: 14px; align-items: center;
+    color: var(--ink-mute); font-size: 12.5px; margin-top: 2px;
+  }
+</style>
+</head>
+<body>
+
+<header class="page-header">
+  <h1>Ollie — UI mockup (v1)</h1>
+  <span class="note">static visual reference, not interactive</span>
+</header>
+
+<nav class="toc" aria-label="screens">
+  <a href="#s-signin">1 sign-in</a>
+  <a href="#s-dump">2 dump (rest)</a>
+  <a href="#s-dump-okay">3 dump (okay)</a>
+  <a href="#s-dump-crisis">4 dump (crisis)</a>
+  <a href="#s-modules">5 modules</a>
+  <a href="#s-grocery-pantry">6 grocery · pantry</a>
+  <a href="#s-grocery-shop">7 grocery · shopping</a>
+  <a href="#s-pets">8 pets</a>
+  <a href="#s-body">9 body</a>
+  <a href="#s-work">10 work</a>
+  <a href="#s-finance">11 finance</a>
+  <a href="#s-sleep">12 sleep</a>
+  <a href="#s-admin">13 admin</a>
+  <a href="#s-habits">14 habits</a>
+  <a href="#s-goals">15 goals</a>
+  <a href="#s-medication">16 medication</a>
+  <a href="#s-cycle">17 cycle</a>
+  <a href="#s-settings">18 settings</a>
+</nav>
+
+<!-- ===================================================================
+     reusable HTML fragments inlined for each screen.
+     desktop frame + iphone frame side by side per screen.
+     ================================================================ -->
+
+<!-- 1) SIGN-IN ============================================== -->
+<section class="screen-group" id="s-signin">
+  <div class="screen-caption"><strong>01</strong> sign-in</div>
+  <div class="pair">
+
+    <!-- desktop -->
+    <div class="desktop" role="img" aria-label="desktop frame, sign-in">
+      <div class="titlebar">
+        <div class="traffic"><span class="red"></span><span class="yellow"></span><span class="green"></span></div>
+        <div class="addressbar"><i class="fa-solid fa-lock"></i><span>app.ollie.local</span></div>
+        <div class="browser-actions"><i class="fa-solid fa-arrow-down"></i><i class="fa-solid fa-plus"></i></div>
+      </div>
+      <div class="viewport">
+        <div class="topnav">
+          <div class="brand"><span class="dot"></span> ollie</div>
+          <div></div>
+          <div></div>
+        </div>
+        <div class="signin">
+          <h2>welcome back</h2>
+          <div class="sub">sign in to keep dumping. no cloud, no tracking.</div>
+          <form onsubmit="return false">
+            <label for="d-email">email</label>
+            <input id="d-email" type="email" value="serra@ollie.local" />
+            <label for="d-pass">password</label>
+            <input id="d-pass" type="password" value="************" />
+            <button class="submit" type="submit">sign in</button>
+            <div class="links">
+              <a href="#">create account</a>
+              <a href="#">forgot password</a>
+            </div>
+          </form>
+          <div class="clerk-foot">secured by clerk</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- iphone -->
+    <div class="iphone" role="img" aria-label="iphone frame, sign-in">
+      <div class="screen">
+        <div class="island"></div>
+        <div class="ios-status">
+          <span class="time">9:41</span>
+          <span class="right">
+            <i class="fa-solid fa-signal"></i>
+            <i class="fa-solid fa-wifi"></i>
+            <i class="fa-solid fa-battery-full"></i>
+          </span>
+        </div>
+        <div class="ios-body">
+          <div class="signin">
+            <h2>welcome back</h2>
+            <div class="sub">no cloud, no tracking.</div>
+            <label>email</label>
+            <input type="email" value="serra@ollie.local" />
+            <label>password</label>
+            <input type="password" value="************" />
+            <button class="submit">sign in</button>
+            <div class="links">
+              <a href="#">create account</a>
+              <a href="#">forgot password</a>
+            </div>
+            <div class="clerk-foot">secured by clerk</div>
+          </div>
+        </div>
+        <div class="tabbar">
+          <div class="tab"><i class="fa-solid fa-feather"></i><span>home</span></div>
+          <div class="tab"><i class="fa-regular fa-square"></i><span>modules</span></div>
+          <div class="tab"><i class="fa-solid fa-sliders"></i><span>settings</span></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- 2) DUMP (rest) ============================================== -->
+<section class="screen-group" id="s-dump">
+  <div class="screen-caption"><strong>02</strong> dump · resting state</div>
+  <div class="pair">
+
+    <div class="desktop" role="img" aria-label="desktop frame, dump rest">
+      <div class="titlebar">
+        <div class="traffic"><span class="red"></span><span class="yellow"></span><span class="green"></span></div>
+        <div class="addressbar"><i class="fa-solid fa-lock"></i><span>app.ollie.local/home</span></div>
+        <div class="browser-actions"><i class="fa-solid fa-arrow-down"></i><i class="fa-solid fa-plus"></i></div>
+      </div>
+      <div class="viewport">
+        <div class="topnav">
+          <div class="brand"><span class="dot"></span> ollie</div>
+          <nav>
+            <a class="navlink active" href="#">home</a>
+            <a class="navlink" href="#">modules</a>
+            <a class="navlink" href="#">settings</a>
+          </nav>
+          <div class="user">S</div>
+        </div>
+        <div class="dump-wrap">
+          <div class="dump-prompt">what's on your mind?</div>
+          <textarea class="dump-input" placeholder="say it like you'd text a friend…"></textarea>
+          <div class="dump-actions">
+            <span class="dump-hint">cmd + enter to send</span>
+            <button class="dump-send"><i class="fa-solid fa-paper-plane"></i> send</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="iphone" role="img" aria-label="iphone frame, dump rest">
+      <div class="screen">
+        <div class="island"></div>
+        <div class="ios-status">
+          <span class="time">9:41</span>
+          <span class="right"><i class="fa-solid fa-signal"></i><i class="fa-solid fa-wifi"></i><i class="fa-solid fa-battery-full"></i></span>
+        </div>
+        <div class="ios-body">
+          <div class="dump-wrap">
+            <div class="dump-prompt">what's on your mind?</div>
+            <textarea class="dump-input" placeholder="say it like you'd text a friend…"></textarea>
+            <div class="dump-actions">
+              <span class="dump-hint">return twice to send</span>
+              <button class="dump-send"><i class="fa-solid fa-paper-plane"></i></button>
+            </div>
+          </div>
+        </div>
+        <div class="tabbar">
+          <div class="tab active"><i class="fa-solid fa-feather"></i><span>home</span></div>
+          <div class="tab"><i class="fa-regular fa-square"></i><span>modules</span></div>
+          <div class="tab"><i class="fa-solid fa-sliders"></i><span>settings</span></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- 3) DUMP (with okay toast) ============================================== -->
+<section class="screen-group" id="s-dump-okay">
+  <div class="screen-caption"><strong>03</strong> dump · after submit</div>
+  <div class="pair">
+
+    <div class="desktop" role="img" aria-label="desktop, dump okay">
+      <div class="titlebar">
+        <div class="traffic"><span class="red"></span><span class="yellow"></span><span class="green"></span></div>
+        <div class="addressbar"><i class="fa-solid fa-lock"></i><span>app.ollie.local/home</span></div>
+        <div class="browser-actions"><i class="fa-solid fa-arrow-down"></i><i class="fa-solid fa-plus"></i></div>
+      </div>
+      <div class="viewport">
+        <div class="topnav">
+          <div class="brand"><span class="dot"></span> ollie</div>
+          <nav>
+            <a class="navlink active" href="#">home</a>
+            <a class="navlink" href="#">modules</a>
+            <a class="navlink" href="#">settings</a>
+          </nav>
+          <div class="user">S</div>
+        </div>
+        <div class="dump-wrap">
+          <div class="dump-prompt">what's on your mind?</div>
+          <textarea class="dump-input" placeholder="say it like you'd text a friend…"></textarea>
+          <div class="dump-actions">
+            <span class="dump-hint">cmd + enter to send</span>
+            <button class="dump-send"><i class="fa-solid fa-paper-plane"></i> send</button>
+          </div>
+          <div class="dump-toast" role="status" aria-live="polite">
+            <span class="dot"></span> okay
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="iphone" role="img" aria-label="iphone, dump okay">
+      <div class="screen">
+        <div class="island"></div>
+        <div class="ios-status">
+          <span class="time">9:41</span>
+          <span class="right"><i class="fa-solid fa-signal"></i><i class="fa-solid fa-wifi"></i><i class="fa-solid fa-battery-full"></i></span>
+        </div>
+        <div class="ios-body">
+          <div class="dump-wrap">
+            <div class="dump-prompt">what's on your mind?</div>
+            <textarea class="dump-input" placeholder="say it like you'd text a friend…"></textarea>
+            <div class="dump-actions">
+              <span class="dump-hint">return twice to send</span>
+              <button class="dump-send"><i class="fa-solid fa-paper-plane"></i></button>
+            </div>
+            <div class="dump-toast"><span class="dot"></span> okay</div>
+            <div class="dump-error" style="margin-top:18px; color: var(--ink-mute)">— or, on a bad pipe —</div>
+            <div class="dump-error">no connection</div>
+          </div>
+        </div>
+        <div class="tabbar">
+          <div class="tab active"><i class="fa-solid fa-feather"></i><span>home</span></div>
+          <div class="tab"><i class="fa-regular fa-square"></i><span>modules</span></div>
+          <div class="tab"><i class="fa-solid fa-sliders"></i><span>settings</span></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- 4) DUMP (crisis) ============================================== -->
+<section class="screen-group" id="s-dump-crisis">
+  <div class="screen-caption"><strong>04</strong> dump · crisis banner (replaces "okay")</div>
+  <div class="pair">
+
+    <div class="desktop" role="img" aria-label="desktop, dump crisis">
+      <div class="titlebar">
+        <div class="traffic"><span class="red"></span><span class="yellow"></span><span class="green"></span></div>
+        <div class="addressbar"><i class="fa-solid fa-lock"></i><span>app.ollie.local/home</span></div>
+        <div class="browser-actions"><i class="fa-solid fa-arrow-down"></i><i class="fa-solid fa-plus"></i></div>
+      </div>
+      <div class="viewport">
+        <div class="topnav">
+          <div class="brand"><span class="dot"></span> ollie</div>
+          <nav>
+            <a class="navlink active" href="#">home</a>
+            <a class="navlink" href="#">modules</a>
+            <a class="navlink" href="#">settings</a>
+          </nav>
+          <div class="user">S</div>
+        </div>
+        <div class="dump-wrap">
+          <div class="dump-prompt">what's on your mind?</div>
+          <textarea class="dump-input" placeholder="say it like you'd text a friend…"></textarea>
+          <div class="dump-actions">
+            <span class="dump-hint">cmd + enter to send</span>
+            <button class="dump-send"><i class="fa-solid fa-paper-plane"></i> send</button>
+          </div>
+          <div class="crisis" role="alert">
+            <i class="fa-regular fa-circle-dot bow"></i>
+            <div style="flex:1">
+              what you wrote sounds heavy. if you'd like to talk to a person right now, the
+              <a href="tel:988">988 lifeline</a> is open, free, and confidential.
+              you don't have to be in a crisis to call.
+            </div>
+            <button class="dismiss" aria-label="dismiss">dismiss</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="iphone" role="img" aria-label="iphone, dump crisis">
+      <div class="screen">
+        <div class="island"></div>
+        <div class="ios-status">
+          <span class="time">9:41</span>
+          <span class="right"><i class="fa-solid fa-signal"></i><i class="fa-solid fa-wifi"></i><i class="fa-solid fa-battery-full"></i></span>
+        </div>
+        <div class="ios-body">
+          <div class="dump-wrap">
+            <div class="dump-prompt">what's on your mind?</div>
+            <textarea class="dump-input"></textarea>
+            <div class="dump-actions">
+              <span class="dump-hint">return twice to send</span>
+              <button class="dump-send"><i class="fa-solid fa-paper-plane"></i></button>
+            </div>
+            <div class="crisis" role="alert">
+              <i class="fa-regular fa-circle-dot bow"></i>
+              <div style="flex:1">that sounded heavy. <a href="tel:988">988 lifeline</a> is open if you'd like.</div>
+              <button class="dismiss">x</button>
+            </div>
+          </div>
+        </div>
+        <div class="tabbar">
+          <div class="tab active"><i class="fa-solid fa-feather"></i><span>home</span></div>
+          <div class="tab"><i class="fa-regular fa-square"></i><span>modules</span></div>
+          <div class="tab"><i class="fa-solid fa-sliders"></i><span>settings</span></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- 5) MODULES INDEX ============================================== -->
+<section class="screen-group" id="s-modules">
+  <div class="screen-caption"><strong>05</strong> modules index</div>
+  <div class="pair">
+
+    <div class="desktop" role="img" aria-label="desktop, modules">
+      <div class="titlebar">
+        <div class="traffic"><span class="red"></span><span class="yellow"></span><span class="green"></span></div>
+        <div class="addressbar"><i class="fa-solid fa-lock"></i><span>app.ollie.local/modules</span></div>
+        <div class="browser-actions"><i class="fa-solid fa-arrow-down"></i><i class="fa-solid fa-plus"></i></div>
+      </div>
+      <div class="viewport">
+        <div class="topnav">
+          <div class="brand"><span class="dot"></span> ollie</div>
+          <nav>
+            <a class="navlink" href="#">home</a>
+            <a class="navlink active" href="#">modules</a>
+            <a class="navlink" href="#">settings</a>
+          </nav>
+          <div class="user">S</div>
+        </div>
+        <div class="inner">
+          <div class="crumb">modules</div>
+          <h2 class="display-title">all of it</h2>
+          <div class="standfirst">three rooms — yourself, your stuff, the things you owe. tap any name to open or close.</div>
+
+          <!-- ─────── YOU ─────── -->
+          <div style="margin-top: 56px;">
+            <div class="section-label" style="font-size: 14px; letter-spacing: 0.20em;">you</div>
+            <p class="aside">how you are this week.</p>
+
+            <button type="button" class="mod-head open" aria-expanded="true">
+              <span class="mod-name">body</span>
+              <span class="mod-glance">4 of 8 glasses today · last walked 20 min</span>
+              <i class="fa-solid fa-chevron-right mod-chevron" aria-hidden="true"></i>
+            </button>
+            <div class="mod-body open">
+              <div class="card">
+                <div class="row"><span class="grow">walked 20 min</span><span class="qty">8h ago</span></div>
+                <div class="row"><span class="grow">water · 250 ml</span><span class="qty">2h ago</span></div>
+                <div class="row"><span class="grow">headache, mild</span><span class="qty">yesterday</span></div>
+              </div>
+            </div>
+
+            <button type="button" class="mod-head open" aria-expanded="true">
+              <span class="mod-name">sleep</span>
+              <span class="mod-glance">last night: 7h 20m</span>
+              <i class="fa-solid fa-chevron-right mod-chevron" aria-hidden="true"></i>
+            </button>
+            <div class="mod-body open">
+              <div class="card">
+                <div class="row"><span class="grow">7h 20m · quality ok</span><span class="qty">last night</span></div>
+                <div class="row"><span class="grow">6h 45m · woke twice</span><span class="qty">2 nights ago</span></div>
+              </div>
+            </div>
+
+            <button type="button" class="mod-head" aria-expanded="false">
+              <span class="mod-name">cycle</span>
+              <span class="mod-glance">day 14 · luteal</span>
+              <i class="fa-solid fa-chevron-right mod-chevron" aria-hidden="true"></i>
+            </button>
+
+            <button type="button" class="mod-head" aria-expanded="false">
+              <span class="mod-name">medication</span>
+              <span class="mod-glance">today — 2 taken, 1 missed</span>
+              <i class="fa-solid fa-chevron-right mod-chevron" aria-hidden="true"></i>
+            </button>
+
+            <button type="button" class="mod-head" aria-expanded="false">
+              <span class="mod-name">habits</span>
+              <span class="mod-glance">2 done today, 2 still waiting</span>
+              <i class="fa-solid fa-chevron-right mod-chevron" aria-hidden="true"></i>
+            </button>
+
+            <button type="button" class="mod-head" aria-expanded="false">
+              <span class="mod-name">goals</span>
+              <span class="mod-glance">amsterdam by july · save 50k</span>
+              <i class="fa-solid fa-chevron-right mod-chevron" aria-hidden="true"></i>
+            </button>
+          </div>
+
+          <!-- ─────── YOUR STUFF ─────── -->
+          <div style="margin-top: 64px;">
+            <div class="section-label" style="font-size: 14px; letter-spacing: 0.20em;">your stuff</div>
+            <p class="aside">what's in the kitchen, who's in the house.</p>
+
+            <button type="button" class="mod-head open" aria-expanded="true">
+              <span class="mod-name">grocery</span>
+              <span class="mod-glance">5 on the list · pantry has 7</span>
+              <i class="fa-solid fa-chevron-right mod-chevron" aria-hidden="true"></i>
+            </button>
+            <div class="mod-body open">
+              <div class="card">
+                <div class="row"><span class="grow">milk</span><span class="qty">1 L · to buy</span></div>
+                <div class="row"><span class="grow">tomatoes</span><span class="qty">6 · to buy</span></div>
+                <div class="row"><span class="grow">olive oil</span><span class="qty">1 bottle · in pantry</span></div>
+                <div class="row"><span class="grow">eggs</span><span class="qty">6 · low</span></div>
+              </div>
+            </div>
+
+            <button type="button" class="mod-head" aria-expanded="false">
+              <span class="mod-name">pets</span>
+              <span class="mod-glance">tontin's vitamin c — today</span>
+              <i class="fa-solid fa-chevron-right mod-chevron" aria-hidden="true"></i>
+            </button>
+          </div>
+
+          <!-- ─────── YOUR RESPONSIBILITIES ─────── -->
+          <div style="margin-top: 64px;">
+            <div class="section-label" style="font-size: 14px; letter-spacing: 0.20em;">your responsibilities</div>
+            <p class="aside">things that won't wait.</p>
+
+            <button type="button" class="mod-head open" aria-expanded="true">
+              <span class="mod-name">work</span>
+              <span class="mod-glance">90 min focus today · prd due friday</span>
+              <i class="fa-solid fa-chevron-right mod-chevron" aria-hidden="true"></i>
+            </button>
+            <div class="mod-body open">
+              <div class="card">
+                <div class="row"><span class="grow">write the prd</span><span class="qty">open</span></div>
+                <div class="row"><span class="grow">prd deadline</span><span class="qty">friday</span></div>
+                <div class="row"><span class="grow">sync with boran</span><span class="qty">30 min · 2h ago</span></div>
+              </div>
+            </div>
+
+            <button type="button" class="mod-head" aria-expanded="false">
+              <span class="mod-name">admin</span>
+              <span class="mod-glance">passport in 14 days · 2 calls open</span>
+              <i class="fa-solid fa-chevron-right mod-chevron" aria-hidden="true"></i>
+            </button>
+
+            <button type="button" class="mod-head" aria-expanded="false">
+              <span class="mod-name">finance</span>
+              <span class="mod-glance">$845 this month</span>
+              <i class="fa-solid fa-chevron-right mod-chevron" aria-hidden="true"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="iphone" role="img" aria-label="iphone, modules">
+      <div class="screen">
+        <div class="island"></div>
+        <div class="ios-status">
+          <span class="time">9:41</span>
+          <span class="right"><i class="fa-solid fa-signal"></i><i class="fa-solid fa-wifi"></i><i class="fa-solid fa-battery-full"></i></span>
+        </div>
+        <div class="ios-body">
+          <div style="padding: 0 6px;">
+            <div class="crumb" style="margin-top: 14px;">modules</div>
+            <h2 class="display-title" style="margin: 4px 0 4px">all of it</h2>
+            <div class="standfirst">tap any name to open or close.</div>
+
+            <div style="margin-top: 24px;">
+              <div class="section-label">you</div>
+              <p class="aside">how you are this week.</p>
+
+              <button type="button" class="mod-head open" aria-expanded="true">
+                <span class="mod-name" style="font-size: 22px;">body</span>
+                <i class="fa-solid fa-chevron-right mod-chevron" aria-hidden="true"></i>
+              </button>
+              <div class="mod-body open">
+                <p class="aside" style="margin-top: 4px;">4 of 8 glasses today.</p>
+                <div class="card">
+                  <div class="row"><span class="grow">water · 250 ml</span><span class="qty">2h ago</span></div>
+                  <div class="row"><span class="grow">walked 20 min</span><span class="qty">8h ago</span></div>
+                </div>
+              </div>
+
+              <button type="button" class="mod-head" aria-expanded="false">
+                <span class="mod-name" style="font-size: 22px;">sleep</span>
+                <i class="fa-solid fa-chevron-right mod-chevron" aria-hidden="true"></i>
+              </button>
+              <button type="button" class="mod-head" aria-expanded="false">
+                <span class="mod-name" style="font-size: 22px;">cycle</span>
+                <i class="fa-solid fa-chevron-right mod-chevron" aria-hidden="true"></i>
+              </button>
+              <button type="button" class="mod-head" aria-expanded="false">
+                <span class="mod-name" style="font-size: 22px;">medication</span>
+                <i class="fa-solid fa-chevron-right mod-chevron" aria-hidden="true"></i>
+              </button>
+              <button type="button" class="mod-head" aria-expanded="false">
+                <span class="mod-name" style="font-size: 22px;">habits</span>
+                <i class="fa-solid fa-chevron-right mod-chevron" aria-hidden="true"></i>
+              </button>
+              <button type="button" class="mod-head" aria-expanded="false">
+                <span class="mod-name" style="font-size: 22px;">goals</span>
+                <i class="fa-solid fa-chevron-right mod-chevron" aria-hidden="true"></i>
+              </button>
+            </div>
+
+            <div style="margin-top: 28px;">
+              <div class="section-label">your stuff</div>
+              <p class="aside">in the kitchen, in the house.</p>
+              <button type="button" class="mod-head open" aria-expanded="true">
+                <span class="mod-name" style="font-size: 22px;">grocery</span>
+                <i class="fa-solid fa-chevron-right mod-chevron" aria-hidden="true"></i>
+              </button>
+              <div class="mod-body open">
+                <p class="aside" style="margin-top: 4px;">5 on the list.</p>
+                <div class="card">
+                  <div class="row"><span class="grow">milk</span><span class="qty">1 L</span></div>
+                  <div class="row"><span class="grow">tomatoes</span><span class="qty">6</span></div>
+                </div>
+              </div>
+              <button type="button" class="mod-head" aria-expanded="false">
+                <span class="mod-name" style="font-size: 22px;">pets</span>
+                <i class="fa-solid fa-chevron-right mod-chevron" aria-hidden="true"></i>
+              </button>
+            </div>
+
+            <div style="margin-top: 28px;">
+              <div class="section-label">your responsibilities</div>
+              <p class="aside">things that won't wait.</p>
+              <button type="button" class="mod-head" aria-expanded="false">
+                <span class="mod-name" style="font-size: 22px;">work</span>
+                <i class="fa-solid fa-chevron-right mod-chevron" aria-hidden="true"></i>
+              </button>
+              <button type="button" class="mod-head" aria-expanded="false">
+                <span class="mod-name" style="font-size: 22px;">admin</span>
+                <i class="fa-solid fa-chevron-right mod-chevron" aria-hidden="true"></i>
+              </button>
+              <button type="button" class="mod-head" aria-expanded="false">
+                <span class="mod-name" style="font-size: 22px;">finance</span>
+                <i class="fa-solid fa-chevron-right mod-chevron" aria-hidden="true"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="tabbar">
+          <div class="tab"><i class="fa-solid fa-feather"></i><span>home</span></div>
+          <div class="tab active"><i class="fa-regular fa-square"></i><span>modules</span></div>
+          <div class="tab"><i class="fa-solid fa-sliders"></i><span>settings</span></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- 6) GROCERY · PANTRY ============================================== -->
+<section class="screen-group" id="s-grocery-pantry">
+  <div class="screen-caption"><strong>06</strong> grocery · pantry</div>
+  <div class="pair">
+
+    <div class="desktop" role="img" aria-label="desktop, grocery pantry">
+      <div class="titlebar">
+        <div class="traffic"><span class="red"></span><span class="yellow"></span><span class="green"></span></div>
+        <div class="addressbar"><i class="fa-solid fa-lock"></i><span>app.ollie.local/m/grocery</span></div>
+        <div class="browser-actions"><i class="fa-solid fa-arrow-down"></i><i class="fa-solid fa-plus"></i></div>
+      </div>
+      <div class="viewport">
+        <div class="topnav">
+          <div class="brand"><span class="dot"></span> ollie</div>
+          <nav>
+            <a class="navlink" href="#">home</a>
+            <a class="navlink active" href="#">modules</a>
+            <a class="navlink" href="#">settings</a>
+          </nav>
+          <div class="user">S</div>
+        </div>
+        <div class="inner">
+          <div class="crumb">box <span class="sep">·</span> grocery</div>
+          <h2 class="display-title">kitchen</h2>
+          <div class="standfirst">what's in, what's running out, what you said you'd grab.</div>
+
+          <div class="seg" role="tablist">
+            <button class="on" role="tab">pantry</button>
+            <button role="tab">shopping</button>
+          </div>
+
+          <div class="section-label">staples</div>
+          <div class="card">
+            <div class="row"><span class="grow">olive oil</span><span class="qty">1 bottle</span><button class="remove" aria-label="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+            <div class="row"><span class="grow">salt</span><span class="qty">1 tin</span><button class="remove" aria-label="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+            <div class="row"><span class="grow">brown rice</span><span class="qty">~½ bag</span><span class="pill low">low</span><button class="remove" aria-label="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+            <div class="row"><span class="grow">red lentils</span><span class="qty">1 bag</span><button class="remove" aria-label="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+          </div>
+
+          <div class="section-label">fridge</div>
+          <div class="card">
+            <div class="row"><span class="grow">eggs</span><span class="qty">6</span><span class="pill low">low</span><button class="remove" aria-label="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+            <div class="row"><span class="grow">feta</span><span class="qty">200 g</span><button class="remove" aria-label="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+            <div class="row"><span class="grow">spinach</span><span class="qty">1 bag</span><button class="remove" aria-label="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="iphone" role="img" aria-label="iphone, grocery pantry">
+      <div class="screen">
+        <div class="island"></div>
+        <div class="ios-status">
+          <span class="time">9:41</span>
+          <span class="right"><i class="fa-solid fa-signal"></i><i class="fa-solid fa-wifi"></i><i class="fa-solid fa-battery-full"></i></span>
+        </div>
+        <div class="ios-body inner-phone">
+          <div class="crumb">your stuff · grocery</div>
+          <h2 class="display-title">kitchen</h2>
+          <div class="standfirst">what's in, what's out.</div>
+          <div class="seg"><button class="on">pantry</button><button>shopping</button></div>
+          <div class="section-label">staples</div>
+          <div class="card">
+            <div class="row"><span class="grow">olive oil</span><span class="qty">1 bottle</span><button class="remove" aria-label="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+            <div class="row"><span class="grow">brown rice</span><span class="qty">~½ bag</span><span class="pill low">low</span><button class="remove" aria-label="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+            <div class="row"><span class="grow">red lentils</span><span class="qty">1 bag</span><button class="remove" aria-label="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+          </div>
+          <div class="section-label">fridge</div>
+          <div class="card">
+            <div class="row"><span class="grow">eggs</span><span class="qty">6</span><span class="pill low">low</span><button class="remove" aria-label="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+            <div class="row"><span class="grow">feta</span><span class="qty">200 g</span><button class="remove" aria-label="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+          </div>
+        </div>
+        <div class="tabbar">
+          <div class="tab"><i class="fa-solid fa-feather"></i><span>home</span></div>
+          <div class="tab active"><i class="fa-regular fa-square"></i><span>modules</span></div>
+          <div class="tab"><i class="fa-solid fa-sliders"></i><span>settings</span></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- 7) GROCERY · SHOPPING ============================================== -->
+<section class="screen-group" id="s-grocery-shop">
+  <div class="screen-caption"><strong>07</strong> grocery · shopping</div>
+  <div class="pair">
+
+    <div class="desktop" role="img" aria-label="desktop, grocery shopping">
+      <div class="titlebar">
+        <div class="traffic"><span class="red"></span><span class="yellow"></span><span class="green"></span></div>
+        <div class="addressbar"><i class="fa-solid fa-lock"></i><span>app.ollie.local/m/grocery?mode=shopping</span></div>
+        <div class="browser-actions"><i class="fa-solid fa-arrow-down"></i><i class="fa-solid fa-plus"></i></div>
+      </div>
+      <div class="viewport">
+        <div class="topnav">
+          <div class="brand"><span class="dot"></span> ollie</div>
+          <nav>
+            <a class="navlink" href="#">home</a>
+            <a class="navlink active" href="#">modules</a>
+            <a class="navlink" href="#">settings</a>
+          </nav>
+          <div class="user">S</div>
+        </div>
+        <div class="inner">
+          <div class="crumb">your stuff · grocery</div>
+          <h2 class="display-title">shopping</h2>
+          <div class="standfirst">things you've said you'd pick up. check to move into the pantry.</div>
+
+          <div class="seg" role="tablist">
+            <button role="tab">pantry</button>
+            <button class="on" role="tab">shopping</button>
+          </div>
+
+          <div class="section-label">to buy</div>
+          <p class="aside">tap one when it's in the basket.</p>
+          <div class="card">
+            <div class="row"><button class="check" aria-label="mark bought"></button><span class="grow">milk</span><span class="qty">1 L</span><button class="remove" aria-label="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+            <div class="row"><button class="check" aria-label="mark bought"></button><span class="grow">tomatoes</span><span class="qty">6</span><button class="remove" aria-label="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+            <div class="row checked"><button class="check"><i class="fa-solid fa-check" style="font-size:11px"></i></button><span class="grow">bread</span><span class="qty">1 loaf</span><button class="remove" aria-label="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+            <div class="row"><button class="check" aria-label="mark bought"></button><span class="grow">guinea pig hay</span><span class="qty">large bag</span><button class="remove" aria-label="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+            <div class="row"><button class="check" aria-label="mark bought"></button><span class="grow">bell pepper</span><span class="qty">2</span><button class="remove" aria-label="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="iphone" role="img" aria-label="iphone, grocery shopping">
+      <div class="screen">
+        <div class="island"></div>
+        <div class="ios-status">
+          <span class="time">9:41</span>
+          <span class="right"><i class="fa-solid fa-signal"></i><i class="fa-solid fa-wifi"></i><i class="fa-solid fa-battery-full"></i></span>
+        </div>
+        <div class="ios-body inner-phone">
+          <div class="crumb">your stuff · grocery</div>
+          <h2 class="display-title">shopping</h2>
+          <div class="standfirst">check to move into the pantry.</div>
+          <div class="seg"><button>pantry</button><button class="on">shopping</button></div>
+          <div class="section-label">to buy</div>
+          <div class="card">
+            <div class="row"><button class="check"></button><span class="grow">milk</span><span class="qty">1 L</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+            <div class="row"><button class="check"></button><span class="grow">tomatoes</span><span class="qty">6</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+            <div class="row checked"><button class="check"><i class="fa-solid fa-check" style="font-size:11px"></i></button><span class="grow">bread</span><span class="qty">1 loaf</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+            <div class="row"><button class="check"></button><span class="grow">guinea pig hay</span><span class="qty">large bag</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+          </div>
+        </div>
+        <div class="tabbar">
+          <div class="tab"><i class="fa-solid fa-feather"></i><span>home</span></div>
+          <div class="tab active"><i class="fa-regular fa-square"></i><span>modules</span></div>
+          <div class="tab"><i class="fa-solid fa-sliders"></i><span>settings</span></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- 8) PETS ============================================== -->
+<section class="screen-group" id="s-pets">
+  <div class="screen-caption"><strong>08</strong> pets</div>
+  <div class="pair">
+
+    <div class="desktop" role="img" aria-label="desktop, pets">
+      <div class="titlebar">
+        <div class="traffic"><span class="red"></span><span class="yellow"></span><span class="green"></span></div>
+        <div class="addressbar"><i class="fa-solid fa-lock"></i><span>app.ollie.local/m/pets</span></div>
+        <div class="browser-actions"><i class="fa-solid fa-arrow-down"></i><i class="fa-solid fa-plus"></i></div>
+      </div>
+      <div class="viewport">
+        <div class="topnav">
+          <div class="brand"><span class="dot"></span> ollie</div>
+          <nav>
+            <a class="navlink" href="#">home</a>
+            <a class="navlink active" href="#">modules</a>
+            <a class="navlink" href="#">settings</a>
+          </nav>
+          <div class="user">S</div>
+        </div>
+        <div class="inner">
+          <div class="crumb">box · pets</div>
+          <h2 class="display-title">tontin + pinpon</h2>
+          <div class="meta-line">
+            <span class="status-dot"><span class="d"></span> vitamin C · logged 4h ago</span>
+          </div>
+          <div class="standfirst">two guinea pigs. their care has more structure than yours, and that's allowed.</div>
+
+          <div class="section-label">feeds</div>
+          <div class="card">
+            <div class="row"><span class="grow">bell pepper + romaine, both bowls</span><span class="qty">today 08:10</span><button class="remove" aria-label="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+            <div class="row"><span class="grow">hay refill</span><span class="qty">yesterday</span><button class="remove" aria-label="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+          </div>
+
+          <div class="section-label">observations</div>
+          <div class="card">
+            <div class="row"><span class="grow">pinpon was popcorning after dinner</span><span class="qty">yesterday</span><button class="remove" aria-label="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+            <div class="row"><span class="grow">tontin sneezed twice — watching</span><span class="qty">2d ago</span><button class="remove" aria-label="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+          </div>
+
+          <div class="section-label">vet</div>
+          <div class="card">
+            <div class="row"><span class="grow">annual check-up — dr. polat</span><span class="qty">jun 14</span><button class="remove" aria-label="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+          </div>
+
+          <div class="section-label">supplements</div>
+          <div class="card">
+            <div class="row"><span class="grow">vitamin C drops</span><span class="qty">daily · last 4h ago</span><button class="remove" aria-label="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="iphone" role="img" aria-label="iphone, pets">
+      <div class="screen">
+        <div class="island"></div>
+        <div class="ios-status">
+          <span class="time">9:41</span>
+          <span class="right"><i class="fa-solid fa-signal"></i><i class="fa-solid fa-wifi"></i><i class="fa-solid fa-battery-full"></i></span>
+        </div>
+        <div class="ios-body inner-phone">
+          <div class="crumb">box · pets</div>
+          <h2 class="display-title">tontin + pinpon</h2>
+          <div class="meta-line"><span class="status-dot"><span class="d"></span> vitamin C · 4h ago</span></div>
+          <div class="standfirst">their care has structure. yours can borrow some.</div>
+          <div class="section-label">feeds</div>
+          <div class="card">
+            <div class="row"><span class="grow">bell pepper + romaine</span><span class="qty">08:10</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+            <div class="row"><span class="grow">hay refill</span><span class="qty">yesterday</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+          </div>
+          <div class="section-label">observations</div>
+          <div class="card">
+            <div class="row"><span class="grow">pinpon popcorning</span><span class="qty">yesterday</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+            <div class="row"><span class="grow">tontin sneezed twice</span><span class="qty">2d</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+          </div>
+          <div class="section-label">vet</div>
+          <div class="card">
+            <div class="row"><span class="grow">annual check-up</span><span class="qty">jun 14</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+          </div>
+        </div>
+        <div class="tabbar">
+          <div class="tab"><i class="fa-solid fa-feather"></i><span>home</span></div>
+          <div class="tab active"><i class="fa-regular fa-square"></i><span>modules</span></div>
+          <div class="tab"><i class="fa-solid fa-sliders"></i><span>settings</span></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- 9) BODY ============================================== -->
+<section class="screen-group" id="s-body">
+  <div class="screen-caption"><strong>09</strong> body</div>
+  <div class="pair">
+
+    <div class="desktop" role="img" aria-label="desktop, body">
+      <div class="titlebar">
+        <div class="traffic"><span class="red"></span><span class="yellow"></span><span class="green"></span></div>
+        <div class="addressbar"><i class="fa-solid fa-lock"></i><span>app.ollie.local/m/body</span></div>
+        <div class="browser-actions"><i class="fa-solid fa-arrow-down"></i><i class="fa-solid fa-plus"></i></div>
+      </div>
+      <div class="viewport">
+        <div class="topnav">
+          <div class="brand"><span class="dot"></span> ollie</div>
+          <nav>
+            <a class="navlink" href="#">home</a>
+            <a class="navlink active" href="#">modules</a>
+            <a class="navlink" href="#">settings</a>
+          </nav>
+          <div class="user">S</div>
+        </div>
+        <div class="inner">
+          <div class="crumb">box · body</div>
+          <h2 class="display-title">body</h2>
+          <div class="standfirst">just the data. no scolding.</div>
+
+          <div class="hero" style="margin-top: 12px">
+            <div class="tumbler"><div class="fill"></div><div class="count">4 / 8</div></div>
+            <div>
+              <div style="font-family: var(--font-display); font-weight:600; font-size: 18px">water</div>
+              <div class="caption">4 of 8 glasses · last sip 22 min ago</div>
+              <div class="caption" style="margin-top: 10px"><strong style="color: var(--ink-soft); font-weight:500">last movement:</strong> 38-min walk · earlier today</div>
+            </div>
+          </div>
+
+          <div class="section-label">water</div>
+          <div class="card">
+            <div class="row"><span class="grow">glass after coffee</span><span class="qty">08:40</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+            <div class="row"><span class="grow">refilled bottle</span><span class="qty">11:05</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+          </div>
+
+          <div class="section-label">movement</div>
+          <div class="card">
+            <div class="row"><span class="grow">walk to bakery, slow pace</span><span class="qty">38 min · today</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+            <div class="row"><span class="grow">stretching, hips</span><span class="qty">12 min · yesterday</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+          </div>
+
+          <div class="section-label">symptoms</div>
+          <div class="card">
+            <div class="row"><span class="grow">low-grade headache, right side</span><span class="qty">since afternoon</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+          </div>
+
+          <div class="section-label">supplements</div>
+          <div class="card">
+            <div class="row"><span class="grow">magnesium glycinate</span><span class="qty">last night</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+            <div class="row"><span class="grow">vit D</span><span class="qty">this morning</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="iphone" role="img" aria-label="iphone, body">
+      <div class="screen">
+        <div class="island"></div>
+        <div class="ios-status">
+          <span class="time">9:41</span>
+          <span class="right"><i class="fa-solid fa-signal"></i><i class="fa-solid fa-wifi"></i><i class="fa-solid fa-battery-full"></i></span>
+        </div>
+        <div class="ios-body inner-phone">
+          <div class="crumb">box · body</div>
+          <h2 class="display-title">body</h2>
+          <div class="hero" style="margin-top:10px">
+            <div class="tumbler"><div class="fill"></div><div class="count">4/8</div></div>
+            <div>
+              <div style="font-family: var(--font-display); font-weight:600">water</div>
+              <div class="caption">last sip 22m ago</div>
+              <div class="caption" style="margin-top: 8px">walk · 38 min today</div>
+            </div>
+          </div>
+          <div class="section-label">water</div>
+          <div class="card">
+            <div class="row"><span class="grow">glass after coffee</span><span class="qty">08:40</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+            <div class="row"><span class="grow">refilled bottle</span><span class="qty">11:05</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+          </div>
+          <div class="section-label">symptoms</div>
+          <div class="card">
+            <div class="row"><span class="grow">low-grade headache</span><span class="qty">today pm</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+          </div>
+        </div>
+        <div class="tabbar">
+          <div class="tab"><i class="fa-solid fa-feather"></i><span>home</span></div>
+          <div class="tab active"><i class="fa-regular fa-square"></i><span>modules</span></div>
+          <div class="tab"><i class="fa-solid fa-sliders"></i><span>settings</span></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- 10) WORK ============================================== -->
+<section class="screen-group" id="s-work">
+  <div class="screen-caption"><strong>10</strong> work</div>
+  <div class="pair">
+
+    <div class="desktop" role="img" aria-label="desktop, work">
+      <div class="titlebar">
+        <div class="traffic"><span class="red"></span><span class="yellow"></span><span class="green"></span></div>
+        <div class="addressbar"><i class="fa-solid fa-lock"></i><span>app.ollie.local/m/work</span></div>
+        <div class="browser-actions"><i class="fa-solid fa-arrow-down"></i><i class="fa-solid fa-plus"></i></div>
+      </div>
+      <div class="viewport">
+        <div class="topnav">
+          <div class="brand"><span class="dot"></span> ollie</div>
+          <nav>
+            <a class="navlink" href="#">home</a>
+            <a class="navlink active" href="#">modules</a>
+            <a class="navlink" href="#">settings</a>
+          </nav>
+          <div class="user">S</div>
+        </div>
+        <div class="inner">
+          <div class="crumb">box · work</div>
+          <h2 class="display-title">work</h2>
+          <div class="standfirst">tasks that exist, not tasks you should feel bad about.</div>
+
+          <div class="hero" style="margin-top: 12px">
+            <div class="ring"><span class="center">92<span style="font-size:11px; color: var(--ink-mute); margin-left:1px">m</span></span></div>
+            <div>
+              <div style="font-family: var(--font-display); font-weight:600; font-size: 18px">focus today · 92 min</div>
+              <div class="caption">last finished: "draft EB1A criteria gate"</div>
+            </div>
+          </div>
+
+          <div class="section-label">tasks</div>
+          <div class="card">
+            <div class="row checked"><button class="check"><i class="fa-solid fa-check" style="font-size:11px"></i></button><span class="grow">draft EB1A criteria gate</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+            <div class="row"><button class="check"></button><span class="grow">reply to nicole re: case theory doc</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+            <div class="row"><button class="check"></button><span class="grow">prep cofounder onboarding pdf</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+            <div class="row"><button class="check"></button><span class="grow">port grocery routing pattern to body</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+          </div>
+
+          <div class="section-label">deadlines</div>
+          <div class="card">
+            <div class="row"><span class="grow">Atelier doctrinal trifecta v1.2 review</span><span class="qty">fri</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+            <div class="row"><span class="grow">B2B pitch deck draft</span><span class="qty">mon</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+          </div>
+
+          <div class="section-label">recent events</div>
+          <div class="card">
+            <div class="row"><span class="grow">finished: "draft EB1A criteria gate"</span><span class="qty">11:42</span></div>
+            <div class="row"><span class="grow">started focus block</span><span class="qty">10:10</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="iphone" role="img" aria-label="iphone, work">
+      <div class="screen">
+        <div class="island"></div>
+        <div class="ios-status"><span class="time">9:41</span><span class="right"><i class="fa-solid fa-signal"></i><i class="fa-solid fa-wifi"></i><i class="fa-solid fa-battery-full"></i></span></div>
+        <div class="ios-body inner-phone">
+          <div class="crumb">box · work</div>
+          <h2 class="display-title">work</h2>
+          <div class="hero" style="margin-top:10px">
+            <div class="ring"><span class="center">92m</span></div>
+            <div>
+              <div style="font-family: var(--font-display); font-weight:600">focus · 92m</div>
+              <div class="caption">last: draft EB1A gate</div>
+            </div>
+          </div>
+          <div class="section-label">tasks</div>
+          <div class="card">
+            <div class="row"><button class="check"></button><span class="grow">reply to nicole</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+            <div class="row"><button class="check"></button><span class="grow">prep cofounder pdf</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+            <div class="row checked"><button class="check"><i class="fa-solid fa-check" style="font-size:11px"></i></button><span class="grow">draft EB1A gate</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+          </div>
+          <div class="section-label">deadlines</div>
+          <div class="card">
+            <div class="row"><span class="grow">trifecta v1.2 review</span><span class="qty">fri</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+          </div>
+        </div>
+        <div class="tabbar">
+          <div class="tab"><i class="fa-solid fa-feather"></i><span>home</span></div>
+          <div class="tab active"><i class="fa-regular fa-square"></i><span>modules</span></div>
+          <div class="tab"><i class="fa-solid fa-sliders"></i><span>settings</span></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- 11) FINANCE ============================================== -->
+<section class="screen-group" id="s-finance">
+  <div class="screen-caption"><strong>11</strong> finance</div>
+  <div class="pair">
+
+    <div class="desktop" role="img" aria-label="desktop, finance">
+      <div class="titlebar">
+        <div class="traffic"><span class="red"></span><span class="yellow"></span><span class="green"></span></div>
+        <div class="addressbar"><i class="fa-solid fa-lock"></i><span>app.ollie.local/m/finance</span></div>
+        <div class="browser-actions"><i class="fa-solid fa-arrow-down"></i><i class="fa-solid fa-plus"></i></div>
+      </div>
+      <div class="viewport">
+        <div class="topnav">
+          <div class="brand"><span class="dot"></span> ollie</div>
+          <nav>
+            <a class="navlink" href="#">home</a>
+            <a class="navlink active" href="#">modules</a>
+            <a class="navlink" href="#">settings</a>
+          </nav>
+          <div class="user">S</div>
+        </div>
+        <div class="inner">
+          <div class="crumb">box · finance</div>
+          <h2 class="display-title">finance</h2>
+          <div class="standfirst">spend so far this month, things on autopilot, what hit the card.</div>
+
+          <div class="hero" style="margin-top: 12px; flex-direction: column; align-items: flex-start; gap: 8px;">
+            <div class="big-num"><span class="ccy">$</span>2,148.<span style="font-size: 26px; color: var(--ink-mute)">37</span></div>
+            <div class="caption">may · so far · primary USD &nbsp; <span style="color: var(--ink-faint)">also: €214, ₺3,820</span></div>
+          </div>
+
+          <div class="section-label">bills</div>
+          <div class="card">
+            <div class="row"><span class="grow">rent</span><span class="qty">$1,400 · jun 1</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+            <div class="row"><span class="grow">electricity (avg)</span><span class="qty">$82 · jun 8</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+          </div>
+
+          <div class="section-label">subscriptions</div>
+          <div class="card">
+            <div class="row"><span class="grow">claude pro</span><span class="qty">$20 · monthly</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+            <div class="row"><span class="grow">supabase pro</span><span class="qty">$25 · monthly</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+            <div class="row"><span class="grow">spotify family</span><span class="qty">$17 · monthly</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+          </div>
+
+          <div class="section-label">recent transactions</div>
+          <div class="card">
+            <div class="row"><span class="grow">migros — groceries</span><span class="qty">−₺820 · today</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+            <div class="row"><span class="grow">a kahve — espresso</span><span class="qty">−₺95 · yesterday</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="iphone" role="img" aria-label="iphone, finance">
+      <div class="screen">
+        <div class="island"></div>
+        <div class="ios-status"><span class="time">9:41</span><span class="right"><i class="fa-solid fa-signal"></i><i class="fa-solid fa-wifi"></i><i class="fa-solid fa-battery-full"></i></span></div>
+        <div class="ios-body inner-phone">
+          <div class="crumb">box · finance</div>
+          <h2 class="display-title">finance</h2>
+          <div class="hero" style="flex-direction:column; align-items:flex-start; gap:6px; margin-top:10px">
+            <div class="big-num"><span class="ccy">$</span>2,148<span style="font-size: 20px; color: var(--ink-mute)">.37</span></div>
+            <div class="caption">may so far · USD</div>
+          </div>
+          <div class="section-label">bills</div>
+          <div class="card">
+            <div class="row"><span class="grow">rent</span><span class="qty">$1,400 · jun 1</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+          </div>
+          <div class="section-label">subscriptions</div>
+          <div class="card">
+            <div class="row"><span class="grow">claude pro</span><span class="qty">$20/mo</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+            <div class="row"><span class="grow">supabase pro</span><span class="qty">$25/mo</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+          </div>
+        </div>
+        <div class="tabbar">
+          <div class="tab"><i class="fa-solid fa-feather"></i><span>home</span></div>
+          <div class="tab active"><i class="fa-regular fa-square"></i><span>modules</span></div>
+          <div class="tab"><i class="fa-solid fa-sliders"></i><span>settings</span></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- 12) SLEEP (with empty-state variant below) =============== -->
+<section class="screen-group" id="s-sleep">
+  <div class="screen-caption"><strong>12</strong> sleep</div>
+  <div class="stack">
+
+    <div>
+      <div class="sub-label">populated</div>
+      <div class="pair">
+
+        <div class="desktop" role="img" aria-label="desktop, sleep">
+          <div class="titlebar">
+            <div class="traffic"><span class="red"></span><span class="yellow"></span><span class="green"></span></div>
+            <div class="addressbar"><i class="fa-solid fa-lock"></i><span>app.ollie.local/m/sleep</span></div>
+            <div class="browser-actions"><i class="fa-solid fa-arrow-down"></i><i class="fa-solid fa-plus"></i></div>
+          </div>
+          <div class="viewport">
+            <div class="topnav">
+              <div class="brand"><span class="dot"></span> ollie</div>
+              <nav>
+                <a class="navlink" href="#">home</a>
+                <a class="navlink active" href="#">modules</a>
+                <a class="navlink" href="#">settings</a>
+              </nav>
+              <div class="user">S</div>
+            </div>
+            <div class="inner">
+              <div class="crumb">box · sleep</div>
+              <h2 class="display-title">sleep</h2>
+              <div class="standfirst">your week in bars. the last one is last night.</div>
+
+              <div class="hero" style="margin-top: 12px">
+                <div class="weekbar" aria-label="week-bar">
+                  <div class="bar" style="height: 32px"></div>
+                  <div class="bar" style="height: 44px"></div>
+                  <div class="bar dashed" style="height: 28px"></div>
+                  <div class="bar" style="height: 50px"></div>
+                  <div class="bar" style="height: 40px"></div>
+                  <div class="bar" style="height: 36px"></div>
+                  <div class="bar on" style="height: 48px"></div>
+                </div>
+                <div>
+                  <div style="font-family: var(--font-serif); font-size: 28px; font-weight: 400; letter-spacing: -0.01em">
+                    7<span style="color: var(--ink-mute); font-size: 18px; font-style: italic">h</span> 20<span style="color: var(--ink-mute); font-size: 18px; font-style: italic">m</span>
+                  </div>
+                  <div class="caption">last night · in bed 23:50, up 07:10</div>
+                </div>
+              </div>
+
+              <div class="section-label">recent sleep</div>
+              <div class="card">
+                <div class="row"><span class="grow">7h 20m</span><span class="qty">last night</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+                <div class="row"><span class="grow">6h 05m, woke twice</span><span class="qty">2 nights ago</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+              </div>
+
+              <div class="section-label">wind-down notes</div>
+              <div class="card">
+                <div class="row"><span class="grow">phone off the bed, kindle on</span><span class="qty">last night</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+              </div>
+
+              <div class="section-label">dreams</div>
+              <div class="card">
+                <div class="row"><span class="grow">stairs in old apartment, kept going down</span><span class="qty">last night</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="iphone" role="img" aria-label="iphone, sleep">
+          <div class="screen">
+            <div class="island"></div>
+            <div class="ios-status"><span class="time">9:41</span><span class="right"><i class="fa-solid fa-signal"></i><i class="fa-solid fa-wifi"></i><i class="fa-solid fa-battery-full"></i></span></div>
+            <div class="ios-body inner-phone">
+              <div class="crumb">box · sleep</div>
+              <h2 class="display-title">sleep</h2>
+              <div class="hero" style="margin-top:10px">
+                <div class="weekbar" aria-hidden="true">
+                  <div class="bar" style="height: 28px"></div>
+                  <div class="bar" style="height: 38px"></div>
+                  <div class="bar dashed" style="height: 24px"></div>
+                  <div class="bar" style="height: 44px"></div>
+                  <div class="bar" style="height: 34px"></div>
+                  <div class="bar" style="height: 32px"></div>
+                  <div class="bar on" style="height: 42px"></div>
+                </div>
+                <div>
+                  <div style="font-family: var(--font-serif); font-size: 22px">7<span style="color: var(--ink-mute); font-style: italic">h</span> 20<span style="color: var(--ink-mute); font-style: italic">m</span></div>
+                  <div class="caption">last night</div>
+                </div>
+              </div>
+              <div class="section-label">recent</div>
+              <div class="card">
+                <div class="row"><span class="grow">7h 20m</span><span class="qty">last night</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+                <div class="row"><span class="grow">6h 05m, woke twice</span><span class="qty">2 nights ago</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+              </div>
+            </div>
+            <div class="tabbar">
+              <div class="tab"><i class="fa-solid fa-feather"></i><span>home</span></div>
+              <div class="tab active"><i class="fa-regular fa-square"></i><span>modules</span></div>
+              <div class="tab"><i class="fa-solid fa-sliders"></i><span>settings</span></div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- empty -->
+    <div>
+      <div class="sub-label">empty state</div>
+      <div class="pair">
+
+        <div class="desktop" role="img" aria-label="desktop, sleep empty">
+          <div class="titlebar">
+            <div class="traffic"><span class="red"></span><span class="yellow"></span><span class="green"></span></div>
+            <div class="addressbar"><i class="fa-solid fa-lock"></i><span>app.ollie.local/m/sleep</span></div>
+            <div class="browser-actions"><i class="fa-solid fa-arrow-down"></i><i class="fa-solid fa-plus"></i></div>
+          </div>
+          <div class="viewport">
+            <div class="topnav">
+              <div class="brand"><span class="dot"></span> ollie</div>
+              <nav>
+                <a class="navlink" href="#">home</a>
+                <a class="navlink active" href="#">modules</a>
+                <a class="navlink" href="#">settings</a>
+              </nav>
+              <div class="user">S</div>
+            </div>
+            <div class="inner">
+              <div class="crumb">box · sleep</div>
+              <h2 class="display-title">sleep</h2>
+              <div class="standfirst">your week in bars. the last one is last night.</div>
+              <div class="card empty" style="margin-top: 18px">
+                no nights logged yet.
+                <div class="ex">try: "slept 7h, woke up once around 4"</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="iphone" role="img" aria-label="iphone, sleep empty">
+          <div class="screen">
+            <div class="island"></div>
+            <div class="ios-status"><span class="time">9:41</span><span class="right"><i class="fa-solid fa-signal"></i><i class="fa-solid fa-wifi"></i><i class="fa-solid fa-battery-full"></i></span></div>
+            <div class="ios-body inner-phone">
+              <div class="crumb">box · sleep</div>
+              <h2 class="display-title">sleep</h2>
+              <div class="card empty">
+                no nights logged yet.
+                <div class="ex">"slept 7h, woke once"</div>
+              </div>
+            </div>
+            <div class="tabbar">
+              <div class="tab"><i class="fa-solid fa-feather"></i><span>home</span></div>
+              <div class="tab active"><i class="fa-regular fa-square"></i><span>modules</span></div>
+              <div class="tab"><i class="fa-solid fa-sliders"></i><span>settings</span></div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- 13) ADMIN ============================================== -->
+<section class="screen-group" id="s-admin">
+  <div class="screen-caption"><strong>13</strong> admin</div>
+  <div class="pair">
+
+    <div class="desktop" role="img" aria-label="desktop, admin">
+      <div class="titlebar">
+        <div class="traffic"><span class="red"></span><span class="yellow"></span><span class="green"></span></div>
+        <div class="addressbar"><i class="fa-solid fa-lock"></i><span>app.ollie.local/m/admin</span></div>
+        <div class="browser-actions"><i class="fa-solid fa-arrow-down"></i><i class="fa-solid fa-plus"></i></div>
+      </div>
+      <div class="viewport">
+        <div class="topnav">
+          <div class="brand"><span class="dot"></span> ollie</div>
+          <nav>
+            <a class="navlink" href="#">home</a>
+            <a class="navlink active" href="#">modules</a>
+            <a class="navlink" href="#">settings</a>
+          </nav>
+          <div class="user">S</div>
+        </div>
+        <div class="inner">
+          <div class="crumb">box · admin</div>
+          <h2 class="display-title">admin</h2>
+          <div class="standfirst">the boring stuff that pays the bills.</div>
+
+          <div class="section-label">upcoming renewals</div>
+          <div class="card">
+            <div class="row"><span class="grow">passport renewal</span><span class="qty">jun 30</span><span class="pill warn">soon</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+            <div class="row"><span class="grow">car insurance</span><span class="qty">jul 12</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+            <div class="row"><span class="grow">domain · ollie.app</span><span class="qty">may 22 · overdue</span><span class="pill warn">overdue</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+          </div>
+
+          <div class="runway" style="margin-top: 16px">
+            <span>runway · today → 60d</span>
+            <div class="line"><span style="left: 10%"></span><span style="left: 38%"></span><span style="left: 62%"></span><span style="left: 90%"></span></div>
+            <span style="display:flex; justify-content: space-between"><span>jun</span><span>jul</span></span>
+          </div>
+
+          <div class="section-label">tasks</div>
+          <div class="card">
+            <div class="row"><button class="check"></button><span class="grow">scan and upload tax forms</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+            <div class="row"><button class="check"></button><span class="grow">change beneficiary on retirement acct</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+          </div>
+
+          <div class="section-label">phone calls</div>
+          <div class="card">
+            <div class="row"><span class="grow">call landlord about kitchen sink</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+          </div>
+
+          <div class="section-label">appointments</div>
+          <div class="card">
+            <div class="row"><span class="grow">notary · 14:30</span><span class="qty">jun 03</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="iphone" role="img" aria-label="iphone, admin">
+      <div class="screen">
+        <div class="island"></div>
+        <div class="ios-status"><span class="time">9:41</span><span class="right"><i class="fa-solid fa-signal"></i><i class="fa-solid fa-wifi"></i><i class="fa-solid fa-battery-full"></i></span></div>
+        <div class="ios-body inner-phone">
+          <div class="crumb">box · admin</div>
+          <h2 class="display-title">admin</h2>
+          <div class="section-label">renewals</div>
+          <div class="card">
+            <div class="row"><span class="grow">passport</span><span class="qty">jun 30</span><span class="pill warn">soon</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+            <div class="row"><span class="grow">ollie.app domain</span><span class="qty">may 22</span><span class="pill warn">overdue</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+          </div>
+          <div class="section-label">tasks</div>
+          <div class="card">
+            <div class="row"><button class="check"></button><span class="grow">scan tax forms</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+          </div>
+          <div class="section-label">appointments</div>
+          <div class="card">
+            <div class="row"><span class="grow">notary · 14:30</span><span class="qty">jun 03</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+          </div>
+        </div>
+        <div class="tabbar">
+          <div class="tab"><i class="fa-solid fa-feather"></i><span>home</span></div>
+          <div class="tab active"><i class="fa-regular fa-square"></i><span>modules</span></div>
+          <div class="tab"><i class="fa-solid fa-sliders"></i><span>settings</span></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- 14) HABITS ============================================== -->
+<section class="screen-group" id="s-habits">
+  <div class="screen-caption"><strong>14</strong> habits</div>
+  <div class="pair">
+
+    <div class="desktop" role="img" aria-label="desktop, habits">
+      <div class="titlebar">
+        <div class="traffic"><span class="red"></span><span class="yellow"></span><span class="green"></span></div>
+        <div class="addressbar"><i class="fa-solid fa-lock"></i><span>app.ollie.local/m/habits</span></div>
+        <div class="browser-actions"><i class="fa-solid fa-arrow-down"></i><i class="fa-solid fa-plus"></i></div>
+      </div>
+      <div class="viewport">
+        <div class="topnav">
+          <div class="brand"><span class="dot"></span> ollie</div>
+          <nav>
+            <a class="navlink" href="#">home</a>
+            <a class="navlink active" href="#">modules</a>
+            <a class="navlink" href="#">settings</a>
+          </nav>
+          <div class="user">S</div>
+        </div>
+        <div class="inner">
+          <div class="crumb">box · habits</div>
+          <h2 class="display-title">habits</h2>
+          <div class="standfirst">tiny things you wanted to be the person who does.</div>
+
+          <div class="hero" style="margin-top: 12px">
+            <div class="ring"><span class="center">5/7</span></div>
+            <div>
+              <div style="font-family: var(--font-display); font-weight:600; font-size: 18px">stretch — 10 min</div>
+              <div class="caption">streak · 5 days</div>
+              <div style="display: flex; gap: 8px; margin-top: 10px">
+                <span class="status-dot"><span class="d"></span></span>
+                <span class="status-dot"><span class="d"></span></span>
+                <span class="status-dot"><span class="d"></span></span>
+                <span class="status-dot"><span class="d"></span></span>
+                <span class="status-dot"><span class="d"></span></span>
+                <span class="status-dot"><span class="d" style="background: var(--ink-faint)"></span></span>
+                <span class="status-dot"><span class="d" style="background: var(--ink-faint)"></span></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="section-label">today</div>
+          <div class="card">
+            <div class="row checked"><button class="check"><i class="fa-solid fa-check" style="font-size:11px"></i></button><span class="grow">stretch — 10 min</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+            <div class="row"><button class="check"></button><span class="grow">no scroll before coffee</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+            <div class="row"><button class="check"></button><span class="grow">read 5 pages</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+          </div>
+
+          <div class="section-label">identity notes</div>
+          <div class="card">
+            <div class="row"><span class="grow">"I'm the person who pauses before opening twitter"</span></div>
+          </div>
+
+          <div class="section-label">streak breaks</div>
+          <div class="card">
+            <div class="row"><span class="grow">no scroll — broke on the 4th</span><span class="qty">5d ago</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="iphone" role="img" aria-label="iphone, habits">
+      <div class="screen">
+        <div class="island"></div>
+        <div class="ios-status"><span class="time">9:41</span><span class="right"><i class="fa-solid fa-signal"></i><i class="fa-solid fa-wifi"></i><i class="fa-solid fa-battery-full"></i></span></div>
+        <div class="ios-body inner-phone">
+          <div class="crumb">box · habits</div>
+          <h2 class="display-title">habits</h2>
+          <div class="hero" style="margin-top:10px">
+            <div class="ring"><span class="center">5/7</span></div>
+            <div>
+              <div style="font-family: var(--font-display); font-weight:600">stretch</div>
+              <div class="caption">streak · 5d</div>
+            </div>
+          </div>
+          <div class="section-label">today</div>
+          <div class="card">
+            <div class="row checked"><button class="check"><i class="fa-solid fa-check" style="font-size:11px"></i></button><span class="grow">stretch — 10 min</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+            <div class="row"><button class="check"></button><span class="grow">no scroll before coffee</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+            <div class="row"><button class="check"></button><span class="grow">read 5 pages</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+          </div>
+        </div>
+        <div class="tabbar">
+          <div class="tab"><i class="fa-solid fa-feather"></i><span>home</span></div>
+          <div class="tab active"><i class="fa-regular fa-square"></i><span>modules</span></div>
+          <div class="tab"><i class="fa-solid fa-sliders"></i><span>settings</span></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- 15) GOALS (with empty-state variant) ============================================== -->
+<section class="screen-group" id="s-goals">
+  <div class="screen-caption"><strong>15</strong> goals</div>
+
+  <div class="stack">
+
+    <div>
+      <div class="sub-label">populated</div>
+      <div class="pair">
+
+        <div class="desktop" role="img" aria-label="desktop, goals">
+          <div class="titlebar">
+            <div class="traffic"><span class="red"></span><span class="yellow"></span><span class="green"></span></div>
+            <div class="addressbar"><i class="fa-solid fa-lock"></i><span>app.ollie.local/m/goals</span></div>
+            <div class="browser-actions"><i class="fa-solid fa-arrow-down"></i><i class="fa-solid fa-plus"></i></div>
+          </div>
+          <div class="viewport">
+            <div class="topnav">
+              <div class="brand"><span class="dot"></span> ollie</div>
+              <nav>
+                <a class="navlink" href="#">home</a>
+                <a class="navlink active" href="#">modules</a>
+                <a class="navlink" href="#">settings</a>
+              </nav>
+              <div class="user">S</div>
+            </div>
+            <div class="inner">
+              <div class="crumb">box · goals</div>
+              <h2 class="display-title">goals</h2>
+              <div class="standfirst">things you decided are worth doing on a longer arc than today.</div>
+
+              <div class="hero" style="margin-top: 12px">
+                <div class="ring"><span class="center">62%</span></div>
+                <div>
+                  <div style="font-family: var(--font-display); font-weight:600; font-size: 18px">ship ollie closed alpha</div>
+                  <div style="font-family: var(--font-serif); font-style: italic; color: var(--ink-soft); margin-top: 4px">because I want this to exist before I get bored of building it.</div>
+                  <div class="caption" style="margin-top:6px">last note: "grocery routing done, body next"</div>
+                </div>
+              </div>
+
+              <div class="section-label">active goals</div>
+              <div class="card">
+                <div class="row"><span class="grow">ship ollie closed alpha</span><span class="qty">62%</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+                <div class="row"><span class="grow">EB1A pilot · 3 cases through</span><span class="qty">33%</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+                <div class="row"><span class="grow">10k steps/day average</span><span class="qty">this month</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+              </div>
+
+              <div class="section-label">milestones</div>
+              <div class="card">
+                <div class="row checked"><button class="check"><i class="fa-solid fa-check" style="font-size:11px"></i></button><span class="grow">grocery routing live in real chrome E2E</span><span class="qty">may 22</span></div>
+                <div class="row"><button class="check"></button><span class="grow">body routing</span></div>
+                <div class="row"><button class="check"></button><span class="grow">phase-1 dogfood for 2 weeks</span></div>
+              </div>
+
+              <div class="section-label">obstacles</div>
+              <div class="card">
+                <div class="row"><span class="grow">CF Pages CI not set up for web</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="iphone" role="img" aria-label="iphone, goals">
+          <div class="screen">
+            <div class="island"></div>
+            <div class="ios-status"><span class="time">9:41</span><span class="right"><i class="fa-solid fa-signal"></i><i class="fa-solid fa-wifi"></i><i class="fa-solid fa-battery-full"></i></span></div>
+            <div class="ios-body inner-phone">
+              <div class="crumb">box · goals</div>
+              <h2 class="display-title">goals</h2>
+              <div class="hero" style="margin-top:10px">
+                <div class="ring"><span class="center">62%</span></div>
+                <div>
+                  <div style="font-family: var(--font-display); font-weight:600">ship alpha</div>
+                  <div style="font-family: var(--font-serif); font-style: italic; color: var(--ink-soft); font-size: 12.5px; margin-top: 2px">because I want this to exist.</div>
+                </div>
+              </div>
+              <div class="section-label">milestones</div>
+              <div class="card">
+                <div class="row checked"><button class="check"><i class="fa-solid fa-check" style="font-size:11px"></i></button><span class="grow">grocery routing E2E</span></div>
+                <div class="row"><button class="check"></button><span class="grow">body routing</span></div>
+                <div class="row"><button class="check"></button><span class="grow">2w dogfood</span></div>
+              </div>
+            </div>
+            <div class="tabbar">
+              <div class="tab"><i class="fa-solid fa-feather"></i><span>home</span></div>
+              <div class="tab active"><i class="fa-regular fa-square"></i><span>modules</span></div>
+              <div class="tab"><i class="fa-solid fa-sliders"></i><span>settings</span></div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- empty variant -->
+    <div>
+      <div class="sub-label">empty state</div>
+      <div class="pair">
+
+        <div class="desktop" role="img" aria-label="desktop, goals empty">
+          <div class="titlebar">
+            <div class="traffic"><span class="red"></span><span class="yellow"></span><span class="green"></span></div>
+            <div class="addressbar"><i class="fa-solid fa-lock"></i><span>app.ollie.local/m/goals</span></div>
+            <div class="browser-actions"><i class="fa-solid fa-arrow-down"></i><i class="fa-solid fa-plus"></i></div>
+          </div>
+          <div class="viewport">
+            <div class="topnav">
+              <div class="brand"><span class="dot"></span> ollie</div>
+              <nav>
+                <a class="navlink" href="#">home</a>
+                <a class="navlink active" href="#">modules</a>
+                <a class="navlink" href="#">settings</a>
+              </nav>
+              <div class="user">S</div>
+            </div>
+            <div class="inner">
+              <div class="crumb">box · goals</div>
+              <h2 class="display-title">goals</h2>
+              <div class="standfirst">things on a longer arc than today.</div>
+              <div class="card empty" style="margin-top: 18px">
+                no goals yet. that's also fine.
+                <div class="ex">try: "I want to run 5k by september, because it'd feel good to finish something"</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="iphone" role="img" aria-label="iphone, goals empty">
+          <div class="screen">
+            <div class="island"></div>
+            <div class="ios-status"><span class="time">9:41</span><span class="right"><i class="fa-solid fa-signal"></i><i class="fa-solid fa-wifi"></i><i class="fa-solid fa-battery-full"></i></span></div>
+            <div class="ios-body inner-phone">
+              <div class="crumb">box · goals</div>
+              <h2 class="display-title">goals</h2>
+              <div class="card empty">
+                no goals yet. that's also fine.
+                <div class="ex">"run 5k by september, because it'd feel good"</div>
+              </div>
+            </div>
+            <div class="tabbar">
+              <div class="tab"><i class="fa-solid fa-feather"></i><span>home</span></div>
+              <div class="tab active"><i class="fa-regular fa-square"></i><span>modules</span></div>
+              <div class="tab"><i class="fa-solid fa-sliders"></i><span>settings</span></div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- 16) MEDICATION ============================================== -->
+<section class="screen-group" id="s-medication">
+  <div class="screen-caption"><strong>16</strong> medication</div>
+  <div class="pair">
+
+    <div class="desktop" role="img" aria-label="desktop, medication">
+      <div class="titlebar">
+        <div class="traffic"><span class="red"></span><span class="yellow"></span><span class="green"></span></div>
+        <div class="addressbar"><i class="fa-solid fa-lock"></i><span>app.ollie.local/m/medication</span></div>
+        <div class="browser-actions"><i class="fa-solid fa-arrow-down"></i><i class="fa-solid fa-plus"></i></div>
+      </div>
+      <div class="viewport">
+        <div class="topnav">
+          <div class="brand"><span class="dot"></span> ollie</div>
+          <nav>
+            <a class="navlink" href="#">home</a>
+            <a class="navlink active" href="#">modules</a>
+            <a class="navlink" href="#">settings</a>
+          </nav>
+          <div class="user">S</div>
+        </div>
+        <div class="inner">
+          <div class="crumb">box · medication</div>
+          <h2 class="display-title">medication</h2>
+          <div class="standfirst">what, when, how it felt.</div>
+
+          <div class="hero" style="margin-top: 12px">
+            <div class="ring dose"><span class="center">3/5</span></div>
+            <div>
+              <div style="font-family: var(--font-display); font-weight:600; font-size: 18px">3 of 5 today</div>
+              <div class="caption">last dose · 08:30 · next dose · 12:00</div>
+              <div class="dose-dots" style="margin-top: 10px">
+                <span class="d" title="taken"></span>
+                <span class="d" title="taken"></span>
+                <span class="d" title="taken"></span>
+                <span class="d amber" title="missed"></span>
+                <span class="d dashed" title="upcoming"></span>
+                <span class="more">+0</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="section-label">your meds</div>
+          <div class="card">
+            <div class="row"><span class="grow">vyvanse 50 mg</span><span class="qty">morning</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+            <div class="row"><span class="grow">sertraline 50 mg</span><span class="qty">evening</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+            <div class="row"><span class="grow">magnesium glycinate</span><span class="qty">bedtime</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+          </div>
+
+          <div class="section-label">missed doses</div>
+          <div class="card">
+            <div class="row"><span class="grow">sertraline · evening</span><span class="qty">2d ago</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+          </div>
+
+          <div class="section-label">side effects</div>
+          <div class="card">
+            <div class="row"><span class="grow">dry mouth in the afternoon</span><span class="qty">this week</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="iphone" role="img" aria-label="iphone, medication">
+      <div class="screen">
+        <div class="island"></div>
+        <div class="ios-status"><span class="time">9:41</span><span class="right"><i class="fa-solid fa-signal"></i><i class="fa-solid fa-wifi"></i><i class="fa-solid fa-battery-full"></i></span></div>
+        <div class="ios-body inner-phone">
+          <div class="crumb">box · medication</div>
+          <h2 class="display-title">medication</h2>
+          <div class="hero" style="margin-top:10px">
+            <div class="ring dose"><span class="center">3/5</span></div>
+            <div>
+              <div style="font-family: var(--font-display); font-weight:600">3 of 5</div>
+              <div class="caption">next · 12:00</div>
+              <div class="dose-dots" style="margin-top: 8px">
+                <span class="d"></span><span class="d"></span><span class="d"></span><span class="d amber"></span><span class="d dashed"></span>
+              </div>
+            </div>
+          </div>
+          <div class="section-label">your meds</div>
+          <div class="card">
+            <div class="row"><span class="grow">vyvanse 50 mg</span><span class="qty">am</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+            <div class="row"><span class="grow">sertraline 50 mg</span><span class="qty">pm</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+          </div>
+        </div>
+        <div class="tabbar">
+          <div class="tab"><i class="fa-solid fa-feather"></i><span>home</span></div>
+          <div class="tab active"><i class="fa-regular fa-square"></i><span>modules</span></div>
+          <div class="tab"><i class="fa-solid fa-sliders"></i><span>settings</span></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- 17) CYCLE ============================================== -->
+<section class="screen-group" id="s-cycle">
+  <div class="screen-caption"><strong>17</strong> cycle</div>
+  <div class="pair">
+
+    <div class="desktop" role="img" aria-label="desktop, cycle">
+      <div class="titlebar">
+        <div class="traffic"><span class="red"></span><span class="yellow"></span><span class="green"></span></div>
+        <div class="addressbar"><i class="fa-solid fa-lock"></i><span>app.ollie.local/m/cycle</span></div>
+        <div class="browser-actions"><i class="fa-solid fa-arrow-down"></i><i class="fa-solid fa-plus"></i></div>
+      </div>
+      <div class="viewport">
+        <div class="topnav">
+          <div class="brand"><span class="dot"></span> ollie</div>
+          <nav>
+            <a class="navlink" href="#">home</a>
+            <a class="navlink active" href="#">modules</a>
+            <a class="navlink" href="#">settings</a>
+          </nav>
+          <div class="user">S</div>
+        </div>
+        <div class="inner">
+          <div class="crumb">box · cycle</div>
+          <h2 class="display-title">cycle</h2>
+          <div class="standfirst">28-day arc, where you are on it, what's coming.</div>
+
+          <div class="hero" style="margin-top: 12px">
+            <div class="ring phase"><span class="center" style="font-size:14px">day 14</span><span class="marker"></span></div>
+            <div>
+              <div style="font-family: var(--font-display); font-weight:600; font-size: 18px">ovulatory</div>
+              <div class="caption">day 14 · no bleeding · next period in 14d</div>
+            </div>
+          </div>
+
+          <div class="section-label">recent symptoms</div>
+          <div class="card">
+            <div class="row"><span class="grow">tender chest, mild</span><span class="qty">today</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+            <div class="row"><span class="grow">ovulation twinge, left</span><span class="qty">2d ago</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+          </div>
+
+          <div class="section-label">pills</div>
+          <div class="card">
+            <div class="row"><span class="grow">none currently</span></div>
+          </div>
+
+          <div class="section-label">history</div>
+          <div class="card">
+            <div class="row"><span class="grow">last period · 28d</span><span class="qty">3 weeks ago</span></div>
+            <div class="row"><span class="grow">last period · 30d</span><span class="qty">last month</span></div>
+            <div class="row"><span class="grow">last period · 27d</span><span class="qty">2 months ago</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="iphone" role="img" aria-label="iphone, cycle">
+      <div class="screen">
+        <div class="island"></div>
+        <div class="ios-status"><span class="time">9:41</span><span class="right"><i class="fa-solid fa-signal"></i><i class="fa-solid fa-wifi"></i><i class="fa-solid fa-battery-full"></i></span></div>
+        <div class="ios-body inner-phone">
+          <div class="crumb">box · cycle</div>
+          <h2 class="display-title">cycle</h2>
+          <div class="hero" style="margin-top:10px">
+            <div class="ring phase"><span class="center" style="font-size:12px">day 14</span><span class="marker"></span></div>
+            <div>
+              <div style="font-family: var(--font-display); font-weight:600">ovulatory</div>
+              <div class="caption">next period · 14d</div>
+            </div>
+          </div>
+          <div class="section-label">recent symptoms</div>
+          <div class="card">
+            <div class="row"><span class="grow">tender chest, mild</span><span class="qty">today</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+            <div class="row"><span class="grow">ovulation twinge</span><span class="qty">2d ago</span><button class="remove"><i class="fa-regular fa-trash-can"></i></button></div>
+          </div>
+          <div class="section-label">history</div>
+          <div class="card">
+            <div class="row"><span class="grow">28d</span><span class="qty">3w ago</span></div>
+            <div class="row"><span class="grow">30d</span><span class="qty">last mo</span></div>
+          </div>
+        </div>
+        <div class="tabbar">
+          <div class="tab"><i class="fa-solid fa-feather"></i><span>home</span></div>
+          <div class="tab active"><i class="fa-regular fa-square"></i><span>modules</span></div>
+          <div class="tab"><i class="fa-solid fa-sliders"></i><span>settings</span></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- 18) SETTINGS ============================================== -->
+<section class="screen-group" id="s-settings">
+  <div class="screen-caption"><strong>18</strong> settings</div>
+  <div class="pair">
+
+    <div class="desktop" role="img" aria-label="desktop, settings">
+      <div class="titlebar">
+        <div class="traffic"><span class="red"></span><span class="yellow"></span><span class="green"></span></div>
+        <div class="addressbar"><i class="fa-solid fa-lock"></i><span>app.ollie.local/settings</span></div>
+        <div class="browser-actions"><i class="fa-solid fa-arrow-down"></i><i class="fa-solid fa-plus"></i></div>
+      </div>
+      <div class="viewport">
+        <div class="topnav">
+          <div class="brand"><span class="dot"></span> ollie</div>
+          <nav>
+            <a class="navlink" href="#">home</a>
+            <a class="navlink" href="#">modules</a>
+            <a class="navlink active" href="#">settings</a>
+          </nav>
+          <div class="user">S</div>
+        </div>
+        <div class="inner">
+          <div class="crumb">settings</div>
+          <h2 class="display-title">settings</h2>
+          <div class="standfirst">your knobs. defaults are quiet on purpose.</div>
+
+          <div class="section-label">account</div>
+          <div class="card settings-list">
+            <div class="row"><div class="grow"><div class="label">email</div><div class="sub">serra@ollie.local</div></div><i class="fa-solid fa-chevron-right" style="color: var(--ink-faint)"></i></div>
+            <div class="row"><div class="grow"><div class="label">change password</div></div><i class="fa-solid fa-chevron-right" style="color: var(--ink-faint)"></i></div>
+            <div class="row"><div class="grow"><div class="label">sign out</div></div><i class="fa-solid fa-chevron-right" style="color: var(--ink-faint)"></i></div>
+          </div>
+
+          <div class="section-label">privacy</div>
+          <div class="card settings-list">
+            <div class="row"><div class="grow"><div class="label">share anonymous usage</div><div class="sub">helps me build the right things. off by default.</div></div><div class="toggle"></div></div>
+            <div class="row"><div class="grow"><div class="label">app lock · face ID</div><div class="sub">required after 5 min idle</div></div><div class="toggle on"></div></div>
+            <div class="row"><div class="grow"><div class="label">data passphrase</div><div class="sub">12+ characters · stored locally</div></div><i class="fa-solid fa-chevron-right" style="color: var(--ink-faint)"></i></div>
+          </div>
+
+          <div class="section-label">notifications</div>
+          <div class="card settings-list">
+            <div class="row"><div class="grow"><div class="label">quiet hours</div><div class="sub">22:30 — 08:00</div></div><i class="fa-solid fa-chevron-right" style="color: var(--ink-faint)"></i></div>
+            <div class="row"><div class="grow"><div class="label">crisis surface</div><div class="sub">always on</div></div><div class="toggle on" style="opacity: .6"></div></div>
+          </div>
+
+          <div class="section-label">about</div>
+          <div class="card settings-list">
+            <div class="row"><div class="grow"><div class="label">version</div><div class="sub">v1.0.0 · alpha</div></div></div>
+            <div class="row"><div class="grow"><div class="label">credits</div></div><i class="fa-solid fa-chevron-right" style="color: var(--ink-faint)"></i></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="iphone" role="img" aria-label="iphone, settings">
+      <div class="screen">
+        <div class="island"></div>
+        <div class="ios-status"><span class="time">9:41</span><span class="right"><i class="fa-solid fa-signal"></i><i class="fa-solid fa-wifi"></i><i class="fa-solid fa-battery-full"></i></span></div>
+        <div class="ios-body inner-phone">
+          <div class="crumb">settings</div>
+          <h2 class="display-title">settings</h2>
+          <div class="section-label">account</div>
+          <div class="card settings-list">
+            <div class="row"><div class="grow"><div class="label">email</div><div class="sub">serra@ollie.local</div></div><i class="fa-solid fa-chevron-right" style="color: var(--ink-faint)"></i></div>
+            <div class="row"><div class="grow"><div class="label">sign out</div></div><i class="fa-solid fa-chevron-right" style="color: var(--ink-faint)"></i></div>
+          </div>
+          <div class="section-label">privacy</div>
+          <div class="card settings-list">
+            <div class="row"><div class="grow"><div class="label">share anonymous usage</div><div class="sub">off by default.</div></div><div class="toggle"></div></div>
+            <div class="row"><div class="grow"><div class="label">face ID lock</div></div><div class="toggle on"></div></div>
+          </div>
+          <div class="section-label">about</div>
+          <div class="card settings-list">
+            <div class="row"><div class="grow"><div class="label">version</div><div class="sub">v1.0.0 · alpha</div></div></div>
+          </div>
+        </div>
+        <div class="tabbar">
+          <div class="tab"><i class="fa-solid fa-feather"></i><span>home</span></div>
+          <div class="tab"><i class="fa-regular fa-square"></i><span>modules</span></div>
+          <div class="tab active"><i class="fa-solid fa-sliders"></i><span>settings</span></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<footer style="max-width:1400px; margin: 0 auto 80px; padding: 0 32px; color: var(--ink-mute); font-size: 12.5px;">
+  end of mockup · v1 · static visual reference, not interactive.
+</footer>
+
+<script>
+  // optional: textarea auto-grow demo. degrades gracefully without JS.
+  document.querySelectorAll('.dump-input').forEach((ta) => {
+    const grow = () => {
+      ta.style.height = 'auto';
+      ta.style.height = Math.min(240, ta.scrollHeight) + 'px';
+    };
+    ta.addEventListener('input', grow);
+  });
+
+  // accordion toggle on the modules page. clicking a module header opens
+  // its body inline; clicking again closes. siblings stay independent —
+  // multiple can be open at once. degrades gracefully (defaults shown
+  // in markup) without JS.
+  document.querySelectorAll('.mod-head').forEach((head) => {
+    head.addEventListener('click', () => {
+      const open = head.classList.toggle('open');
+      head.setAttribute('aria-expanded', open ? 'true' : 'false');
+      const body = head.nextElementSibling;
+      if (body && body.classList.contains('mod-body')) {
+        body.classList.toggle('open', open);
+      }
+    });
+  });
+</script>
+
+</body>
+</html>

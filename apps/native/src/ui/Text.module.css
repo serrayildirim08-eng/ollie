@@ -21,6 +21,8 @@
   line-height: var(--ollie-leading-display);
   letter-spacing: var(--ollie-tracking-display);
   color: var(--ollie-color-ink);
+  /* Magazine masthead — page H1s sit in the middle of the column. */
+  text-align: center;
 }
 
 .title {
