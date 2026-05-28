@@ -10,9 +10,10 @@
  *   2. createStore(browserAdapter)
  *   3. createOrchestrator(store, { cadenceSources }) → init()
  *
- * Cadence sources today: grocery / body / habits. The 8 remaining native
- * modules will land in this map as their `enumerateCadences` adapters get
- * exported from their barrels (mirrors the prior commit pattern).
+ * Cadence sources today: all 11 native modules — grocery / body / habits
+ * (initial trio) plus sleep / pets / finance / work / goals / admin /
+ * cycle / medication (this commit). Each module's `enumerateCadences`
+ * barrel export yields its own CadenceTrackedEntry stream.
  *
  * scheduleNotification is intentionally NOT injected yet — APNs wiring
  * lives behind the Tauri push plugin which is a separate milestone. Until
@@ -37,6 +38,14 @@ import { isOverdue } from '@ollie/cadence';
 import { enumerateCadences as enumerateGrocery } from './modules/grocery';
 import { enumerateCadences as enumerateBody } from './modules/body';
 import { enumerateCadences as enumerateHabits } from './modules/habits';
+import { enumerateCadences as enumerateSleep } from './modules/sleep';
+import { enumerateCadences as enumeratePets } from './modules/pets';
+import { enumerateCadences as enumerateFinance } from './modules/finance';
+import { enumerateCadences as enumerateWork } from './modules/work';
+import { enumerateCadences as enumerateGoals } from './modules/goals';
+import { enumerateCadences as enumerateAdmin } from './modules/admin';
+import { enumerateCadences as enumerateCycle } from './modules/cycle';
+import { enumerateCadences as enumerateMedication } from './modules/medication';
 
 runMigrations(browserAdapter);
 export const store = createStore(browserAdapter);
@@ -72,6 +81,14 @@ const cadenceSources: Record<string, CadenceSourceFn> = {
   grocery: withDevLog('grocery', enumerateGrocery),
   body: withDevLog('body', enumerateBody),
   habits: withDevLog('habits', enumerateHabits),
+  sleep: withDevLog('sleep', enumerateSleep),
+  pets: withDevLog('pets', enumeratePets),
+  finance: withDevLog('finance', enumerateFinance),
+  work: withDevLog('work', enumerateWork),
+  goals: withDevLog('goals', enumerateGoals),
+  admin: withDevLog('admin', enumerateAdmin),
+  cycle: withDevLog('cycle', enumerateCycle),
+  medication: withDevLog('medication', enumerateMedication),
 };
 
 export const orchestrator = createOrchestrator(store, { cadenceSources });
