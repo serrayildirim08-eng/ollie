@@ -4,19 +4,20 @@
  * Visual port of `apps/web/src/modules/money-v2/screens/MoneyFace.tsx`
  * (the redesign/money-v2 branch). One serif hero number sits over three
  * expandable area-cards — bills / subscriptions / recent transactions —
- * each opening in place with a quiet key-value detail strip. Data,
- * polling and repo contracts are unchanged from the previous version.
+ * each opening in place with a quiet key-value detail strip.
  *
- * The hero shows the current calendar month's spend total in DM Serif
- * Display, with the currency symbol carried in DM Mono mute, mirroring
- * the money-v2 HeroNumber primitive. When the month carries multiple
- * currencies the dominant one anchors the hero and the rest line up as
- * a small caption beneath — the closest equivalent the finance repo can
- * express of money-v2's "safe to spend" + "horizon" pairing.
+ * The hero shows the current calendar month's TRUE burn — transactions
+ * logged this month + monthly cost of every active subscription +
+ * monthly-equivalent of every recurring bill — in DM Serif Display, with
+ * the currency symbol carried in DM Mono mute (money-v2 HeroNumber). A
+ * single quiet caption underneath unpacks the math:
+ *   "$1200 spent · $15 subscriptions · $0 bills"
+ * When the month carries multiple currencies the dominant one anchors
+ * the hero and the rest line up as a small list beneath.
  *
- * Spends whose currency the router never resolved get rendered in umber
- * (#8A4B2C) — money-v2's "unaccounted" ink — so the user can see at a
- * glance what slipped through ledger parsing.
+ * Rows whose currency the router never resolved get rendered in umber
+ * (#8A4B2C) — money-v2's "unaccounted" ink — captioned "no currency tag"
+ * so the user can see at a glance what slipped through ledger parsing.
  *
  * Auto-refreshes on focus + every 6s so the screen catches additions
  * made from another tab / from a dump while the page is open.
@@ -37,14 +38,20 @@ import { migrateFinance } from './migrate';
 import {
   bills as billsRepo,
   cadence as cadenceRepo,
+  getMonthlyBurn,
   subscriptions as subsRepo,
   transactions as txRepo,
 } from './repo';
+import {
+  detectFromTransactions,
+  type RecurringSuggestion,
+} from './recurring';
 import {
   normaliseMerchant,
   type FinanceBill,
   type FinanceSubscription,
   type FinanceTransaction,
+  type MonthlyBurn,
 } from './types';
 
 // ── visual constants ──────────────────────────────────────────────────────
@@ -126,6 +133,7 @@ export function FinanceBox(): JSX.Element {
   const [txs, setTxs] = useState<FinanceTransaction[]>([]);
   const [billRows, setBillRows] = useState<FinanceBill[]>([]);
   const [subRows, setSubRows] = useState<FinanceSubscription[]>([]);
+  const [burn, setBurn] = useState<MonthlyBurn[]>([]);
   const [merchantCadence, setMerchantCadence] = useState<Map<string, CadenceEstimate>>(
     () => new Map(),
   );
@@ -133,14 +141,16 @@ export function FinanceBox(): JSX.Element {
   const [openCard, setOpenCard] = useState<AreaKey | null>(null);
 
   const refresh = useCallback(async () => {
-    const [t, b, s] = await Promise.all([
+    const [t, b, s, burnRows] = await Promise.all([
       txRepo.list(),
       billsRepo.list(),
       subsRepo.list(),
+      getMonthlyBurn(),
     ]);
     setTxs(t);
     setBillRows(b);
     setSubRows(s);
+    setBurn(burnRows);
 
     // Fan-out cadence reads — one per distinct merchant in the transaction
     // list. Keeps row render synchronous (no per-row async).
@@ -207,11 +217,43 @@ export function FinanceBox(): JSX.Element {
     [refresh],
   );
 
-  const monthTotals = useMemo(() => sumThisMonth(txs), [txs]);
   const hasData = txs.length > 0 || billRows.length > 0 || subRows.length > 0;
+
+  // Recurring detection — read-only surface. We re-derive on every tx
+  // change rather than schedule a separate fetch since the detection is
+  // a pure in-memory pass over the rows we already have.
+  const suggestions = useMemo(() => detectFromTransactions(txs), [txs]);
+
+  // Lead currency comes from the burn hero; we use it to format the
+  // "$X recurring detected" caption so the unit matches what the eye
+  // just landed on. Falls back to USD-style "$" when no burn is available.
+  const recurringByLeadCurrency = useMemo(
+    () => sumRecurringInLeadCurrency(suggestions, burn[0]?.currency ?? null),
+    [suggestions, burn],
+  );
 
   const toggle = useCallback((k: AreaKey) => {
     setOpenCard((cur) => (cur === k ? null : k));
+  }, []);
+
+  /**
+   * Promote a suggestion to a real bill / subscription. TODO(serra): the
+   * brief asks us to wire the tap to the existing handler paths
+   * (`bills.add({ merchant, amount, cadence })` for monthly/yearly,
+   * `subscriptions.add({ name })` for things the user recognises as a
+   * named service). The handoff isn't trivial — we need a small confirm
+   * sheet ("Promote 'netflix' to a $15/mo bill?") because:
+   *   (a) the detected cadence may differ from how the user thinks of it
+   *   (b) the suggestion has no currency on rows where the router didn't
+   *       resolve one — we'd be writing a bill row with currency=null
+   *   (c) once promoted we shouldn't keep nagging — needs a "snoozed"
+   *       table or a hash-set we read in detection
+   * Lands in a follow-up. For now the tap just no-ops with a console hint
+   * so the surface ships and we can dogfood the detection accuracy first.
+   */
+  const handlePromoteSuggestion = useCallback((s: RecurringSuggestion) => {
+    // eslint-disable-next-line no-console
+    console.info('[finance] promote suggestion — wire pending', s);
   }, []);
 
   // ── glance lines for area-cards ────────────────────────────────────────
@@ -263,8 +305,12 @@ export function FinanceBox(): JSX.Element {
         </Text>
       ) : (
         <Stack gap={40}>
-          {/* HERO — this month total in DM Serif Display */}
-          <MonthHero totals={monthTotals} hasData={hasData} />
+          {/* HERO — this month's true burn in DM Serif Display */}
+          <MonthHero
+            burn={burn}
+            hasData={hasData}
+            recurringDetected={recurringByLeadCurrency}
+          />
 
           {/* AREA CARDS — expandable in-place */}
           <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -337,6 +383,14 @@ export function FinanceBox(): JSX.Element {
               )}
             </AreaCard>
           </div>
+
+          {/* RECURRING SUGGESTIONS — silent unless detection found a pattern. */}
+          {suggestions.length > 0 && (
+            <RecurringList
+              suggestions={suggestions}
+              onPromote={handlePromoteSuggestion}
+            />
+          )}
         </Stack>
       )}
     </Stack>
@@ -348,18 +402,28 @@ export function FinanceBox(): JSX.Element {
 /**
  * MonthHero — the calm safe-to-spend stand-in.
  *
- * Sorts monthTotals biggest-first, anchors the dominant currency in a
- * large serif figure, and lists secondaries underneath in DM Mono mute.
- * Unknown-currency totals carry the umber ink — money-v2's "unaccounted".
+ * Sorts MonthlyBurn biggest-first, anchors the dominant currency's total
+ * (transactions + subscriptions + bills) in a large serif figure, lists
+ * the breakdown beneath as "$X spent · $Y subscriptions · $Z bills", then
+ * any secondary currencies. Unknown-currency totals carry the umber ink
+ * (money-v2's "no currency tag" rail) so currency-parse leakage stays
+ * visible without lying about its meaning.
  */
 function MonthHero({
-  totals,
+  burn,
   hasData,
+  recurringDetected,
 }: {
-  totals: MonthTotal[];
+  burn: MonthlyBurn[];
   hasData: boolean;
+  /**
+   * Sum of detected recurring monthly cost, expressed in the lead
+   * currency. `null` when detection found nothing — caller computes; we
+   * just render. Show as "$X recurring detected" under the breakdown.
+   */
+  recurringDetected: { amount: number; currency: string | null } | null;
 }): JSX.Element {
-  if (totals.length === 0) {
+  if (burn.length === 0) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
         <div style={HERO_LEAD_STYLE}>this month</div>
@@ -387,10 +451,8 @@ function MonthHero({
     );
   }
 
-  // Biggest total anchors the hero; rest line up beneath it.
-  const sorted = [...totals].sort((a, b) => b.total - a.total);
-  const lead = sorted[0]!;
-  const rest = sorted.slice(1);
+  const lead = burn[0]!;
+  const rest = burn.slice(1);
   const isUnaccounted = lead.currency == null;
   const { symbol, body } = splitAmount(lead.total, lead.currency);
 
@@ -425,10 +487,31 @@ function MonthHero({
         <span style={{ fontVariantNumeric: 'tabular-nums' }}>{body}</span>
       </div>
 
+      {/* breakdown — txns · subs · bills · (in the lead currency) */}
+      <BurnBreakdown row={lead} />
+
+      {/* recurring caption — only when detection found at least one pattern */}
+      {recurringDetected && (
+        <div
+          style={{
+            marginTop: 4,
+            fontFamily: fonts.sans,
+            fontSize: 11,
+            fontWeight: 500,
+            color: colors.inkFaint,
+            letterSpacing: '0.06em',
+            fontVariantCaps: 'all-small-caps',
+            textAlign: 'center',
+          }}
+        >
+          {`${formatAmount(recurringDetected.amount, recurringDetected.currency)} recurring detected`}
+        </div>
+      )}
+
       {/* horizon bar — a soft hairline that holds the eye even when empty */}
       <div
         style={{
-          marginTop: 26,
+          marginTop: 18,
           width: 188,
           height: 4,
           borderRadius: 3,
@@ -461,6 +544,7 @@ function MonthHero({
                 }}
               >
                 {formatAmount(m.total, m.currency)}
+                {muted ? ' · no currency tag' : ''}
               </div>
             );
           })}
@@ -468,10 +552,43 @@ function MonthHero({
       )}
 
       <div style={{ marginTop: rest.length > 0 ? 10 : 13, ...HERO_CAPTION_STYLE }}>
-        {lead.currency ?? 'unaccounted'}
+        {lead.currency ?? 'no currency tag'}
         {' · '}
         {monthLabel(new Date())}
       </div>
+    </div>
+  );
+}
+
+/**
+ * BurnBreakdown — the one-line "$1200 spent · $15 subscriptions · $0 bills"
+ * caption that unpacks the headline. Stays under the hero number so the
+ * eye lands on the total first; renders silent when ALL three components
+ * are zero (the empty-state already speaks for that case).
+ */
+function BurnBreakdown({ row }: { row: MonthlyBurn }): JSX.Element | null {
+  if (row.transactions === 0 && row.subscriptions === 0 && row.billsDue === 0) {
+    return null;
+  }
+  const muted = row.currency == null;
+  return (
+    <div
+      style={{
+        marginTop: 10,
+        fontFamily: fonts.mono,
+        fontSize: 12,
+        fontWeight: 500,
+        color: muted ? UMBER : colors.inkFaint,
+        fontVariantNumeric: 'tabular-nums',
+        letterSpacing: '0.01em',
+        textAlign: 'center',
+      }}
+    >
+      {`${formatAmount(row.transactions, row.currency)} spent`}
+      {' · '}
+      {`${formatAmount(row.subscriptions, row.currency)} subscriptions`}
+      {' · '}
+      {`${formatAmount(row.billsDue, row.currency)} bills`}
     </div>
   );
 }
@@ -721,12 +838,151 @@ function RemoveButton({ onClick }: { onClick: () => void }): JSX.Element {
   );
 }
 
-// ── formatting helpers ────────────────────────────────────────────────────
+// ── recurring suggestions ─────────────────────────────────────────────────
 
-interface MonthTotal {
-  currency: string | null;
-  total: number;
+/**
+ * The "looks recurring · promote?" strip that sits under the area-cards
+ * once detection finds at least one pattern. Each row is a tiny prompt:
+ *   "netflix · monthly · $15.99       looks recurring — promote?"
+ * Tapping invokes onPromote(); the parent owns what that means (today: a
+ * console hint; see the TODO on handlePromoteSuggestion).
+ *
+ * Renders nothing for an empty list — the caller already guards on it but
+ * we mirror the guard so this component is safe to mount unconditionally.
+ */
+function RecurringList({
+  suggestions,
+  onPromote,
+}: {
+  suggestions: RecurringSuggestion[];
+  onPromote: (s: RecurringSuggestion) => void;
+}): JSX.Element | null {
+  if (suggestions.length === 0) return null;
+  return (
+    <Stack gap={6}>
+      <div
+        style={{
+          fontFamily: fonts.sans,
+          fontSize: 11,
+          fontWeight: 600,
+          color: colors.inkFaint,
+          letterSpacing: '0.08em',
+          fontVariantCaps: 'all-small-caps',
+        }}
+      >
+        looks recurring
+      </div>
+      <DetailList>
+        {suggestions.map((s) => (
+          <RecurringRow
+            key={`${s.merchant}:${s.cadence}`}
+            suggestion={s}
+            onPromote={() => onPromote(s)}
+          />
+        ))}
+      </DetailList>
+    </Stack>
+  );
 }
+
+function RecurringRow({
+  suggestion,
+  onPromote,
+}: {
+  suggestion: RecurringSuggestion;
+  onPromote: () => void;
+}): JSX.Element {
+  const { merchant, cadence, medianAmount, currency, sampleSize } = suggestion;
+  return (
+    <Row gap={12} align="baseline" justify="space-between">
+      <span style={DETAIL_K_STYLE}>
+        {merchant}
+        <span style={{ color: colors.inkGhost, marginLeft: 6 }}>· {cadence}</span>
+      </span>
+      <Row gap={8} align="baseline">
+        <span style={DETAIL_V_STYLE}>
+          {formatAmount(medianAmount, currency)}
+        </span>
+        <span
+          style={{
+            fontFamily: fonts.sans,
+            fontSize: 11,
+            color: colors.inkFaint,
+            fontWeight: 500,
+            letterSpacing: '0.06em',
+            fontVariantCaps: 'all-small-caps',
+          }}
+          aria-hidden
+        >
+          · {sampleSize} seen
+        </span>
+        <button
+          type="button"
+          onClick={onPromote}
+          aria-label={`promote ${merchant} to ${cadence}`}
+          style={{
+            background: 'none',
+            border: 'none',
+            padding: '4px 8px',
+            color: colors.ink,
+            cursor: 'pointer',
+            fontFamily: fonts.sans,
+            fontVariantCaps: 'all-small-caps',
+            letterSpacing: '0.08em',
+            fontSize: 12,
+            fontWeight: 600,
+          }}
+        >
+          promote
+        </button>
+      </Row>
+    </Row>
+  );
+}
+
+/**
+ * Roll detection results into a single "recurring detected" caption value,
+ * expressed in the lead currency from the burn. Currency-mismatched
+ * suggestions are dropped from the sum (we don't fake an FX) — the user
+ * still sees them as individual rows in the RecurringList below. When the
+ * lead currency is unresolved (null), we sum any null-currency rows
+ * together so the caption still reads sensibly under the "no currency
+ * tag" hero.
+ *
+ * Returns `null` when nothing remains — caller renders nothing.
+ */
+function sumRecurringInLeadCurrency(
+  suggestions: RecurringSuggestion[],
+  leadCurrency: string | null,
+): { amount: number; currency: string | null } | null {
+  let total = 0;
+  let counted = 0;
+  for (const s of suggestions) {
+    if (s.medianAmount == null) continue;
+    if (s.currency !== leadCurrency) continue;
+    // Express every cycle as a monthly-equivalent so the caption reads
+    // consistently with the hero (which is already a per-month figure).
+    const monthly = toMonthlyEquivalent(s.medianAmount, s.cadence);
+    total += monthly;
+    counted += 1;
+  }
+  if (counted === 0) return null;
+  return { amount: total, currency: leadCurrency };
+}
+
+/** Convert a per-cycle amount into its monthly-equivalent. */
+function toMonthlyEquivalent(
+  amount: number,
+  cadence: 'monthly' | 'weekly' | 'yearly',
+): number {
+  switch (cadence) {
+    case 'monthly': return amount;
+    case 'weekly':  return amount * (52 / 12);
+    case 'yearly':  return amount / 12;
+  }
+}
+
+// ── formatting helpers ────────────────────────────────────────────────────
 
 /** Format an amount with currency prefix. Falls back to "—" if amount null. */
 function formatAmount(amount: number | null, currency: string | null): string {
@@ -761,26 +1017,7 @@ function splitAmount(
   return { symbol: currency, body: fixed };
 }
 
-/** Group transactions in the current calendar month and sum per currency. */
-function sumThisMonth(rows: FinanceTransaction[]): MonthTotal[] {
-  const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
-  const totals = new Map<string, MonthTotal>();
-  for (const r of rows) {
-    if (r.amount == null) continue;
-    if (r.occurredAt < monthStart) continue;
-    const key = r.currency ?? '_';
-    const existing = totals.get(key);
-    if (existing) {
-      existing.total += r.amount;
-    } else {
-      totals.set(key, { currency: r.currency, total: r.amount });
-    }
-  }
-  return [...totals.values()];
-}
-
-/** "May 2026" — used in the hero caption. */
+/** "may 2026" — used in the hero caption. */
 function monthLabel(d: Date): string {
   return d.toLocaleString(undefined, { month: 'long', year: 'numeric' }).toLowerCase();
 }

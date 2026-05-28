@@ -232,3 +232,16 @@ function coefficientOfVariation(values: number[]): number {
   const stdDev = Math.sqrt(variance);
   return stdDev / m;
 }
+
+// ─── recurring detection re-exports ──────────────────────────────────────
+//
+// Lives in a sibling module so the core compute stays small. Re-exported
+// from the package root so callers import from '@ollie/cadence' regardless.
+
+export {
+  detectRecurring,
+  classifyCycle,
+  type RecurringCycle,
+  type RecurringEvent,
+  type RecurringPattern,
+} from './recurring';
