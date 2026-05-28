@@ -222,6 +222,23 @@ export async function handleDumpRoute(req: Request, env: DumpRouteEnv): Promise<
     moduleCount[f.module] = (moduleCount[f.module] ?? 0) + 1;
   }
 
+  console.log(
+    '[route/dump]',
+    JSON.stringify({
+      input: body.text.slice(0, 120),
+      fragments: fragments.map((f) => ({
+        text: f.text.slice(0, 60),
+        module: f.module,
+        action: (f.payload as { action?: string }).action,
+        confidence: f.confidence,
+        needsConfirm: f.needsConfirm,
+        source: f.source,
+      })),
+      aiCalls,
+      cacheHits,
+    }),
+  );
+
   const output: RouterOutput = {
     schemaVersion: '1.0',
     originalDump: body.text,

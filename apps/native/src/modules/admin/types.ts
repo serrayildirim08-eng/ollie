@@ -1,0 +1,97 @@
+/**
+ * Admin module · domain types.
+ *
+ * The admin module catches all the small life-admin debris the brain dump
+ * surfaces: "call dentist", "schedule eye exam tuesday", "passport renews
+ * in march", "decide on insurance". Two table shapes back this:
+ *
+ *   1. `admin_tasks` — generic checkable rows, classified by `kind`
+ *      (task / phone / appointment / paperwork / decision).
+ *   2. `admin_renewals` — first-class objects because they have a due_date
+ *      and need a soonest-due surface at the top of the screen.
+ *
+ * Kinds are a soft enum — the router lands these directly from its
+ * `AdminAction` discriminator, so changes here have to track schema.ts.
+ */
+
+export type AdminTaskKind =
+  | 'task'         // create_task — generic todo
+  | 'phone'        // create_phone_task — "call X about Y"
+  | 'appointment'  // schedule_appointment — optionally dated
+  | 'paperwork'    // log_paperwork — a form / filing to remember
+  | 'decision';    // recurring_decision — something to think about
+
+/**
+ * One row in `admin_tasks`. `data` is an opaque JSON envelope for
+ * kind-specific extras (phone reason, appointment date) — keeping it in
+ * one column lets us add new fields without migrating.
+ */
+export interface AdminTask {
+  id: string;
+  kind: AdminTaskKind;
+  /** body of the row — task text / person name / what */
+  text: string;
+  /** kind-specific extras parsed out of the JSON envelope */
+  data: AdminTaskData;
+  done: boolean;
+  createdAt: number; // ms since epoch
+}
+
+/**
+ * Discriminated extras stored in the `data` column. Each kind has its
+ * own minimal payload — the UI uses these for the secondary line.
+ */
+export type AdminTaskData =
+  | { kind: 'task' }
+  | { kind: 'phone'; reason?: string }
+  | { kind: 'appointment'; date?: string }
+  | { kind: 'paperwork' }
+  | { kind: 'decision' };
+
+/**
+ * Renewal — passport, license, lease, insurance, or any other string the
+ * router surfaces. `dueDate` is optional because the router will sometimes
+ * see "passport renewal" with no date and we still want to log it.
+ */
+export interface AdminRenewal {
+  id: string;
+  /** soft enum — known values get nicer formatting, anything else passes through */
+  renewalType: string;
+  /** ISO yyyy-mm-dd or null when the router couldn't extract a date */
+  dueDate: string | null;
+  addedAt: number; // ms since epoch
+}
+
+/** Known renewal types — used for capitalised labels in the UI. */
+export const KNOWN_RENEWAL_TYPES = ['passport', 'license', 'lease', 'insurance'] as const;
+
+/**
+ * Days until the renewal is due. Negative numbers mean overdue. Returns
+ * null when no due date is set so the caller can render "no date".
+ */
+export function daysUntil(dueDate: string | null, now: number = Date.now()): number | null {
+  if (!dueDate) return null;
+  const due = Date.parse(dueDate);
+  if (Number.isNaN(due)) return null;
+  const MS_PER_DAY = 86_400_000;
+  // Compare at day granularity — round both to local midnight so a row
+  // due "today" reads as 0 even when it's 11pm.
+  const dueDay = Math.floor(due / MS_PER_DAY);
+  const nowDay = Math.floor(now / MS_PER_DAY);
+  return dueDay - nowDay;
+}
+
+/**
+ * Editorial summary of how soon a renewal is due. Examples:
+ *   "in 14 days", "in 1 day", "today", "1 day overdue", "14 days overdue",
+ *   "no date".
+ */
+export function formatDaysUntil(dueDate: string | null, now: number = Date.now()): string {
+  const days = daysUntil(dueDate, now);
+  if (days == null) return 'no date';
+  if (days === 0) return 'today';
+  if (days === 1) return 'in 1 day';
+  if (days === -1) return '1 day overdue';
+  if (days > 0) return `in ${days} days`;
+  return `${Math.abs(days)} days overdue`;
+}

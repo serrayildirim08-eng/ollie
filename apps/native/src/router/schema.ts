@@ -73,9 +73,17 @@ export interface CrisisSignal {
 
 export interface Fragment {
   text: string;            // the slice of original dump
+  /** Detected language for THIS fragment (per Decision 4 — per-fragment, not per-dump). */
+  language: 'tr' | 'en' | 'es' | 'mixed' | 'unknown';
   module: Module;
   payload: ActionPayload;  // discriminated union by `action` field
   confidence: number;      // 0..1 — UI surfaces low-confidence for confirm
+  /**
+   * Server-side 3-tier confidence policy output (Decision 2). True when
+   * 0.60 ≤ confidence < 0.80 — UI should ask the user to confirm before
+   * persisting the action.
+   */
+  needsConfirm?: boolean;
   source: 'cache' | 'ai' | 'fast_path';
 }
 
@@ -245,8 +253,12 @@ export interface ModuleHandler<M extends Module> {
   /**
    * Apply a routed fragment to the module's local state + backend.
    * Returns a UI-displayable note (e.g., "added milk to pantry").
+   *
+   * The dispatcher guarantees fragment.module === M when this is called,
+   * so handlers can safely narrow `fragment.payload` via the corresponding
+   * per-module action type (e.g. cast to `GroceryAction` inside grocery).
    */
-  apply(fragment: Extract<Fragment, { module: M }>): Promise<HandlerResult>;
+  apply(fragment: Fragment): Promise<HandlerResult>;
 }
 
 export interface HandlerResult {

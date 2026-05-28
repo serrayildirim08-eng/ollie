@@ -25,6 +25,17 @@ export type ApiResult<T> =
   | { ok: true; data: T; status: number }
   | { ok: false; error: ApiError };
 
+// ─── /route/dump (POST) — v2 brain-dump router ────────────────────────────────
+// Response shape is RouterOutput from src/router/schema.ts. The API client
+// returns it untyped (Record-style) here and callers cast / parse as needed,
+// keeping api/types.ts free of an import from src/router.
+
+export interface RouteDumpRequest {
+  text: string;
+  dumpId?: string;
+  locale?: string;
+}
+
 // ─── /brain-dump (POST) ───────────────────────────────────────────────────────
 
 export interface BrainDumpRequest {

@@ -46,36 +46,38 @@ export interface Palette {
   readonly shadow: string;       // shadow base rgb triplet (for rgba use)
 }
 
+// Source of truth: apps/web/src/design/tokens.css on the redesign/money-v2
+// branch. Values were ported on 2026-05-28 to align native + web visually.
 export const lightPalette: Palette = {
-  // surfaces · cream-anchored, warm
-  cream: '#f5efe6',
-  paper: '#efe8db',
-  paper2: '#e8e0d0',
+  // surfaces · bone-anchored
+  cream: '#FAFAF7',   // bone — page background everywhere
+  paper: '#F4F1E8',   // pull-quote bleeds, callouts, inner cards
+  paper2: '#EFEBE0',  // tertiary · menu sections, sticky headers
 
-  // ink · deep sage as primary (not pure black — editorial warmth)
-  ink: '#1f261f',
-  inkSoft: '#3a4a3a',
-  inkFaint: '#6e7a6e',
-  inkGhost: '#b8c0b3',
+  // ink · near-black with editorial warmth (not pure #000)
+  ink: '#14140F',
+  inkSoft: '#5A574E',
+  inkFaint: '#9C9890',
+  inkGhost: '#C8C4BA',
 
-  // sage spectrum · the accent voice
-  sageDeep: '#3a4a3a',
-  sage: '#5a6e58',
-  sageSoft: '#8a9a8a',
+  // sage spectrum · accent voice (single accent role per redesign tokens.css)
+  sageDeep: '#2E5D43',
+  sage: '#2E5D43',
+  sageSoft: '#5A574E',
 
-  // sky · sparingly used, single moment
-  sky: '#7a96ad',
+  // sky · body water glasses ONLY (do not extend per redesign tokens)
+  sky: '#5B8FB5',
 
-  // severity · HITL exception only
-  rubric: '#b8392e',
-  amber: '#c9974c',
+  // severity · HITL exception only · umber/amber/pink per redesign
+  rubric: '#B86A8A',  // pink — tier-4 push (fire) / crisis label only
+  amber: '#C9974C',   // amber — tier-3 push (insist) / ledger flags
 
   // hairlines
-  hairline: 'rgba(31, 38, 31, 0.10)',
-  hairlineSoft: 'rgba(31, 38, 31, 0.05)',
+  hairline: 'rgba(20, 20, 15, 0.10)',
+  hairlineSoft: 'rgba(20, 20, 15, 0.05)',
 
   // shadow base (rgb triplet usable in rgba)
-  shadow: '20, 25, 20',
+  shadow: '20, 20, 15',
 } as const;
 
 export const darkPalette: Palette = {
@@ -118,15 +120,16 @@ export const colors = lightPalette;
 // hybrid 1.250 step / 1.618 hero jump · no SaaS sizes
 // ─────────────────────────────────────────────────────────────────────
 
+// Matches the redesign branch's font system: DM Serif Display + DM Sans + DM
+// Mono, loaded via @fontsource/* in main.tsx with platform fallbacks for
+// first-paint before the webfont resolves.
 export const fonts = {
-  // until self-hosted: editorial-leaning system fallback chain.
-  // Iowan Old Style / Charter ship on macOS and are decent serif anchors.
   serif:
-    '"Fraunces", "Iowan Old Style", "Charter", "Georgia", "Times New Roman", serif',
+    '"DM Serif Display", "Iowan Old Style", "Charter", "Georgia", "Times New Roman", serif',
   sans:
-    '-apple-system, BlinkMacSystemFont, "Inter", "Helvetica Neue", "Segoe UI", system-ui, sans-serif',
+    '"DM Sans", -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Segoe UI", system-ui, sans-serif',
   mono:
-    'ui-monospace, "JetBrains Mono", "SFMono-Regular", "Menlo", "Consolas", monospace',
+    '"DM Mono", ui-monospace, "JetBrains Mono", "SFMono-Regular", "Menlo", "Consolas", monospace',
 } as const;
 
 export const fontSizes = {
@@ -157,7 +160,7 @@ export const lineHeights = {
   headline: 1.10,
   h2: 1.20,
   lede: 1.40,
-  body: 1.62,    // generous · ADHD breathing room
+  body: 1.55,    // matches redesign branch · was 1.62 in v0 native foundation
   caption: 1.45,
 } as const;
 
