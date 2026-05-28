@@ -16,36 +16,36 @@ describe('@ollie/events · runtime', () => {
 
   it('delivers an event to a subscriber', () => {
     const seen: unknown[] = [];
-    on('void:cycle:started', (p) => seen.push(p));
-    emit('void:cycle:started', { ts: 123, source: 'user' });
+    on('cycle:period_logged', (p) => seen.push(p));
+    emit('cycle:period_logged', { ts: 123, source: 'user' });
     expect(seen).toEqual([{ ts: 123, source: 'user' }]);
   });
 
   it('returns an unsubscribe function from on()', () => {
     const seen: unknown[] = [];
-    const unsub = on('void:cycle:started', (p) => seen.push(p));
-    emit('void:cycle:started', { ts: 1, source: 'user' });
+    const unsub = on('cycle:period_logged', (p) => seen.push(p));
+    emit('cycle:period_logged', { ts: 1, source: 'user' });
     unsub();
-    emit('void:cycle:started', { ts: 2, source: 'user' });
+    emit('cycle:period_logged', { ts: 2, source: 'user' });
     expect(seen).toHaveLength(1);
   });
 
   it('once() fires only the first event', () => {
     const seen: unknown[] = [];
-    once('void:cycle:started', (p) => seen.push(p));
-    emit('void:cycle:started', { ts: 1, source: 'user' });
-    emit('void:cycle:started', { ts: 2, source: 'user' });
+    once('cycle:period_logged', (p) => seen.push(p));
+    emit('cycle:period_logged', { ts: 1, source: 'user' });
+    emit('cycle:period_logged', { ts: 2, source: 'user' });
     expect(seen).toHaveLength(1);
   });
 
   it('a thrown handler does not block other subscribers', () => {
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const seen: unknown[] = [];
-    on('void:cycle:started', () => {
+    on('cycle:period_logged', () => {
       throw new Error('boom');
     });
-    on('void:cycle:started', (p) => seen.push(p));
-    emit('void:cycle:started', { ts: 1, source: 'user' });
+    on('cycle:period_logged', (p) => seen.push(p));
+    emit('cycle:period_logged', { ts: 1, source: 'user' });
     expect(seen).toHaveLength(1);
     expect(errSpy).toHaveBeenCalled();
     errSpy.mockRestore();
@@ -64,8 +64,8 @@ describe('@ollie/events · runtime', () => {
   it('drops emit on payload shape mismatch', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const seen: unknown[] = [];
-    on('void:cycle:started', (p) => seen.push(p));
-    emit('void:cycle:started', { ts: 123 }); // missing `source`
+    on('cycle:period_logged', (p) => seen.push(p));
+    emit('cycle:period_logged', { ts: 123 }); // missing `source`
     expect(seen).toEqual([]);
     expect(warn).toHaveBeenCalled();
     warn.mockRestore();
@@ -74,7 +74,7 @@ describe('@ollie/events · runtime', () => {
 
 describe('@ollie/events · registry + shapes', () => {
   it('has expected events registered', () => {
-    expect(REGISTRY).toHaveProperty('void:cycle:started');
+    expect(REGISTRY).toHaveProperty('cycle:period_logged');
     expect(REGISTRY).toHaveProperty('void:braindump:submitted');
     expect(REGISTRY).toHaveProperty('pets:care_logged');
     expect(REGISTRY).toHaveProperty('finance:record_added');
