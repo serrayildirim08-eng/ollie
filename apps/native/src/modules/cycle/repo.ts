@@ -12,6 +12,7 @@
  *     no separate "cycle" row.
  */
 
+import { computeCadence, type CadenceEstimate } from '@ollie/cadence';
 import { sql } from '../../storage';
 import {
   normaliseSymptom,
@@ -146,5 +147,34 @@ export const cycleRepo = {
 
   async remove(id: string): Promise<void> {
     await sql.execute(`DELETE FROM cycle_events WHERE id = ?`, [id]);
+  },
+};
+
+// ─── cadence ──────────────────────────────────────────────────────────────
+//
+// The cycle's natural cadence anchor is period-start → period-start. The
+// `current()` derivation reads just the most recent start, but a full
+// stream of starts gives us the user's median cycle length once enough
+// rows accumulate.
+//
+// Per the box's tone: this surface stays calm — no predictions, no
+// warnings, no risk scoring. The cadence line just observes what's
+// happened. Silent until 'observed' confidence (≥ 2 starts on file).
+
+export const cycleCadence = {
+  /**
+   * Cadence over every period-start event. Returns 'low-data' until at
+   * least two starts are logged — silent rather than wrong.
+   */
+  async getPeriodCadence(): Promise<CadenceEstimate> {
+    const rows = await sql.select<CycleEventRow>(
+      `SELECT id, kind, data, occurred_at
+       FROM cycle_events
+       WHERE kind = 'period_start'
+       ORDER BY occurred_at ASC`,
+    );
+    return computeCadence(
+      rows.map((r) => ({ ts: r.occurred_at, label: 'period_start' })),
+    );
   },
 };

@@ -85,6 +85,9 @@ importers:
       '@ollie/crypto':
         specifier: workspace:*
         version: link:../../packages/crypto
+      '@ollie/orchestrator':
+        specifier: workspace:*
+        version: link:../../packages/orchestrator
       '@ollie/store':
         specifier: workspace:*
         version: link:../../packages/store
@@ -436,6 +439,9 @@ importers:
 
   packages/orchestrator:
     dependencies:
+      '@ollie/cadence':
+        specifier: workspace:*
+        version: link:../cadence
       '@ollie/consent':
         specifier: workspace:*
         version: link:../consent

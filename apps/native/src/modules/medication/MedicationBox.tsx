@@ -27,6 +27,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
+import { type CadenceEstimate } from '@ollie/cadence';
 import { Stack, Row } from '../../layout';
 import { Text } from '../../ui';
 import {
@@ -37,7 +38,11 @@ import {
 } from '../../theme/tokens';
 import { formatRelativeTime } from '../../lib/formatRelativeTime';
 import { migrateMedication } from './migrate';
-import { events as eventsRepo, medications as medsRepo } from './repo';
+import {
+  cadence as cadenceRepo,
+  events as eventsRepo,
+  medications as medsRepo,
+} from './repo';
 import type { Medication, MedicationEventWithName } from './types';
 
 const SMCP_STYLE: React.CSSProperties = {
@@ -55,6 +60,8 @@ interface BoxState {
   todayMissed: MedicationEventWithName[];
   recentMissed: MedicationEventWithName[];
   recentSideEffects: MedicationEventWithName[];
+  /** Cadence per med id — populated by fan-out alongside the main read. */
+  doseCadence: Map<string, CadenceEstimate>;
 }
 
 const EMPTY_STATE: BoxState = {
@@ -64,6 +71,7 @@ const EMPTY_STATE: BoxState = {
   todayMissed: [],
   recentMissed: [],
   recentSideEffects: [],
+  doseCadence: new Map(),
 };
 
 export function MedicationBox(): JSX.Element {
@@ -81,7 +89,24 @@ export function MedicationBox(): JSX.Element {
         eventsRepo.recentByKind('missed', RECENT_LIMIT),
         eventsRepo.recentByKind('side_effect', RECENT_LIMIT),
       ]);
-    setState({ meds, lastDose, todayDoses, todayMissed, recentMissed, recentSideEffects });
+    // Fan-out cadence reads — one per registered medication. Cheap: each
+    // is a filtered range scan on (med_id, kind='dose').
+    const cadencePairs = await Promise.all(
+      meds.map(
+        async (med) =>
+          [med.id, await cadenceRepo.getDoseCadenceFor(med.id)] as const,
+      ),
+    );
+    const doseCadence = new Map(cadencePairs);
+    setState({
+      meds,
+      lastDose,
+      todayDoses,
+      todayMissed,
+      recentMissed,
+      recentSideEffects,
+      doseCadence,
+    });
   }, []);
 
   useEffect(() => {

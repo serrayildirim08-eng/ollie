@@ -19,7 +19,8 @@
     "@ollie/logic": "workspace:*",
     "@ollie/notifications": "workspace:*",
     "@ollie/consent": "workspace:*",
-    "@ollie/pii-scrub": "workspace:*"
+    "@ollie/pii-scrub": "workspace:*",
+    "@ollie/cadence": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.6.0",

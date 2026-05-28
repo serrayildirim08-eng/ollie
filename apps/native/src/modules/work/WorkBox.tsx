@@ -24,12 +24,21 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import type { CSSProperties } from 'react';
+import {
+  daysSinceLast,
+  medianIntervalDays,
+  type CadenceEstimate,
+} from '@ollie/cadence';
 import { Stack, Row } from '../../layout';
 import { Text } from '../../ui';
 import { colors } from '../../theme/tokens';
 import { WhenCaption } from '../../lib/WhenCaption';
 import { migrateWork } from './migrate';
-import { tasks as tasksRepo, events as eventsRepo } from './repo';
+import {
+  cadence as cadenceRepo,
+  events as eventsRepo,
+  tasks as tasksRepo,
+} from './repo';
 import type { WorkEvent, WorkTask } from './types';
 
 const SMCP_STYLE: CSSProperties = {
@@ -48,6 +57,9 @@ export function WorkBox(): JSX.Element {
   const [allTasks, setAllTasks] = useState<WorkTask[]>([]);
   const [deadlines, setDeadlines] = useState<WorkTask[]>([]);
   const [recentEvents, setRecentEvents] = useState<WorkEvent[]>([]);
+  const [taskCadence, setTaskCadence] = useState<Map<string, CadenceEstimate>>(
+    () => new Map(),
+  );
   const [today, setToday] = useState<TodaySnapshot>({
     focusMinutes: 0,
     lastDone: null,
@@ -67,6 +79,19 @@ export function WorkBox(): JSX.Element {
     setDeadlines(d);
     setRecentEvents(e);
     setToday({ focusMinutes: focusMin, lastDone });
+
+    // Fan-out cadence reads — one per distinct task text touched by both
+    // sections. Tasks dedupe by text within the open set; recurring chores
+    // ("send invoice", "weekly check-in") produce real cadence rows once
+    // toggled done + dumped again.
+    const texts = new Set<string>();
+    for (const row of [...t, ...d]) texts.add(row.text);
+    const pairs = await Promise.all(
+      Array.from(texts).map(
+        async (txt) => [txt, await cadenceRepo.getTaskCadenceFor(txt)] as const,
+      ),
+    );
+    setTaskCadence(new Map(pairs));
   }, []);
 
   useEffect(() => {
@@ -209,6 +234,7 @@ export function WorkBox(): JSX.Element {
                   <TaskRow
                     key={item.id}
                     item={item}
+                    cadence={taskCadence.get(item.text)}
                     onToggle={() => void handleToggleTask(item.id)}
                     onRemove={() => void handleRemoveTask(item.id)}
                   />
@@ -223,6 +249,7 @@ export function WorkBox(): JSX.Element {
                   <DeadlineRow
                     key={item.id}
                     item={item}
+                    cadence={taskCadence.get(item.text)}
                     onToggle={() => void handleToggleTask(item.id)}
                     onRemove={() => void handleRemoveTask(item.id)}
                   />
@@ -324,10 +351,12 @@ function ListSection<T>({
 
 function TaskRow({
   item,
+  cadence,
   onToggle,
   onRemove,
 }: {
   item: WorkTask;
+  cadence?: CadenceEstimate | undefined;
   onToggle: () => void;
   onRemove: () => void;
 }): JSX.Element {
@@ -357,16 +386,25 @@ function TaskRow({
         <RemoveButton onClick={onRemove} />
       </Row>
       <WhenCaption ts={item.createdAt} style={{ marginLeft: 26 }} />
+      {cadence && (
+        <CadenceHint
+          estimate={cadence}
+          subject={item.text}
+          style={{ marginLeft: 26 }}
+        />
+      )}
     </Stack>
   );
 }
 
 function DeadlineRow({
   item,
+  cadence,
   onToggle,
   onRemove,
 }: {
   item: WorkTask;
+  cadence?: CadenceEstimate | undefined;
   onToggle: () => void;
   onRemove: () => void;
 }): JSX.Element {
@@ -396,8 +434,59 @@ function DeadlineRow({
         <RemoveButton onClick={onRemove} />
       </Row>
       <WhenCaption ts={item.createdAt} style={{ marginLeft: 26 }} />
+      {cadence && (
+        <CadenceHint
+          estimate={cadence}
+          subject={item.text}
+          style={{ marginLeft: 26 }}
+        />
+      )}
     </Stack>
   );
+}
+
+/**
+ * Faint sub-line under a task / deadline row: "last send invoice 7 days
+ * ago · usually every 14 days". Silent at low-data — Serra's minimal UI
+ * prefers nothing to a misleading prediction. Recurring chores leave a
+ * trail of created_at timestamps across rows; one-offs never trigger.
+ */
+function CadenceHint({
+  estimate,
+  subject,
+  style,
+}: {
+  estimate: CadenceEstimate;
+  subject: string;
+  style?: CSSProperties;
+}): JSX.Element | null {
+  if (estimate.confidence === 'low-data' || estimate.lastTs == null) {
+    return null;
+  }
+  const now = Date.now();
+  const since = daysSinceLast(estimate, now) ?? 0;
+  const every = medianIntervalDays(estimate);
+  const sinceLabel = formatDays(since);
+  const everyLabel = every >= 1 ? formatDays(every) : 'less than a day';
+  return (
+    <Text
+      scale="caption"
+      color={colors.inkFaint}
+      style={{
+        fontVariantCaps: 'all-small-caps',
+        letterSpacing: '0.06em',
+        ...style,
+      }}
+    >
+      {`last ${subject} ${sinceLabel} ago · usually every ${everyLabel}`}
+    </Text>
+  );
+}
+
+function formatDays(d: number): string {
+  if (d < 1) return 'less than a day';
+  const rounded = Math.round(d);
+  return `${rounded} day${rounded === 1 ? '' : 's'}`;
 }
 
 function EventRow({

@@ -14,6 +14,7 @@
  *   - All times are ms-since-epoch integers (SQLite INTEGER).
  */
 
+import { computeCadence, type CadenceEstimate } from '@ollie/cadence';
 import { sql } from '../../storage';
 import {
   normaliseCadence,
@@ -243,3 +244,37 @@ function rowToSubscription(r: SubscriptionRow): FinanceSubscription {
     addedAt: r.added_at,
   };
 }
+
+// ─── cadence ──────────────────────────────────────────────────────────────
+//
+// Finance transactions are append-only with `occurred_at` timestamps and
+// each row carries a normalised `merchant` key. The cadence signal: how
+// often a given merchant shows up — coffee shops, rideshare, the gym.
+//
+// Bills + subscriptions are upsert-only (a single row per merchant /
+// cadence pair) so they don't carry a usable timestamp stream — we skip
+// cadence for those surfaces (the `cadence` column on bills is the
+// router-asserted cadence, not an observed one).
+
+export const cadence = {
+  /**
+   * Cadence for one merchant. Filters `finance_transactions` rows where
+   * the normalised `merchant` matches. Caller can pass the raw label —
+   * we normalise defensively so the row and the cadence keying stay in
+   * lockstep with the writer.
+   */
+  async getMerchantCadenceFor(merchant: string | null): Promise<CadenceEstimate> {
+    const key = normaliseMerchant(merchant);
+    if (!key) return computeCadence([]);
+    const rows = await sql.select<TransactionRow>(
+      `SELECT id, amount, currency, merchant, occurred_at
+       FROM finance_transactions
+       WHERE merchant = ?
+       ORDER BY occurred_at ASC`,
+      [key],
+    );
+    return computeCadence(
+      rows.map((r) => ({ ts: r.occurred_at, label: key })),
+    );
+  },
+};

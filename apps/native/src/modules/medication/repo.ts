@@ -15,6 +15,7 @@
  *   - All times are ms-since-epoch integers (SQLite INTEGER).
  */
 
+import { computeCadence, type CadenceEstimate } from '@ollie/cadence';
 import { sql } from '../../storage';
 import {
   normaliseName,
@@ -231,3 +232,43 @@ function parseData(raw: string): Record<string, unknown> {
     return {};
   }
 }
+
+// ─── cadence ──────────────────────────────────────────────────────────────
+//
+// Dose events are append-only with `logged_at` timestamps and a typed
+// `kind='dose'` filter. Per-med adherence cadence reads straight off
+// `medications_events` filtered by `med_id` + `kind='dose'`.
+//
+// Health data: tone stays calm — no streaks, no scoring. The cadence
+// surface just observes "you usually take X every Y hours" once the
+// stream stabilises. Silent until 'observed' confidence.
+
+export const cadence = {
+  /**
+   * Cadence for one med's dose log, keyed by med id (the cheaper path —
+   * registry lookup avoided).
+   */
+  async getDoseCadenceFor(medId: string): Promise<CadenceEstimate> {
+    const rows = await sql.select<EventRow>(
+      `SELECT id, med_id, kind, data, logged_at
+       FROM medications_events
+       WHERE med_id = ? AND kind = 'dose'
+       ORDER BY logged_at ASC`,
+      [medId],
+    );
+    return computeCadence(
+      rows.map((r) => ({ ts: r.logged_at, label: r.med_id })),
+    );
+  },
+
+  /**
+   * Same as `getDoseCadenceFor` but keyed by medication name. Looks up
+   * the registry; returns a 'low-data' estimate when the med isn't
+   * registered yet.
+   */
+  async getDoseCadenceForName(medName: string): Promise<CadenceEstimate> {
+    const med = await medications.findByName(medName);
+    if (!med) return computeCadence([]);
+    return cadence.getDoseCadenceFor(med.id);
+  },
+};

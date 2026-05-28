@@ -59,12 +59,21 @@ import {
   type CSSProperties,
   type ReactNode,
 } from 'react';
+import {
+  daysSinceLast,
+  medianIntervalDays,
+  type CadenceEstimate,
+} from '@ollie/cadence';
 import { Stack, Row } from '../../layout';
 import { Text } from '../../ui';
 import { colors } from '../../theme/tokens';
 import { WhenCaption } from '../../lib/WhenCaption';
 import { migrateAdmin } from './migrate';
-import { renewals as renewalsRepo, tasks as tasksRepo } from './repo';
+import {
+  cadence as cadenceRepo,
+  renewals as renewalsRepo,
+  tasks as tasksRepo,
+} from './repo';
 import {
   daysUntil,
   formatDaysUntil,
@@ -112,12 +121,30 @@ function runwayPosFromDays(days: number): number {
 export function AdminBox(): JSX.Element {
   const [taskList, setTaskList] = useState<AdminTask[]>([]);
   const [renewalList, setRenewalList] = useState<AdminRenewal[]>([]);
+  const [renewalCadence, setRenewalCadence] = useState<Map<string, CadenceEstimate>>(
+    () => new Map(),
+  );
   const [ready, setReady] = useState(false);
 
   const refresh = useCallback(async () => {
     const [t, r] = await Promise.all([tasksRepo.list(), renewalsRepo.list()]);
     setTaskList(t);
     setRenewalList(r);
+
+    // Fan-out cadence reads — one per distinct renewal type. Most users
+    // will only ever cross 'observed' for things like an annual lease or
+    // insurance after a couple of years; we surface silently until then.
+    const types = new Set<string>();
+    for (const row of r) {
+      if (row.renewalType) types.add(row.renewalType);
+    }
+    const pairs = await Promise.all(
+      Array.from(types).map(
+        async (type) =>
+          [type, await cadenceRepo.getRenewalCadenceFor(type)] as const,
+      ),
+    );
+    setRenewalCadence(new Map(pairs));
   }, []);
 
   useEffect(() => {
@@ -221,7 +248,11 @@ export function AdminBox(): JSX.Element {
               <HairlineList
                 items={restRenewals}
                 renderRow={(r) => (
-                  <RenewalRow renewal={r} onRemove={() => void handleRemoveRenewal(r.id)} />
+                  <RenewalRow
+                    renewal={r}
+                    cadence={renewalCadence.get(r.renewalType)}
+                    onRemove={() => void handleRemoveRenewal(r.id)}
+                  />
                 )}
               />
             </Section>
@@ -599,9 +630,11 @@ function HairlineList<T extends { id: string }>({
 
 function RenewalRow({
   renewal,
+  cadence,
   onRemove,
 }: {
   renewal: AdminRenewal;
+  cadence?: CadenceEstimate | undefined;
   onRemove: () => void;
 }): JSX.Element {
   const days = daysUntil(renewal.dueDate);
@@ -644,11 +677,65 @@ function RenewalRow({
             </Text>
           </Text>
           <WhenCaption ts={renewal.addedAt} />
+          {cadence && (
+            <CadenceHint estimate={cadence} subject={renewal.renewalType} />
+          )}
         </Stack>
       </Row>
       <RemoveButton onClick={onRemove} />
     </Row>
   );
+}
+
+/**
+ * Faint sub-line under a renewal row: "last passport 365 days ago ·
+ * usually every year". Silent at low-data — most renewals only fire once
+ * a year, so the second instance is when this lights up.
+ */
+function CadenceHint({
+  estimate,
+  subject,
+}: {
+  estimate: CadenceEstimate;
+  subject: string;
+}): JSX.Element | null {
+  if (estimate.confidence === 'low-data' || estimate.lastTs == null) {
+    return null;
+  }
+  const now = Date.now();
+  const since = daysSinceLast(estimate, now) ?? 0;
+  const every = medianIntervalDays(estimate);
+  const sinceLabel = formatDays(since);
+  const everyLabel = formatEvery(every);
+  return (
+    <Text
+      scale="caption"
+      color={colors.inkFaint}
+      style={{ fontVariantCaps: 'all-small-caps', letterSpacing: '0.06em' }}
+    >
+      {`last ${subject} ${sinceLabel} ago · usually every ${everyLabel}`}
+    </Text>
+  );
+}
+
+function formatDays(d: number): string {
+  if (d < 1) return 'less than a day';
+  const rounded = Math.round(d);
+  return `${rounded} day${rounded === 1 ? '' : 's'}`;
+}
+
+/**
+ * Renewals run on yearly+ cadence, so we humanise the median: anything
+ * over 300d reads as years; anything under, as days. Keeps the editorial
+ * voice honest without inventing "months" for an admin row that's really
+ * an annual rhythm.
+ */
+function formatEvery(d: number): string {
+  if (d >= 300) {
+    const years = Math.round(d / 365);
+    return years === 1 ? 'year' : `${years} years`;
+  }
+  return formatDays(d);
 }
 
 function TaskRow({

@@ -11,6 +11,7 @@
  *   - `list*` queries always return most-recent-first.
  */
 
+import { computeCadence, type CadenceEstimate } from '@ollie/cadence';
 import { sql } from '../../storage';
 import {
   hoursBetween,
@@ -128,6 +129,34 @@ export const sleepRepo = {
 
   async remove(id: string): Promise<void> {
     await sql.execute(`DELETE FROM sleep_events WHERE id = ?`, [id]);
+  },
+};
+
+// ─── cadence ──────────────────────────────────────────────────────────────
+//
+// Sleep events are append-only with `occurred_at` timestamps. The
+// useful cadence here is *how regularly the user logs sleep at all* —
+// one series across every `kind='sleep'` row. Not per-night quality, not
+// per-bedtime: the simple "are you tracking" signal that turns into
+// "you've been logging sleep about every 1.2 days · usually every day".
+//
+// Per Serra's minimal-UI brief: silent until 'observed' confidence.
+
+export const cadence = {
+  /**
+   * Cadence over every 'sleep' row in the log. Each entry is one logged
+   * night; the gaps between entries reveal the user's logging rhythm.
+   */
+  async getSleepLogCadence(): Promise<CadenceEstimate> {
+    const rows = await sql.select<SleepEventRow>(
+      `SELECT id, kind, data, occurred_at
+       FROM sleep_events
+       WHERE kind = 'sleep'
+       ORDER BY occurred_at ASC`,
+    );
+    return computeCadence(
+      rows.map((r) => ({ ts: r.occurred_at, label: 'sleep' })),
+    );
   },
 };
 

@@ -24,13 +24,28 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
+import {
+  daysSinceLast,
+  medianIntervalDays,
+  type CadenceEstimate,
+} from '@ollie/cadence';
 import { Stack, Row } from '../../layout';
 import { Text } from '../../ui';
 import { colors, fonts } from '../../theme/tokens';
 import { WhenCaption } from '../../lib/WhenCaption';
 import { migrateFinance } from './migrate';
-import { bills as billsRepo, subscriptions as subsRepo, transactions as txRepo } from './repo';
-import type { FinanceBill, FinanceSubscription, FinanceTransaction } from './types';
+import {
+  bills as billsRepo,
+  cadence as cadenceRepo,
+  subscriptions as subsRepo,
+  transactions as txRepo,
+} from './repo';
+import {
+  normaliseMerchant,
+  type FinanceBill,
+  type FinanceSubscription,
+  type FinanceTransaction,
+} from './types';
 
 // ── visual constants ──────────────────────────────────────────────────────
 
@@ -111,6 +126,9 @@ export function FinanceBox(): JSX.Element {
   const [txs, setTxs] = useState<FinanceTransaction[]>([]);
   const [billRows, setBillRows] = useState<FinanceBill[]>([]);
   const [subRows, setSubRows] = useState<FinanceSubscription[]>([]);
+  const [merchantCadence, setMerchantCadence] = useState<Map<string, CadenceEstimate>>(
+    () => new Map(),
+  );
   const [ready, setReady] = useState(false);
   const [openCard, setOpenCard] = useState<AreaKey | null>(null);
 
@@ -123,6 +141,20 @@ export function FinanceBox(): JSX.Element {
     setTxs(t);
     setBillRows(b);
     setSubRows(s);
+
+    // Fan-out cadence reads — one per distinct merchant in the transaction
+    // list. Keeps row render synchronous (no per-row async).
+    const merchants = new Set<string>();
+    for (const tx of t) {
+      const key = normaliseMerchant(tx.merchant);
+      if (key) merchants.add(key);
+    }
+    const pairs = await Promise.all(
+      Array.from(merchants).map(
+        async (m) => [m, await cadenceRepo.getMerchantCadenceFor(m)] as const,
+      ),
+    );
+    setMerchantCadence(new Map(pairs));
   }, []);
 
   useEffect(() => {
@@ -293,6 +325,11 @@ export function FinanceBox(): JSX.Element {
                     <TxDetailRow
                       key={item.id}
                       item={item}
+                      cadence={
+                        merchantCadence.get(
+                          normaliseMerchant(item.merchant) ?? '',
+                        )
+                      }
                       onRemove={() => void handleRemoveTx(item.id)}
                     />
                   ))}
@@ -592,9 +629,11 @@ function SubDetailRow({
 
 function TxDetailRow({
   item,
+  cadence,
   onRemove,
 }: {
   item: FinanceTransaction;
+  cadence?: CadenceEstimate | undefined;
   onRemove: () => void;
 }): JSX.Element {
   const muted = item.currency == null && item.amount != null;
@@ -610,8 +649,54 @@ function TxDetailRow({
         </Row>
       </Row>
       <WhenCaption ts={item.occurredAt} />
+      {cadence && item.merchant && (
+        <CadenceHint estimate={cadence} subject={item.merchant} />
+      )}
     </Stack>
   );
+}
+
+/**
+ * Faint sub-line under a transaction row: "last sephora 4 days ago ·
+ * usually every 7 days". Silent at low-data confidence — Serra's minimal
+ * UI prefers nothing to a misleading prediction. One spend doesn't make a
+ * pattern; we wait for the second.
+ */
+function CadenceHint({
+  estimate,
+  subject,
+}: {
+  estimate: CadenceEstimate;
+  subject: string;
+}): JSX.Element | null {
+  if (estimate.confidence === 'low-data' || estimate.lastTs == null) {
+    return null;
+  }
+  const now = Date.now();
+  const since = daysSinceLast(estimate, now) ?? 0;
+  const every = medianIntervalDays(estimate);
+  const sinceLabel = formatDays(since);
+  const everyLabel = every >= 1 ? formatDays(every) : 'less than a day';
+  return (
+    <span
+      style={{
+        fontFamily: fonts.sans,
+        fontSize: 11,
+        color: colors.inkFaint,
+        fontWeight: 500,
+        letterSpacing: '0.06em',
+        fontVariantCaps: 'all-small-caps',
+      }}
+    >
+      {`last ${subject} ${sinceLabel} ago · usually every ${everyLabel}`}
+    </span>
+  );
+}
+
+function formatDays(d: number): string {
+  if (d < 1) return 'less than a day';
+  const rounded = Math.round(d);
+  return `${rounded} day${rounded === 1 ? '' : 's'}`;
 }
 
 function RemoveButton({ onClick }: { onClick: () => void }): JSX.Element {
