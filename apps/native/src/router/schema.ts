@@ -183,7 +183,11 @@ export type FinanceAction =
   | { module: 'finance'; action: 'log_transaction'; amount?: number; currency?: string; merchant?: string }
   | { module: 'finance'; action: 'add_bill'; merchant: string; amount?: number; cadence?: 'monthly' | 'yearly' | 'weekly' }
   | { module: 'finance'; action: 'savings_note'; amount?: number; note?: string }
-  | { module: 'finance'; action: 'subscription_log'; name: string };
+  // amount/currency are optional — the worker prompt currently emits only
+  // `name`, but the native handler stores them when present so subscriptions
+  // can feed the monthly-burn headline. Backfilling the worker prompt is a
+  // separate task; this surface stays forward-compatible.
+  | { module: 'finance'; action: 'subscription_log'; name: string; amount?: number; currency?: string };
 
 // ── SLEEP ────────────────────────────────────────────────────────────
 

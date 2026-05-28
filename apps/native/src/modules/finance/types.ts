@@ -34,7 +34,25 @@ export interface FinanceBill {
 export interface FinanceSubscription {
   id: string;
   name: string;
+  /** Per-cycle cost. Treated as monthly for burn math (the dominant cadence). */
+  amount: number | null;
+  currency: string | null;
   addedAt: number;
+}
+
+/**
+ * Typed breakdown of the current calendar month's true commitment.
+ * `transactions` are spends actually logged this month; `subscriptions` is
+ * the monthly cost of every active subscription; `billsDue` is the
+ * monthly-equivalent of every bill (monthly = full amount, yearly = /12,
+ * weekly = *52/12). All three are summed into `total`.
+ */
+export interface MonthlyBurn {
+  currency: string | null;
+  transactions: number;
+  subscriptions: number;
+  billsDue: number;
+  total: number;
 }
 
 export const KNOWN_CADENCES: Cadence[] = ['monthly', 'yearly', 'weekly'];

@@ -65,7 +65,14 @@ export const financeHandler: ModuleHandler<'finance'> = {
       }
 
       case 'subscription_log': {
-        const sub = await subscriptions.add({ name: p.name });
+        // amount + currency are forward-compat — the router prompt only
+        // emits `name` today, but the column is here so the burn headline
+        // picks them up the moment the prompt is taught to extract them.
+        const sub = await subscriptions.add({
+          name: p.name,
+          amount: p.amount ?? null,
+          currency: p.currency ?? null,
+        });
         return {
           ok: true,
           note: `tracked subscription: ${sub.name}`,

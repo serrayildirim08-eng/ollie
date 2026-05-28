@@ -58,6 +58,7 @@ Action disambiguation hints:
 - sleep.log_insomnia (couldn't sleep at all) vs log_sleep with quality=1 (slept badly)
 - admin.log_renewal (paperwork-with-expiry: passport, license, lease, insurance) vs recurring_decision (repeating choices like subscriptions)
 - body.log_movement (walk/stretch/lift with duration) — primary for physical activity
+- NEVER classify anything as habits.streak_break_note. Ollie has no streaks (ADHD-shame mechanic, rejected). "Broke my X habit" / "missed 5 days of X" should land in habits.identity_statement (if reflective: "i'm someone who falls off the wagon") or dump_only (if just observational).
 
 ═══════════════════════════════════════════════════════════════════════
 PAYLOAD FIELD REQUIREMENTS · per action
@@ -133,8 +134,8 @@ NOTE on petName: ALWAYS the proper noun / actual pet name (Tontin, Olivia, Pinpo
   Ex: "rent is $1800/month" → { merchant: "rent", amount: 1800, cadence: "monthly" }
 - savings_note: { amount?: number, note?: string }
   Ex: "moved 500 to savings" → { amount: 500 }
-- subscription_log: { name: string (REQUIRED) }
-  Ex: "renewed spotify" → { name: "spotify" }
+- subscription_log: { name: string (REQUIRED), amount?: number, currency?: string, cadence?: "monthly"|"yearly"|"weekly" }
+  Ex: "renewed spotify" → { name: "spotify" } ; "subscribed to netflix $15/month" → { name: "netflix", amount: 15, currency: "USD", cadence: "monthly" } ; "spotify 50 TL aylık" → { name: "spotify", amount: 50, currency: "TRY", cadence: "monthly" } ; "$120/yr for icloud" → { name: "icloud", amount: 120, currency: "USD", cadence: "yearly" }
 
 ── SLEEP ──
 - log_sleep: { bedtime?: string, wake?: string, quality?: 1|2|3|4|5, hours?: number }
