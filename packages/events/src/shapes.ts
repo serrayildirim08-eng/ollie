@@ -29,10 +29,9 @@ export const SHAPES: Record<string, ShapeSpec> = {
   'braindump:routed':          { route_path: 'string', item_count: 'number', modules: 'array', idempotency_key: 'string', ts: 'number' },
   'braindump:routing_failed':  { raw: 'string', reason: 'string', ts: 'number' },
   'void:inventory:refill':     { productType: 'string', quantity: 'number', source: 'string' },
-  'void:cycle:started':        { ts: 'number', source: 'string' },
   'pets:care_logged':          { pet_id: 'string', task: 'string', source: 'string', occurred_at: 'number' },
   'void:reminder:scheduled':   { id: 'string', fireAt: 'number', message: 'string', module: 'string', source: 'string' },
-  'void:crisis:detected':      { text: 'string', matchedLine: 'string', ts: 'number' },
+  'void:crisis:detected':      { ts: 'number' },
   'research:row_written':      { row_id: 'string', table: 'string', text: 'string', locale: 'string', ts: 'number' },
 
   // T2 2026-05-21 · grocery AI routing (co-owned with frontend pod;
@@ -40,6 +39,15 @@ export const SHAPES: Record<string, ShapeSpec> = {
   //   error-layout subscribes to).
   'grocery:routing:pending':   { idempotency_key: 'string', raw: 'string', ts: 'number' },
   'grocery:routed':            { idempotency_key: 'string', raw: 'string', items: 'array', source: 'string', latency_ms: 'number', ts: 'number', 'error?': 'string' },
+
+  // grocery · undo stack (2026-05-22)
+  'grocery:undone':            { description: 'string', mode: 'string', ts: 'number' },
+
+  // Feed Me v2 telemetry (2026-05-22 · docs/handoffs/feed-me/00-SPEC.md)
+  'feedme:requested':          { pantryCount: 'number', diet: 'string', feedTarget: 'string', ts: 'number' },
+  'feedme:suggested':          { source: 'string', count: 'number', latencyMs: 'number', ts: 'number' },
+  'feedme:cooked':             { dish: 'string', rating: 'number', ts: 'number' },
+  'feedme:rejected':           { dish: 'string', ts: 'number' },
 
   // Sprint 3 / D1 burhan
   'burhan:element_added':      { id: 'string', type: 'string', source_module: 'string', source_event_id: 'string', ts: 'number' },
