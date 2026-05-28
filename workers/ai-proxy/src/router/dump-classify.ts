@@ -50,6 +50,9 @@ Modules and their action vocabularies:
 - dump_only: archive_only  (use when no module fits OR confidence < 0.6)
 
 Action disambiguation hints:
+- "bought/got/picked up + a food/household item" → grocery.pantry_add (NOT finance.log_transaction). Examples: "bought milk", "got eggs", "süt aldım", "compré pasta".
+- If the user mentions a PRICE alongside the food item ("bought milk for $5", "got lemons for 3 dollars"), still classify as grocery.pantry_add but include \`price\` (number) and \`currency\` (string, e.g. "USD"/"EUR") on the payload. The grocery handler will mirror the purchase to finance automatically — DO NOT emit a separate finance.log_transaction.
+- Finance is only for explicit spending with no purchased food item ("paid rent", "spent $40 on impulse stuff at sephora"), or for bills/subscriptions.
 - grocery.pantry_low_flag (warning, "running low") vs shopping_list_add (active need, "out of"/"need to buy")
 - pets.log_supplement (typed vitamin/calcium with dose) vs log_care (generic care event)
 - sleep.log_insomnia (couldn't sleep at all) vs log_sleep with quality=1 (slept badly)
