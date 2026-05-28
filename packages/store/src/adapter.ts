@@ -19,6 +19,15 @@ export interface StorageAdapter {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
   removeItem(key: string): void;
+  /**
+   * Enumerate every key currently held by the adapter.
+   *
+   * Required by the pre-migration snapshot (see migrations.ts) — without
+   * it the snapshot of non-browser adapters was silently empty, so the
+   * rollback-on-failed-migration path restored nothing. Implemented by
+   * BOTH the browser adapter (over localStorage) and the memory adapter.
+   */
+  getAllKeys(): string[];
   /** Subscribe to changes made by OTHER tabs. Returns an unsubscribe fn. */
   onChange?(handler: (change: StorageChange) => void): () => void;
 }
@@ -32,6 +41,15 @@ export const browserAdapter: StorageAdapter = {
   },
   removeItem(key) {
     globalThis.localStorage.removeItem(key);
+  },
+  getAllKeys() {
+    const ls = globalThis.localStorage;
+    const keys: string[] = [];
+    for (let i = 0; i < ls.length; i++) {
+      const k = ls.key(i);
+      if (k != null) keys.push(k);
+    }
+    return keys;
   },
   onChange(handler) {
     const listener = (e: StorageEvent) => {
@@ -53,6 +71,9 @@ export function createMemoryAdapter(seed?: Record<string, string>): StorageAdapt
     },
     removeItem(key) {
       storage.delete(key);
+    },
+    getAllKeys() {
+      return [...storage.keys()];
     },
   };
 }
