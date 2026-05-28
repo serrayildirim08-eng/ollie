@@ -1,0 +1,92 @@
+name: deploy workers
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'workers/**'
+
+jobs:
+  deploy-ai-proxy:
+    name: deploy · ai-proxy
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: workers/ai-proxy
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: install
+        run: pnpm install
+      - name: deploy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: workers/ai-proxy
+
+  deploy-cron:
+    name: deploy · cron
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: workers/cron
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: install
+        run: pnpm install
+      - name: deploy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: workers/cron
+
+  deploy-apns-push:
+    name: deploy · apns-push
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: workers/apns-push
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: install
+        run: pnpm install
+      - name: deploy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: workers/apns-push
+
+  deploy-sentry-tunnel:
+    name: deploy · sentry-tunnel
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: workers/sentry-tunnel
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: install
+        run: pnpm install
+      - name: deploy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: workers/sentry-tunnel
