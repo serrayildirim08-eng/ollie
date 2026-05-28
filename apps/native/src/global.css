@@ -1,0 +1,54 @@
+/* Global baseline — ported from apps/web redesign branch (tokens.css). */
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  overflow-x: hidden;
+  background: var(--ollie-color-cream);
+  color: var(--ollie-color-ink);
+  font-family: var(--ollie-font-sans);
+  font-size: var(--ollie-text-body);
+  line-height: var(--ollie-leading-body);
+  letter-spacing: var(--ollie-tracking-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Editorial display + serif faces use DM Serif Display. */
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--ollie-font-serif);
+  letter-spacing: var(--ollie-tracking-display);
+  line-height: var(--ollie-leading-display);
+  font-weight: 400;
+}
+
+button,
+input,
+textarea {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+a {
+  color: inherit;
+}
+
+/* Sharp edges everywhere except deliberate components — matches redesign DNA. */
+input,
+button {
+  border-radius: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

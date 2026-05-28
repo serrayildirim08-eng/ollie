@@ -6,6 +6,7 @@ export { getSupabaseClient, supabase } from './supabase';
 
 export {
   brainDump,
+  routeDump,
   enrichDump,
   ingestEvent,
   label,
@@ -21,6 +22,7 @@ export type {
   ApiResult,
   BrainDumpRequest,
   BrainDumpResponse,
+  RouteDumpRequest,
   EnrichDumpRequest,
   EnrichDumpResponse,
   IngestEventRequest,

@@ -25,6 +25,14 @@ export type ApiResult<T> =
   | { ok: true; data: T; status: number }
   | { ok: false; error: ApiError };
 
+// ─── /route/dump (POST) — v2 brain-dump router ────────────────────────────────
+
+export interface RouteDumpRequest {
+  text: string;
+  dumpId?: string;
+  locale?: string;
+}
+
 // ─── /brain-dump (POST) ───────────────────────────────────────────────────────
 
 export interface BrainDumpRequest {

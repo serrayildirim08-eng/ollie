@@ -37,8 +37,10 @@ import type {
   ClaimInviteResponse,
   PushRegisterRequest,
   PushRegisterResponse,
+  RouteDumpRequest,
   SentryEnvelope,
 } from './types';
+import type { RouterOutput } from '../router/schema';
 
 // ─── env helpers ──────────────────────────────────────────────────────────────
 
@@ -52,9 +54,27 @@ function workerUrl(key: string, fallback?: string): string {
 // Lazy getters so missing env only throws when the function is actually called.
 const urls = {
   get aiProxy() { return workerUrl('VITE_AI_PROXY_URL', 'https://ollie-api.ollieapp.workers.dev'); },
+  get routeDump() {
+    const override = import.meta.env.VITE_ROUTE_DUMP_URL as string | undefined;
+    if (override) return override.replace(/\/$/, '');
+    return this.aiProxy;
+  },
   get apnsPush() { return workerUrl('VITE_APNS_PUSH_URL', 'https://ollie-apns.ollieapp.workers.dev'); },
   get sentryTunnel() { return workerUrl('VITE_SENTRY_TUNNEL_URL', 'https://ollie-sentry.ollieapp.workers.dev'); },
 };
+
+// ─── ai-proxy: /route/dump — v2 brain-dump router ─────────────────────────────
+
+export function routeDump(
+  req: RouteDumpRequest,
+  opts: { bearer: string; timeoutMs?: number },
+): Promise<ApiResult<RouterOutput>> {
+  return post<RouterOutput>(
+    `${urls.routeDump}/route/dump`,
+    req,
+    { authJwt: opts.bearer, timeoutMs: opts.timeoutMs ?? 30_000 },
+  );
+}
 
 // ─── core fetch helper ────────────────────────────────────────────────────────
 

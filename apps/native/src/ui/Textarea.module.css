@@ -1,9 +1,9 @@
-/* Textarea — Ollie UI primitive, brain-dump style */
+/* Textarea — Ollie UI primitive, brain-dump style. */
 
 .wrapper {
   display: flex;
   flex-direction: column;
-  gap: var(--ollie-space-xs);
+  gap: var(--ollie-space-2);
   width: 100%;
 }
 
@@ -12,57 +12,52 @@
   background: transparent;
   width: 100%;
   box-sizing: border-box;
-  font-family: inherit;
-  font-size: var(--ollie-size-body);
-  font-weight: var(--ollie-weight-normal);
-  color: var(--ollie-ink-dark);
-  line-height: var(--ollie-leading);
+  font-family: var(--ollie-font-sans);
+  font-size: var(--ollie-text-body);
+  font-weight: var(--ollie-weight-regular);
+  color: var(--ollie-color-ink);
+  line-height: var(--ollie-leading-body);
 
-  /* Generous padding — dump mode = needs breathing room */
-  padding: var(--ollie-space-md);
+  padding: var(--ollie-space-4);
 
-  /* Soft border — full box for multiline context */
-  border: 1px solid var(--ollie-ceramic-dim);
-  border-radius: var(--ollie-radius-lg);
+  border: 1px solid var(--ollie-color-hairline);
+  border-radius: 0;
 
   outline: none;
-  resize: none; /* auto-grow handles height */
+  resize: none;
 
-  /* Auto-grow: field-sizing is the modern way; JS fallback in component */
   field-sizing: content;
   min-height: 96px;
   max-height: 480px;
   overflow-y: auto;
 
   transition:
-    border-color var(--ollie-duration-fast) var(--ollie-easing-standard),
-    background-color var(--ollie-duration-fast) var(--ollie-easing-standard);
+    border-color var(--ollie-duration-tap) var(--ollie-ease-calm-out),
+    background-color var(--ollie-duration-tap) var(--ollie-ease-calm-out);
 }
 
 .textarea::placeholder {
-  color: var(--ollie-ink-light);
-  font-weight: var(--ollie-weight-light);
+  color: var(--ollie-color-ink-faint);
 }
 
 .textarea:focus {
-  border-color: var(--ollie-sage);
-  background-color: var(--ollie-ceramic);
+  border-color: var(--ollie-color-sage-deep);
+  background-color: var(--ollie-color-paper);
 }
 
-/* Error state */
 .textareaError {
-  border-color: var(--ollie-error-border);
+  border-color: var(--ollie-color-rubric);
 }
 
 .textareaError:focus {
-  border-color: var(--ollie-error-border);
-  background-color: var(--ollie-error-bg);
+  border-color: var(--ollie-color-rubric);
+  background-color: var(--ollie-color-paper);
 }
 
 .errorMsg {
-  font-size: var(--ollie-size-caption);
-  color: var(--ollie-error-text);
-  letter-spacing: var(--ollie-tracking-wide);
+  font-size: var(--ollie-text-caption);
+  color: var(--ollie-color-rubric);
+  letter-spacing: var(--ollie-tracking-caps);
 }
 
 .textarea:disabled {

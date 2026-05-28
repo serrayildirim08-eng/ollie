@@ -72,10 +72,14 @@ export interface CrisisSignal {
 // ─────────────────────────────────────────────────────────────────────
 
 export interface Fragment {
-  text: string;            // the slice of original dump
+  text: string;
+  /** Per-fragment language (router does per-fragment detection). */
+  language: 'tr' | 'en' | 'es' | 'mixed' | 'unknown';
   module: Module;
-  payload: ActionPayload;  // discriminated union by `action` field
-  confidence: number;      // 0..1 — UI surfaces low-confidence for confirm
+  payload: ActionPayload;
+  confidence: number;
+  /** Server-side 3-tier policy: true when 0.60 ≤ confidence < 0.80. */
+  needsConfirm?: boolean;
   source: 'cache' | 'ai' | 'fast_path';
 }
 
@@ -246,7 +250,7 @@ export interface ModuleHandler<M extends Module> {
    * Apply a routed fragment to the module's local state + backend.
    * Returns a UI-displayable note (e.g., "added milk to pantry").
    */
-  apply(fragment: Extract<Fragment, { module: M }>): Promise<HandlerResult>;
+  apply(fragment: Fragment): Promise<HandlerResult>;
 }
 
 export interface HandlerResult {
