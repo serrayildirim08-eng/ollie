@@ -378,6 +378,64 @@ describe('@ollie/orchestrator · CadenceScanner', () => {
     expect(calls).toHaveLength(0);
   });
 
+  describe('copy templates for the 8 native modules', () => {
+    const cases: Array<{
+      module: string;
+      key: string;
+      label: string;
+      intervalMs: number;
+      /** Substring or regex that the fired title must contain. */
+      mustMatch: RegExp;
+    }> = [
+      { module: 'sleep', key: 'nightly', label: 'nightly', intervalMs: DAY_MS, mustMatch: /(sleep|short|nightly)/i },
+      { module: 'pets', key: 'pet-1', label: 'Mochi', intervalMs: DAY_MS, mustMatch: /Mochi/ },
+      { module: 'finance', key: 'rent', label: 'rent', intervalMs: 30 * DAY_MS, mustMatch: /rent/ },
+      { module: 'work', key: 'matter-1', label: 'OPT case', intervalMs: 3 * DAY_MS, mustMatch: /(OPT case|focus|deep work)/ },
+      { module: 'goals', key: 'goal-1', label: 'novel draft', intervalMs: 7 * DAY_MS, mustMatch: /novel draft/ },
+      { module: 'admin', key: 'passport', label: 'passport', intervalMs: 365 * DAY_MS, mustMatch: /passport/ },
+      { module: 'cycle', key: 'period', label: 'period', intervalMs: 28 * DAY_MS, mustMatch: /period/ },
+      { module: 'medication', key: 'med-1', label: 'vitamin D', intervalMs: DAY_MS, mustMatch: /vitamin D/ },
+    ];
+
+    for (const c of cases) {
+      it(`${c.module}: fires non-shaming copy for overdue ${c.label}`, async () => {
+        const { backend, calls } = makeBackend();
+        installBackend(backend);
+        const store = createStore(createMemoryAdapter());
+        installNotificationStore(store);
+
+        const scanner = createCadenceScanner(store, { now: () => NOW });
+        scanner.registerSource(c.module, () => [
+          {
+            module: c.module,
+            key: c.key,
+            label: c.label,
+            estimate: makeOverdueEstimate(c.intervalMs, NOW, 2 * DAY_MS),
+          },
+        ]);
+
+        const result = await scanner.scanNow();
+        expect(result.fired).toHaveLength(1);
+        expect(result.fired[0]?.module).toBe(c.module);
+        expect(result.fired[0]?.title).toMatch(c.mustMatch);
+
+        // Tone guard: none of the new copy may contain banned shame /
+        // streak / alarm patterns.
+        const title = result.fired[0]?.title ?? '';
+        expect(title).not.toMatch(/streak/i);
+        expect(title).not.toMatch(/!/);
+        expect(title).not.toMatch(/missed/i);
+        expect(title).not.toMatch(/failed/i);
+        expect(title).not.toMatch(/broken/i);
+
+        await Promise.resolve();
+        await Promise.resolve();
+        expect(calls).toHaveLength(1);
+        expect(DEFAULT_CADENCE_COPY[c.module]?.variants).toHaveLength(3);
+      });
+    }
+  });
+
   it('init() runs a debounced boot scan + recurring foreground interval', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(NOW);
