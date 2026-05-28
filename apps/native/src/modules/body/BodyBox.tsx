@@ -29,6 +29,7 @@ import {
 import { Stack, Row } from '../../layout';
 import { Text } from '../../ui';
 import { colors, fontSizes, fontWeights, letterSpacings } from '../../theme/tokens';
+import { WhenCaption } from '../../lib/WhenCaption';
 import { migrateBody } from './migrate';
 import { cadence as cadenceRepo, events as eventsRepo } from './repo';
 import {
@@ -447,10 +448,13 @@ function ListSection({
 function WaterRow({ event, onRemove }: { event: BodyEvent; onRemove: () => void }): JSX.Element {
   const ml = getAmountMl(event);
   return (
-    <Row gap={12} align="baseline" justify="space-between">
-      <Text scale="body">{ml != null ? `${ml} mL` : 'water'}</Text>
-      <RemoveButton onClick={onRemove} />
-    </Row>
+    <Stack gap={2}>
+      <Row gap={12} align="baseline" justify="space-between">
+        <Text scale="body">{ml != null ? `${ml} mL` : 'water'}</Text>
+        <RemoveButton onClick={onRemove} />
+      </Row>
+      <WhenCaption ts={event.loggedAt} />
+    </Stack>
   );
 }
 
@@ -471,6 +475,7 @@ function MovementRow({
         <Text scale="body">{dur != null ? `${label} · ${dur} min` : label}</Text>
         <RemoveButton onClick={onRemove} />
       </Row>
+      <WhenCaption ts={event.loggedAt} />
       <CadenceHint estimate={cadence} subject={label} />
     </Stack>
   );
@@ -527,10 +532,13 @@ function SymptomRow({
   if (bodyPart) parts.push(bodyPart);
   if (severity != null) parts.push(`${severity}/5`);
   return (
-    <Row gap={12} align="baseline" justify="space-between">
-      <Text scale="body">{parts.join(' · ')}</Text>
-      <RemoveButton onClick={onRemove} />
-    </Row>
+    <Stack gap={2}>
+      <Row gap={12} align="baseline" justify="space-between">
+        <Text scale="body">{parts.join(' · ')}</Text>
+        <RemoveButton onClick={onRemove} />
+      </Row>
+      <WhenCaption ts={event.loggedAt} />
+    </Stack>
   );
 }
 
@@ -544,20 +552,26 @@ function SupplementRow({
   const label = getLabel(event) || 'supplement';
   const dose = getDose(event);
   return (
-    <Row gap={12} align="baseline" justify="space-between">
-      <Text scale="body">{dose ? `${label} · ${dose}` : label}</Text>
-      <RemoveButton onClick={onRemove} />
-    </Row>
+    <Stack gap={2}>
+      <Row gap={12} align="baseline" justify="space-between">
+        <Text scale="body">{dose ? `${label} · ${dose}` : label}</Text>
+        <RemoveButton onClick={onRemove} />
+      </Row>
+      <WhenCaption ts={event.loggedAt} />
+    </Stack>
   );
 }
 
 function OtherRow({ event, onRemove }: { event: BodyEvent; onRemove: () => void }): JSX.Element {
   const label = describeOther(event);
   return (
-    <Row gap={12} align="baseline" justify="space-between">
-      <Text scale="body">{label}</Text>
-      <RemoveButton onClick={onRemove} />
-    </Row>
+    <Stack gap={2}>
+      <Row gap={12} align="baseline" justify="space-between">
+        <Text scale="body">{label}</Text>
+        <RemoveButton onClick={onRemove} />
+      </Row>
+      <WhenCaption ts={event.loggedAt} />
+    </Stack>
   );
 }
 

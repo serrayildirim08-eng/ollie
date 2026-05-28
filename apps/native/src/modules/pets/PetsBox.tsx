@@ -25,6 +25,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Stack, Row } from '../../layout';
 import { Text } from '../../ui';
 import { colors, fonts } from '../../theme/tokens';
+import { WhenCaption } from '../../lib/WhenCaption';
 import { migratePets } from './migrate';
 import { events as eventsRepo } from './repo';
 import {
@@ -436,6 +437,7 @@ function ListSection<T>({
 function EventRow({
   primary,
   secondary,
+  event,
   onRemove,
 }: {
   primary: string;
@@ -444,22 +446,25 @@ function EventRow({
   onRemove: () => void;
 }): JSX.Element {
   return (
-    <Row gap={12} align="baseline" justify="space-between">
-      <Text scale="body">
-        {primary}
-        {secondary && (
-          <Text
-            as="span"
-            scale="caption"
-            color={colors.inkFaint}
-            style={{ marginLeft: 8 }}
-          >
-            · {secondary}
-          </Text>
-        )}
-      </Text>
-      <RemoveButton onClick={onRemove} />
-    </Row>
+    <Stack gap={2}>
+      <Row gap={12} align="baseline" justify="space-between">
+        <Text scale="body">
+          {primary}
+          {secondary && (
+            <Text
+              as="span"
+              scale="caption"
+              color={colors.inkFaint}
+              style={{ marginLeft: 8 }}
+            >
+              · {secondary}
+            </Text>
+          )}
+        </Text>
+        <RemoveButton onClick={onRemove} />
+      </Row>
+      <WhenCaption ts={event.loggedAt} />
+    </Stack>
   );
 }
 

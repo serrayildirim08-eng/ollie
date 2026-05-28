@@ -24,6 +24,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Stack, Row } from '../../layout';
 import { Text } from '../../ui';
 import { colors, fonts } from '../../theme/tokens';
+import { WhenCaption } from '../../lib/WhenCaption';
 import { migrateSleep } from './migrate';
 import { sleepRepo } from './repo';
 import type { SleepEvent } from './types';
@@ -446,10 +447,13 @@ function SleepRow({
 }): JSX.Element {
   if (event.kind !== 'sleep') return <></>;
   return (
-    <Row gap={12} align="baseline" justify="space-between">
-      <Text scale="body">{formatSleepLine(event)}</Text>
-      <RemoveButton onClick={onRemove} />
-    </Row>
+    <Stack gap={2}>
+      <Row gap={12} align="baseline" justify="space-between">
+        <Text scale="body">{formatSleepLine(event)}</Text>
+        <RemoveButton onClick={onRemove} />
+      </Row>
+      <WhenCaption ts={event.occurredAt} />
+    </Stack>
   );
 }
 
@@ -462,10 +466,13 @@ function WindDownRow({
 }): JSX.Element {
   if (event.kind !== 'wind_down') return <></>;
   return (
-    <Row gap={12} align="baseline" justify="space-between">
-      <Text scale="body">{event.data.note}</Text>
-      <RemoveButton onClick={onRemove} />
-    </Row>
+    <Stack gap={2}>
+      <Row gap={12} align="baseline" justify="space-between">
+        <Text scale="body">{event.data.note}</Text>
+        <RemoveButton onClick={onRemove} />
+      </Row>
+      <WhenCaption ts={event.occurredAt} />
+    </Stack>
   );
 }
 
@@ -478,10 +485,13 @@ function DreamRow({
 }): JSX.Element {
   if (event.kind !== 'dream') return <></>;
   return (
-    <Row gap={12} align="baseline" justify="space-between">
-      <Text scale="body">{event.data.text}</Text>
-      <RemoveButton onClick={onRemove} />
-    </Row>
+    <Stack gap={2}>
+      <Row gap={12} align="baseline" justify="space-between">
+        <Text scale="body">{event.data.text}</Text>
+        <RemoveButton onClick={onRemove} />
+      </Row>
+      <WhenCaption ts={event.occurredAt} />
+    </Stack>
   );
 }
 
@@ -494,10 +504,13 @@ function InsomniaRow({
 }): JSX.Element {
   if (event.kind !== 'insomnia') return <></>;
   return (
-    <Row gap={12} align="baseline" justify="space-between">
-      <Text scale="body">{formatInsomniaLine(event)}</Text>
-      <RemoveButton onClick={onRemove} />
-    </Row>
+    <Stack gap={2}>
+      <Row gap={12} align="baseline" justify="space-between">
+        <Text scale="body">{formatInsomniaLine(event)}</Text>
+        <RemoveButton onClick={onRemove} />
+      </Row>
+      <WhenCaption ts={event.occurredAt} />
+    </Stack>
   );
 }
 

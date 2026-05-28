@@ -27,6 +27,7 @@ import type { CSSProperties, ReactNode } from 'react';
 import { Stack, Row } from '../../layout';
 import { Text } from '../../ui';
 import { colors, fonts } from '../../theme/tokens';
+import { WhenCaption } from '../../lib/WhenCaption';
 import { migrateFinance } from './migrate';
 import { bills as billsRepo, subscriptions as subsRepo, transactions as txRepo } from './repo';
 import type { FinanceBill, FinanceSubscription, FinanceTransaction } from './types';
@@ -551,20 +552,23 @@ function BillDetailRow({
 }): JSX.Element {
   const muted = item.currency == null && item.amount != null;
   return (
-    <Row gap={12} align="baseline" justify="space-between">
-      <span style={DETAIL_K_STYLE}>
-        {item.merchant}
-        {item.cadence ? (
-          <span style={{ color: colors.inkGhost, marginLeft: 6 }}>· {item.cadence}</span>
-        ) : null}
-      </span>
-      <Row gap={8} align="baseline">
-        <span style={{ ...DETAIL_V_STYLE, color: muted ? UMBER : colors.ink }}>
-          {formatAmount(item.amount, item.currency)}
+    <Stack gap={2}>
+      <Row gap={12} align="baseline" justify="space-between">
+        <span style={DETAIL_K_STYLE}>
+          {item.merchant}
+          {item.cadence ? (
+            <span style={{ color: colors.inkGhost, marginLeft: 6 }}>· {item.cadence}</span>
+          ) : null}
         </span>
-        <RemoveButton onClick={onRemove} />
+        <Row gap={8} align="baseline">
+          <span style={{ ...DETAIL_V_STYLE, color: muted ? UMBER : colors.ink }}>
+            {formatAmount(item.amount, item.currency)}
+          </span>
+          <RemoveButton onClick={onRemove} />
+        </Row>
       </Row>
-    </Row>
+      <WhenCaption ts={item.addedAt} />
+    </Stack>
   );
 }
 
@@ -576,10 +580,13 @@ function SubDetailRow({
   onRemove: () => void;
 }): JSX.Element {
   return (
-    <Row gap={12} align="baseline" justify="space-between">
-      <span style={DETAIL_K_STYLE}>{item.name}</span>
-      <RemoveButton onClick={onRemove} />
-    </Row>
+    <Stack gap={2}>
+      <Row gap={12} align="baseline" justify="space-between">
+        <span style={DETAIL_K_STYLE}>{item.name}</span>
+        <RemoveButton onClick={onRemove} />
+      </Row>
+      <WhenCaption ts={item.addedAt} />
+    </Stack>
   );
 }
 
@@ -592,15 +599,18 @@ function TxDetailRow({
 }): JSX.Element {
   const muted = item.currency == null && item.amount != null;
   return (
-    <Row gap={12} align="baseline" justify="space-between">
-      <span style={DETAIL_K_STYLE}>{item.merchant ?? '—'}</span>
-      <Row gap={8} align="baseline">
-        <span style={{ ...DETAIL_V_STYLE, color: muted ? UMBER : colors.ink }}>
-          {formatAmount(item.amount, item.currency)}
-        </span>
-        <RemoveButton onClick={onRemove} />
+    <Stack gap={2}>
+      <Row gap={12} align="baseline" justify="space-between">
+        <span style={DETAIL_K_STYLE}>{item.merchant ?? '—'}</span>
+        <Row gap={8} align="baseline">
+          <span style={{ ...DETAIL_V_STYLE, color: muted ? UMBER : colors.ink }}>
+            {formatAmount(item.amount, item.currency)}
+          </span>
+          <RemoveButton onClick={onRemove} />
+        </Row>
       </Row>
-    </Row>
+      <WhenCaption ts={item.occurredAt} />
+    </Stack>
   );
 }
 
