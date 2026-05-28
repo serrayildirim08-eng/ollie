@@ -45,7 +45,6 @@ import {
 import type {
   HealthKitHeartRateSample,
   HealthKitHydrationSample,
-  HealthKitRestingHRSample,
   HealthKitSleepSample,
   HealthKitStepSample,
 } from './types';
@@ -53,7 +52,7 @@ import type { HealthPluginShape } from './runtime';
 
 const NS = 'healthkit';
 
-/** 6h default — the HealthKit equivalent of Plaid's cursor sync window. */
+/** 6h default — the HealthKit cursor sync window. */
 export const HEALTHKIT_SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
 export interface SyncOptions {
