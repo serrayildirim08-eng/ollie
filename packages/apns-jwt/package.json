@@ -1,5 +1,5 @@
 {
-  "name": "@ollie/consent",
+  "name": "@ollie/apns-jwt",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -9,11 +9,11 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "test": "vitest run --passWithNoTests",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250906.0",
     "typescript": "^5.6.0",
     "vitest": "^2.1.9"
   }
