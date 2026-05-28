@@ -43,6 +43,12 @@ export interface FlushEnv {
   SUPABASE_SERVICE_ROLE: string;
   /** Service binding to ollie-apns-push (in-cluster, no public hop). */
   APNS_PUSH: Fetcher;
+  /**
+   * Shared secret presented to the apns-push worker's /push endpoint.
+   * MUST equal apns-push's APNS_INTERNAL_SECRET. Without it /push returns
+   * 401 and no notification is delivered.
+   */
+  APNS_INTERNAL_SECRET: string;
 }
 
 // ─── shapes ─────────────────────────────────────────────────────────────────
@@ -180,6 +186,14 @@ async function processJob(
     sentToday = await countSentToday(env, job.user_id);
     sentTodayCache.set(job.user_id, sentToday);
   }
+  // Fail CLOSED (audit #13): if the count query failed we cannot prove
+  // the user is under budget. Leave the job 'pending' (via applyRetry) so
+  // it retries on the next 5-min tick when Supabase may be reachable —
+  // rather than 'budget_skipped' (terminal) which would silently drop it.
+  if (sentToday === COUNT_UNAVAILABLE) {
+    await applyRetry(env, job, stats, 'count-unavailable');
+    return;
+  }
   if (sentToday >= cap) {
     await updateJob(env, job.id, {
       status: 'budget_skipped',
@@ -304,7 +318,11 @@ async function pushOne(
   try {
     const resp = await env.APNS_PUSH.fetch('https://apns-push.internal/push', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: {
+        'content-type': 'application/json',
+        // Shared-secret bearer — apns-push /push rejects without it.
+        authorization: `Bearer ${env.APNS_INTERNAL_SECRET}`,
+      },
       body: JSON.stringify({ deviceToken, payload, userId }),
     });
     if (resp.ok) return { ok: true, status: resp.status };
@@ -353,10 +371,23 @@ async function selectDueJobs(env: FlushEnv): Promise<ScheduledJobRow[]> {
 }
 
 /**
+ * Sentinel returned by `countSentToday` when the count query fails.
+ * `processJob` treats this as "fail closed": the job is left pending and
+ * retried on the next tick rather than delivered against an unknown
+ * budget. Number.MAX_SAFE_INTEGER guarantees `sentToday >= cap` for any
+ * clamped cap, so the job never slips past the daily cap on an error.
+ */
+export const COUNT_UNAVAILABLE = Number.MAX_SAFE_INTEGER;
+
+/**
  * Count this user's notifications already delivered today (UTC day).
  * The budget is a calendar-day cap; the worker uses UTC because it has no
  * access to the user's timezone (that lives in encrypted state). Close
  * enough for a soft cap — see the memo for the deferred-precision note.
+ *
+ * Returns COUNT_UNAVAILABLE on a query error so the caller fails CLOSED
+ * (audit item #13). The previous `return 0` silently disabled the daily
+ * cap for every user on a single transient Supabase error.
  */
 async function countSentToday(env: FlushEnv, userId: string): Promise<number> {
   const startOfDay = new Date();
@@ -369,14 +400,22 @@ async function countSentToday(env: FlushEnv, userId: string): Promise<number> {
     sent_at: `gte.${startOfDay.toISOString()}`,
   });
   const url = `${base}/rest/v1/scheduled_jobs?${qs.toString()}`;
-  const resp = await fetch(url, {
-    headers: { ...supabaseHeaders(env), prefer: 'count=exact' },
-  });
+  let resp: Response;
+  try {
+    resp = await fetch(url, {
+      headers: { ...supabaseHeaders(env), prefer: 'count=exact' },
+    });
+  } catch (err) {
+    // Network throw — fail closed.
+    console.error('[flush] countSentToday threw', String(err));
+    return COUNT_UNAVAILABLE;
+  }
   if (!resp.ok) {
-    // Fail OPEN on a count error — better to risk one extra notification
-    // than to silently swallow every delivery. Logged for ops.
+    // Fail CLOSED on a count error — we cannot prove the user is under
+    // budget, so we skip + retry rather than risk blowing the daily cap
+    // (or, on a sustained outage, every cap at once). Logged for ops.
     console.error('[flush] countSentToday failed', resp.status);
-    return 0;
+    return COUNT_UNAVAILABLE;
   }
   // PostgREST returns the exact count in the Content-Range header
   // ("0-24/25") when prefer=count=exact. Fall back to row length.

@@ -20,10 +20,16 @@
  *     because each dump's user text is unique. We do still include a
  *     stable system prompt with ephemeral cache_control to amortize the
  *     system tokens across the batch.
- *   - We INSERT raw_dumps first, then enriched_signals (FK), then DELETE
- *     the KV entry. If we crash between raw insert and signal insert the
- *     next run will re-attempt and duplicate the raw row — acceptable
- *     because B2B reports aggregate, and our retry counter caps blast.
+ *   - We UPSERT raw_dumps first (on the `id` primary key), then INSERT
+ *     enriched_signals (FK), then DELETE the KV entry / ack the message.
+ *     If we crash between the raw write and the signal write, the retry
+ *     re-runs processOne — the raw_dumps write is an idempotent upsert
+ *     keyed on `dump.id`, so it merges instead of inserting a duplicate
+ *     row (audit item #12). enriched_signals stays a plain INSERT: a
+ *     duplicate there would need its own dedup key, but in practice a
+ *     retry only re-reaches it after the raw upsert succeeds, and the
+ *     enriched write either fully succeeded last time (then the KV entry
+ *     was already deleted / message acked) or fully failed.
  */
 
 // ─── env ──────────────────────────────────────────────────────────────────────
@@ -160,6 +166,35 @@ export async function drainEnrichQueue(env: DrainEnv): Promise<{
   return { scanned, succeeded, failed, dlq };
 }
 
+// ─── Cloudflare Queues consumer (item #4) ──────────────────────────────────────
+//
+// When the [[queues.consumers]] binding is configured, Cloudflare delivers
+// batches of QueuedDump messages here. We process each message and either
+// `ack()` it (success) or `retry()` it (failure) — the Queue itself owns
+// retry/backoff and the DLQ, so the hand-rolled `q:enrich:retry:*` counter
+// and `dlq:enrich:*` keys are no longer needed on this path.
+//
+// This is wired but DOES NOT take effect until `wrangler queues create` has
+// been run and the wrangler.toml producer/consumer blocks are uncommented.
+// Until then the worker keeps using `drainEnrichQueue` (the KV-scan path).
+
+export async function handleEnrichQueueBatch(
+  batch: MessageBatch<QueuedDump>,
+  env: DrainEnv,
+): Promise<void> {
+  for (const message of batch.messages) {
+    try {
+      await processOne(env, message.body);
+      message.ack();
+    } catch (err) {
+      console.error(`[queue:enrich] message ${message.body?.id} failed:`, String(err));
+      // retry() hands the message back to the Queue; after max_retries
+      // (set in wrangler.toml) the Queue moves it to the configured DLQ.
+      message.retry();
+    }
+  }
+}
+
 // ─── per-entry pipeline ───────────────────────────────────────────────────────
 
 async function processOne(env: DrainEnv, dump: QueuedDump): Promise<void> {
@@ -266,14 +301,18 @@ async function insertRawDump(env: DrainEnv, dump: QueuedDump): Promise<string> {
     routing_module: dump.payload.routing_module,
     app_version: dump.payload.app_version,
   };
-  const url = `${env.SUPABASE_URL.replace(/\/$/, '')}/rest/v1/raw_dumps`;
+  // UPSERT on the `id` primary key (audit item #12). A retry after a
+  // crash between this write and the enriched_signals write must NOT
+  // create a second raw_dumps row. PostgREST treats POST + on_conflict +
+  // prefer=resolution=merge-duplicates as an upsert keyed on `id`.
+  const url = `${env.SUPABASE_URL.replace(/\/$/, '')}/rest/v1/raw_dumps?on_conflict=id`;
   const resp = await fetch(url, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
       apikey: env.SUPABASE_SERVICE_ROLE,
       authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE}`,
-      prefer: 'return=minimal',
+      prefer: 'resolution=merge-duplicates,return=minimal',
     },
     body: JSON.stringify(row),
   });

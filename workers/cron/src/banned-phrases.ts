@@ -115,7 +115,7 @@ const GLOBAL_BANS: readonly Ban[] = [
 // Mirror of SCOPED_BANS.push in tools/banned-phrases.cjs.
 const PUSH_BANS: readonly Ban[] = [
   { id: 'push-exclaim', re: /!(?:[\s$"'.,)]|$)/, why: 'no exclamation in push templates · principle viii' },
-  { id: 'emoji-celebrate', re: /[💪💯🎉✨💙❤️👏🔥]/u, why: 'emoji as celebration · principle i' },
+  { id: 'emoji-celebrate', re: /💪|💯|🎉|✨|💙|❤️?|👏|🔥/u, why: 'emoji as celebration · principle i' },
   {
     id: 'reward-feedback',
     re: /\bgreat\s+job\s+(today|tracking|logging)\b/i,
