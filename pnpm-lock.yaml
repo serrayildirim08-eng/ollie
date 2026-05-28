@@ -277,9 +277,6 @@ importers:
 
   packages/auth:
     dependencies:
-      '@ollie/api':
-        specifier: workspace:*
-        version: link:../api
       '@ollie/crypto':
         specifier: workspace:*
         version: link:../crypto
@@ -294,7 +291,7 @@ importers:
         specifier: ^5.6.0
         version: 5.9.3
       vitest:
-        specifier: ^2.1.5
+        specifier: ^2.1.9
         version: 2.1.9(@types/node@25.6.2)(jsdom@29.1.1)
 
   packages/backup:
