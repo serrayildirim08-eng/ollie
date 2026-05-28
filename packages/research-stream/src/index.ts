@@ -72,6 +72,16 @@ export interface ResearchDeps {
   now?: () => number;
   /** Pluggable connectivity check. Default navigator.onLine. */
   isOnline?: () => boolean;
+  /**
+   * Supplies the Supabase user JWT for the `/ingest-event` worker call.
+   * The ai-proxy worker requires `Authorization: Bearer <jwt>` on that
+   * endpoint. This package deliberately has NO access to @ollie/auth, so
+   * the bearer string is handed IN by the constructing caller (account-boot)
+   * rather than read here. The JWT is an opaque auth credential — NOT the
+   * encryption key or email — so passing it via deps respects the isolation
+   * rule. When omitted or returning null, trackTable() no-ops.
+   */
+  getJwt?: () => string | null;
 }
 
 export interface ResearchClient {
@@ -188,6 +198,11 @@ export function createResearchStream(deps: ResearchDeps): ResearchClient {
     if (!deps.ingestUrl) return;
     if (!table || typeof table !== 'string') return;
     if (!row || typeof row !== 'object') return;
+    // The /ingest-event worker endpoint requires a verified Supabase JWT.
+    // No token → no-op (an unauthenticated POST would only 401, and this
+    // path is best-effort / consent-gated).
+    const jwt = deps.getJwt?.() ?? null;
+    if (!jwt) return;
     const url = `${deps.ingestUrl.replace(/\/$/, '')}/ingest-event`;
     const f = deps.fetchImpl ?? (typeof fetch === 'function' ? fetch : null);
     if (!f) return;
@@ -196,7 +211,10 @@ export function createResearchStream(deps: ResearchDeps): ResearchClient {
     try {
       void f(url, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: {
+          'content-type': 'application/json',
+          authorization: `Bearer ${jwt}`,
+        },
         body: JSON.stringify({ table, row }),
       }).catch(() => { /* best-effort */ });
     } catch {
