@@ -16,6 +16,10 @@ import "@fontsource/dm-mono/500.css";
 import "./global.css";
 import { ThemeProvider } from "./theme";
 import { Router } from "./navigation";
+// Boot the store + root orchestrator (cadence scanner, sub-orchestrators).
+// Side-effect import — evaluating this module runs `createOrchestrator(...).init()`.
+// Must precede first render so cadence sources are live before any module mounts.
+import "./store";
 
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as
   | string
