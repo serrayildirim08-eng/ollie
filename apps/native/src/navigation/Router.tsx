@@ -61,45 +61,107 @@ export function Router() {
   );
 }
 
-const MODULES: Array<{ id: string; label: string; hint: string }> = [
-  { id: "grocery", label: "Grocery", hint: "pantry + shopping" },
-  { id: "pets", label: "Pets", hint: "feeds, vet, supplements" },
-  { id: "body", label: "Body", hint: "water, movement, symptoms" },
-  { id: "work", label: "Work", hint: "tasks + focus" },
-  { id: "finance", label: "Finance", hint: "transactions + bills" },
-  { id: "sleep", label: "Sleep", hint: "logs + insomnia" },
-  { id: "admin", label: "Admin", hint: "renewals + paperwork" },
-  { id: "habits", label: "Habits", hint: "streaks + identity" },
-  { id: "goals", label: "Goals", hint: "progress + milestones" },
-  { id: "medication", label: "Medication", hint: "doses + side effects" },
-  { id: "cycle", label: "Cycle", hint: "period + symptoms" },
+interface ModuleEntry { id: string; label: string; hint: string }
+
+interface ModuleGroup {
+  id: string;
+  label: string;
+  aside: string;
+  items: ModuleEntry[];
+}
+
+// Three rooms — see memory: project_ollie_4_modules_grouping (2026-05-28).
+// "you / your stuff / your responsibilities" is the user's mental model.
+const MODULE_GROUPS: ModuleGroup[] = [
+  {
+    id: "you",
+    label: "you",
+    aside: "how you are this week.",
+    items: [
+      { id: "body", label: "Body", hint: "water, movement, symptoms" },
+      { id: "sleep", label: "Sleep", hint: "logs + insomnia" },
+      { id: "cycle", label: "Cycle", hint: "period + symptoms" },
+      { id: "medication", label: "Medication", hint: "doses + side effects" },
+      { id: "habits", label: "Habits", hint: "what you do" },
+      { id: "goals", label: "Goals", hint: "what you're moving toward" },
+    ],
+  },
+  {
+    id: "your-stuff",
+    label: "your stuff",
+    aside: "what's in the kitchen, who's in the house.",
+    items: [
+      { id: "grocery", label: "Grocery", hint: "pantry + shopping" },
+      { id: "pets", label: "Pets", hint: "tontin + pinpon" },
+    ],
+  },
+  {
+    id: "your-responsibilities",
+    label: "your responsibilities",
+    aside: "things that won't wait.",
+    items: [
+      { id: "work", label: "Work", hint: "tasks + deadlines" },
+      { id: "admin", label: "Admin", hint: "renewals + paperwork" },
+      { id: "finance", label: "Finance", hint: "transactions + bills" },
+    ],
+  },
 ];
+
+const ASIDE_STYLE: React.CSSProperties = {
+  fontFamily: 'var(--ollie-font-serif)',
+  fontStyle: 'italic',
+  fontSize: 14,
+  color: colors.inkFaint,
+  margin: '-2px 0 12px',
+  letterSpacing: '0.005em',
+};
 
 function ModulesIndex() {
   return (
-    <Stack gap={32}>
-      <Stack gap={8}>
+    <Stack gap={48}>
+      <Stack gap={12}>
         <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
           modules
         </Text>
-        <Text scale="display">All boxes</Text>
+        <Text scale="display">All of it</Text>
+        <Text scale="body" color={colors.inkSoft} style={{ maxWidth: 540 }}>
+          three rooms — yourself, your stuff, the things you owe.
+        </Text>
       </Stack>
-      <Stack gap={4}>
-        {MODULES.map((m) => (
-          <Link
-            key={m.id}
-            to={`/box/${m.id}`}
-            style={{ textDecoration: "none", color: "inherit" }}
+
+      {MODULE_GROUPS.map((group) => (
+        <Stack key={group.id} gap={8}>
+          <Text
+            scale="caption"
+            color={colors.inkFaint}
+            style={{ ...SMCP_STYLE, letterSpacing: "0.20em" }}
           >
-            <Row gap={12} align="baseline" justify="space-between" style={{ padding: "12px 0" }}>
-              <Text scale="body">{m.label}</Text>
-              <Text scale="caption" color={colors.inkFaint}>
-                {m.hint}
-              </Text>
-            </Row>
-          </Link>
-        ))}
-      </Stack>
+            {group.label}
+          </Text>
+          <p style={ASIDE_STYLE}>{group.aside}</p>
+          <Stack gap={0}>
+            {group.items.map((m, i) => (
+              <Link
+                key={m.id}
+                to={`/box/${m.id}`}
+                style={{
+                  textDecoration: "none",
+                  color: "inherit",
+                  borderTop: i === 0 ? `1px solid ${colors.hairline}` : "none",
+                  borderBottom: `1px solid ${colors.hairline}`,
+                }}
+              >
+                <Row gap={12} align="baseline" justify="space-between" style={{ padding: "16px 0" }}>
+                  <Text scale="body">{m.label}</Text>
+                  <Text scale="caption" color={colors.inkFaint}>
+                    {m.hint}
+                  </Text>
+                </Row>
+              </Link>
+            ))}
+          </Stack>
+        </Stack>
+      ))}
     </Stack>
   );
 }

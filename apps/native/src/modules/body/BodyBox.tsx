@@ -154,7 +154,17 @@ export function BodyBox(): JSX.Element {
         </Text>
       ) : (
         <Stack gap={48}>
-          <WaterHero count={glassCount} target={GLASS_TARGET} cold={isEmpty} />
+          <WaterHero
+            count={glassCount}
+            target={GLASS_TARGET}
+            cold={isEmpty}
+            onAddGlass={() =>
+              void (async () => {
+                await eventsRepo.add({ kind: 'water', data: { amountMl: 250 } });
+                await refresh();
+              })()
+            }
+          />
 
           {lastMovement && (
             <Row gap={12} align="baseline" justify="space-between">
@@ -227,15 +237,30 @@ function WaterHero({
   count,
   target,
   cold,
+  onAddGlass,
 }: {
   count: number;
   target: number;
   cold: boolean;
+  onAddGlass: () => void;
 }): JSX.Element {
   const fill = target > 0 ? Math.min(1, count / target) : 0;
   return (
     <Stack gap={20} align="center">
-      <Glass fill={fill} size="big" />
+      <button
+        type="button"
+        onClick={onAddGlass}
+        aria-label="add a glass of water"
+        style={{
+          background: 'none',
+          border: 'none',
+          padding: 0,
+          cursor: 'pointer',
+          display: 'inline-flex',
+        }}
+      >
+        <Glass fill={fill} size="big" />
+      </button>
 
       <Stack gap={4} align="center">
         <div

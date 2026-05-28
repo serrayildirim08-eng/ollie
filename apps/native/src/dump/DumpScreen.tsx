@@ -86,16 +86,15 @@ export function DumpScreen(): JSX.Element {
 }
 
 // ─── ack ──────────────────────────────────────────────────────────────────
-// One word. Quiet. Fades after a couple seconds. That's the whole UX.
+// Full-viewport sage takeover with a giant serif "Okay!". Fades in, holds,
+// fades back over ~2.4s. Pointer-events off so the user can keep typing
+// straight through the flash — the dump UI behind it is still alive.
 
 function Ack(): JSX.Element {
   return (
-    <span className={styles.ack} style={{ color: colors.inkFaint }}>
-      <span className={styles.ackMark} aria-hidden="true" />
-      <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
-        okay
-      </Text>
-    </span>
+    <div className={styles.ack} role="status" aria-live="polite">
+      <span className={styles.ackText}>Okay!</span>
+    </div>
   );
 }
 
