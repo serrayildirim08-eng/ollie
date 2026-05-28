@@ -6,8 +6,8 @@
  *      Vectorize entries and research_corpus rows.
  *   2. Pass-1 segmentation: Intl.Segmenter sentence + trilingual
  *      conjunction overlay (Decision 5/B).
- *   3. Pass-2 segmentation (Decision A trigger): Gemini Flash with
- *      response_schema (Decision C) for fragments that look weakly
+ *   3. Pass-2 segmentation (Decision A trigger): Groq Llama 3.3 70B
+ *      with JSON mode (Decision C) for fragments that look weakly
  *      punctuated or code-switched. Pass-2 output is NEVER cached.
  *   4. Per-fragment language detect (Decision 4). 'mixed' is valid.
  *   5. Crisis classification IN PARALLEL with routing (Decision 9). All
@@ -18,7 +18,7 @@
  *        a. Voyage multilingual-2 embed (1024-dim).
  *        b. Vectorize cache lookup (per-user namespace).
  *        c. HIT → return cached classification (no AI call).
- *        d. MISS → Gemini classify (response_schema, no try/catch parse).
+ *        d. MISS → Groq classify (JSON mode, no try/catch parse).
  *        e. Apply 3-tier confidence policy (Decision 2): demote
  *           <0.60 to dump_only, mark 0.60-0.79 needsConfirm.
  *        f. Fire-and-forget cache write.
@@ -26,7 +26,7 @@
  *
  * Cost guardrails:
  *   - Voyage embed: ~$0.00002/fragment
- *   - Gemini Flash classification: ~$0.0001/fragment (only on cache miss)
+ *   - Groq Llama 3.3 70B classification: free tier 14.4k req/day (cache miss only)
  *   - Pass-2 segmentation: triggered on ~30% of dumps per Decision A cost note
  *
  * NEVER cached: raw fragment text, pass-2 segmentation output.
@@ -58,7 +58,7 @@ const VOYAGE_EMBED_DIM = 1024;
 
 export interface DumpRouteEnv {
   VOYAGE_API_KEY: string;
-  GEMINI_API_KEY: string;
+  GROQ_API_KEY: string;
   /** Required at runtime for /route/dump; declared optional here so it
    *  remains compatible with the broader Env shape (InvitesEnv keeps it
    *  optional during Clerk migration). The handler returns 503 if missing. */
@@ -123,7 +123,7 @@ export async function handleDumpRoute(req: Request, env: DumpRouteEnv): Promise<
     if (frag.needsPass2) {
       pass2Triggered++;
       try {
-        const split = await pass2Split(frag.text, env.GEMINI_API_KEY);
+        const split = await pass2Split(frag.text, env.GROQ_API_KEY);
         if (split.length > 0) {
           fragmentsText.push(...split);
           continue;
@@ -183,14 +183,14 @@ export async function handleDumpRoute(req: Request, env: DumpRouteEnv): Promise<
       continue;
     }
 
-    // MISS — Gemini classify.
+    // MISS — Groq classify.
     aiCalls++;
     let result: Awaited<ReturnType<typeof classifyFragment>>;
     try {
-      result = await classifyFragment(text, language, env.GEMINI_API_KEY);
+      result = await classifyFragment(text, language, env.GROQ_API_KEY);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      return upstreamError('gemini_classify_failed', 502, msg, { dumpId, fragment: text.slice(0, 80) });
+      return upstreamError('groq_classify_failed', 502, msg, { dumpId, fragment: text.slice(0, 80) });
     }
 
     const tiered = applyConfidencePolicy(result.module, result.payload, result.confidence);

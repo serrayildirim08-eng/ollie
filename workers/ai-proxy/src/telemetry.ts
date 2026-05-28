@@ -28,9 +28,17 @@
  */
 
 import { scrubPII } from './pii';
+import { json, upstreamError } from '@ollie/worker-http';
 
 export interface EnrichEnv {
   CACHE_KV: KVNamespace;
+  // Cloudflare Queues producer binding (item #4). OPTIONAL: when the
+  // [[queues.producers]] block in wrangler.toml is uncommented (after
+  // `wrangler queues create ollie-enrich-queue`) this is bound and the
+  // dump is sent to the durable Queue. When absent, the handler falls
+  // back to the legacy `q:enrich:*` KV queue so a routine deploy that
+  // has NOT provisioned the queue keeps working unchanged.
+  ENRICH_QUEUE?: Queue<QueuedDump>;
 }
 
 export interface IngestEnv {
@@ -133,8 +141,16 @@ export async function handleEnrichDump(req: Request, env: EnrichEnv): Promise<Re
     queued_at: queuedAt,
   };
 
-  // Key prefix `q:enrich:<unix-ts-ms>:<uuid>` — drain can do a prefix list
-  // and ordering by timestamp falls out for free.
+  // Cloudflare Queues path (item #4) — preferred when the producer binding
+  // is present. The Queue gives us native retry/backoff + a real DLQ,
+  // replacing the hand-rolled KV-prefix queue + retry-counter.
+  if (env.ENRICH_QUEUE) {
+    await env.ENRICH_QUEUE.send(entry);
+    return json({ id, queued: true });
+  }
+
+  // Legacy fallback — KV-prefix queue. Key `q:enrich:<unix-ts-ms>:<uuid>`
+  // so the drain can do a prefix list and timestamp ordering falls out.
   const tsMs = Date.now();
   const key = `q:enrich:${tsMs}:${id}`;
   await env.CACHE_KV.put(key, JSON.stringify(entry), { expirationTtl: QUEUE_TTL_SEC });
@@ -196,15 +212,16 @@ export async function handleIngestEvent(req: Request, env: IngestEnv): Promise<R
     return json({ ok: true, table: body.table, inserted: 1 });
   }
 
+  // SECURITY (S8): generic code to the client; PostgREST detail (which
+  // discloses the target table's column/constraint names) logged
+  // server-side only behind a request id.
   const errText = await resp.text();
-  return json({ ok: false, table: body.table, status: resp.status, error: errText }, 502);
+  return upstreamError('ingest_failed', 502, errText, {
+    endpoint: 'ingest-event',
+    table: body.table,
+    upstream_status: resp.status,
+  });
 }
 
 // ─── helpers ───────────────────────────────────────────────────────────────────
-
-function json(obj: unknown, status = 200): Response {
-  return new Response(JSON.stringify(obj), {
-    status,
-    headers: { 'content-type': 'application/json' },
-  });
-}
+// `json()` is the shared helper from @ollie/worker-http (imported above).

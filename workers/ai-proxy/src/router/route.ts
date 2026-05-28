@@ -6,7 +6,7 @@
  *   2. Voyage multilingual-2 embed (1024-dim).
  *   3. pgvector cosine lookup in `routing_cache` (threshold 0.85).
  *      HIT  → return cached classification, increment hit_count.
- *      MISS → Gemini 2.5 Flash function-calling with module-specific
+ *      MISS → Groq Llama 3.3 70B tool-calling with module-specific
  *             prompt/schema, write result to cache.
  *   4. Respond with { source, latencyMs, classification, language }.
  *
@@ -28,6 +28,7 @@ import { json, upstreamError } from '@ollie/worker-http';
 import { scrubPII } from '../pii';
 import { groceryConfig, type ModuleConfig } from '../modules/grocery.config';
 import { verifyClerkJwt } from '../clerk-verify';
+import { groqChat } from '../groq';
 
 // ─── env ─────────────────────────────────────────────────────────────────────
 
@@ -35,7 +36,7 @@ export interface RouteEnv {
   SUPABASE_URL: string;
   SUPABASE_SERVICE_ROLE: string;
   VOYAGE_API_KEY: string;
-  GEMINI_API_KEY: string;
+  GROQ_API_KEY: string;
   /**
    * JWT enforcement gate — set to "1" once Clerk is wired end-to-end (T0).
    * When "1" we require a valid Clerk session JWT in the Authorization
@@ -60,7 +61,7 @@ const MODULE_CONFIGS: Record<string, ModuleConfig<any>> = {
 
 // ─── types ────────────────────────────────────────────────────────────────────
 
-export type RoutingSource = 'cache_hit' | 'gemini_miss';
+export type RoutingSource = 'cache_hit' | 'groq_miss';
 
 export interface RouteResponse {
   source: RoutingSource;
@@ -74,8 +75,6 @@ export interface RouteResponse {
 const COSINE_THRESHOLD = 0.85;
 const VOYAGE_MODEL = 'voyage-multilingual-2';
 const VOYAGE_EMBED_DIM = 1024;
-const GEMINI_MODEL = 'gemini-2.5-flash';
-const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 // ─── main handler ─────────────────────────────────────────────────────────────
 
@@ -136,7 +135,7 @@ export async function handleRoute(
     cacheRow = await cacheLookup(embedding, module, env);
   } catch (err) {
     // Cache read failure is non-fatal — fall through to Gemini
-    console.error('[route] cache lookup failed, falling through to gemini', err);
+    console.error('[route] cache lookup failed, falling through to groq', err);
     cacheRow = null;
   }
 
@@ -157,15 +156,15 @@ export async function handleRoute(
     return json(resp);
   }
 
-  // 4. MISS — Gemini function-calling
+  // 4. MISS — Groq tool-calling
   let classification: unknown;
   let language = 'en';
   try {
-    const result = await geminiClassify(cleanText, config, env.GEMINI_API_KEY);
+    const result = await groqClassify(cleanText, config, env.GROQ_API_KEY);
     classification = result.classification;
     language = result.language;
   } catch (err) {
-    return upstreamError('gemini_classify_failed', 502, err, { module });
+    return upstreamError('groq_classify_failed', 502, err, { module });
   }
 
   // 5. Cache write (fire-and-forget)
@@ -176,7 +175,7 @@ export async function handleRoute(
   const totalLatencyMs = Date.now() - t0;
 
   const resp: RouteResponse = {
-    source: 'gemini_miss',
+    source: 'groq_miss',
     latencyMs: totalLatencyMs,
     classification,
     language,
@@ -311,77 +310,74 @@ async function cacheWrite(
   });
 }
 
-// ─── Gemini 2.5 Flash function-calling ───────────────────────────────────────
+// ─── Groq Llama 3.3 70B tool-calling ─────────────────────────────────────────
 
-interface GeminiResult {
+interface GroqClassifyResult {
   classification: unknown;
   language: string;
 }
 
-async function geminiClassify(
+async function groqClassify(
   text: string,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   config: ModuleConfig<any>,
   apiKey: string,
-): Promise<GeminiResult> {
-  const systemPrompt = config.buildSystemPrompt();
-  const fnSchema = config.buildFunctionSchema();
-
-  // Build few-shot examples as user/model turn pairs
-  const contents: unknown[] = [];
-  for (const ex of config.examples) {
-    contents.push({ role: 'user',  parts: [{ text: ex.input }] });
-    contents.push({
-      role: 'model',
-      parts: [{
-        functionCall: {
-          name: fnSchema.name,
-          args: ex.output,
-        },
-      }],
-    });
-  }
-  // Actual query
-  contents.push({ role: 'user', parts: [{ text }] });
-
-  const url = `${GEMINI_API_BASE}/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      systemInstruction: { parts: [{ text: systemPrompt }] },
-      contents,
-      tools: [{ functionDeclarations: [fnSchema] }],
-      toolConfig: { functionCallingConfig: { mode: 'ANY' } },
-      generationConfig: { temperature: 0, maxOutputTokens: 1024 },
-    }),
-  });
-
-  if (!res.ok) {
-    const detail = await res.text().catch(() => '');
-    throw new Error(`gemini ${res.status}: ${detail.slice(0, 300)}`);
-  }
-
-  const data = (await res.json()) as {
-    candidates?: Array<{
-      content?: {
-        parts?: Array<{
-          functionCall?: { name: string; args: unknown };
-        }>;
-      };
-    }>;
+): Promise<GroqClassifyResult> {
+  const baseSystemPrompt = config.buildSystemPrompt();
+  const fnSchema = config.buildFunctionSchema() as {
+    name: string;
+    description?: string;
+    parameters: Record<string, unknown>;
   };
 
-  const parts = data?.candidates?.[0]?.content?.parts ?? [];
-  for (const part of parts) {
-    if (part.functionCall?.name === fnSchema.name && part.functionCall?.args) {
-      const args = part.functionCall.args as Record<string, unknown>;
-      return {
-        classification: args,
-        language: typeof args.language === 'string' ? args.language : 'en',
-      };
-    }
+  // Inline few-shot examples into the system prompt. Encoding them as
+  // assistant tool_calls would require synthetic tool reply turns and
+  // bloat the message list; the model takes them just as well as text.
+  const examplesBlock = config.examples
+    .map(
+      (ex, i) =>
+        `Example ${i + 1}:\nUser: ${ex.input}\nExpected ${fnSchema.name} args: ${JSON.stringify(ex.output)}`,
+    )
+    .join('\n\n');
+
+  const systemPrompt = examplesBlock
+    ? `${baseSystemPrompt}\n\n${examplesBlock}`
+    : baseSystemPrompt;
+
+  const choice = await groqChat(
+    {
+      apiKey,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: text },
+      ],
+      tools: [{ type: 'function', function: fnSchema }],
+      toolChoice: { type: 'function', function: { name: fnSchema.name } },
+      maxTokens: 1024,
+    },
+    'route',
+  );
+
+  const toolCalls = choice.message.tool_calls ?? [];
+  const call =
+    toolCalls.find((tc) => tc.function.name === fnSchema.name) ?? toolCalls[0];
+  if (!call) {
+    throw new Error(
+      `groq returned no tool call (finish=${choice.finish_reason})`,
+    );
   }
 
-  throw new Error(`gemini returned no function call: ${JSON.stringify(data).slice(0, 300)}`);
+  let args: Record<string, unknown>;
+  try {
+    args = JSON.parse(call.function.arguments) as Record<string, unknown>;
+  } catch {
+    throw new Error(
+      `groq bad tool args json: ${call.function.arguments.slice(0, 300)}`,
+    );
+  }
+
+  return {
+    classification: args,
+    language: typeof args.language === 'string' ? args.language : 'en',
+  };
 }

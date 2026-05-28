@@ -11,6 +11,10 @@ compatibility_flags = ["nodejs_compat"]
 binding = "CACHE_KV"
 id = "6031aea7f9c14f96884e55ec1be527f3"
 
+# RATE_KV is the LEGACY rate-limit store. It is kept as a fallback while the
+# native Rate Limiting binding (below) rolls out — the worker prefers the
+# native limiter and only falls back to this KV counter if the binding is
+# absent. Safe to remove once the native limiter is confirmed live.
 [[kv_namespaces]]
 binding = "RATE_KV"
 id = "5e222944bc8f450cb3cca05e709e3b88"
@@ -25,6 +29,43 @@ id = "5e222944bc8f450cb3cca05e709e3b88"
 [[vectorize]]
 binding = "VECTORIZE_INDEX"
 index_name = "ollie-routing-cache"
+
+# ─── native Rate Limiting bindings (item #5) ───────────────────────────────────
+# These replace the racy KV-counter rate limiter. The binding is DECLARATIVE —
+# Cloudflare provisions it automatically on `wrangler deploy`, no `wrangler`
+# CLI resource-creation step is required (needs Wrangler ≥ 4.36).
+# `period` must be 10 or 60. namespace_id is an arbitrary positive integer,
+# unique per limiter within the account.
+#
+# AI_RATE_LIMITER   — /brain-dump + /v1/messages : 10 requests / 60s per user.
+# TELEM_RATE_LIMITER — /enrich-dump + /ingest-event + /label : 10 / 60s per user.
+[[ratelimits]]
+name = "AI_RATE_LIMITER"
+namespace_id = "2001"
+simple = { limit = 10, period = 60 }
+
+[[ratelimits]]
+name = "TELEM_RATE_LIMITER"
+namespace_id = "2002"
+simple = { limit = 10, period = 60 }
+
+# ─── Cloudflare Queues producer (item #4) — COMMENTED OUT, see DEPLOY_TODO ─────
+# The brain-dump enrichment queue migrates from the hand-rolled `q:enrich:*`
+# KV queue to a native Cloudflare Queue. This block is intentionally left
+# commented: an uncommented producer binding pointing at a queue that does
+# not exist makes `wrangler deploy` FAIL. Until the queue is provisioned the
+# worker falls back to the KV queue (env.ENRICH_QUEUE is undefined).
+#
+# To enable (see DEPLOY_TODO.md §"Item #4 — Cloudflare Queues"):
+#   1. wrangler queues create ollie-enrich-queue
+#   2. wrangler queues create ollie-enrich-dlq
+#   3. uncomment the block below, AND the [[queues.consumers]] block in
+#      workers/cron/wrangler.toml
+#   4. deploy ai-proxy, then cron
+#
+[[queues.producers]]
+binding = "ENRICH_QUEUE"
+queue = "ollie-enrich-queue"
 
 # ─── secrets (set with `wrangler secret put`) ──────────────────────────────────
 # ANTHROPIC_API_KEY       — sk-ant-… key. NEVER ship to the client.
@@ -51,15 +92,16 @@ index_name = "ollie-routing-cache"
 # ── T2 /route/:module secrets ──────────────────────────────────────────────────
 # VOYAGE_API_KEY          — Voyage AI key for multilingual-2 embeddings.
 #                           wrangler secret put VOYAGE_API_KEY
-# GEMINI_API_KEY          — Google AI Studio key for Gemini 2.5 Flash.
-#                           wrangler secret put GEMINI_API_KEY
+# GROQ_API_KEY            — Groq API key for Llama 3.3 70B classify + segment.
+#                           https://console.groq.com → API Keys → Create.
+#                           wrangler secret put GROQ_API_KEY
 # T0_JWT_ENFORCED         — Set to "1" once T0 (Clerk JWT) ships end-to-end.
 #                           Until then the /route/:module endpoint is open.
 #                           wrangler secret put T0_JWT_ENFORCED  (value: 1)
 
 # ─── staging environment ──────────────────────────────────────────────────────
 # Deploys to a separate worker (ollie-ai-proxy-staging) so prod stays untouched
-# while we test /route/dump end-to-end against real Gemini + Voyage.
+# while we test /route/dump end-to-end against real Groq + Voyage.
 # Bindings inherit from top-level (wrangler 3+ requires explicit re-declaration).
 [env.staging]
 name = "ollie-ai-proxy-staging"
@@ -75,3 +117,17 @@ id = "5e222944bc8f450cb3cca05e709e3b88"
 [[env.staging.vectorize]]
 binding = "VECTORIZE_INDEX"
 index_name = "ollie-routing-cache"
+
+[[env.staging.ratelimits]]
+name = "AI_RATE_LIMITER"
+namespace_id = "2001"
+simple = { limit = 10, period = 60 }
+
+[[env.staging.ratelimits]]
+name = "TELEM_RATE_LIMITER"
+namespace_id = "2002"
+simple = { limit = 10, period = 60 }
+
+[[env.staging.queues.producers]]
+binding = "ENRICH_QUEUE"
+queue = "ollie-enrich-queue"

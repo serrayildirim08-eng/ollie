@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@ollie/crisis-lexicon": "workspace:*",
+    "@ollie/pii-scrub": "workspace:*",
     "@ollie/worker-http": "workspace:*",
     "jose": "^6.2.3"
   }

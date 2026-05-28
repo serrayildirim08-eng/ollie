@@ -120,7 +120,7 @@ async function handleRequest(req: Request, env: Env): Promise<Response> {
 
     // ── /route/dump — brain-dump universal router (Decision-locked v2) ───────
     // Pipeline: pass-1 + pass-2 segmentation, per-fragment Voyage embed,
-    // Vectorize cache lookup, Gemini Flash classify (response_schema),
+    // Vectorize cache lookup, Groq Llama 3.3 70B classify (JSON mode),
     // parallel crisis check (all 3 lexicons), 3-tier confidence policy.
     // Auth: Clerk JWT REQUIRED (not gated). User namespaces the cache.
     if (url.pathname === '/route/dump') {

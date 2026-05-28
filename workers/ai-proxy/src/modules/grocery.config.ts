@@ -8,12 +8,30 @@
  * Spec: docs/MODULE_AGNOSTIC_AI.md
  */
 
+/**
+ * Mutation action — added 2026-05-22 for list mutation commands
+ * (remove / check / move_to_pantry). Defaults to 'add' so existing
+ * Gemini cache rows and downstream consumers without `action` keep
+ * working unchanged.
+ */
+export type GroceryAction = 'add' | 'remove' | 'check' | 'move_to_pantry';
+
 export interface GroceryItem {
   name: string;
   canonical: string | null;
   category: string;
-  intent: 'acquire' | 'plan' | 'pantry' | 'unknown';
+  intent: 'acquire' | 'plan' | 'pantry' | 'unknown' | 'edit';
   target: 'shopping' | 'pantry';
+  /**
+   * The mutation to apply to the targeted slice.
+   *   - 'add' (default): append to slice.
+   *   - 'remove': delete a matching item from slice.
+   *   - 'check': mark a matching item as bought in shopping.
+   *   - 'move_to_pantry': remove from shopping AND append to pantry
+   *     (the "scratch X, got some" case).
+   * Items without an `action` field are treated as 'add' (backward compat).
+   */
+  action?: GroceryAction;
   qty?: number;
   unit?: string;
   shelfLifeDays?: number;
@@ -23,12 +41,29 @@ export interface GroceryItem {
 export interface GroceryClassification {
   items: GroceryItem[];
   /** Top-level intent of the dump fragment. */
-  intent: 'acquire' | 'plan' | 'pantry' | 'unknown';
+  intent: 'acquire' | 'plan' | 'pantry' | 'unknown' | 'edit';
   /** Detected language of the raw text. */
   language: 'en' | 'es' | 'tr' | 'other';
   /** Non-null when the fragment describes a dish/recipe — kept for recipe expansion. */
   recipeSourceLabel?: string | null;
 }
+
+/**
+ * List context passed alongside `text` on /route/grocery so Gemini can
+ * disambiguate "remove pasta" when multiple pastas exist, expand
+ * "everything except X" against the actual list, and decide where
+ * "I finished X" applies (pantry remove vs shopping add).
+ *
+ * Capped to 50 items per slice at the worker boundary to keep prompt
+ * tokens bounded.
+ */
+export interface GroceryListContext {
+  shoppingItems?: Array<{ name: string; canonical?: string | null }>;
+  pantryItems?: Array<{ name: string; canonical?: string | null }>;
+}
+
+/** Soft cap on list-context entries injected into the prompt. */
+export const LIST_CONTEXT_CAP = 50;
 
 export type GroceryIntentVerb = {
   acquire: string[];
@@ -36,7 +71,7 @@ export type GroceryIntentVerb = {
   pantry: string[];
 };
 
-export interface ModuleConfig<C> {
+export interface ModuleConfig<C, Ctx = unknown> {
   /** Human-readable module name (used in system prompt). */
   moduleName: string;
   /** Known/canonical items for this module (drives normalization hint). */
@@ -49,8 +84,12 @@ export interface ModuleConfig<C> {
   shelfLifeMap: Record<string, number>;
   /** Few-shot examples for the Gemini prompt. */
   examples: Array<{ input: string; output: C }>;
-  /** Build the Gemini system prompt for this module. */
-  buildSystemPrompt(): string;
+  /**
+   * Build the Gemini system prompt for this module. Optional `context`
+   * argument is appended to the prompt when present (e.g. current
+   * shopping + pantry lists for grocery mutation disambiguation).
+   */
+  buildSystemPrompt(context?: Ctx): string;
   /** Build the JSON schema block for Gemini function calling. */
   buildFunctionSchema(): Record<string, unknown>;
 }
@@ -59,7 +98,7 @@ export interface ModuleConfig<C> {
 // Full alias table lives in @ollie/logic/grocery/data.ts.
 // We list the canonical keys here so Gemini can normalize to them.
 
-const CANONICAL_ITEMS = [
+export const CANONICAL_ITEMS = [
   'milk','yogurt','cheese','feta','butter','cream','egg','mozzarella','parmesan',
   'chicken','ground beef','beef','lamb','pork','fish','shrimp','sausage','bacon',
   'ham','salami','tomato','onion','garlic','potato','sweet potato','carrot',
@@ -79,8 +118,17 @@ const CANONICAL_ITEMS = [
 const INTENT_VERBS: GroceryIntentVerb = {
   acquire: [
     'buy','get','pick up','grab','need','add','order','stock up',
-    'al','almak','getir','satın al',
-    'comprar','traer','conseguir',
+    // depletion signals — when user says "out of X" or "running low on X"
+    // they're telling us they need to BUY more (not that they have it now).
+    'out of','running low on','running out of','low on','almost out of',
+    'we need','we are out of','have to buy','should get','must buy',
+    // Turkish
+    'al','almak','getir','satın al','almam lazım','lazım','bitti',
+    'kalmadı','tükendi','almalıyım','almalıyız',
+    // Spanish
+    'comprar','traer','conseguir','necesito','necesitamos','me falta',
+    'nos falta','hace falta','tengo que comprar','hay que comprar',
+    'se acabó','se nos acabó','no hay','no queda','añade','agrega',
   ],
   plan: [
     'planning to buy','want','thinking about','considering','maybe',
@@ -88,9 +136,16 @@ const INTENT_VERBS: GroceryIntentVerb = {
     'pensando en','quiero',
   ],
   pantry: [
-    'bought','got','picked up','have','stocked','finished','used up',
-    'aldım','bitti','tükendi',
-    'compré','tengo','se acabó',
+    // confirmed POSSESSION — user already has the item in hand.
+    // NOT to be confused with depletion ("out of X", "ran out") which is
+    // ACQUIRE intent, not pantry. The verb signals OWNERSHIP, not LACK.
+    'bought','got','picked up','have','stocked','restocked',
+    'just bought','just got','just picked up','already have',
+    // Turkish
+    'aldım','aldık','getirdim','elimde var','elimde',
+    // Spanish
+    'compré','compramos','traje','trajimos','tengo','tenemos',
+    'ya tengo','recién compré',
   ],
 };
 
@@ -99,7 +154,7 @@ const CATEGORIES = [
   'frozen','snacks','supplements','personal_care','period_products','other',
 ];
 
-const SHELF_LIFE_MAP: Record<string, number> = {
+export const SHELF_LIFE_MAP: Record<string, number> = {
   milk: 7, yogurt: 21, cheese: 30, feta: 30, butter: 60, cream: 10, egg: 28,
   mozzarella: 14, parmesan: 90,
   chicken: 2, 'ground beef': 2, beef: 4, lamb: 4, pork: 4, fish: 2, shrimp: 2,
@@ -149,12 +204,269 @@ const FEW_SHOT_EXAMPLES: Array<{ input: string; output: GroceryClassification }>
       ],
     },
   },
+  // Depletion signals — these mean BUY MORE, not "I have it". Critical
+  // for not putting "out of X" into the pantry slice by mistake.
+  {
+    input: 'out of dish soap\nrunning low on coffee\nalmost out of olive oil',
+    output: {
+      intent: 'acquire',
+      language: 'en',
+      recipeSourceLabel: null,
+      items: [
+        { name: 'dish soap',  canonical: null,        category: 'cleaning', intent: 'acquire', target: 'shopping' },
+        { name: 'coffee',     canonical: 'coffee',    category: 'drinks',   intent: 'acquire', target: 'shopping' },
+        { name: 'olive oil',  canonical: 'olive oil', category: 'pantry',   intent: 'acquire', target: 'shopping' },
+      ],
+    },
+  },
+  // Abbreviations + depletion combined — common ADHD shorthand flow.
+  // 'tp' should expand to toilet paper with canonical set; 'pb' is peanut butter.
+  // User typed the abbreviation deliberately for speed — preserve it in `name`,
+  // expose the expansion only via `canonical`.
+  {
+    input: 'need tp\nout of pb\nneed evoo',
+    output: {
+      intent: 'acquire',
+      language: 'en',
+      recipeSourceLabel: null,
+      items: [
+        { name: 'tp',   canonical: 'toilet paper', category: 'personal_care', intent: 'acquire', target: 'shopping' },
+        { name: 'pb',   canonical: 'peanut butter', category: 'pantry',       intent: 'acquire', target: 'shopping' },
+        { name: 'evoo', canonical: 'olive oil',     category: 'pantry',       intent: 'acquire', target: 'shopping' },
+      ],
+    },
+  },
+  // Multi-line, multi-intent — extract EACH line as a separate item.
+  // This example exists to make explicit that newline-separated dumps
+  // should produce N items, not a single summary item.
+  {
+    input: 'need garlic\nneed yogurt\nbuy bell pepper for the pigs\nbuy hay\nneed lemons',
+    output: {
+      intent: 'acquire',
+      language: 'en',
+      recipeSourceLabel: null,
+      items: [
+        { name: 'garlic',       canonical: 'garlic',      category: 'produce', intent: 'acquire', target: 'shopping', shelfLifeDays: 90 },
+        { name: 'yogurt',       canonical: 'yogurt',      category: 'dairy',   intent: 'acquire', target: 'shopping', shelfLifeDays: 21 },
+        { name: 'bell pepper',  canonical: 'bell pepper', category: 'produce', intent: 'acquire', target: 'shopping', shelfLifeDays: 10 },
+        { name: 'hay',          canonical: null,          category: 'other',   intent: 'acquire', target: 'shopping' },
+        { name: 'lemons',       canonical: 'lemon',       category: 'produce', intent: 'acquire', target: 'shopping', shelfLifeDays: 30 },
+      ],
+    },
+  },
+  // Comma-separated single-line list — same N-items rule as newlines.
+  {
+    input: 'tomatoes, garlic, onion',
+    output: {
+      intent: 'acquire',
+      language: 'en',
+      recipeSourceLabel: null,
+      items: [
+        { name: 'tomatoes', canonical: 'tomato', category: 'produce', intent: 'acquire', target: 'shopping', shelfLifeDays: 7 },
+        { name: 'garlic',   canonical: 'garlic', category: 'produce', intent: 'acquire', target: 'shopping', shelfLifeDays: 90 },
+        { name: 'onion',    canonical: 'onion',  category: 'produce', intent: 'acquire', target: 'shopping', shelfLifeDays: 30 },
+      ],
+    },
+  },
+  // Quantity + unit extraction.
+  {
+    input: 'buy 2 lemons\n1 kg pasta\na dozen eggs\nhalf a loaf of sourdough\nbig bag of hay',
+    output: {
+      intent: 'acquire',
+      language: 'en',
+      recipeSourceLabel: null,
+      items: [
+        { name: 'lemons',     canonical: 'lemon', category: 'produce', intent: 'acquire', target: 'shopping', qty: 2,    shelfLifeDays: 30 },
+        { name: 'pasta',      canonical: 'pasta', category: 'pantry',  intent: 'acquire', target: 'shopping', qty: 1,    unit: 'kg' },
+        { name: 'eggs',       canonical: 'egg',   category: 'dairy',   intent: 'acquire', target: 'shopping', qty: 12,   shelfLifeDays: 28 },
+        { name: 'sourdough',  canonical: 'bread', category: 'pantry',  intent: 'acquire', target: 'shopping', qty: 0.5,  unit: 'loaf', shelfLifeDays: 7 },
+        { name: 'hay',        canonical: null,    category: 'other',   intent: 'acquire', target: 'shopping', qty: 1,    unit: 'bag' },
+      ],
+    },
+  },
+  // Recipe context — meal name + explicit ingredients (NOT expansion).
+  {
+    input: 'want to do shakshuka, need tomatoes and feta',
+    output: {
+      intent: 'acquire',
+      language: 'en',
+      recipeSourceLabel: 'shakshuka',
+      items: [
+        { name: 'tomatoes', canonical: 'tomato', category: 'produce', intent: 'acquire', target: 'shopping', shelfLifeDays: 7,  isRecipeExpansion: false },
+        { name: 'feta',     canonical: 'feta',   category: 'dairy',   intent: 'acquire', target: 'shopping', shelfLifeDays: 30, isRecipeExpansion: false },
+      ],
+    },
+  },
+  // Turkish — depletion + possession + acquire mix.
+  {
+    input: 'kahve bitti\nsüt almam lazım\nmatcha aldım\ntp bitti',
+    output: {
+      intent: 'acquire',
+      language: 'tr',
+      recipeSourceLabel: null,
+      items: [
+        { name: 'kahve',  canonical: 'coffee',       category: 'drinks',        intent: 'acquire', target: 'shopping' },
+        { name: 'süt',    canonical: 'milk',         category: 'dairy',         intent: 'acquire', target: 'shopping', shelfLifeDays: 7 },
+        { name: 'matcha', canonical: null,           category: 'drinks',        intent: 'pantry',  target: 'pantry' },
+        { name: 'tp',     canonical: 'toilet paper', category: 'personal_care', intent: 'acquire', target: 'shopping' },
+      ],
+    },
+  },
+  // Spanish — depletion ("se acabó", "me falta"), possession ("compré"),
+  // explicit need ("necesito"), pet context, abbreviation/canonical.
+  {
+    input: 'necesito comprar pasta\nme falta café\nse acabó el aceite de oliva\ncompré pan\nno hay heno para los cerditos\nhace falta papel higiénico',
+    output: {
+      intent: 'acquire',
+      language: 'es',
+      recipeSourceLabel: null,
+      items: [
+        { name: 'pasta',           canonical: 'pasta',        category: 'pantry',        intent: 'acquire', target: 'shopping' },
+        { name: 'café',            canonical: 'coffee',       category: 'drinks',        intent: 'acquire', target: 'shopping' },
+        { name: 'aceite de oliva', canonical: 'olive oil',    category: 'pantry',        intent: 'acquire', target: 'shopping' },
+        { name: 'pan',             canonical: 'bread',        category: 'pantry',        intent: 'pantry',  target: 'pantry', shelfLifeDays: 7 },
+        { name: 'heno',            canonical: null,           category: 'other',         intent: 'acquire', target: 'shopping' },
+        { name: 'papel higiénico', canonical: 'toilet paper', category: 'personal_care', intent: 'acquire', target: 'shopping' },
+      ],
+    },
+  },
+  // ── Mutation commands (2026-05-22) ─────────────────────────────────────
+  // These set action=remove/check/move_to_pantry and intent=edit. The
+  // model uses the CURRENT SHOPPING LIST / CURRENT PANTRY context block
+  // appended at the end of the system prompt to disambiguate matches.
+
+  // Plain remove from shopping.
+  {
+    input: 'remove pasta from the list',
+    output: {
+      intent: 'edit',
+      language: 'en',
+      recipeSourceLabel: null,
+      items: [
+        { name: 'pasta', canonical: 'pasta', category: 'pantry', intent: 'edit', target: 'shopping', action: 'remove' },
+      ],
+    },
+  },
+  // Scratch X got some → remove from shopping + add to pantry.
+  {
+    input: 'scratch the bread, got some',
+    output: {
+      intent: 'edit',
+      language: 'en',
+      recipeSourceLabel: null,
+      items: [
+        { name: 'bread', canonical: 'bread', category: 'pantry', intent: 'edit', target: 'shopping', action: 'move_to_pantry', shelfLifeDays: 7 },
+      ],
+    },
+  },
+  // "Got everything except X" — enumerate shop list, mark all except X as
+  // checked. The shopping context in the prompt provides the enumeration.
+  {
+    input: 'got everything except eggs',
+    // Implicit context (would be appended by buildSystemPrompt):
+    //   CURRENT SHOPPING LIST: milk, eggs, bread, pasta
+    output: {
+      intent: 'edit',
+      language: 'en',
+      recipeSourceLabel: null,
+      items: [
+        { name: 'milk',  canonical: 'milk',  category: 'dairy',  intent: 'edit', target: 'shopping', action: 'check' },
+        { name: 'bread', canonical: 'bread', category: 'pantry', intent: 'edit', target: 'shopping', action: 'check' },
+        { name: 'pasta', canonical: 'pasta', category: 'pantry', intent: 'edit', target: 'shopping', action: 'check' },
+      ],
+    },
+  },
+  // "Finished X" where X is in pantry → remove from pantry (consumed).
+  {
+    input: 'I finished the milk',
+    // Implicit context: CURRENT PANTRY: milk, yogurt
+    output: {
+      intent: 'edit',
+      language: 'en',
+      recipeSourceLabel: null,
+      items: [
+        { name: 'milk', canonical: 'milk', category: 'dairy', intent: 'edit', target: 'pantry', action: 'remove' },
+      ],
+    },
+  },
+  // Spoiled — always pantry remove.
+  {
+    input: 'throw out the yogurt',
+    output: {
+      intent: 'edit',
+      language: 'en',
+      recipeSourceLabel: null,
+      items: [
+        { name: 'yogurt', canonical: 'yogurt', category: 'dairy', intent: 'edit', target: 'pantry', action: 'remove' },
+      ],
+    },
+  },
+  // Turkish — "listeden çıkar" remove from list.
+  {
+    input: 'pastayı listeden çıkar',
+    output: {
+      intent: 'edit',
+      language: 'tr',
+      recipeSourceLabel: null,
+      items: [
+        { name: 'pasta', canonical: 'pasta', category: 'pantry', intent: 'edit', target: 'shopping', action: 'remove' },
+      ],
+    },
+  },
+  // Spanish — "quita" remove from list.
+  {
+    input: 'quita la pasta de la lista',
+    output: {
+      intent: 'edit',
+      language: 'es',
+      recipeSourceLabel: null,
+      items: [
+        { name: 'pasta', canonical: 'pasta', category: 'pantry', intent: 'edit', target: 'shopping', action: 'remove' },
+      ],
+    },
+  },
+
+  // Out-of-domain — not grocery, return empty.
+  {
+    input: 'buy stock',
+    output: {
+      intent: 'unknown',
+      language: 'en',
+      recipeSourceLabel: null,
+      items: [],
+    },
+  },
 ];
 
-function buildSystemPrompt(): string {
+/**
+ * Render the list-context block appended to the system prompt when the
+ * caller passes the user's current lists. Returns an empty string when
+ * there's no context — preserves the previous prompt verbatim for
+ * existing Gemini cache rows.
+ */
+function renderListContext(context: GroceryListContext | undefined): string {
+  if (!context) return '';
+  const shop = (context.shoppingItems ?? [])
+    .slice(0, LIST_CONTEXT_CAP)
+    .map((i) => (i.canonical ?? i.name))
+    .filter((s) => typeof s === 'string' && s.length > 0);
+  const pantry = (context.pantryItems ?? [])
+    .slice(0, LIST_CONTEXT_CAP)
+    .map((i) => (i.canonical ?? i.name))
+    .filter((s) => typeof s === 'string' && s.length > 0);
+  if (shop.length === 0 && pantry.length === 0) return '';
+
+  const parts: string[] = ['', 'LIST CONTEXT (use this to disambiguate mutation commands):'];
+  if (shop.length > 0) parts.push(`CURRENT SHOPPING LIST: ${shop.join(', ')}`);
+  if (pantry.length > 0) parts.push(`CURRENT PANTRY: ${pantry.join(', ')}`);
+  return parts.join('\n');
+}
+
+function buildSystemPrompt(context?: GroceryListContext): string {
   const canonicalSample = CANONICAL_ITEMS.slice(0, 30).join(', ');
   const acquireVerbs = INTENT_VERBS.acquire.slice(0, 8).join(', ');
   const pantryVerbs = INTENT_VERBS.pantry.slice(0, 8).join(', ');
+  const contextBlock = renderListContext(context);
 
   return `You are an AI grocery assistant. Extract grocery items from a user's brain-dump text.
 
@@ -166,15 +478,136 @@ INTENT CLASSIFICATION:
 - "pantry": user just bought or already has (verbs: ${pantryVerbs})
 - "unknown": ambiguous
 
+COMMON ABBREVIATIONS — expand silently to the canonical full name:
+- tp / t.p. / tps → toilet paper
+- pb → peanut butter
+- evoo → olive oil (extra virgin)
+- ck / chx → chicken
+- veg / veggies → vegetables (or specific veg if listed)
+- gf → gluten free (modifier, not item — only if standalone, treat as note)
+- df → dairy free (same — modifier)
+- og → organic (modifier)
+- mayo → mayonnaise
+- shroom / shrooms → mushroom
+- decaf → decaf coffee
+- soda → soft drink
+- ben/ben & jerrys → ice cream
+- tp → toilet paper (yes, listed twice on purpose — this one matters)
+Set the item's "name" to the user's original abbreviation (so the UI shows
+what they typed) and "canonical" to the expanded canonical key. The user
+should never have to see the expansion unless they ask for it.
+
+CRITICAL — DEPLETION VS POSSESSION:
+"out of X", "running low on X", "finished my X", "we ran out", "almost out of X"
+all mean the user NEEDS TO BUY more — these are ACQUIRE intent, target=shopping.
+ONLY use intent=pantry / target=pantry when the user confirms PRESENT possession:
+"I have X", "just bought X", "got X", "picked up X", "already have X". When in
+doubt, prefer acquire — putting a needed item in pantry by mistake is worse than
+putting an owned item in shopping by mistake.
+
+MULTI-LINE + COMMA-SEPARATED INPUT:
+When the text contains multiple lines (newline-separated) OR comma/and-separated
+list items (e.g. "eggs, milk, bread" or "bananas and oat milk"), treat EACH
+entry as a separate item. Do NOT collapse them into a single summary item.
+"eggs, milk, bread" should produce THREE items, not one.
+
+QUANTITY + UNIT PARSING:
+Extract qty (number) and unit (string) when present. Examples:
+- "buy 2 lemons" → qty=2, name="lemons", canonical="lemon"
+- "1 kg pasta" → qty=1, unit="kg", name="pasta", canonical="pasta"
+- "a dozen eggs" → qty=12, name="eggs", canonical="egg"
+- "half a loaf of sourdough" → qty=0.5, unit="loaf", name="sourdough", canonical="bread"
+- "big bag of hay" → qty=1, unit="bag", name="hay" (descriptive size kept in unit)
+- "small jar of matcha" → qty=1, unit="jar", name="matcha"
+- "two bell peppers" → qty=2, name="bell peppers", canonical="bell pepper"
+Leave qty/unit unset only when the text gives no quantity signal at all.
+
+RECIPE CONTEXT:
+"making pasta tonight, need basil" → recipeSourceLabel="pasta", items=[basil]
+isRecipeExpansion=true only for ingredients the user did NOT explicitly list
+(i.e. items you'd add via canonical pasta-recipe knowledge). When the user
+explicitly lists the ingredients, leave isRecipeExpansion=false but still
+populate recipeSourceLabel. "want to do shakshuka, need tomatoes and feta"
+→ recipeSourceLabel="shakshuka", items=[tomatoes (explicit), feta (explicit)].
+
+PET FOOD:
+"hay for the pigs", "romaine for tontin and pinpon" — these are still grocery
+items the user is shopping for; extract them normally. The "for the pets"
+phrase is context, not a domain switch.
+
+OUT-OF-DOMAIN:
+If the input is clearly not about food/grocery/household supplies (e.g.
+"buy stock", "pet a dog", "schedule dentist"), return intent="unknown" and
+items=[]. Do NOT hallucinate grocery items from non-grocery text.
+
 LANGUAGE: detect the primary language (en/es/tr/other).
 
-RECIPE EXPANSION: if the text mentions a dish/meal, set recipeSourceLabel to the dish name; mark resulting ingredient items with isRecipeExpansion: true.
+RECIPE EXPANSION: if a single fragment mentions a dish/meal name AND lists its
+ingredients, set recipeSourceLabel to the dish name and mark the ingredient items
+with isRecipeExpansion: true. Do NOT do recipe expansion across newline-separated
+items — those are independent shopping entries, not a recipe.
 
 TARGET:
 - "shopping": item should go on shopping list (acquire/plan intents)
-- "pantry": item should go to pantry log (pantry intent)
+- "pantry": item should go to pantry log (pantry intent only)
 
 SHELF LIFE: populate shelfLifeDays from your knowledge of typical shelf life.
+
+MUTATION COMMANDS — when the user wants to MODIFY an existing list (remove,
+check off, throw out, mark as got), set the item's "action" field. Use the
+LIST CONTEXT block below to identify which existing entry the command refers
+to. When NO mutation verb is present, leave action="add" (or omit — "add" is
+the default).
+
+Set intent="edit" for the top-level fragment AND each item when ANY mutation
+verb is detected.
+
+Action values:
+- "remove" — remove a single matching item from the target slice.
+    Verbs: "remove", "delete", "take X off the list", "scratch X" (alone,
+    no possession), "no need for X", "drop X from the list".
+    TR: "çıkar", "sil", "listeden çıkar", "kaldır", "iptal".
+    ES: "quita", "elimina", "borra", "saca", "saca de la lista".
+    target = the slice currently holding the item (shopping or pantry per
+    the LIST CONTEXT). When unsure, prefer shopping.
+
+- "move_to_pantry" — combined remove-from-shopping + add-to-pantry. Triggered
+    by "scratch X, got some" / "actually I have X already" / "X aldım zaten"
+    / "ya tengo X". target="shopping" (the slice we're removing from).
+
+- "check" — mark a single matching item as bought in shopping (the user
+    completed the purchase). Triggered when the user lists what they
+    already bought. The big multi-item case is "got everything except X" /
+    "got all but X" / "all except X" / "menos X" / "excepto X" / "X hariç" —
+    for these, enumerate the CURRENT SHOPPING LIST and emit one
+    action="check" item per entry EXCEPT X.
+    target always = "shopping".
+
+- "remove" from pantry — triggered by "I finished X" / "ran out of X" /
+    "used up X" / "threw out X" / "X bitti" / "X bozuldu" / "se acabó X" /
+    "se echó a perder X", ONLY when X currently appears in CURRENT PANTRY.
+    If X is NOT in pantry then "I finished X" is a DEPLETION signal — emit
+    a normal action="add" item with target="shopping" (buy more), not a
+    remove. This is the one case where the LIST CONTEXT changes the action.
+    target="pantry" for the remove case; target="shopping" for the
+    depletion/add case.
+
+- "throw out X" / "X bozuldu" / "se echó a perder X" → always action="remove"
+    target="pantry" (spoilage — context doesn't matter; user is telling us
+    they discarded it).
+
+DISAMBIGUATION RULES:
+- Prefer exact canonical match over substring. "remove pasta" with shopping
+  [whole wheat pasta, rice] → match "whole wheat pasta" (canonical="pasta").
+- When LIST CONTEXT is empty or absent, still emit the mutation with action
+  set — downstream applier uses fuzzy matching as a fallback.
+- When you emit a mutation, do NOT also emit a duplicate add. One verb =
+  one item (except the "everything except X" case which fans out).
+
+BACKWARD COMPAT: a brain-dump with NO mutation verbs should classify
+exactly as it did before mutation support — action="add" (or omitted),
+intent in {acquire, plan, pantry, unknown}, never "edit".
+${contextBlock}
 
 Respond ONLY with the classify_grocery_items function call.`;
 }
@@ -189,7 +622,7 @@ function buildFunctionSchema(): Record<string, unknown> {
       properties: {
         intent: {
           type: 'string',
-          enum: ['acquire', 'plan', 'pantry', 'unknown'],
+          enum: ['acquire', 'plan', 'pantry', 'unknown', 'edit'],
           description: 'Top-level intent of the whole fragment.',
         },
         language: {
@@ -209,8 +642,13 @@ function buildFunctionSchema(): Record<string, unknown> {
               name:             { type: 'string', description: 'Raw item name from user text.' },
               canonical:        { type: 'string', description: 'Normalized canonical name or null.' },
               category:         { type: 'string', enum: CATEGORIES },
-              intent:           { type: 'string', enum: ['acquire', 'plan', 'pantry', 'unknown'] },
+              intent:           { type: 'string', enum: ['acquire', 'plan', 'pantry', 'unknown', 'edit'] },
               target:           { type: 'string', enum: ['shopping', 'pantry'] },
+              action:           {
+                type: 'string',
+                enum: ['add', 'remove', 'check', 'move_to_pantry'],
+                description: 'Mutation to apply. Defaults to "add" when omitted.',
+              },
               qty:              { type: 'number' },
               unit:             { type: 'string' },
               shelfLifeDays:    { type: 'number' },
@@ -223,7 +661,7 @@ function buildFunctionSchema(): Record<string, unknown> {
   };
 }
 
-export const groceryConfig: ModuleConfig<GroceryClassification> = {
+export const groceryConfig: ModuleConfig<GroceryClassification, GroceryListContext> = {
   moduleName: 'grocery',
   canonicalItems: CANONICAL_ITEMS,
   intentVerbs: INTENT_VERBS,
