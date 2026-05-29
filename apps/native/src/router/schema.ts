@@ -158,7 +158,13 @@ export type WorkAction =
   | { module: 'work'; action: 'create_task'; text: string; project?: string; remindIn?: RemindIn }
   | { module: 'work'; action: 'log_deadline'; text: string; dueDate?: string }
   | { module: 'work'; action: 'log_meeting'; with?: string; durationMin?: number }
-  | { module: 'work'; action: 'distraction_journal'; what: string };
+  | { module: 'work'; action: 'distraction_journal'; what: string }
+  /**
+   * Start a focus/work timer. "start a timer" / "set a 25 min timer". The
+   * handler schedules a background system notification at now + duration
+   * (default 30 min) via scheduleAt — fires even if the app is closed.
+   */
+  | { module: 'work'; action: 'start_timer'; durationMin?: number };
 
 // ── ADMIN ────────────────────────────────────────────────────────────
 
