@@ -33,6 +33,9 @@ export interface RouterOutput {
   crisis?: CrisisSignal;
   fragments: Fragment[];
   summary: RoutingSummary;
+  /** True when the dump was augmented by Gemini Flash 2.5 vision extraction.
+   *  Client surfaces a subtle "from photo" badge on the resulting cards. */
+  visionUsed?: boolean;
 }
 
 export interface Fragment {
