@@ -86,7 +86,10 @@ export type {
 
 // ─── constants ───────────────────────────────────────────────────────────────
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** Accepts UUIDs (legacy) AND Clerk user IDs (user_xxx). The Clerk JWT
+ *  ownership check downstream (verified === pathUserId) is the real auth
+ *  boundary — this regex only blocks injection-shaped garbage. */
+const UUID_RE = /^[A-Za-z0-9_-]{8,128}$/;
 
 const COSINE_THRESHOLD = 0.85;
 const VOYAGE_MODEL = 'voyage-multilingual-2';
