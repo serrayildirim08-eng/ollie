@@ -18,6 +18,7 @@
 import { computeCadence, type CadenceEstimate } from '@ollie/cadence';
 import { detectLowMood } from '@ollie/logic/goals';
 import { sql } from '../../storage';
+import { migrateGoals } from './migrate';
 import {
   ACTIVE_GOAL_CAP,
   DELETE_LOCK_MS,
@@ -87,6 +88,7 @@ function newId(): string {
 
 export const goals = {
   async list(): Promise<Goal[]> {
+    await migrateGoals();
     const rows = await sql.select<GoalRow>(
       `SELECT ${GOAL_COLS}
        FROM goals_registry
@@ -176,6 +178,10 @@ export const goals = {
    * this is a deliberate user action so refusing is correct (brief G2).
    */
   async create(draft: GoalDraft): Promise<Goal> {
+    // Self-migrate: the create modal calls repo directly (not via the dump
+    // handler that normally runs migrateGoals), so the new columns may not
+    // exist yet on this session's DB. Idempotent + promise-cached.
+    await migrateGoals();
     const count = await goals.activeCount();
     if (count >= ACTIVE_GOAL_CAP) {
       throw new GoalCapError();
@@ -221,6 +227,7 @@ export const goals = {
    * stays tiny.
    */
   async recordMoodSignal(text: string): Promise<void> {
+    await migrateGoals();
     const id = newId();
     const now = Date.now();
     await sql.execute(
@@ -248,6 +255,7 @@ export const goals = {
    */
   async canDelete(_id: string): Promise<DeleteGate> {
     try {
+      await migrateGoals();
       const now = Date.now();
       const windowStart = now - 14 * 24 * 60 * 60 * 1000;
       const rows = await sql.select<MoodRow>(
