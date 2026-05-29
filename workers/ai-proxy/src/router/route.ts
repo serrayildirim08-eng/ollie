@@ -40,6 +40,18 @@ import {
   CYCLE_ESCALATE_THRESHOLD,
 } from '../modules/cycle.config';
 import {
+  financeConfig,
+  FINANCE_MODEL_FAST,
+  FINANCE_MODEL_ACCURATE,
+  FINANCE_ESCALATE_THRESHOLD,
+} from '../modules/finance.config';
+import {
+  habitsConfig,
+  HABITS_MODEL_FAST,
+  HABITS_MODEL_ACCURATE,
+  HABITS_ESCALATE_THRESHOLD,
+} from '../modules/habits.config';
+import {
   medicationConfig,
   MEDICATION_MODEL_FAST,
   MEDICATION_MODEL_ACCURATE,
@@ -83,6 +95,8 @@ const MODULE_CONFIGS: Record<string, ModuleConfig<any, any>> = {
   grocery: groceryConfig,
   body: bodyConfig,
   cycle: cycleConfig,
+  finance: financeConfig,
+  habits: habitsConfig,
   medication: medicationConfig,
   sleep: sleepConfig,
 };
@@ -111,6 +125,14 @@ const MODULE_TIERS: Record<string, TierConfig> = {
   cycle: {
     models: [CYCLE_MODEL_FAST, CYCLE_MODEL_ACCURATE],
     threshold: CYCLE_ESCALATE_THRESHOLD,
+  },
+  finance: {
+    models: [FINANCE_MODEL_FAST, FINANCE_MODEL_ACCURATE],
+    threshold: FINANCE_ESCALATE_THRESHOLD,
+  },
+  habits: {
+    models: [HABITS_MODEL_FAST, HABITS_MODEL_ACCURATE],
+    threshold: HABITS_ESCALATE_THRESHOLD,
   },
   medication: {
     models: [MEDICATION_MODEL_FAST, MEDICATION_MODEL_ACCURATE],
