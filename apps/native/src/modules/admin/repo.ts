@@ -87,6 +87,27 @@ export const tasks = {
   async remove(id: string): Promise<void> {
     await sql.execute(`DELETE FROM admin_tasks WHERE id = ?`, [id]);
   },
+
+  /**
+   * Open admin tasks for the cross-module /todo aggregate. Filters out
+   * `done = 1` rows; sorted most-recent-first so the TodoScreen can apply
+   * its own date bucketing.
+   */
+  async listOpen(): Promise<AdminTask[]> {
+    const rows = await sql.select<TaskRow>(
+      `SELECT id, kind, text, data, done, created_at
+       FROM admin_tasks
+       WHERE done = 0
+       ORDER BY created_at DESC`,
+    );
+    return rows.map(rowToTask);
+  },
+
+  /** Mark a task complete. Thin alias over `setDone(id, true)` for the
+   *  /todo screen — keeps the cross-module aggregator's intent obvious. */
+  async markComplete(id: string): Promise<void> {
+    await sql.execute(`UPDATE admin_tasks SET done = 1 WHERE id = ?`, [id]);
+  },
 };
 
 // ─── renewals ─────────────────────────────────────────────────────────────
@@ -128,7 +149,43 @@ export const renewals = {
   async remove(id: string): Promise<void> {
     await sql.execute(`DELETE FROM admin_renewals WHERE id = ?`, [id]);
   },
+
+  /**
+   * Renewals open against today's date. `due_date IS NULL` rows are
+   * included — the /todo screen wants them in the "no date" tail. Future
+   * dates included; expired (past) rows excluded so the list doesn't
+   * carry stale debris.
+   */
+  async listOpen(today: string = isoToday()): Promise<AdminRenewal[]> {
+    const rows = await sql.select<RenewalRow>(
+      `SELECT id, renewal_type, due_date, added_at
+       FROM admin_renewals
+       WHERE due_date IS NULL OR due_date >= ?
+       ORDER BY
+         CASE WHEN due_date IS NULL THEN 1 ELSE 0 END ASC,
+         due_date ASC,
+         added_at DESC`,
+      [today],
+    );
+    return rows.map(rowToRenewal);
+  },
+
+  /** Renewals don't have a completed_at column — "done early" deletes
+   *  the row. The /todo X collapses to remove(). */
+  async markComplete(id: string): Promise<void> {
+    await sql.execute(`DELETE FROM admin_renewals WHERE id = ?`, [id]);
+  },
 };
+
+/** Local ISO-yyyy-mm-dd for today; injectable via the param so tests can
+ *  pin time. Kept local because admin is the only consumer. */
+function isoToday(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
 
 // ─── row mappers ──────────────────────────────────────────────────────────
 
