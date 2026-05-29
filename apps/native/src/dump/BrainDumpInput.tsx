@@ -10,6 +10,14 @@
  *   - explicit Submit button
  *   - Cmd/Ctrl + Enter while focused in the textarea
  *
+ * Photo intake — added 2026-05-29:
+ *   - drag-and-drop image onto the container (dashed sage border feedback)
+ *   - cmd/ctrl + V with an image in clipboard (text paste falls through native)
+ *   - explicit picker via a small camera icon button next to the send row
+ *   When an image is staged, submit can fire with image-only (no typed text).
+ *   The compressed payload is shipped in the existing /route/dump body under
+ *   the `image` field; see api/types.ts for the contract.
+ *
  * Auth: takes a bearer-token getter via prop. In dev that reads
  * `VITE_DEV_DUMP_BEARER`; once Clerk lands in T0 phase 3 the AuthProvider
  * will surface a Clerk session JWT instead.
@@ -19,8 +27,11 @@ import { useCallback, useEffect, useState } from 'react';
 import { Textarea, Button, Text } from '../ui';
 import { Stack, Row } from '../layout';
 import { routeDump } from '../api';
+import type { RouteDumpRequest } from '../api';
 import { kv } from '../storage';
+import { colors } from '../theme/tokens';
 import type { RouterOutput, CrisisSignal } from '../router/schema';
+import { usePhotoIntake, PhotoIntakeBar } from './PhotoIntake';
 import styles from './BrainDumpInput.module.css';
 
 /**
@@ -84,6 +95,8 @@ export function BrainDumpInput({
   // never delete a saved draft before we've had a chance to load it.
   const [restored, setRestored] = useState(false);
 
+  const photo = usePhotoIntake();
+
   // Restore a persisted draft on mount (unless the textarea already has
   // content, e.g. an initialValue from a voice transcript).
   useEffect(() => {
@@ -113,7 +126,11 @@ export function BrainDumpInput({
 
   const submit = useCallback(async () => {
     const trimmed = text.trim();
-    if (trimmed.length === 0) return;
+    const hasText = trimmed.length > 0;
+    const hasImage = photo.image !== null;
+    // No-op when both sides are empty. Spec: "If text is empty AND image is
+    // empty, do nothing." We DON'T flip to error state — quietly bail.
+    if (!hasText && !hasImage) return;
     setState({ kind: 'loading' });
 
     let bearer: string;
@@ -128,17 +145,31 @@ export function BrainDumpInput({
       return;
     }
 
-    // Persist the thought durably BEFORE the network call so it survives
-    // a crash, app close, or failed/offline submit. Cleared on success.
-    await kv.set(PENDING_DUMP_KEY, { text: trimmed, ts: Date.now() });
+    // Persist text durably BEFORE the network call so it survives a crash,
+    // app close, or failed/offline submit. The image is not disk-persisted
+    // (large + cheap to re-attach) — it lives in component state only.
+    if (hasText) {
+      await kv.set(PENDING_DUMP_KEY, { text: trimmed, ts: Date.now() });
+    }
 
-    const res = await routeDump({ text: trimmed }, { bearer });
+    const body: RouteDumpRequest = {};
+    if (hasText) body.text = trimmed;
+    if (photo.image) body.image = photo.image;
+
+    const res = await routeDump(body, { bearer });
     if (!res.ok) {
       // Translate ApiError to a one-line human message. The draft stays in
-      // the box AND on disk, so recoverable failures reassure the user
-      // their words are safe and retryable.
+      // the box AND on disk; the image stays in state so the user can retry.
       const code = res.error.code;
+      // Backend reports vision-side failure with http 502 and an opaque body —
+      // we surface a dedicated copy when we can detect it via body text.
+      const isVisionFail =
+        hasImage &&
+        code === 'http' &&
+        typeof res.error.body === 'string' &&
+        res.error.body.includes('vision_failed');
       const message =
+        isVisionFail ? "Couldn't read the photo. Try again or type it out." :
         code === 'unauthorized' ? 'sign in to dump' :
         code === 'rate_limited' ? 'too fast — try again in a moment' :
         code === 'timeout' ? 'took too long — your words are saved, try again' :
@@ -152,7 +183,10 @@ export function BrainDumpInput({
     // Success — the dump routed, so the saved draft is no longer needed.
     void kv.delete(PENDING_DUMP_KEY);
     setState({ kind: 'idle' });
-    if (clearOnSuccess) setText('');
+    if (clearOnSuccess) {
+      setText('');
+      photo.clear();
+    }
 
     // Crisis short-circuit BEFORE module result — parent decides whether to
     // pause downstream side-effects, but in v1 both callbacks fire so a
@@ -161,7 +195,7 @@ export function BrainDumpInput({
       onCrisis(res.data.crisis, res.data);
     }
     if (onResult) onResult(res.data);
-  }, [text, getBearer, onResult, onCrisis, clearOnSuccess]);
+  }, [text, photo, getBearer, onResult, onCrisis, clearOnSuccess]);
 
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -176,35 +210,68 @@ export function BrainDumpInput({
 
   const isLoading = state.kind === 'loading';
   const error = state.kind === 'error' ? state.message : undefined;
-  const disabled = isLoading || text.trim().length === 0;
+  // Submit is gated on EITHER side being populated. Photo-only dumps are
+  // first-class — receipts, pill bottles, handwritten notes ride the same
+  // flow as typed dumps.
+  const disabled =
+    isLoading || (text.trim().length === 0 && photo.image === null);
 
+  // Drag/paste handlers attach to a host wrapper around the Stack — Stack
+  // is a token-only flex primitive and doesn't forward DOM events. The
+  // wrapper also carries the dashed sage border (drag-over feedback).
   return (
-    <Stack gap="md" className={styles.container}>
-      <Textarea
-        value={text}
-        onChange={setText}
-        placeholder={placeholder}
-        disabled={isLoading}
-        error={error}
-        onKeyDown={onKeyDown}
-        label="Brain dump"
-        labelHidden
-        minRows={3}
-      />
-      <Row align="center" justify="space-between">
-        <Text scale="caption">
-          {isLoading ? 'thinking…' : 'cmd + enter to send'}
-        </Text>
-        <Button
-          variant="primary"
-          size="md"
-          loading={isLoading}
-          disabled={disabled}
-          onClick={() => void submit()}
-        >
-          send
-        </Button>
-      </Row>
-    </Stack>
+    <div
+      className={styles.container}
+      style={{
+        // 1px dashed sage on drag-over; transparent border by default so the
+        // layout doesn't jitter when the border appears.
+        border: photo.isDragOver
+          ? `1px dashed ${colors.sage}`
+          : '1px dashed transparent',
+        borderRadius: 6,
+        padding: 4,
+        transition: 'border-color 200ms cubic-bezier(0.18, 0, 0.22, 1)',
+      }}
+      onDragOver={photo.onDragOver}
+      onDragEnter={photo.onDragOver}
+      onDragLeave={photo.onDragLeave}
+      onDrop={photo.onDrop}
+      onPaste={photo.onPaste}
+    >
+      <Stack gap="md">
+        <Textarea
+          value={text}
+          onChange={setText}
+          placeholder={placeholder}
+          disabled={isLoading}
+          error={error}
+          onKeyDown={onKeyDown}
+          label="Brain dump"
+          labelHidden
+          minRows={3}
+        />
+        <Row align="center" justify="space-between">
+          <Row align="center" gap={16}>
+            <PhotoIntakeBar intake={photo} disabled={isLoading} />
+            <Text scale="caption">
+              {isLoading
+                ? photo.image
+                  ? 'reading photo…'
+                  : 'thinking…'
+                : 'cmd + enter to send'}
+            </Text>
+          </Row>
+          <Button
+            variant="primary"
+            size="md"
+            loading={isLoading}
+            disabled={disabled}
+            onClick={() => void submit()}
+          >
+            send
+          </Button>
+        </Row>
+      </Stack>
+    </div>
   );
 }

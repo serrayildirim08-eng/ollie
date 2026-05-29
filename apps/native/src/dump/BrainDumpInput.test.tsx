@@ -14,6 +14,13 @@ import React, { act } from 'react';
 import { it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRoot, type Root } from 'react-dom/client';
 
+// jsdom may not ship URL.createObjectURL; PhotoIntake reaches for it.
+// Stash refs at module load and restore in afterAll-equivalent (the file
+// runs in its own worker via vitest forks pool, so module-level reassign
+// is acceptable here).
+URL.createObjectURL = vi.fn(() => 'blob:mock');
+URL.revokeObjectURL = vi.fn();
+
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 // ── stub layout + ui primitives as plain HTML ──────────────────────────────
@@ -70,6 +77,14 @@ vi.mock('../storage', () => ({
 const routeDump = vi.fn();
 vi.mock('../api', () => ({ routeDump: (...a: unknown[]) => routeDump(...a) }));
 
+// ── mock compressImage so PhotoIntake can stage images without a canvas ──
+const compressImage = vi.fn();
+vi.mock('./compressImage', () => ({
+  compressImage: (...a: unknown[]) => compressImage(...a),
+  MAX_DIM: 1280,
+  MAX_B64_BYTES: 900 * 1024,
+}));
+
 import { BrainDumpInput } from './BrainDumpInput';
 
 const KEY = 'pending_dump';
@@ -82,6 +97,11 @@ beforeEach(() => {
   kvGet.mockClear();
   kvDelete.mockClear();
   routeDump.mockReset();
+  compressImage.mockReset();
+  compressImage.mockResolvedValue({
+    ok: true,
+    image: { mime: 'image/jpeg', data: 'AAAA' },
+  });
   container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);
@@ -131,4 +151,48 @@ it('CLEARS the draft on a successful submit', async () => {
   await act(async () => { btn.click(); });
   await flush();
   expect(kvDelete).toHaveBeenCalledWith(KEY);
+});
+
+// ── photo-intake additions ───────────────────────────────────────────────
+
+it('submits an image-only dump (no typed text)', async () => {
+  routeDump.mockResolvedValue({
+    ok: true,
+    data: { fragments: [], visionUsed: true },
+  });
+  await act(async () => {
+    root.render(React.createElement(BrainDumpInput, { getBearer: () => 'tok' }));
+  });
+  await flush();
+  // stage a photo via the hidden picker input
+  const file = new File([new Uint8Array([1])], 'r.jpg', { type: 'image/jpeg' });
+  const input = container.querySelector(
+    '[data-testid="photo-intake-file"]',
+  ) as HTMLInputElement;
+  Object.defineProperty(input, 'files', { value: [file], configurable: true });
+  await act(async () => {
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await flush();
+  const btn = container.querySelector('[data-testid="send"]') as HTMLButtonElement;
+  expect(btn.disabled).toBe(false);
+  await act(async () => { btn.click(); });
+  await flush();
+  expect(routeDump).toHaveBeenCalledTimes(1);
+  const body = routeDump.mock.calls[0]![0] as Record<string, unknown>;
+  expect(body.image).toEqual({ mime: 'image/jpeg', data: 'AAAA' });
+  expect(body.text).toBeUndefined();
+});
+
+it('submit no-ops when there is neither text nor image', async () => {
+  await act(async () => {
+    root.render(React.createElement(BrainDumpInput, { getBearer: () => 'tok' }));
+  });
+  await flush();
+  const btn = container.querySelector('[data-testid="send"]') as HTMLButtonElement;
+  // disabled when empty — clicking is a no-op
+  expect(btn.disabled).toBe(true);
+  await act(async () => { btn.click(); });
+  await flush();
+  expect(routeDump).not.toHaveBeenCalled();
 });

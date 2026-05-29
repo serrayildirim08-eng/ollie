@@ -54,6 +54,14 @@ export interface RouterOutput {
 
   // Routing telemetry for UI + analytics
   summary: RoutingSummary;
+
+  /**
+   * True when the dump payload included an image and the worker ran the
+   * vision pipeline on it. UI uses this to render a quiet "from your photo"
+   * badge on the resulting fragment cards. Backwards-compatible: legacy
+   * text-only responses simply omit this field.
+   */
+  visionUsed?: boolean;
 }
 
 // ─────────────────────────────────────────────────────────────────────

@@ -29,6 +29,11 @@ export interface NeedsConfirmCardProps {
   onKeep: () => void;
   /** Remove the just-written entry and dismiss the card. */
   onUndo: () => void;
+  /**
+   * True when the source fragment came from the vision pipeline (photo intake).
+   * Renders a quiet "from photo" badge in the top-right of the card.
+   */
+  fromPhoto?: boolean;
 }
 
 export function NeedsConfirmCard({
@@ -36,6 +41,7 @@ export function NeedsConfirmCard({
   routeLabel,
   onKeep,
   onUndo,
+  fromPhoto = false,
 }: NeedsConfirmCardProps): JSX.Element {
   return (
     <div
@@ -46,8 +52,26 @@ export function NeedsConfirmCard({
         borderRadius: 10,
         background: colors.paper,
         border: `1px solid ${colors.hairline}`,
+        position: 'relative',
       }}
     >
+      {fromPhoto && (
+        <span
+          aria-label="From your photo"
+          style={{
+            position: 'absolute',
+            top: 10,
+            right: 12,
+            fontFamily: 'inherit',
+            fontSize: 10,
+            color: colors.sage,
+            letterSpacing: '0.10em',
+            fontVariantCaps: 'all-small-caps',
+          }}
+        >
+          photo
+        </span>
+      )}
       <Stack gap={10}>
         {/* kicker */}
         <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>

@@ -27,8 +27,24 @@ export type ApiResult<T> =
 
 // ─── /route/dump (POST) — v2 brain-dump router ────────────────────────────────
 
+/**
+ * MIME types accepted by the /route/dump vision pipeline. Anything outside
+ * this list is rejected client-side before encoding so the worker never
+ * sees a malformed payload.
+ */
+export type RouteDumpImageMime = 'image/jpeg' | 'image/png' | 'image/webp';
+
+export interface RouteDumpImage {
+  mime: RouteDumpImageMime;
+  /** Base64-encoded compressed image bytes. ≤900KB after encoding (≈700KB raw). */
+  data: string;
+}
+
 export interface RouteDumpRequest {
-  text: string;
+  /** Free-text dump. At least one of `text` / `image` must be present. */
+  text?: string;
+  /** Optional photo intake — receipt / pill bottle / handwritten note / etc. */
+  image?: RouteDumpImage;
   dumpId?: string;
   locale?: string;
 }
