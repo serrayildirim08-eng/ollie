@@ -28,6 +28,12 @@ import { json, upstreamError } from '@ollie/worker-http';
 import { scrubPII } from '../pii';
 import { groceryConfig, type ModuleConfig } from '../modules/grocery.config';
 import {
+  adminConfig,
+  ADMIN_MODEL_FAST,
+  ADMIN_MODEL_ACCURATE,
+  ADMIN_ESCALATE_THRESHOLD,
+} from '../modules/admin.config';
+import {
   bodyConfig,
   BODY_MODEL_FAST,
   BODY_MODEL_ACCURATE,
@@ -57,6 +63,12 @@ import {
   MEDICATION_MODEL_ACCURATE,
   MEDICATION_ESCALATE_THRESHOLD,
 } from '../modules/medication.config';
+import {
+  petsConfig,
+  PETS_MODEL_FAST,
+  PETS_MODEL_ACCURATE,
+  PETS_ESCALATE_THRESHOLD,
+} from '../modules/pets.config';
 import {
   sleepConfig,
   SLEEP_MODEL_FAST,
@@ -92,12 +104,14 @@ export interface RouteEnv {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const MODULE_CONFIGS: Record<string, ModuleConfig<any, any>> = {
+  admin: adminConfig,
   grocery: groceryConfig,
   body: bodyConfig,
   cycle: cycleConfig,
   finance: financeConfig,
   habits: habitsConfig,
   medication: medicationConfig,
+  pets: petsConfig,
   sleep: sleepConfig,
 };
 
@@ -118,6 +132,10 @@ interface TierConfig {
   threshold: number;
 }
 const MODULE_TIERS: Record<string, TierConfig> = {
+  admin: {
+    models: [ADMIN_MODEL_FAST, ADMIN_MODEL_ACCURATE],
+    threshold: ADMIN_ESCALATE_THRESHOLD,
+  },
   body: {
     models: [BODY_MODEL_FAST, BODY_MODEL_ACCURATE],
     threshold: BODY_ESCALATE_THRESHOLD,
@@ -137,6 +155,10 @@ const MODULE_TIERS: Record<string, TierConfig> = {
   medication: {
     models: [MEDICATION_MODEL_FAST, MEDICATION_MODEL_ACCURATE],
     threshold: MEDICATION_ESCALATE_THRESHOLD,
+  },
+  pets: {
+    models: [PETS_MODEL_FAST, PETS_MODEL_ACCURATE],
+    threshold: PETS_ESCALATE_THRESHOLD,
   },
   sleep: {
     models: [SLEEP_MODEL_FAST, SLEEP_MODEL_ACCURATE],
