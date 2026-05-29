@@ -46,7 +46,6 @@ import {
   aggregateTodos,
   bucketTodos,
   isoToday,
-  type TodoBucket,
   type TodoItem,
   type TodoSource,
 } from './aggregateTodos';
@@ -167,8 +166,15 @@ export function TodoScreen(): JSX.Element {
   );
 
   const today = useMemo(() => isoToday(), []);
-  const buckets = useMemo<TodoBucket[]>(
-    () => bucketTodos(items, today),
+  // "just shit to do today": overdue + due-today + undated loose to-dos.
+  // Future-dated commitments (this week / later) are intentionally hidden —
+  // they live in their own modules until the day comes. One flat list, no
+  // bucket headers: the to-do screen is a today-focus surface, not a backlog.
+  const todayList = useMemo<TodoItem[]>(
+    () =>
+      bucketTodos(items, today)
+        .filter((b) => b.id === 'today' || b.id === 'noDate')
+        .flatMap((b) => b.items),
     [items, today],
   );
 
@@ -178,9 +184,9 @@ export function TodoScreen(): JSX.Element {
         <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
           to-do
         </Text>
-        <Text scale="display">To-Do</Text>
+        <Text scale="display">Today</Text>
         <Text scale="body" color={colors.inkSoft} style={{ maxWidth: 540 }}>
-          everything you've dumped, ready to do.
+          what's on you today.
         </Text>
       </Stack>
 
@@ -188,62 +194,26 @@ export function TodoScreen(): JSX.Element {
         <Text scale="caption" color={colors.inkFaint}>
           loading…
         </Text>
-      ) : items.length === 0 ? (
+      ) : todayList.length === 0 ? (
         <Text scale="body" color={colors.inkFaint} data-testid="todo-empty">
-          nothing on the list yet. brain dump something to fill it.
+          {items.length === 0
+            ? 'nothing on the list yet. brain dump something to fill it.'
+            : 'nothing for today. rest easy.'}
         </Text>
       ) : (
-        <Stack gap={40} as="ul" style={LIST_RESET}>
-          {buckets.map((bucket) => (
-            <BucketSection
-              key={bucket.id}
-              bucket={bucket}
-              fadingIds={fadingIds}
+        <Stack gap={0} as="ul" style={LIST_RESET} data-testid="bucket-today">
+          {todayList.map((item, i) => (
+            <TodoRow
+              key={item.id}
+              item={item}
+              first={i === 0}
+              fading={fadingIds.includes(item.id)}
               onComplete={handleComplete}
             />
           ))}
         </Stack>
       )}
     </Stack>
-  );
-}
-
-// ─── bucket section ───────────────────────────────────────────────────────
-
-interface BucketSectionProps {
-  readonly bucket: TodoBucket;
-  readonly fadingIds: readonly string[];
-  readonly onComplete: (item: TodoItem) => void | Promise<void>;
-}
-
-function BucketSection({
-  bucket,
-  fadingIds,
-  onComplete,
-}: BucketSectionProps): JSX.Element {
-  return (
-    <li style={LIST_ITEM_RESET}>
-      <Stack gap={12}>
-        <Text
-          scale="caption"
-          color={colors.inkFaint}
-          style={{ ...SMCP_STYLE, letterSpacing: '0.20em' }}
-        >
-          {bucket.label}
-        </Text>
-        <Stack gap={0} as="ul" style={LIST_RESET} data-testid={`bucket-${bucket.id}`}>
-          {bucket.items.map((item, i) => (
-            <TodoRow
-              key={item.id}
-              item={item}
-              first={i === 0}
-              fading={fadingIds.includes(item.id)}
-              onComplete={onComplete}
-            />
-          ))}
-        </Stack>
-      </Stack>
-    </li>
   );
 }
 
