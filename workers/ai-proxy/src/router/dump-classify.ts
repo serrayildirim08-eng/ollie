@@ -12,6 +12,7 @@
  */
 
 import { groqChat } from '../groq';
+import { geminiJson } from '../gemini';
 import type { FragmentLanguage, Module } from './dump-schema';
 
 // Allowed Module values (enumerated in the system prompt so the model
@@ -280,59 +281,10 @@ export async function classifyFragment(
   };
 }
 
-/**
- * Classify MULTIPLE fragments in a single Groq call.
- *
- * The ~4k-token SYSTEM_PROMPT is the dominant token cost; sending it once
- * per dump instead of once per fragment is the difference between a
- * 3-fragment dump costing ~12k tokens (3 separate calls) and ~4.5k (one
- * batched call). On Groq's free tier (8k tokens/minute) that's the
- * difference between a reliable 502 and a working dump.
- *
- * Falls through to the single-fragment path for n≤1 so the prompt framing
- * (and the well-tested single-object contract) is preserved for the common
- * case. Output order is guaranteed to match the input order; a count
- * mismatch throws so the caller can fail loudly rather than misalign
- * classifications to fragments.
- */
-export async function classifyBatch(
-  items: Array<{ text: string; language: FragmentLanguage }>,
-  apiKey: string,
-): Promise<ClassifyResult[]> {
-  if (items.length === 0) return [];
-  if (items.length === 1) {
-    return [await classifyFragment(items[0].text, items[0].language, apiKey)];
-  }
-
-  const list = items
-    .map((it, i) => `[${i}] (lang=${it.language}) ${it.text}`)
-    .join('\n');
-  const userMessage =
-    `You are given ${items.length} fragments below, one per line, each prefixed with its index [i].\n` +
-    `Classify EACH fragment independently using the rules above.\n` +
-    `IGNORE the single-object response instruction above. Instead respond with a JSON object EXACTLY of the form:\n` +
-    `{ "results": [ { "module": ..., "action": ..., "confidence": ..., "payload": {...} } ] }\n` +
-    `The results array MUST contain exactly ${items.length} objects, in the SAME order as the input indices.\n\n` +
-    `Fragments:\n${list}`;
-
-  const choice = await groqChat(
-    {
-      apiKey,
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: userMessage },
-      ],
-      jsonMode: true,
-      maxTokens: 256 * items.length + 256,
-    },
-    'classify-batch',
-  );
-
-  const rawText = choice.message.content ?? '';
-  if (!rawText) {
-    throw new Error(`classify-batch groq empty content (finish=${choice.finish_reason})`);
-  }
-
+/** Parse a `{ results: [...] }` batch payload into ClassifyResults. Throws on
+ *  malformed JSON or a count that doesn't match the request, so the caller
+ *  never silently misaligns classifications to fragments. */
+function parseBatchResults(rawText: string, expected: number, provider: string): ClassifyResult[] {
   let parsed: {
     results?: Array<{
       module: Module;
@@ -344,13 +296,13 @@ export async function classifyBatch(
   try {
     parsed = JSON.parse(rawText);
   } catch {
-    throw new Error(`classify-batch groq bad json: ${rawText.slice(0, 300)}`);
+    throw new Error(`classify-batch ${provider} bad json: ${rawText.slice(0, 300)}`);
   }
 
   const results = parsed?.results;
-  if (!Array.isArray(results) || results.length !== items.length) {
+  if (!Array.isArray(results) || results.length !== expected) {
     const got = Array.isArray(results) ? results.length : 'none';
-    throw new Error(`classify-batch count mismatch: got ${got} want ${items.length}`);
+    throw new Error(`classify-batch ${provider} count mismatch: got ${got} want ${expected}`);
   }
 
   return results.map((r) => ({
@@ -358,4 +310,74 @@ export async function classifyBatch(
     payload: { ...r.payload, module: r.module, action: r.action },
     confidence: typeof r.confidence === 'number' ? r.confidence : 0,
   }));
+}
+
+/**
+ * Classify one or more fragments in a SINGLE upstream call.
+ *
+ * The ~4k-token SYSTEM_PROMPT is the dominant token cost; sending it once per
+ * dump instead of once per fragment turns a 3-fragment dump from ~12k tokens
+ * (3 separate calls) into ~4.5k (one batched call) — the difference between a
+ * reliable 502 and a working dump on Groq's free tier (8k tokens/minute).
+ *
+ * Provider strategy (free-tier, no paid Groq Dev Tier):
+ *   - PRIMARY: Groq gpt-oss-120b — fast, but only 8k tokens/min.
+ *   - FALLBACK: Gemini 2.5 Flash — ~31× the TPM (250k/min) so it absorbs
+ *     overflow when Groq returns 429 (or a transient 5xx). Stacking the two
+ *     free tiers covers far more throughput than either alone. Gemini is
+ *     skipped if `keys.gemini` is absent (then a Groq 429 bubbles up so the
+ *     caller can surface a soft rate-limit message).
+ *
+ * Output order matches input order; a count mismatch throws.
+ */
+export async function classifyBatch(
+  items: Array<{ text: string; language: FragmentLanguage }>,
+  keys: { groq: string; gemini?: string },
+): Promise<ClassifyResult[]> {
+  if (items.length === 0) return [];
+
+  const list = items
+    .map((it, i) => `[${i}] (lang=${it.language}) ${it.text}`)
+    .join('\n');
+  const userMessage =
+    `You are given ${items.length} fragment(s) below, one per line, each prefixed with its index [i].\n` +
+    `Classify EACH fragment independently using the rules above.\n` +
+    `IGNORE the single-object response instruction above. Instead respond with a JSON object EXACTLY of the form:\n` +
+    `{ "results": [ { "module": ..., "action": ..., "confidence": ..., "payload": {...} } ] }\n` +
+    `The results array MUST contain exactly ${items.length} object(s), in the SAME order as the input indices.\n\n` +
+    `Fragments:\n${list}`;
+
+  const maxTokens = 256 * items.length + 256;
+
+  // PRIMARY — Groq.
+  try {
+    const choice = await groqChat(
+      {
+        apiKey: keys.groq,
+        messages: [
+          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'user', content: userMessage },
+        ],
+        jsonMode: true,
+        maxTokens,
+      },
+      'classify-batch',
+    );
+    const rawText = choice.message.content ?? '';
+    if (!rawText) {
+      throw new Error(`classify-batch groq empty content (finish=${choice.finish_reason})`);
+    }
+    return parseBatchResults(rawText, items.length, 'groq');
+  } catch (err) {
+    const status = (err as { status?: number })?.status;
+    const recoverable = status === 429 || (typeof status === 'number' && status >= 500);
+    if (!recoverable || !keys.gemini) throw err;
+
+    // FALLBACK — Gemini Flash. Groq saturated (429) or transiently down.
+    const rawText = await geminiJson(
+      { apiKey: keys.gemini, system: SYSTEM_PROMPT, user: userMessage, maxTokens },
+      'classify-batch',
+    );
+    return parseBatchResults(rawText, items.length, 'gemini');
+  }
 }

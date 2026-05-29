@@ -72,11 +72,13 @@ beforeEach(() => {
         confidence: 0.93,
         payload: { item: 'süt' },
       };
+      // classifyBatch sends every dump (incl. single-fragment) through the
+      // batched `{ results: [...] }` contract.
       return new Response(
         JSON.stringify({
           choices: [
             {
-              message: { content: JSON.stringify(fakeClassification) },
+              message: { content: JSON.stringify({ results: [fakeClassification] }) },
               finish_reason: 'stop',
             },
           ],

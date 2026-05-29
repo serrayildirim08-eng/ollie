@@ -57,6 +57,11 @@ export interface GroqChoice {
   finish_reason: string;
 }
 
+/** Error thrown when Groq returns a non-2xx. `status` carries the HTTP code
+ *  so callers can distinguish 429 (rate limit — recoverable, surface softly)
+ *  from a genuine upstream failure. */
+export type GroqHttpError = Error & { status?: number };
+
 export async function groqChat(opts: GroqOpts, label: string): Promise<GroqChoice> {
   const body: Record<string, unknown> = {
     model: opts.model ?? GROQ_MODEL,
@@ -81,7 +86,9 @@ export async function groqChat(opts: GroqOpts, label: string): Promise<GroqChoic
 
   if (!res.ok) {
     const detail = await res.text().catch(() => '');
-    throw new Error(`${label} groq ${res.status}: ${detail.slice(0, 300)}`);
+    const err = new Error(`${label} groq ${res.status}: ${detail.slice(0, 300)}`) as GroqHttpError;
+    err.status = res.status;
+    throw err;
   }
 
   const data = (await res.json()) as { choices?: GroqChoice[] };
