@@ -22,6 +22,7 @@ import { Stack } from '../../layout';
 import { Text } from '../../ui';
 import { colors, fonts, fontSizes, letterSpacings } from '../../theme/tokens';
 import { events } from './repo';
+import { NotifyPrimeLine } from '../../notify/NotifyPrimeLine';
 
 // ─── constants ────────────────────────────────────────────────────────────────
 
@@ -492,6 +493,8 @@ export function FocusTimer({ onSessionLogged }: FocusTimerProps): JSX.Element {
           </button>
         )}
       </div>
+
+      <NotifyPrimeLine label="allow ollie to ping you when a session ends?" />
     </Stack>
   );
 }
