@@ -180,7 +180,7 @@ export default {
     // POST only (pantry lives in the body). Auth + ownership enforced inside
     // the handler; rate-limited per-user via the telemetry bucket so a single
     // account cannot burn Voyage + Groq budget by spamming the endpoint.
-    const feedMeMatch = url.pathname.match(/^\/feed-me\/([0-9a-f-]+)$/i);
+    const feedMeMatch = url.pathname.match(/^\/feed-me\/([A-Za-z0-9_-]+)$/i);
     if (feedMeMatch && req.method === 'POST') {
       const fmUser = await resolveUserIdForRateLimit(req, env);
       if (fmUser) {
@@ -202,7 +202,7 @@ export default {
     // beyond Cloudflare's edge defaults — frontend re-fetches at most once
     // per purchase + on grocery module mount.
     const replenishMatch = url.pathname.match(
-      /^\/replenishment\/([0-9a-f-]+)$/i,
+      /^\/replenishment\/([A-Za-z0-9_-]+)$/i,
     );
     if (replenishMatch && req.method === 'GET') {
       return withCors(await handleReplenishment(req, env, replenishMatch[1]));
