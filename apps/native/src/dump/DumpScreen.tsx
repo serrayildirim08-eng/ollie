@@ -199,9 +199,8 @@ function CrisisBanner({
         notice
       </Text>
       <Text scale="body" color="rgb(80, 20, 20)">
-        Something in what you wrote sounded heavy. You're not alone — the
-        full crisis surface ships in the next sprint. For now: if this is
-        urgent, please reach out to a crisis line in your country.
+        Something in what you wrote sounded heavy. If it's urgent, a crisis
+        line in your country can help right now.
       </Text>
       <Text
         scale="caption"

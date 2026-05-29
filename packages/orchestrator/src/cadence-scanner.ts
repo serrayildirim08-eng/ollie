@@ -117,7 +117,7 @@ export const DEFAULT_CADENCE_COPY: Record<string, CadenceCopyTemplates> = {
     category: 'PATTERN_ALERT',
     actionUrl: '/habits',
     variants: [
-      (l) => ({ title: `${l} streak — might want to catch up?` }),
+      (l) => ({ title: `${l} — want to pick it back up?` }),
       (l) => ({ title: `${l} hasn’t happened in a few days` }),
       (l) => ({ title: `usual ${l} day is past` }),
     ],

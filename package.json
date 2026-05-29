@@ -7,6 +7,8 @@
     "dev": "pnpm --filter @ollie/web dev",
     "build": "pnpm --filter @ollie/web build",
     "typecheck": "pnpm -r typecheck",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
     "scan:banned": "node tools/scan-banned-phrases.cjs",
     "scan:banned:test": "node tools/banned-phrases.test.cjs",
     "pretest": "node tools/banned-phrases.test.cjs && node tools/scan-banned-phrases.cjs",
@@ -18,7 +20,11 @@
     "tauri:build": "pnpm --filter native tauri build"
   },
   "devDependencies": {
-    "typescript": "^5.6.0"
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.4.0",
+    "globals": "^17.6.0",
+    "typescript": "^5.6.0",
+    "typescript-eslint": "^8.60.0"
   },
   "packageManager": "pnpm@11.0.9",
   "engines": {

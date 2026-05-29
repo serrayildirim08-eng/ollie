@@ -59,7 +59,7 @@ export function canonicalMerchantKey(raw: string | null | undefined): string | n
   // Drop punctuation other than apostrophes inside words ("trader joe's").
   // Collapse residual whitespace after stripping.
   const stripped = base
-    .replace(/[!?,.;:"()\[\]{}*~`#]+/g, ' ')
+    .replace(/[!?,.;:"()[\]{}*~`#]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
   return stripped.length === 0 ? null : stripped;

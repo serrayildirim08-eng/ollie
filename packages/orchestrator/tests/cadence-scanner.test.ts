@@ -41,7 +41,7 @@ const DAY_MS = 86_400_000;
 const NOW = new Date('2026-05-09T12:00:00Z').getTime();
 const NEXT_DAY = NOW + DAY_MS;
 
-interface CapturedSpec extends NotificationSpec {}
+type CapturedSpec = NotificationSpec;
 
 function makeBackend(): { backend: NotificationBackend; calls: CapturedSpec[] } {
   const calls: CapturedSpec[] = [];
