@@ -17,6 +17,7 @@ import type { FragmentLanguage, Module } from './dump-schema';
 // Allowed Module values (enumerated in the system prompt so the model
 // stays on the rails even though Groq's JSON mode doesn't enforce a schema).
 const MODULES: Module[] = [
+  'crisis',
   'work',
   'admin',
   'pets',
@@ -36,6 +37,7 @@ const SYSTEM_PROMPT = `You are Ollie's brain-dump router. You receive one fragme
 Input may be in Turkish, English, Spanish, or any mix of the three within a single sentence (e.g. "compré pasta and email boran"). Classify based on intent, not language. Do not refuse on the basis of mixed language. Do not paraphrase.
 
 Modules and their action vocabularies:
+- crisis: boundary_shown  (defensive fallback ONLY — upstream lexicon catches first; see CRISIS section below)
 - work: log_focus_session | create_task | log_deadline | log_meeting | distraction_journal
 - admin: create_task | create_phone_task | schedule_appointment | log_paperwork | recurring_decision | log_renewal
 - pets: log_care | log_observation | log_vet | log_feed | log_supplement
@@ -68,6 +70,13 @@ Action disambiguation hints:
 PAYLOAD FIELD REQUIREMENTS · per action
 ═══════════════════════════════════════════════════════════════════════
 Each action below lists the EXACT keys to put inside \`payload\`. Required keys MUST appear; optional keys appear only when the fragment supplies them. Never invent values; if a required string slot is unknown, fall back to the user's wording.
+
+── CRISIS ── (defensive fallback)
+The primary crisis detector is the upstream lexicon (@ollie/crisis-lexicon), which runs BEFORE this classifier and short-circuits the response. You will rarely see crisis fragments. Classify as crisis ONLY when the fragment is unambiguous suicidal ideation, self-harm intent, or method-seeking. Do NOT trigger on general sadness, frustration, "i hate my life", venting, or anger. When in doubt, prefer dump_only.
+- boundary_shown: { tier: 2 | 3 }
+  tier 2 = ideation ("i don't want to be here anymore", "ya no quiero seguir", "kendime zarar vermek istiyorum")
+  tier 3 = method-seeking or imminent intent (explicit method + time, e.g. "tonight i'm going to take all my pills")
+  Confidence should be ≥ 0.9 when you do trigger. If you're under 0.9, pick dump_only instead.
 
 ── BODY ──
 - log_symptom: { symptom: string (REQUIRED), severity?: 1|2|3|4|5, bodyPart?: string }
