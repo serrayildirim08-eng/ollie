@@ -8,18 +8,20 @@
  * Boot order (mirrors apps/web/src/store.ts):
  *   1. runMigrations against the adapter
  *   2. createStore(browserAdapter)
- *   3. createOrchestrator(store, { cadenceSources }) → init()
+ *   3. createOrchestrator(store, { cadenceSources, scheduleNotification }) → init()
  *
  * Cadence sources today: all 11 native modules — grocery / body / habits
  * (initial trio) plus sleep / pets / finance / work / goals / admin /
  * cycle / medication (this commit). Each module's `enumerateCadences`
  * barrel export yields its own CadenceTrackedEntry stream.
  *
- * scheduleNotification is intentionally NOT injected yet — APNs wiring
- * lives behind the Tauri push plugin which is a separate milestone. Until
- * then the cadence scanner falls back to its in-app notify() surface
- * (@ollie/notifications), which is the correct dogfood path: DevTools
- * log + in-app toast, no server APNs round trip.
+ * scheduleNotification — wired 2026-05-29 to the Tauri notification
+ * plugin via `scheduleSystemNotification` in `./notify/systemNotify`.
+ * This is the desktop-local system-notification path. The in-app
+ * @ollie/notifications log path remains the always-on fallback (cadence
+ * scanner calls notify() internally regardless). APNs / iPhone push is
+ * still a separate milestone — when it lands it composes alongside this
+ * adapter, it does not replace it.
  */
 
 import {
@@ -34,7 +36,9 @@ import {
   type CadenceTrackedEntry,
   type CadenceSourceFn,
 } from '@ollie/orchestrator';
+import type { NotificationSpec } from '@ollie/notifications';
 import { isOverdue } from '@ollie/cadence';
+import { scheduleSystemNotification } from './notify/systemNotify';
 import { enumerateCadences as enumerateGrocery } from './modules/grocery';
 import { enumerateCadences as enumerateBody } from './modules/body';
 import { enumerateCadences as enumerateHabits } from './modules/habits';
@@ -91,7 +95,24 @@ const cadenceSources: Record<string, CadenceSourceFn> = {
   medication: withDevLog('medication', enumerateMedication),
 };
 
-export const orchestrator = createOrchestrator(store, { cadenceSources });
+/**
+ * Sub-orchestrators (cycle, sleep, body, habits, finance, etc) accept a
+ * scheduleNotification slot of shape `(spec, fireAt) => void`. We adapt
+ * the Tauri system notification path through `scheduleSystemNotification`
+ * here. The cadence scanner itself does NOT use this slot — it calls
+ * `notify()` directly through @ollie/notifications, which already has
+ * its own backend hook. This adapter is for the per-module orchestrators
+ * that schedule future notifications (cycle ovulation window, sleep
+ * weekly review, finance bill window, etc).
+ */
+const scheduleNotification = (spec: NotificationSpec, fireAt: number): void => {
+  scheduleSystemNotification(spec, fireAt);
+};
+
+export const orchestrator = createOrchestrator(store, {
+  cadenceSources,
+  scheduleNotification,
+});
 orchestrator.init();
 
 if (typeof window !== 'undefined') {
