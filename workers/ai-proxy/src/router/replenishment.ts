@@ -85,8 +85,8 @@ export async function handleReplenishment(
     return json({ error: 'invalid_user_id' }, 400);
   }
 
-  // 2. Auth + ownership
-  if (env.T0_JWT_ENFORCED === '1') {
+  // 2. Auth + ownership — fail CLOSED unless T0_JWT_ENFORCED === '0' (dev).
+  if (env.T0_JWT_ENFORCED !== '0') {
     const auth = req.headers.get('authorization');
     if (!auth || !auth.startsWith('Bearer ')) {
       return json({ error: 'unauthorized' }, 401);

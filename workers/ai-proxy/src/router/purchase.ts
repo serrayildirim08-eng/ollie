@@ -86,7 +86,7 @@ export async function handlePurchase(
 ): Promise<Response> {
   // 1. Auth gate (T0)
   let userId: string | null;
-  if (env.T0_JWT_ENFORCED === '1') {
+  if (env.T0_JWT_ENFORCED !== '0') {
     const auth = req.headers.get('authorization');
     if (!auth || !auth.startsWith('Bearer ')) {
       return json({ error: 'unauthorized' }, 401);
@@ -96,8 +96,8 @@ export async function handlePurchase(
       return json({ error: 'invalid_jwt' }, 401);
     }
   } else {
-    // Open mode: accept user id from header for dev parity with /route/:module.
-    // Once T0 ships this branch is dead.
+    // Open mode: dev only (T0_JWT_ENFORCED === '0'). Accepts a client-
+    // supplied x-user-id — spoofable, so NEVER enable in prod.
     userId = req.headers.get('x-user-id');
     if (!userId) {
       return json({ error: 'unauthorized' }, 401);

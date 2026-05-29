@@ -38,6 +38,7 @@ function makeEnv(overrides: Partial<FeedMeEnv> = {}): FeedMeEnv {
     SUPABASE_SERVICE_ROLE: 'service-role-key',
     VOYAGE_API_KEY: 'voyage-key',
     GEMINI_API_KEY: 'gemini-key',
+    T0_JWT_ENFORCED: '0', // dev/open default; auth tests override with '1'
     ...overrides,
   };
 }

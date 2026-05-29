@@ -37,6 +37,7 @@ function makeEnv(): RouteEnv {
     SUPABASE_SERVICE_ROLE: 'service-role-key',
     VOYAGE_API_KEY: 'voy-test-key',
     GROQ_API_KEY: 'groq-test-key',
+    T0_JWT_ENFORCED: '0', // dev/open default (body L2 route runs in test/open mode)
   };
 }
 

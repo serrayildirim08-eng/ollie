@@ -77,9 +77,9 @@ export async function handleCookHistory(
   req: Request,
   env: CookHistoryEnv,
 ): Promise<Response> {
-  // 1. Auth gate (T0)
+  // 1. Auth gate — fail CLOSED unless T0_JWT_ENFORCED === '0' (dev only).
   let userId: string | null;
-  if (env.T0_JWT_ENFORCED === '1') {
+  if (env.T0_JWT_ENFORCED !== '0') {
     const auth = req.headers.get('authorization');
     if (!auth || !auth.startsWith('Bearer ')) {
       return json({ error: 'unauthorized' }, 401);

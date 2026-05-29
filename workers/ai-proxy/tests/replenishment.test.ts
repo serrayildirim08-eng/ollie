@@ -31,6 +31,7 @@ function makeEnv(overrides: Partial<ReplenishmentEnv> = {}): ReplenishmentEnv {
   return {
     SUPABASE_URL: 'https://test.supabase.co',
     SUPABASE_SERVICE_ROLE: 'service-role-key',
+    T0_JWT_ENFORCED: '0', // dev/open default; auth tests override with '1'
     ...overrides,
   };
 }

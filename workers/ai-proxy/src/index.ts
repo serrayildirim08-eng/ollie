@@ -387,7 +387,7 @@ async function resolveUserIdForRateLimit(
   req: Request,
   env: Env,
 ): Promise<string | null> {
-  if (env.T0_JWT_ENFORCED === '1') {
+  if (env.T0_JWT_ENFORCED !== '0') {
     const auth = req.headers.get('authorization');
     if (auth && auth.startsWith('Bearer ')) {
       const sub = await verifyClerkJwt(auth.slice('Bearer '.length), env);
