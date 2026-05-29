@@ -59,6 +59,15 @@ function normaliseText(raw: string): string {
   return raw.trim().replace(/\s+/g, ' ');
 }
 
+/** Local ISO-yyyy-mm-dd today; mirrors the helper in admin/repo.ts. */
+function isoTodayWork(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 // ─── tasks ────────────────────────────────────────────────────────────────
 
 export const tasks = {
@@ -148,6 +157,38 @@ export const tasks = {
       [id, text, project, kind, dueDate, now],
     );
     return { id, text, project, kind, dueDate, done: false, createdAt: now };
+  },
+
+  /**
+   * Open work rows for the cross-module /todo aggregate. Two pieces:
+   *   - tasks (kind='task') where `done = 0`
+   *   - deadlines (kind='deadline') where `done = 0` AND
+   *     (due_date IS NULL OR due_date >= today)
+   * Most-recent-first ordering; the TodoScreen does date bucketing.
+   */
+  async listOpen(today: string = isoTodayWork()): Promise<WorkTask[]> {
+    const rows = await sql.select<WorkTaskRow>(
+      `SELECT id, text, project, kind, due_date, done, created_at
+       FROM work_tasks
+       WHERE done = 0
+         AND (
+           kind = 'task'
+           OR (kind = 'deadline' AND (due_date IS NULL OR due_date >= ?))
+         )
+       ORDER BY created_at DESC`,
+      [today],
+    );
+    return rows.map(rowToTask);
+  },
+
+  /** Mark a task complete — used by the /todo screen's check-off
+   *  affordance. Hard-sets done=1 rather than toggleDone, so the call
+   *  site doesn't accidentally un-complete a row. */
+  async markComplete(id: string): Promise<void> {
+    await sql.execute(
+      `UPDATE work_tasks SET done = 1, created_at = ? WHERE id = ?`,
+      [Date.now(), id],
+    );
   },
 
   /** Toggle done state. Refreshes created_at so the row floats to "recent". */

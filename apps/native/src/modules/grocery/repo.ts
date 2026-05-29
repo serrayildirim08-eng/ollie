@@ -242,6 +242,25 @@ export const shopping = {
   async removeByName(name: string): Promise<void> {
     await sql.execute(`DELETE FROM grocery_shopping WHERE name = ?`, [normaliseName(name)]);
   },
+
+  /**
+   * Open shopping rows for the cross-module /todo aggregate. The shopping
+   * list table is itself "things still to buy" — there is no `purchased`
+   * column — so every row is open. Thin alias over `list()` so the
+   * cross-module aggregator can read consistently across modules.
+   */
+  async listOpen(): Promise<ShoppingItem[]> {
+    return shopping.list();
+  },
+
+  /**
+   * Mark a shopping row purchased — semantically the row leaving the
+   * shopping list IS the "done" state. Alias for `remove(id)` named for
+   * the /todo screen's intent.
+   */
+  async markPurchased(id: string): Promise<void> {
+    await sql.execute(`DELETE FROM grocery_shopping WHERE id = ?`, [id]);
+  },
 };
 
 // ─── row mappers ──────────────────────────────────────────────────────────

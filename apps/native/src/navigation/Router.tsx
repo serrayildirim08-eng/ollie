@@ -28,6 +28,7 @@ import { HabitsBox } from "../modules/habits";
 import { GoalsBox } from "../modules/goals";
 import { MedicationBox } from "../modules/medication";
 import { CycleBox } from "../modules/cycle";
+import { TodoScreen } from "../todo/TodoScreen";
 
 const SMCP_STYLE: React.CSSProperties = {
   fontVariantCaps: "all-small-caps",
@@ -52,6 +53,7 @@ export function Router() {
           <Route path="box/medication" element={<MedicationBox />} />
           <Route path="box/cycle" element={<CycleBox />} />
           <Route path="modules" element={<ModulesIndex />} />
+          <Route path="todo" element={<TodoScreen />} />
           <Route path="settings" element={<SettingsScreen />} />
           <Route path="box/:id" element={<BoxPlaceholder />} />
           <Route path="*" element={<NotFoundPlaceholder />} />

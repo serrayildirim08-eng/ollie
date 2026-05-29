@@ -22,10 +22,14 @@ function BackBar(): JSX.Element | null {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // No back on home, modules, settings (top-level tabs).
+  // No back on home, todo, modules, settings (top-level tabs).
   const path = location.pathname.replace(/\/$/, "");
   const isTopLevel =
-    path === "" || path === "/" || path === "/modules" || path === "/settings";
+    path === "" ||
+    path === "/" ||
+    path === "/todo" ||
+    path === "/modules" ||
+    path === "/settings";
   if (isTopLevel) return null;
 
   return (

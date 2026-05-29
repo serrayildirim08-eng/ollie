@@ -24,11 +24,18 @@ export interface RouteEntry {
 /**
  * Primary nav entries — shown in TabBar.
  *
- * Slot count is deliberately tiny: Home, Modules (a future drawer), Settings.
- * Modules drawer will surface the long tail of 30 module shortcuts later.
+ * Slot count is deliberately tiny: Home, To-Do, Modules (a future drawer),
+ * Settings. The Modules drawer will surface the long tail of 30 module
+ * shortcuts later.
+ *
+ * Order rationale: To-Do sits second, between Home and Modules, because
+ * it's the daily-action companion to Home (everything the brain dump has
+ * landed across modules, one bullet list). Modules + Settings stay where
+ * they were so muscle memory survives the addition.
  */
 export const primaryRoutes: readonly RouteEntry[] = [
   { id: "home", path: "/", label: "Home", icon: "House", primary: true },
+  { id: "todo", path: "/todo", label: "To-Do", icon: "ListChecks", primary: true },
   { id: "modules", path: "/modules", label: "Modules", icon: "SquaresFour", primary: true },
   { id: "settings", path: "/settings", label: "Settings", icon: "Gear", primary: true },
 ] as const;
