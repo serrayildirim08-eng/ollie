@@ -32,6 +32,7 @@ import { kv } from '../storage';
 import { colors } from '../theme/tokens';
 import type { RouterOutput, CrisisSignal } from '../router/schema';
 import { usePhotoIntake, PhotoIntakeBar } from './PhotoIntake';
+import { NotifyPrimeLine } from '../notify/NotifyPrimeLine';
 import styles from './BrainDumpInput.module.css';
 
 /**
@@ -171,7 +172,7 @@ export function BrainDumpInput({
       const message =
         isVisionFail ? "Couldn't read the photo. Try again or type it out." :
         code === 'unauthorized' ? 'sign in to dump' :
-        code === 'rate_limited' ? 'too fast — try again in a moment' :
+        code === 'rate_limited' ? 'going too fast — your words are saved, try again in a few seconds' :
         code === 'timeout' ? 'took too long — your words are saved, try again' :
         code === 'network' ? 'no connection — your words are saved, try again' :
         code === 'http' ? `server hiccup (${res.error.status ?? '?'}) — your words are saved` :
@@ -271,6 +272,7 @@ export function BrainDumpInput({
             send
           </Button>
         </Row>
+        <NotifyPrimeLine />
       </Stack>
     </div>
   );
