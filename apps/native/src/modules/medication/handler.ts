@@ -22,31 +22,39 @@ export const medicationHandler: ModuleHandler<'medication'> = {
   async apply(fragment): Promise<HandlerResult> {
     await migrateMedication();
     const p = fragment.payload as MedicationAction;
+
+    // Single undo factory — every medications_events row removes by id.
+    // Registry rows aren't touched on undo (the med stays registered).
+    const undoFor = (id: string) => () => events.remove(id);
+
     switch (p.action) {
       case 'log_dose': {
-        await events.logDose({ medName: p.medName, dose: p.dose });
+        const ev = await events.logDose({ medName: p.medName, dose: p.dose });
         return {
           ok: true,
           note: `logged ${p.medName}${p.dose ? ` (${p.dose})` : ''}`,
           deepLink: '/box/medication',
+          undo: undoFor(ev.id),
         };
       }
 
       case 'missed_dose': {
-        await events.logMissed({ medName: p.medName });
+        const ev = await events.logMissed({ medName: p.medName });
         return {
           ok: true,
           note: `noted missed ${p.medName}`,
           deepLink: '/box/medication',
+          undo: undoFor(ev.id),
         };
       }
 
       case 'side_effect_note': {
-        await events.logSideEffect({ medName: p.medName, note: p.note });
+        const ev = await events.logSideEffect({ medName: p.medName, note: p.note });
         return {
           ok: true,
           note: `noted side effect for ${p.medName}`,
           deepLink: '/box/medication',
+          undo: undoFor(ev.id),
         };
       }
 

@@ -22,51 +22,60 @@ export const petsHandler: ModuleHandler<'pets'> = {
   async apply(fragment): Promise<HandlerResult> {
     await migratePets();
     const p = fragment.payload as PetsAction;
+
+    // Single undo factory — every pets_events kind funnels through the same
+    // remove(id) path.
+    const undoFor = (id: string) => () => events.remove(id);
+
     switch (p.action) {
       case 'log_care': {
-        await events.logCare({ petName: p.petName, what: p.what });
+        const ev = await events.logCare({ petName: p.petName, what: p.what });
         const who = p.petName ? petNameLabel(p.petName) : 'them';
         return {
           ok: true,
           note: `logged care for ${who}: ${p.what}`,
           deepLink: '/box/pets',
+          undo: undoFor(ev.id),
         };
       }
 
       case 'log_observation': {
-        await events.logObservation({ petName: p.petName, note: p.note });
+        const ev = await events.logObservation({ petName: p.petName, note: p.note });
         const who = p.petName ? petNameLabel(p.petName) : 'them';
         return {
           ok: true,
           note: `noted: ${who} · ${p.note}`,
           deepLink: '/box/pets',
+          undo: undoFor(ev.id),
         };
       }
 
       case 'log_vet': {
-        await events.logVet({ petName: p.petName, reason: p.reason });
+        const ev = await events.logVet({ petName: p.petName, reason: p.reason });
         const who = p.petName ? petNameLabel(p.petName) : 'them';
         const tail = p.reason ? ` · ${p.reason}` : '';
         return {
           ok: true,
           note: `vet log for ${who}${tail}`,
           deepLink: '/box/pets',
+          undo: undoFor(ev.id),
         };
       }
 
       case 'log_feed': {
-        await events.logFeed({ petName: p.petName });
+        const ev = await events.logFeed({ petName: p.petName });
         const who = p.petName ? petNameLabel(p.petName) : 'them';
         return {
           ok: true,
           note: `fed ${who}`,
           deepLink: '/box/pets',
+          undo: undoFor(ev.id),
         };
       }
 
       case 'log_supplement': {
         // `pet_id` is in the schema but unused for now — we key by name.
-        await events.logSupplement({
+        const ev = await events.logSupplement({
           petName: p.petName,
           supplement: p.supplement,
           dose: p.dose,
@@ -77,6 +86,7 @@ export const petsHandler: ModuleHandler<'pets'> = {
           ok: true,
           note: `${supplementLabel(p.supplement)} logged for ${who}${dose}`,
           deepLink: '/box/pets',
+          undo: undoFor(ev.id),
         };
       }
 

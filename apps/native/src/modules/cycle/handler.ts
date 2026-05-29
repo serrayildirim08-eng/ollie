@@ -15,25 +15,30 @@ export const cycleHandler: ModuleHandler<'cycle'> = {
   async apply(fragment): Promise<HandlerResult> {
     await migrateCycle();
     const p = fragment.payload as CycleAction;
+
+    // Single undo factory — every cycle_events kind funnels through the same
+    // remove(id) path.
+    const undoFor = (id: string) => () => cycleRepo.remove(id);
+
     switch (p.action) {
       case 'log_period_start': {
-        await cycleRepo.logPeriodStart();
-        return { ok: true, note: 'period start logged', deepLink: '/box/cycle' };
+        const ev = await cycleRepo.logPeriodStart();
+        return { ok: true, note: 'period start logged', deepLink: '/box/cycle', undo: undoFor(ev.id) };
       }
 
       case 'log_period_end': {
-        await cycleRepo.logPeriodEnd();
-        return { ok: true, note: 'period end logged', deepLink: '/box/cycle' };
+        const ev = await cycleRepo.logPeriodEnd();
+        return { ok: true, note: 'period end logged', deepLink: '/box/cycle', undo: undoFor(ev.id) };
       }
 
       case 'log_symptom': {
-        await cycleRepo.logSymptom(p.symptom);
-        return { ok: true, note: `logged ${p.symptom}`, deepLink: '/box/cycle' };
+        const ev = await cycleRepo.logSymptom(p.symptom);
+        return { ok: true, note: `logged ${p.symptom}`, deepLink: '/box/cycle', undo: undoFor(ev.id) };
       }
 
       case 'pill_logged': {
-        await cycleRepo.logPill();
-        return { ok: true, note: 'pill logged', deepLink: '/box/cycle' };
+        const ev = await cycleRepo.logPill();
+        return { ok: true, note: 'pill logged', deepLink: '/box/cycle', undo: undoFor(ev.id) };
       }
 
       default:

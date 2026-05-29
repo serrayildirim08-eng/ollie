@@ -36,6 +36,7 @@ const SIMILARITY_THRESHOLD = 0.85;
 const CAP_PER_USER = 10_000;
 const DECAY_DAYS = 30;
 const DECAY_MS = DECAY_DAYS * 24 * 60 * 60 * 1000;
+const TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 export interface VectorizeIndex {
   query(
@@ -95,6 +96,11 @@ export async function cacheLookup(
   if (top.score < SIMILARITY_THRESHOLD) return null;
 
   const meta = top.metadata ?? {};
+
+  // TTL: drop entries older than 30 days (misclassified entries would poison cache forever).
+  const createdAt = typeof meta.createdAt === 'number' ? meta.createdAt : 0;
+  if (Date.now() - createdAt > TTL_MS) return null;
+
   return {
     id: top.id,
     module: meta.module as Module,
@@ -180,10 +186,37 @@ export function evictionScore(hitCount: number, lastHitAt: number, now = Date.no
   return hitCount * Math.exp(-ageMs / DECAY_MS);
 }
 
+/**
+ * Delete all Vectorize entries for a given user namespace.
+ * Use when a user reports systematic misclassification and needs a clean slate.
+ *
+ * Vectorize does not support filter-based delete; we query with a zero vector
+ * to pull all entry ids for the user (topK capped at 10k = CAP_PER_USER),
+ * then delete by id. Fire-and-forget safe — caller can void the result.
+ */
+export async function invalidateCacheForUser(
+  userId: string,
+  index: VectorizeIndex,
+): Promise<{ deleted: number }> {
+  const zero = new Array<number>(1024).fill(0);
+  const result = await index.query(zero, {
+    topK: CAP_PER_USER,
+    filter: { userId },
+    returnMetadata: false,
+  });
+
+  if (!result.matches || result.matches.length === 0) return { deleted: 0 };
+
+  const ids = result.matches.map((m) => m.id);
+  await index.deleteByIds(ids);
+  return { deleted: ids.length };
+}
+
 export const VECTORIZE_DEFAULTS = {
   SIMILARITY_THRESHOLD,
   CAP_PER_USER,
   DECAY_DAYS,
+  TTL_MS,
 };
 
 /**

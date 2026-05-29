@@ -142,6 +142,11 @@ export const completions = {
     );
     return rows.length > 0;
   },
+
+  /** Delete one completion row by id — backs the dump-card undo path. */
+  async remove(id: string): Promise<void> {
+    await sql.execute(`DELETE FROM habits_completions WHERE id = ?`, [id]);
+  },
 };
 
 // ─── events (streak breaks + identity statements) ─────────────────────────

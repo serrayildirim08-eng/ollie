@@ -21,6 +21,7 @@ export const financeHandler: ModuleHandler<'finance'> = {
   async apply(fragment): Promise<HandlerResult> {
     await migrateFinance();
     const p = fragment.payload as FinanceAction;
+
     switch (p.action) {
       case 'log_transaction': {
         const tx = await transactions.add({
@@ -33,6 +34,7 @@ export const financeHandler: ModuleHandler<'finance'> = {
           ok: true,
           note: `logged ${label}`,
           deepLink: '/box/finance',
+          undo: () => transactions.remove(tx.id),
         };
       }
 
@@ -42,10 +44,16 @@ export const financeHandler: ModuleHandler<'finance'> = {
           amount: p.amount ?? null,
           cadence: p.cadence ?? null,
         });
+        // NOTE: bills.add is an upsert — undo removes the row even if it was
+        // a refresh-of-existing rather than a fresh insert. The trade-off is
+        // intentional: the user said "undo what I just dumped" and the
+        // visible state delta is the merchant row regardless of whether it
+        // existed before. Same pattern as subscriptions below.
         return {
           ok: true,
           note: `added bill: ${bill.merchant}`,
           deepLink: '/box/finance',
+          undo: () => bills.remove(bill.id),
         };
       }
 
@@ -53,7 +61,7 @@ export const financeHandler: ModuleHandler<'finance'> = {
         // Stored as a transaction with a "savings" merchant tag so the box
         // surfaces it. Amount nullable; note is dev-only for now (no
         // dedicated notes column yet).
-        await transactions.add({
+        const tx = await transactions.add({
           amount: p.amount ?? null,
           merchant: 'savings',
         });
@@ -61,6 +69,7 @@ export const financeHandler: ModuleHandler<'finance'> = {
           ok: true,
           note: p.note ? `savings: ${p.note}` : 'savings noted',
           deepLink: '/box/finance',
+          undo: () => transactions.remove(tx.id),
         };
       }
 
@@ -77,6 +86,7 @@ export const financeHandler: ModuleHandler<'finance'> = {
           ok: true,
           note: `tracked subscription: ${sub.name}`,
           deepLink: '/box/finance',
+          undo: () => subscriptions.remove(sub.id),
         };
       }
 

@@ -38,6 +38,8 @@ import type {
   PushRegisterRequest,
   PushRegisterResponse,
   RouteDumpRequest,
+  RouteModuleRequest,
+  RouteModuleResponse,
   SentryEnvelope,
 } from './types';
 import type { RouterOutput } from '../router/schema';
@@ -62,6 +64,28 @@ const urls = {
   get apnsPush() { return workerUrl('VITE_APNS_PUSH_URL', 'https://ollie-apns.ollieapp.workers.dev'); },
   get sentryTunnel() { return workerUrl('VITE_SENTRY_TUNNEL_URL', 'https://ollie-sentry.ollieapp.workers.dev'); },
 };
+
+// ─── ai-proxy: /route/:module — module-specific Layer 2 routing ───────────────
+
+/**
+ * Re-route an ambiguous fragment through the module-specific AI endpoint.
+ * Called by module handlers when Layer 1 emits `dump_only` or `needsConfirm`.
+ *
+ * The worker responds with a `RouteModuleResponse` whose `actions` array the
+ * caller uses to replace the original fragment action before persisting.
+ */
+export function routeModule(
+  module: string,
+  text: string,
+  opts: { bearer: string; timeoutMs?: number },
+): Promise<ApiResult<RouteModuleResponse>> {
+  const req: RouteModuleRequest = { module, text };
+  return post<RouteModuleResponse>(
+    `${urls.aiProxy}/route/${module}`,
+    req,
+    { authJwt: opts.bearer, timeoutMs: opts.timeoutMs ?? 15_000 },
+  );
+}
 
 // ─── ai-proxy: /route/dump — v2 brain-dump router ─────────────────────────────
 

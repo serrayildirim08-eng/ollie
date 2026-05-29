@@ -34,14 +34,16 @@ export const groceryHandler: ModuleHandler<'grocery'> = {
         // only when a price is actually present.
         const price = (p as { price?: number | null }).price;
         const currency = (p as { currency?: string | null }).currency ?? null;
+        let financeRowId: string | null = null;
         if (typeof price === 'number' && Number.isFinite(price) && price > 0) {
           try {
             await migrateFinance();
-            await financeTransactions.add({
+            const tx = await financeTransactions.add({
               amount: price,
               currency,
               merchant: item.name,
             });
+            financeRowId = tx.id;
           } catch (err) {
             console.error('[grocery] finance mirror failed', err);
           }
@@ -51,6 +53,12 @@ export const groceryHandler: ModuleHandler<'grocery'> = {
           ok: true,
           note: `added ${item.name} to your pantry`,
           deepLink: '/box/grocery',
+          undo: async () => {
+            await pantry.remove(item.id);
+            if (financeRowId) {
+              try { await financeTransactions.remove(financeRowId); } catch { /* best-effort */ }
+            }
+          },
         };
       }
 
@@ -64,15 +72,23 @@ export const groceryHandler: ModuleHandler<'grocery'> = {
           ok: true,
           note: `added ${item.name} to your shopping list`,
           deepLink: '/box/grocery',
+          undo: () => shopping.remove(item.id),
         };
       }
 
       case 'pantry_use': {
+        // Undo intentionally omitted — pantry.use deletes (or decrements)
+        // the row; rebuilding the prior quantity from a dump card is more
+        // surface area than we want for the silent-dump UX. The user can
+        // re-add via a fresh dump.
         await pantry.use({ name: p.item });
         return { ok: true, note: `marked ${p.item} as used`, deepLink: '/box/grocery' };
       }
 
       case 'pantry_low_flag': {
+        // Undo intentionally omitted — flipping `low_flag` back to 0 isn't
+        // a clean inverse (we don't know whether the row was flagged before
+        // we touched it, and flagLow may have inserted a placeholder row).
         await pantry.flagLow(p.item);
         return { ok: true, note: `flagged ${p.item} as running low`, deepLink: '/box/grocery' };
       }

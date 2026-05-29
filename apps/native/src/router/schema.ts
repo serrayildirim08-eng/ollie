@@ -128,13 +128,25 @@ export type BodyAction =
    * "did 10 reps". MAY multi-route to habits.complete in parallel when the user
    * has a corresponding habit registered (see ARCH_DECISION_NEEDED.md →
    * "movement routes to BOTH body and habits per context"). Downstream concern.
+   *
+   * `pet` is an optional side-effect hint — when the movement involved a pet
+   * ("walked the dog", "tontin'i gezdirdim") the AI populates the proper-noun
+   * name so the body handler can mirror to pets.log_care. Following grocery's
+   * price→finance convention (Approach B: primary handler emits secondary,
+   * see grocery/handler.ts ~line 32-55 for rationale).
    */
-  | { module: 'body'; action: 'log_movement'; type: 'walk' | 'stretch' | 'lift' | string; duration_min?: number };
+  | { module: 'body'; action: 'log_movement'; type: 'walk' | 'stretch' | 'lift' | string; duration_min?: number; pet?: string };
 
 // ── WORK ─────────────────────────────────────────────────────────────
 
 export type WorkAction =
-  | { module: 'work'; action: 'log_focus_session'; durationMin?: number; project?: string }
+  /**
+   * `skipped_meals` is an optional side-effect hint — when the user mentions
+   * a hyperfocus / deep-work block paired with not eating ("hyperfocused all
+   * morning, didn't eat") the AI sets it true so the work handler can mirror
+   * to body.log_hunger. Approach B (see grocery/handler.ts).
+   */
+  | { module: 'work'; action: 'log_focus_session'; durationMin?: number; project?: string; skipped_meals?: boolean }
   | { module: 'work'; action: 'create_task'; text: string; project?: string }
   | { module: 'work'; action: 'log_deadline'; text: string; dueDate?: string }
   | { module: 'work'; action: 'log_meeting'; with?: string; durationMin?: number }
@@ -199,8 +211,13 @@ export type SleepAction =
    * Insomnia — semantically distinct from `log_sleep` with quality 1.
    * "Didn't sleep at all" vs "slept 4h badly" are different downstream
    * (insomnia detector pattern, sleep-onset analysis, etc.).
+   *
+   * `med_taken` is an optional side-effect hint — when the insomnia mention
+   * is paired with a sleep aid ("couldn't sleep so took melatonin") the AI
+   * populates the med name (and `med_dose` when given) so the sleep handler
+   * can mirror to medication.log_dose. Approach B (see grocery/handler.ts).
    */
-  | { module: 'sleep'; action: 'log_insomnia'; duration_attempted_min?: number; woke_count?: number };
+  | { module: 'sleep'; action: 'log_insomnia'; duration_attempted_min?: number; woke_count?: number; med_taken?: string; med_dose?: string };
 
 // ── HABITS ───────────────────────────────────────────────────────────
 
@@ -265,4 +282,10 @@ export interface HandlerResult {
   deepLink?: string;
   /** Set when handler wants the user to confirm before persisting */
   needsConfirm?: boolean;
+  /**
+   * Real undo for the needsConfirm card. When the handler writes a row, it
+   * captures the row id and returns a closure that removes it. Omitted when
+   * the handler did not persist (dump_only, validation reject, etc.).
+   */
+  undo?: () => Promise<void>;
 }

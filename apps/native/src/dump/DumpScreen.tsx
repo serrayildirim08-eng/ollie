@@ -18,7 +18,9 @@ import { Text } from '../ui';
 import { colors } from '../theme/tokens';
 import { BrainDumpInput } from './BrainDumpInput';
 import { dispatchRouterOutput } from '../modules';
+import type { DispatchEntry } from '../modules';
 import type { CrisisSignal, RouterOutput } from '../router/schema';
+import { NeedsConfirmCard } from './NeedsConfirmCard';
 import styles from './DumpScreen.module.css';
 
 const SMCP_STYLE: React.CSSProperties = {
@@ -34,10 +36,31 @@ const ACK_FADE_MS = 2500;
 // when the same Ack node would otherwise persist across submits.
 let _ackTick = 0;
 
+/** One pending confirmation card — keyed by fragment index in the last dispatch. */
+interface PendingConfirm {
+  /** Stable id: dumpId + fragment index in that dispatch. */
+  id: string;
+  fragmentPreview: string;
+  routeLabel: string;
+  /** Called when user clicks undo — best-effort remove on the module handler. */
+  onUndo: () => void;
+}
+
+function buildRouteLabel(entry: DispatchEntry): string {
+  const { module, payload } = entry.fragment;
+  // Every ActionPayload variant carries an `action` string discriminant.
+  // We narrow via `in` first; the index access is safe because the union
+  // guarantees `action` is always a string when the key exists.
+  const action =
+    'action' in payload && typeof payload.action === 'string' ? payload.action : '';
+  return action ? `${module} · ${action}` : module;
+}
+
 export function DumpScreen(): JSX.Element {
   const { getToken } = useAuth();
   const [ackKey, setAckKey] = useState<number | null>(null);
   const [crisis, setCrisis] = useState<CrisisSignal | null>(null);
+  const [pendingConfirms, setPendingConfirms] = useState<PendingConfirm[]>([]);
 
   // Auto-clear the ack so the DOM cleans up after the fade-out and the
   // screen returns to its quiet default state.
@@ -55,14 +78,55 @@ export function DumpScreen(): JSX.Element {
     const t = await getToken();
     return t ?? '';
   }, [getToken]);
+
+  const dismissConfirm = useCallback((id: string) => {
+    setPendingConfirms((prev) => prev.filter((c) => c.id !== id));
+  }, []);
+
   const onResult = useCallback(async (output: RouterOutput) => {
     // Dispatch is silent: the result entries update module-local state but
     // we do not render them. The user goes to the module to see the change.
     const dispatched = await dispatchRouterOutput(output);
     if (dispatched.crisisSkipped) return;
+
+    // Surface a confirm card for each uncertain fragment. Both the fragment-
+    // level flag (set by the router before dispatch) and the handler result
+    // flag are checked — whichever layer sets needsConfirm wins.
+    const cards: PendingConfirm[] = dispatched.entries
+      .filter(
+        (e) => e.fragment.needsConfirm === true || e.result.needsConfirm === true,
+      )
+      .map((e, i) => {
+        const id = `${output.dumpId}-${i}`;
+        const realUndo = e.result.undo;
+        return {
+          id,
+          fragmentPreview: e.fragment.text.slice(0, 60),
+          routeLabel: buildRouteLabel(e),
+          // Run the handler's real undo closure first (removes the written
+          // row), then dismiss the card. Handlers that did not persist
+          // (dump_only, validation reject) omit `undo` — we just dismiss.
+          onUndo: async () => {
+            if (realUndo) {
+              try {
+                await realUndo();
+              } catch (err) {
+                console.error('[dump] undo failed', err);
+              }
+            }
+            dismissConfirm(id);
+          },
+        };
+      });
+
+    if (cards.length > 0) {
+      setPendingConfirms((prev) => [...prev, ...cards]);
+    }
+
     _ackTick += 1;
     setAckKey(_ackTick);
-  }, []);
+  }, [dismissConfirm]);
+
   const onCrisis = useCallback((signal: CrisisSignal) => {
     setCrisis(signal);
   }, []);
@@ -81,6 +145,20 @@ export function DumpScreen(): JSX.Element {
       {crisis && <CrisisBanner crisis={crisis} onDismiss={() => setCrisis(null)} />}
 
       {!crisis && ackKey !== null && <Ack key={ackKey} />}
+
+      {!crisis && pendingConfirms.length > 0 && (
+        <Stack gap={10}>
+          {pendingConfirms.map((card) => (
+            <NeedsConfirmCard
+              key={card.id}
+              fragmentPreview={card.fragmentPreview}
+              routeLabel={card.routeLabel}
+              onKeep={() => dismissConfirm(card.id)}
+              onUndo={card.onUndo}
+            />
+          ))}
+        </Stack>
+      )}
     </Stack>
   );
 }
