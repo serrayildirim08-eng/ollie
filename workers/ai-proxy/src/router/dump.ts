@@ -54,9 +54,11 @@ import {
 } from './vectorize';
 import { base64ByteSize, isVisionImage, visionExtract, type VisionImage } from './vision';
 
-/** Hard upper bound on the raw image bytes the worker accepts. Frontend
- *  resizes to ~700KB; this is defensive against direct API callers. */
-const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
+/** Hard upper bound on the raw image/pdf bytes the worker accepts.
+ *  Frontend resizes images to ~700KB; PDFs aren't resized and routinely
+ *  hit the multi-MB range. Cap chosen to fit a multi-page receipt PDF
+ *  or scanned form while still bounding worker memory + Gemini upload. */
+const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 
 const VOYAGE_MODEL = 'voyage-multilingual-2';
 const VOYAGE_EMBED_DIM = 1024;

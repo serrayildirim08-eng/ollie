@@ -31,11 +31,15 @@ Focus areas (cover what's actually visible — skip what isn't):
 
 If the image doesn't fit any of these categories or is unintelligible, output exactly: "Image unrelated to known brain-dump categories."`;
 
-export type VisionImageMime = 'image/jpeg' | 'image/png' | 'image/webp';
+export type VisionImageMime =
+  | 'image/jpeg'
+  | 'image/png'
+  | 'image/webp'
+  | 'application/pdf';
 
 export interface VisionImage {
   mime: VisionImageMime;
-  /** base64-encoded image payload, no data: URL prefix. */
+  /** base64-encoded payload, no data: URL prefix. */
   data: string;
 }
 
@@ -113,6 +117,7 @@ const ALLOWED_MIMES: ReadonlySet<string> = new Set([
   'image/jpeg',
   'image/png',
   'image/webp',
+  'application/pdf',
 ]);
 
 export function isVisionImage(value: unknown): value is VisionImage {

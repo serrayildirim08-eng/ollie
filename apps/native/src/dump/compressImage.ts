@@ -45,7 +45,12 @@ const ALLOWED_MIMES: ReadonlySet<string> = new Set<RouteDumpImageMime>([
   'image/jpeg',
   'image/png',
   'image/webp',
+  'application/pdf',
 ]);
+
+/** Raw byte cap on PDFs (no client-side resize possible). Matches worker
+ *  MAX_IMAGE_BYTES (8MB) minus headroom for base64 inflation. */
+export const MAX_PDF_RAW_BYTES = 6 * 1024 * 1024;
 
 // ─── pure: resize math + budget verdict (testable, no Canvas needed) ─────────
 
@@ -163,6 +168,20 @@ function pngHasAlpha(img: HTMLImageElement): boolean {
 export async function compressImage(input: Blob): Promise<CompressResult> {
   if (!ALLOWED_MIMES.has(input.type)) {
     return { ok: false, reason: 'unsupported_mime' };
+  }
+
+  // PDF path: no canvas, no resize. Cap raw size + base64 encode the bytes.
+  if (input.type === 'application/pdf') {
+    if (input.size > MAX_PDF_RAW_BYTES) {
+      return { ok: false, reason: 'too_large' };
+    }
+    let data: string;
+    try {
+      data = await blobToBase64(input);
+    } catch {
+      return { ok: false, reason: 'decode_failed' };
+    }
+    return { ok: true, image: { mime: 'application/pdf', data } };
   }
 
   let img: HTMLImageElement;

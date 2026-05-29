@@ -32,7 +32,11 @@ export type ApiResult<T> =
  * this list is rejected client-side before encoding so the worker never
  * sees a malformed payload.
  */
-export type RouteDumpImageMime = 'image/jpeg' | 'image/png' | 'image/webp';
+export type RouteDumpImageMime =
+  | 'image/jpeg'
+  | 'image/png'
+  | 'image/webp'
+  | 'application/pdf';
 
 export interface RouteDumpImage {
   mime: RouteDumpImageMime;

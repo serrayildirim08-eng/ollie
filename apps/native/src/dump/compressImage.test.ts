@@ -17,6 +17,7 @@ import {
   compressImage,
   MAX_DIM,
   MAX_B64_BYTES,
+  MAX_PDF_RAW_BYTES,
 } from './compressImage';
 
 describe('fitWithin', () => {
@@ -88,5 +89,25 @@ describe('compressImage entry-validation', () => {
     const result = await compressImage(blob);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toBe('decode_failed');
+  });
+
+  it('accepts a small PDF blob and returns application/pdf payload', async () => {
+    // 12 fake bytes; PDF path skips canvas entirely, just size-checks + base64.
+    const pdf = new Blob([new Uint8Array([0x25, 0x50, 0x44, 0x46, 1, 2, 3, 4, 5, 6, 7, 8])], {
+      type: 'application/pdf',
+    });
+    const result = await compressImage(pdf);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.image.mime).toBe('application/pdf');
+      expect(result.image.data.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('rejects a PDF blob larger than MAX_PDF_RAW_BYTES with too_large', async () => {
+    const big = new Blob([new Uint8Array(MAX_PDF_RAW_BYTES + 1)], { type: 'application/pdf' });
+    const result = await compressImage(big);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toBe('too_large');
   });
 });

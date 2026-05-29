@@ -218,15 +218,28 @@ describe('/route/dump — vision augmentation', () => {
     expect(res.status).toBe(400);
   });
 
-  it('returns 413 when image exceeds 2MB raw', async () => {
+  it('returns 413 when payload exceeds 8MB raw', async () => {
     installFetchMock();
-    // Base64 of ~3MB raw = ~4MB string. Build a fake oversized payload.
-    const bigData = 'A'.repeat(Math.ceil((2 * 1024 * 1024 + 1) * 4 / 3));
+    const bigData = 'A'.repeat(Math.ceil((8 * 1024 * 1024 + 1) * 4 / 3));
     const res = await handleDumpRoute(
       makeReq({ image: { mime: 'image/jpeg', data: bigData } }),
       makeEnv(),
     );
     expect(res.status).toBe(413);
+  });
+
+  it('accepts application/pdf and routes through vision', async () => {
+    installFetchMock({
+      description: 'Lease renewal form, expires 2026-09-30, tenant: anonymized.',
+    });
+    const res = await handleDumpRoute(
+      makeReq({ image: { mime: 'application/pdf', data: TINY_PNG_BASE64 } }),
+      makeEnv(),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { visionUsed?: boolean; originalDump: string };
+    expect(body.visionUsed).toBe(true);
+    expect(body.originalDump).toContain('Lease renewal');
   });
 
   it('returns 503 when GEMINI_API_KEY missing and image present', async () => {
