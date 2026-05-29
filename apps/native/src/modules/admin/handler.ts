@@ -7,9 +7,10 @@
  * future surface that wants to show what happened.
  */
 
-import type { AdminAction, ModuleHandler, HandlerResult } from '../../router/schema';
+import type { AdminAction, ModuleHandler, HandlerResult, RemindIn } from '../../router/schema';
 import { migrateAdmin } from './migrate';
 import { renewals, tasks } from './repo';
+import { scheduleAt } from '../../notify/systemNotify';
 
 export const adminHandler: ModuleHandler<'admin'> = {
   module: 'admin',
@@ -25,6 +26,9 @@ export const adminHandler: ModuleHandler<'admin'> = {
     switch (p.action) {
       case 'create_task': {
         const task = await tasks.add({ kind: 'task', text: p.text, data: { kind: 'task' } });
+        // Time-deferred reminder side-effect (Approach B). The worker
+        // computes scheduledAtMs from the user's "in N min/hr" hint.
+        scheduleReminderIfPresent(p.remindIn, 'to do', p.text);
         return { ok: true, note: `noted: ${p.text}`, deepLink: '/box/admin', undo: undoTask(task.id) };
       }
 
@@ -36,6 +40,9 @@ export const adminHandler: ModuleHandler<'admin'> = {
           data: { kind: 'phone', reason: p.reason },
         });
         const note = p.reason ? `call ${p.person} — ${p.reason}` : `call ${p.person}`;
+        // Time-deferred reminder side-effect (Approach B).
+        const reminderBody = p.reason ? `${p.person} · ${p.reason}` : p.person;
+        scheduleReminderIfPresent(p.remindIn, 'call', reminderBody);
         return { ok: true, note, deepLink: '/box/admin', undo: undoTask(task.id) };
       }
 
@@ -78,4 +85,19 @@ export const adminHandler: ModuleHandler<'admin'> = {
 
 function exhaustive(p: never): never {
   throw new Error(`admin: unhandled action ${JSON.stringify(p)}`);
+}
+
+/**
+ * If a routed task carries a `remindIn` hint (worker-resolved against the
+ * dump clock), ask the system to fire a notification when the timer hits.
+ * Fire-and-forget — the schedule is a side-effect of the row write, never
+ * a blocker. No-op when remindIn is absent or its scheduledAtMs is missing.
+ */
+function scheduleReminderIfPresent(
+  remindIn: RemindIn | undefined,
+  title: string,
+  body: string,
+): void {
+  if (!remindIn || typeof remindIn.scheduledAtMs !== 'number') return;
+  scheduleAt(remindIn.scheduledAtMs, { title, body });
 }

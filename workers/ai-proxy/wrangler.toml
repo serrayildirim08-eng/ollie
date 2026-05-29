@@ -30,6 +30,12 @@ id = "5e222944bc8f450cb3cca05e709e3b88"
 binding = "VECTORIZE_INDEX"
 index_name = "ollie-routing-cache"
 
+# ─── Workers AI (brain-dump classify fallback) ─────────────────────────────────
+# Same-platform classify backup in the Groq → Cloudflare → Gemini cascade.
+# No API key (it's a binding), ~10k neurons/day free. env.AI in the worker.
+[ai]
+binding = "AI"
+
 # ─── native Rate Limiting bindings (item #5) ───────────────────────────────────
 # These replace the racy KV-counter rate limiter. The binding is DECLARATIVE —
 # Cloudflare provisions it automatically on `wrangler deploy`, no `wrangler`
@@ -119,6 +125,10 @@ id = "5e222944bc8f450cb3cca05e709e3b88"
 [[env.staging.vectorize]]
 binding = "VECTORIZE_INDEX"
 index_name = "ollie-routing-cache"
+
+# Workers AI binding (named envs don't inherit the top-level [ai]).
+[env.staging.ai]
+binding = "AI"
 
 [[env.staging.ratelimits]]
 name = "AI_RATE_LIMITER"

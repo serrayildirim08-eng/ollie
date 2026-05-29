@@ -155,16 +155,30 @@ export type WorkAction =
    * to body.log_hunger. Approach B (see grocery/handler.ts).
    */
   | { module: 'work'; action: 'log_focus_session'; durationMin?: number; project?: string; skipped_meals?: boolean }
-  | { module: 'work'; action: 'create_task'; text: string; project?: string }
+  | { module: 'work'; action: 'create_task'; text: string; project?: string; remindIn?: RemindIn }
   | { module: 'work'; action: 'log_deadline'; text: string; dueDate?: string }
   | { module: 'work'; action: 'log_meeting'; with?: string; durationMin?: number }
   | { module: 'work'; action: 'distraction_journal'; what: string };
 
 // ── ADMIN ────────────────────────────────────────────────────────────
 
+/**
+ * Time-deferred reminder hint (Approach B). The worker may attach a
+ * `remindIn` field to admin / work tasks when the user dumps
+ * "remind me to X in N min/hour/day". `scheduledAtMs` is computed
+ * server-side in `workers/ai-proxy/src/router/remindIn.ts` against the
+ * worker's `Date.now()` so handlers don't redo clock math. The handler
+ * fires a single system notification at that timestamp.
+ */
+export interface RemindIn {
+  amount: number;
+  unit: 'sec' | 'min' | 'hr' | 'day';
+  scheduledAtMs: number;
+}
+
 export type AdminAction =
-  | { module: 'admin'; action: 'create_task'; text: string }
-  | { module: 'admin'; action: 'create_phone_task'; person: string; reason?: string }
+  | { module: 'admin'; action: 'create_task'; text: string; remindIn?: RemindIn }
+  | { module: 'admin'; action: 'create_phone_task'; person: string; reason?: string; remindIn?: RemindIn }
   | { module: 'admin'; action: 'schedule_appointment'; what: string; date?: string }
   | { module: 'admin'; action: 'log_paperwork'; what: string }
   | { module: 'admin'; action: 'recurring_decision'; what: string }

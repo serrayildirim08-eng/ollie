@@ -155,4 +155,108 @@ describe('/route/dump — smoke', () => {
     const res = await handleDumpRoute(makeReq({}), env);
     expect(res.status).toBe(400);
   });
+
+  it('injects scheduledAtMs into payload when Layer 1 emits a remindIn hint', async () => {
+    const env = makeEnv();
+
+    // Override the default fetch impl with one that returns a classification
+    // carrying a remindIn hint. The worker should compute scheduledAtMs and
+    // attach it to the fragment payload before returning.
+    fetchSpy.mockReset();
+    fetchSpy.mockImplementation(async (input: Request | string | URL) => {
+      const url = typeof input === 'string' ? input : (input instanceof Request ? input.url : input.toString());
+      if (url.includes('voyageai.com')) {
+        return new Response(JSON.stringify({ data: [{ embedding: Array(1024).fill(0.1) }] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.includes('api.groq.com')) {
+        const fakeClassification = {
+          module: 'admin',
+          action: 'create_phone_task',
+          confidence: 0.92,
+          payload: { person: 'mama', remindIn: { amount: 1, unit: 'min' } },
+        };
+        return new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: { content: JSON.stringify({ results: [fakeClassification] }) },
+                finish_reason: 'stop',
+              },
+            ],
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      return new Response('not found', { status: 404 });
+    });
+
+    const before = Date.now();
+    const res = await handleDumpRoute(makeReq({ text: 'remind me to call mama in 1 minute' }), env);
+    const after = Date.now();
+    expect(res.status).toBe(200);
+
+    const body = (await res.json()) as {
+      fragments: Array<{ payload: Record<string, unknown> }>;
+    };
+    expect(body.fragments).toHaveLength(1);
+    const remindIn = body.fragments[0].payload.remindIn as
+      | { amount: number; unit: string; scheduledAtMs: number }
+      | undefined;
+    expect(remindIn).toBeDefined();
+    expect(remindIn?.amount).toBe(1);
+    expect(remindIn?.unit).toBe('min');
+    // 60_000 ms after request start ± a small slack for the elapsed test.
+    expect(remindIn?.scheduledAtMs).toBeGreaterThanOrEqual(before + 60_000);
+    expect(remindIn?.scheduledAtMs).toBeLessThanOrEqual(after + 60_000);
+  });
+
+  it('drops a malformed remindIn (no scheduledAtMs surfaced)', async () => {
+    const env = makeEnv();
+
+    fetchSpy.mockReset();
+    fetchSpy.mockImplementation(async (input: Request | string | URL) => {
+      const url = typeof input === 'string' ? input : (input instanceof Request ? input.url : input.toString());
+      if (url.includes('voyageai.com')) {
+        return new Response(JSON.stringify({ data: [{ embedding: Array(1024).fill(0.1) }] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.includes('api.groq.com')) {
+        const fakeClassification = {
+          module: 'admin',
+          action: 'create_task',
+          confidence: 0.92,
+          // 5000-day "reminder" — sanity guard should drop the hint entirely.
+          payload: { text: 'do thing', remindIn: { amount: 5000, unit: 'day' } },
+        };
+        return new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: { content: JSON.stringify({ results: [fakeClassification] }) },
+                finish_reason: 'stop',
+              },
+            ],
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      return new Response('not found', { status: 404 });
+    });
+
+    const res = await handleDumpRoute(makeReq({ text: 'remind me to do thing in 5000 days' }), env);
+    expect(res.status).toBe(200);
+
+    const body = (await res.json()) as {
+      fragments: Array<{ payload: Record<string, unknown> }>;
+    };
+    expect(body.fragments).toHaveLength(1);
+    // The primary write payload still goes through; only remindIn is dropped.
+    expect(body.fragments[0].payload.text).toBe('do thing');
+    expect(body.fragments[0].payload.remindIn).toBeUndefined();
+  });
 });

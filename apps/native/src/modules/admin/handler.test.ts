@@ -23,7 +23,12 @@ vi.mock('./repo', () => ({
   },
 }));
 
+vi.mock('../../notify/systemNotify', () => ({
+  scheduleAt: vi.fn(() => ({ cancel: () => {} })),
+}));
+
 import { tasks, renewals } from './repo';
+import { scheduleAt } from '../../notify/systemNotify';
 import { adminHandler } from './handler';
 import type { Fragment } from '../../router/schema';
 
@@ -60,5 +65,115 @@ describe('adminHandler — undo', () => {
     expect(result.undo).toBeTypeOf('function');
     await result.undo!();
     expect(vi.mocked(renewals.remove)).toHaveBeenCalledWith('ren-id');
+  });
+});
+
+describe('adminHandler — time-deferred reminder (remindIn)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('create_phone_task with remindIn schedules a "call · person" notification at scheduledAtMs', async () => {
+    const fireAt = Date.now() + 60_000;
+    const fragment: Fragment = {
+      text: 'remind me to call mama in 1 minute',
+      language: 'en',
+      module: 'admin',
+      payload: {
+        module: 'admin',
+        action: 'create_phone_task',
+        person: 'mama',
+        remindIn: { amount: 1, unit: 'min', scheduledAtMs: fireAt },
+      },
+      confidence: 0.92,
+      source: 'ai',
+    };
+
+    await adminHandler.apply(fragment);
+
+    expect(vi.mocked(scheduleAt)).toHaveBeenCalledOnce();
+    expect(vi.mocked(scheduleAt)).toHaveBeenCalledWith(fireAt, {
+      title: 'call',
+      body: 'mama',
+    });
+  });
+
+  it('create_phone_task with reason adds " · reason" to the body', async () => {
+    const fireAt = Date.now() + 120_000;
+    const fragment: Fragment = {
+      text: 'remind me to call mama about christmas in 2 minutes',
+      language: 'en',
+      module: 'admin',
+      payload: {
+        module: 'admin',
+        action: 'create_phone_task',
+        person: 'mama',
+        reason: 'christmas',
+        remindIn: { amount: 2, unit: 'min', scheduledAtMs: fireAt },
+      },
+      confidence: 0.92,
+      source: 'ai',
+    };
+
+    await adminHandler.apply(fragment);
+
+    expect(vi.mocked(scheduleAt)).toHaveBeenCalledWith(fireAt, {
+      title: 'call',
+      body: 'mama · christmas',
+    });
+  });
+
+  it('create_task with remindIn schedules a "to do · text" notification', async () => {
+    const fireAt = Date.now() + 1_800_000;
+    const fragment: Fragment = {
+      text: 'remind me to take my zoloft in 30 minutes',
+      language: 'en',
+      module: 'admin',
+      payload: {
+        module: 'admin',
+        action: 'create_task',
+        text: 'take zoloft',
+        remindIn: { amount: 30, unit: 'min', scheduledAtMs: fireAt },
+      },
+      confidence: 0.91,
+      source: 'ai',
+    };
+
+    await adminHandler.apply(fragment);
+
+    expect(vi.mocked(scheduleAt)).toHaveBeenCalledWith(fireAt, {
+      title: 'to do',
+      body: 'take zoloft',
+    });
+  });
+
+  it('create_phone_task WITHOUT remindIn does NOT schedule anything', async () => {
+    const fragment: Fragment = {
+      text: 'call dentist',
+      language: 'en',
+      module: 'admin',
+      payload: { module: 'admin', action: 'create_phone_task', person: 'dentist' },
+      confidence: 0.92,
+      source: 'ai',
+    };
+
+    await adminHandler.apply(fragment);
+
+    expect(vi.mocked(scheduleAt)).not.toHaveBeenCalled();
+  });
+
+  it('create_task WITHOUT remindIn does NOT schedule anything', async () => {
+    const fragment: Fragment = {
+      text: 'renew library card',
+      language: 'en',
+      module: 'admin',
+      payload: { module: 'admin', action: 'create_task', text: 'renew library card' },
+      confidence: 0.92,
+      source: 'ai',
+    };
+
+    await adminHandler.apply(fragment);
+
+    expect(vi.mocked(scheduleAt)).not.toHaveBeenCalled();
   });
 });

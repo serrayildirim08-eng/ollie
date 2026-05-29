@@ -13,6 +13,7 @@
 
 import { groqChat } from '../groq';
 import { geminiJson } from '../gemini';
+import { cloudflareJson, type CfAiBinding } from '../cloudflare-ai';
 import type { FragmentLanguage, Module } from './dump-schema';
 
 // Allowed Module values (enumerated in the system prompt so the model
@@ -67,6 +68,7 @@ Action disambiguation hints:
 - admin.log_renewal (paperwork-with-expiry: passport, license, lease, insurance) vs recurring_decision (repeating choices like subscriptions)
 - body.log_movement (walk/stretch/lift with duration) — primary for physical activity
 - NEVER classify anything as habits.streak_break_note. Ollie has no streaks (ADHD-shame mechanic, rejected). "Broke my X habit" / "missed 5 days of X" should land in habits.identity_statement (if reflective: "i'm someone who falls off the wagon") or dump_only (if just observational).
+- TIME-DEFERRED REMINDER ("remind me to X in N min/hour", "Y dakika sonra X yapmamı hatırlat", "recuérdame X en N min"): classify by what the user wants to be reminded ABOUT (call/email/take/do X → the corresponding admin / work action, e.g. "remind me to call mama in 1 minute" → admin.create_phone_task with person="mama"), and add a top-level \`remindIn\` field on the payload: { amount: number, unit: "sec"|"min"|"hr"|"day" }. The handler schedules a system notification when the timer fires. Do NOT emit a separate "reminder" fragment, and do NOT route to dump_only when remindIn is present. SPECIAL CASE: "remind me to take <medication> in N" is NOT medication.log_dose (that action is for past-tense doses already taken); route it to admin.create_task with text "take <medication>" plus the remindIn hint, since the user hasn't taken it yet — the reminder is the whole point.
 
 ═══════════════════════════════════════════════════════════════════════
 PAYLOAD FIELD REQUIREMENTS · per action
@@ -97,8 +99,9 @@ The primary crisis detector is the upstream lexicon (@ollie/crisis-lexicon), whi
 ── WORK ──
 - log_focus_session: { durationMin?: number, project?: string, skipped_meals?: boolean (cross-route hint — true when the user paired hyperfocus with not eating; handler mirrors to body.log_hunger) }
   Ex: "90 min deep work on atelier" → { durationMin: 90, project: "atelier" } ; "hyperfocused all morning, didn't eat" → { skipped_meals: true } ; "deep work 3h forgot lunch" → { durationMin: 180, skipped_meals: true }
-- create_task: { text: string (REQUIRED — the task itself), project?: string }
+- create_task: { text: string (REQUIRED — the task itself), project?: string, remindIn?: { amount: number, unit: "sec"|"min"|"hr"|"day" } (cross-route hint — schedules a system notification when the timer fires; see TIME-DEFERRED REMINDER above) }
   Ex: "need to write the PRD" → { text: "write the PRD" }
+  Ex: "remind me to ping boran in 10 minutes" → { text: "ping boran", remindIn: { amount: 10, unit: "min" } }
 - log_deadline: { text: string (REQUIRED), dueDate?: string (ISO yyyy-mm-dd preferred) }
   Ex: "PRD due friday" → { text: "PRD", dueDate: "friday" }
 - log_meeting: { with?: string, durationMin?: number }
@@ -107,10 +110,14 @@ The primary crisis detector is the upstream lexicon (@ollie/crisis-lexicon), whi
   Ex: "got sucked into twitter again" → { what: "twitter" }
 
 ── ADMIN ──
-- create_task: { text: string (REQUIRED) }
+- create_task: { text: string (REQUIRED), remindIn?: { amount: number, unit: "sec"|"min"|"hr"|"day" } (cross-route hint — schedules a system notification when the timer fires; see TIME-DEFERRED REMINDER above) }
   Ex: "need to renew library card" → { text: "renew library card" }
-- create_phone_task: { person: string (REQUIRED — who to call), reason?: string }
+  Ex: "recordame en 2 horas a hacer la lavandería" → { text: "do the laundry", remindIn: { amount: 2, unit: "hr" } }
+  Ex: "remind me to take my zoloft in 30 minutes" → { text: "take zoloft", remindIn: { amount: 30, unit: "min" } }   (NOT medication.log_dose — that action is past-tense)
+- create_phone_task: { person: string (REQUIRED — who to call), reason?: string, remindIn?: { amount: number, unit: "sec"|"min"|"hr"|"day" } (cross-route hint — schedules a system notification when the timer fires; see TIME-DEFERRED REMINDER above) }
   Ex: "call mom about christmas" → { person: "mom", reason: "christmas" } ; "anneyi ara" → { person: "mom" }
+  Ex: "remind me to call mama in 1 minute" → { person: "mama", remindIn: { amount: 1, unit: "min" } }
+  Ex: "anneyi 5 dakika sonra aramamı hatırlat" → { person: "mama", remindIn: { amount: 5, unit: "min" } }
 - schedule_appointment: { what: string (REQUIRED), date?: string }
   Ex: "dentist next tuesday" → { what: "dentist", date: "next tuesday" }
 - log_paperwork: { what: string (REQUIRED) }
@@ -330,9 +337,18 @@ function parseBatchResults(rawText: string, expected: number, provider: string):
  *
  * Output order matches input order; a count mismatch throws.
  */
+export interface ClassifyProviders {
+  /** Groq API key — primary (fastest). Required. */
+  groq: string;
+  /** Gemini API key — high-TPM fallback (~250k tokens/min). */
+  gemini?: string;
+  /** Cloudflare Workers AI binding — same-platform fallback, no key, ~10k/day. */
+  cfAI?: CfAiBinding;
+}
+
 export async function classifyBatch(
   items: Array<{ text: string; language: FragmentLanguage }>,
-  keys: { groq: string; gemini?: string },
+  providers: ClassifyProviders,
 ): Promise<ClassifyResult[]> {
   if (items.length === 0) return [];
 
@@ -349,35 +365,62 @@ export async function classifyBatch(
 
   const maxTokens = 256 * items.length + 256;
 
-  // PRIMARY — Groq.
-  try {
-    const choice = await groqChat(
-      {
-        apiKey: keys.groq,
-        messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: userMessage },
-        ],
-        jsonMode: true,
-        maxTokens,
+  // Ordered free-tier cascade: Groq (fastest) → Cloudflare Workers AI
+  // (same-platform, no key) → Gemini (huge TPM). On ANY error we advance to
+  // the next provider — stacking the free tiers makes the chain effectively
+  // un-exhaustable. The LAST provider's error bubbles up so the caller can map
+  // a final 429/503 to a soft "rate_limited" rather than an alarming 502.
+  const chain: Array<{ name: string; run: () => Promise<string> }> = [
+    {
+      name: 'groq',
+      run: async () => {
+        const choice = await groqChat(
+          {
+            apiKey: providers.groq,
+            messages: [
+              { role: 'system', content: SYSTEM_PROMPT },
+              { role: 'user', content: userMessage },
+            ],
+            jsonMode: true,
+            maxTokens,
+          },
+          'classify-batch',
+        );
+        const rawText = choice.message.content ?? '';
+        if (!rawText) {
+          throw new Error(`classify-batch groq empty content (finish=${choice.finish_reason})`);
+        }
+        return rawText;
       },
-      'classify-batch',
-    );
-    const rawText = choice.message.content ?? '';
-    if (!rawText) {
-      throw new Error(`classify-batch groq empty content (finish=${choice.finish_reason})`);
-    }
-    return parseBatchResults(rawText, items.length, 'groq');
-  } catch (err) {
-    const status = (err as { status?: number })?.status;
-    const recoverable = status === 429 || (typeof status === 'number' && status >= 500);
-    if (!recoverable || !keys.gemini) throw err;
-
-    // FALLBACK — Gemini Flash. Groq saturated (429) or transiently down.
-    const rawText = await geminiJson(
-      { apiKey: keys.gemini, system: SYSTEM_PROMPT, user: userMessage, maxTokens },
-      'classify-batch',
-    );
-    return parseBatchResults(rawText, items.length, 'gemini');
+    },
+  ];
+  if (providers.cfAI) {
+    const cf = providers.cfAI;
+    chain.push({
+      name: 'cloudflare',
+      run: () => cloudflareJson(cf, { system: SYSTEM_PROMPT, user: userMessage, maxTokens }, 'classify-batch'),
+    });
   }
+  if (providers.gemini) {
+    const key = providers.gemini;
+    chain.push({
+      name: 'gemini',
+      run: () => geminiJson({ apiKey: key, system: SYSTEM_PROMPT, user: userMessage, maxTokens }, 'classify-batch'),
+    });
+  }
+
+  let lastErr: unknown;
+  for (let i = 0; i < chain.length; i++) {
+    const provider = chain[i];
+    const isLast = i === chain.length - 1;
+    try {
+      const rawText = await provider.run();
+      return parseBatchResults(rawText, items.length, provider.name);
+    } catch (err) {
+      lastErr = err;
+      if (isLast) throw err;
+      console.error(`[classify-batch] ${provider.name} failed, falling through to next provider`, err);
+    }
+  }
+  throw lastErr;
 }

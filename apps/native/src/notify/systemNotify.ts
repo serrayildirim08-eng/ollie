@@ -55,10 +55,16 @@ export const NOTIFY_EVENT = 'ollie:notify';
 //   - pnpm dev browser preview (no IPC, falls back to console.log)
 //   - vitest jsdom (mocked or null)
 
+interface PluginScheduleApi {
+  /** Tauri 2.x: `Schedule.at(date, repeating?, allowWhileIdle?)` */
+  at: (date: Date, repeating?: boolean, allowWhileIdle?: boolean) => unknown;
+}
+
 interface PluginApi {
   isPermissionGranted: () => Promise<boolean>;
   requestPermission: () => Promise<'granted' | 'denied' | 'default'>;
-  sendNotification: (opts: { title: string; body?: string }) => void;
+  sendNotification: (opts: { title: string; body?: string; schedule?: unknown }) => void;
+  Schedule: PluginScheduleApi;
 }
 
 let pluginCache: PluginApi | null | undefined;
@@ -88,6 +94,7 @@ export async function loadNotificationPlugin(): Promise<PluginApi | null> {
       isPermissionGranted: mod.isPermissionGranted,
       requestPermission: mod.requestPermission,
       sendNotification: mod.sendNotification,
+      Schedule: mod.Schedule,
     };
     return pluginCache;
   } catch (err) {
@@ -178,6 +185,91 @@ export async function sendSystemNotification({ title, body }: NotifyEventDetail)
   } catch (err) {
     console.warn('[systemNotify] sendNotification failed', err);
   }
+}
+
+// ─── scheduled delivery (ad-hoc reminders) ────────────────────────────────
+
+/** Returned from `scheduleAt` — `cancel()` aborts the pending fire if it
+ *  hasn't happened yet. For the Tauri schedule path cancellation only works
+ *  on the in-process record (the OS-scheduled notification will still fire);
+ *  for the setTimeout fallback it clears the timer cleanly. */
+export interface ScheduledNotificationHandle {
+  cancel(): void;
+}
+
+/**
+ * Schedule a system notification to fire at an absolute wall-clock time.
+ *
+ * Strategy (in order of preference):
+ *   1. Tauri plugin's native `schedule: Schedule.at(date)` — survives app
+ *      restarts because the OS holds the pending notification.
+ *   2. Fallback: in-process `setTimeout` — works in web preview / vitest but
+ *      does NOT survive an app restart. Use only for short timers in
+ *      non-Tauri contexts (the production use-case for time-deferred
+ *      reminders always lives inside the Tauri shell on desktop).
+ *
+ * Permission is checked once; if denied we drop quietly (matches
+ * sendSystemNotification's silent-drop behaviour — the in-app surfaces
+ * still record the underlying row regardless).
+ *
+ * Never throws; all upstream failures degrade to console.warn so the
+ * primary row write that triggered this call is never undone.
+ */
+export function scheduleAt(
+  at: number,
+  payload: NotifyEventDetail,
+): ScheduledNotificationHandle {
+  const now = Date.now();
+  const delay = at - now;
+
+  // Past or near-immediate (< 1s) — just fire now via the in-process path so
+  // we never round-trip through the OS scheduler for a no-op delay.
+  if (delay <= 1000) {
+    void sendSystemNotification(payload);
+    return { cancel: () => {} };
+  }
+
+  let cancelled = false;
+  let timerId: ReturnType<typeof setTimeout> | null = null;
+
+  void (async () => {
+    const plugin = await loadNotificationPlugin();
+    if (cancelled) return;
+
+    // ── Tauri native path — preferred when the plugin reports a Schedule. ──
+    if (plugin && typeof plugin.Schedule?.at === 'function') {
+      try {
+        const granted = await plugin.isPermissionGranted();
+        if (!granted) return;
+        if (cancelled) return;
+        const schedule = plugin.Schedule.at(new Date(at));
+        plugin.sendNotification({
+          title: payload.title,
+          body: payload.body,
+          schedule,
+        });
+        return;
+      } catch (err) {
+        // Fall through to setTimeout below — the OS may have rejected the
+        // schedule (permissions, daemon down, etc). The in-process timer is
+        // a safe last-resort even if it won't survive a restart.
+        console.warn('[systemNotify] schedule.at failed, falling back', err);
+      }
+    }
+
+    // ── setTimeout fallback — web preview, vitest, plugin path failed. ──
+    // NOT durable across app restarts; acceptable for short ad-hoc reminders.
+    timerId = setTimeout(() => {
+      void sendSystemNotification(payload);
+    }, Math.max(0, at - Date.now()));
+  })();
+
+  return {
+    cancel: () => {
+      cancelled = true;
+      if (timerId !== null) clearTimeout(timerId);
+    },
+  };
 }
 
 // ─── event listener ────────────────────────────────────────────────────────

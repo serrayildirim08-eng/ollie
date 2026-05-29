@@ -7,11 +7,12 @@
  * surface that wants to show what happened.
  */
 
-import type { ModuleHandler, HandlerResult, WorkAction } from '../../router/schema';
+import type { ModuleHandler, HandlerResult, WorkAction, RemindIn } from '../../router/schema';
 import { migrateWork } from './migrate';
 import { tasks, events } from './repo';
 import { migrateBody } from '../body/migrate';
 import { events as bodyEvents } from '../body/repo';
+import { scheduleAt } from '../../notify/systemNotify';
 
 export const workHandler: ModuleHandler<'work'> = {
   module: 'work',
@@ -67,6 +68,9 @@ export const workHandler: ModuleHandler<'work'> = {
           project: p.project ?? null,
           kind: 'task',
         });
+        // Time-deferred reminder side-effect (Approach B). The worker resolved
+        // scheduledAtMs against its clock; we just hand it to the OS.
+        scheduleReminderIfPresent(p.remindIn, 'to do', p.text);
         // NOTE: tasks.add upserts on (text, done=0). Undo removes the row
         // regardless of whether it was fresh or refreshed — see finance.add_bill
         // comment for the same trade-off rationale.
@@ -126,4 +130,20 @@ export const workHandler: ModuleHandler<'work'> = {
 
 function exhaustive(p: never): never {
   throw new Error(`work: unhandled action ${JSON.stringify(p)}`);
+}
+
+/**
+ * Fire a scheduled system notification when the routed task carries a
+ * worker-resolved `remindIn` hint. Mirrors the admin handler's helper —
+ * intentionally not promoted to a shared util while only two callers exist
+ * (Approach B's cross-route hint pattern keeps logic with its primary
+ * handler; collapse later if a third caller appears).
+ */
+function scheduleReminderIfPresent(
+  remindIn: RemindIn | undefined,
+  title: string,
+  body: string,
+): void {
+  if (!remindIn || typeof remindIn.scheduledAtMs !== 'number') return;
+  scheduleAt(remindIn.scheduledAtMs, { title, body });
 }
