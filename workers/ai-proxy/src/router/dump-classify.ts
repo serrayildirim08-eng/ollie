@@ -14,6 +14,7 @@
 import { groqChat } from '../groq';
 import { geminiJson } from '../gemini';
 import { cloudflareJson, type CfAiBinding } from '../cloudflare-ai';
+import { openRouterJson } from '../openrouter';
 import type { FragmentLanguage, Module } from './dump-schema';
 
 // Allowed Module values (enumerated in the system prompt so the model
@@ -344,6 +345,8 @@ export interface ClassifyProviders {
   gemini?: string;
   /** Cloudflare Workers AI binding — same-platform fallback, no key, ~10k/day. */
   cfAI?: CfAiBinding;
+  /** OpenRouter API key — final catch-all (one key → many free models). */
+  openrouter?: string;
 }
 
 export async function classifyBatch(
@@ -406,6 +409,13 @@ export async function classifyBatch(
     chain.push({
       name: 'gemini',
       run: () => geminiJson({ apiKey: key, system: SYSTEM_PROMPT, user: userMessage, maxTokens }, 'classify-batch'),
+    });
+  }
+  if (providers.openrouter) {
+    const key = providers.openrouter;
+    chain.push({
+      name: 'openrouter',
+      run: () => openRouterJson({ apiKey: key, system: SYSTEM_PROMPT, user: userMessage, maxTokens }, 'classify-batch'),
     });
   }
 

@@ -73,6 +73,8 @@ export interface DumpRouteEnv {
    *  worker-wide secret (same one FeedMe uses). Missing/empty value with
    *  image present → 503 upstream-unavailable. Text-only dumps ignore it. */
   GEMINI_API_KEY: string;
+  /** OpenRouter API key — final classify-cascade fallback (optional). */
+  OPENROUTER_API_KEY?: string;
   /** Required at runtime for /route/dump; declared optional here so it
    *  remains compatible with the broader Env shape (InvitesEnv keeps it
    *  optional during Clerk migration). The handler returns 503 if missing. */
@@ -282,7 +284,7 @@ export async function handleDumpRoute(req: Request, env: DumpRouteEnv): Promise<
     try {
       results = await classifyBatch(
         misses.map((m) => ({ text: m.text, language: m.language })),
-        { groq: env.GROQ_API_KEY, gemini: env.GEMINI_API_KEY, cfAI: env.AI },
+        { groq: env.GROQ_API_KEY, gemini: env.GEMINI_API_KEY, cfAI: env.AI, openrouter: env.OPENROUTER_API_KEY },
       );
     } catch (err) {
       // Both providers busy: Groq 429 (rate) AND Gemini fallback 429/503
