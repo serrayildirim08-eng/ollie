@@ -115,11 +115,11 @@ export async function handleRoute(
 ): Promise<Response> {
   const t0 = Date.now();
 
-  // Auth gate — active after T0 (Clerk JWT) ships.
-  // When T0_JWT_ENFORCED === '1' we validate the Bearer token against
-  // the Clerk JWKS. Without the flag the endpoint stays open so frontend
-  // wiring can iterate without waiting on the cutover.
-  if (env.T0_JWT_ENFORCED === '1') {
+  // Auth gate — fail CLOSED by default. We validate the Bearer token
+  // against the Clerk JWKS unless T0_JWT_ENFORCED is explicitly set to
+  // '0' (local dev only). A missing/unset flag therefore enforces auth,
+  // so a misdeploy can never leave this endpoint open.
+  if (env.T0_JWT_ENFORCED !== '0') {
     const auth = req.headers.get('authorization');
     if (!auth || !auth.startsWith('Bearer ')) {
       return json({ error: 'unauthorized' }, 401);

@@ -95,9 +95,11 @@ queue = "ollie-enrich-queue"
 # GROQ_API_KEY            — Groq API key for Llama 3.3 70B classify + segment.
 #                           https://console.groq.com → API Keys → Create.
 #                           wrangler secret put GROQ_API_KEY
-# T0_JWT_ENFORCED         — Set to "1" once T0 (Clerk JWT) ships end-to-end.
-#                           Until then the /route/:module endpoint is open.
-#                           wrangler secret put T0_JWT_ENFORCED  (value: 1)
+# T0_JWT_ENFORCED         — Auth now fails CLOSED by default: Clerk JWT is
+#                           required on /route/:module, /grocery/purchase,
+#                           /cook-history, /feed-me, /replenishment unless this
+#                           is explicitly "0". Set to "0" ONLY for local dev.
+#                           Requires CLERK_ISSUER to be set. Leave UNSET in prod.
 
 # ─── staging environment ──────────────────────────────────────────────────────
 # Deploys to a separate worker (ollie-ai-proxy-staging) so prod stays untouched

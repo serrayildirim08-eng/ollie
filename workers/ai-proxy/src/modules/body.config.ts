@@ -60,10 +60,12 @@ export interface BodyClassification {
 /**
  * Cheap Groq Llama 3.1 8B Instant — handles the easy 80% (clear symptom
  * names, simple "drank 500ml water" style fragments). When the model
- * returns confidence < ESCALATE_THRESHOLD we re-call with 70B.
+ * returns confidence < ESCALATE_THRESHOLD we re-call with the accurate tier
+ * (GPT-OSS 120B — has Groq prompt caching, 50% off cached input after first
+ * call, 6x cheaper than llama-3.3-70b for input. Swap landed 2026-05-30.)
  */
 export const BODY_MODEL_FAST = 'llama-3.1-8b-instant';
-export const BODY_MODEL_ACCURATE = 'llama-3.3-70b-versatile';
+export const BODY_MODEL_ACCURATE = 'openai/gpt-oss-120b';
 export const BODY_ESCALATE_THRESHOLD = 0.7;
 
 // ─── trilingual few-shot examples (14 = 2 per action) ────────────────────────
