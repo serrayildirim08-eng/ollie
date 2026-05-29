@@ -15,12 +15,22 @@
  * will surface a Clerk session JWT instead.
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Textarea, Button, Text } from '../ui';
 import { Stack, Row } from '../layout';
 import { routeDump } from '../api';
+import { kv } from '../storage';
 import type { RouterOutput, CrisisSignal } from '../router/schema';
 import styles from './BrainDumpInput.module.css';
+
+/**
+ * Disk key for the in-progress brain dump. The user's unsent thought is
+ * persisted here (debounced as they type, and again right before each
+ * submit) so it survives an app close, a crash, or an offline/server
+ * submit failure — and is restored into the textarea on next open.
+ * Cleared only on a successful route. ADHD-safety: never lose a thought.
+ */
+const PENDING_DUMP_KEY = 'pending_dump';
 
 export interface BrainDumpInputProps {
   /**
@@ -70,6 +80,36 @@ export function BrainDumpInput({
 }: BrainDumpInputProps): JSX.Element {
   const [text, setText] = useState(initialValue);
   const [state, setState] = useState<SubmitState>({ kind: 'idle' });
+  // Gates the autosave effect until the on-mount restore has run, so we
+  // never delete a saved draft before we've had a chance to load it.
+  const [restored, setRestored] = useState(false);
+
+  // Restore a persisted draft on mount (unless the textarea already has
+  // content, e.g. an initialValue from a voice transcript).
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const draft = await kv.get<{ text: string }>(PENDING_DUMP_KEY);
+      if (cancelled) return;
+      if (draft?.text) setText((prev) => (prev.trim().length === 0 ? draft.text : prev));
+      setRestored(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Debounced autosave: persist the draft as the user types, clear the
+  // saved copy when they empty the box. Runs only after restore.
+  useEffect(() => {
+    if (!restored) return;
+    const trimmed = text.trim();
+    const timer = setTimeout(() => {
+      if (trimmed.length === 0) void kv.delete(PENDING_DUMP_KEY);
+      else void kv.set(PENDING_DUMP_KEY, { text: trimmed, ts: Date.now() });
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [text, restored]);
 
   const submit = useCallback(async () => {
     const trimmed = text.trim();
@@ -88,21 +128,29 @@ export function BrainDumpInput({
       return;
     }
 
+    // Persist the thought durably BEFORE the network call so it survives
+    // a crash, app close, or failed/offline submit. Cleared on success.
+    await kv.set(PENDING_DUMP_KEY, { text: trimmed, ts: Date.now() });
+
     const res = await routeDump({ text: trimmed }, { bearer });
     if (!res.ok) {
-      // Translate ApiError to a one-line human message.
+      // Translate ApiError to a one-line human message. The draft stays in
+      // the box AND on disk, so recoverable failures reassure the user
+      // their words are safe and retryable.
       const code = res.error.code;
       const message =
         code === 'unauthorized' ? 'sign in to dump' :
         code === 'rate_limited' ? 'too fast — try again in a moment' :
-        code === 'timeout' ? 'took too long — try again' :
-        code === 'network' ? 'no connection' :
-        code === 'http' ? `server error (${res.error.status ?? '?'})` :
-        'something went wrong';
+        code === 'timeout' ? 'took too long — your words are saved, try again' :
+        code === 'network' ? 'no connection — your words are saved, try again' :
+        code === 'http' ? `server hiccup (${res.error.status ?? '?'}) — your words are saved` :
+        'something went wrong — your words are saved';
       setState({ kind: 'error', message });
       return;
     }
 
+    // Success — the dump routed, so the saved draft is no longer needed.
+    void kv.delete(PENDING_DUMP_KEY);
     setState({ kind: 'idle' });
     if (clearOnSuccess) setText('');
 
