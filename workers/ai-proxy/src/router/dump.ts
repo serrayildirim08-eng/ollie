@@ -40,6 +40,7 @@ import { pass1Segment } from './segmentation';
 import { pass2Split } from './segmentation-llm';
 import { detectFragmentLanguage } from './lang-detect';
 import { classifyBatch, type ClassifyResult } from './dump-classify';
+import { injectScheduledAt } from './remindIn';
 import {
   type Fragment,
   type FragmentLanguage,
@@ -54,6 +55,7 @@ import {
   type VectorizeIndex,
 } from './vectorize';
 import { base64ByteSize, isVisionImage, visionExtract, type VisionImage } from './vision';
+import type { CfAiBinding } from '../cloudflare-ai';
 
 /** Hard upper bound on the raw image/pdf bytes the worker accepts.
  *  Frontend resizes images to ~700KB; PDFs aren't resized and routinely
@@ -82,6 +84,9 @@ export interface DumpRouteEnv {
    *  the branch is unreachable on prod. */
   STAGING_TEST_BEARER?: string;
   VECTORIZE_INDEX: VectorizeIndex;
+  /** Cloudflare Workers AI binding — same-platform classify fallback (no key).
+   *  Optional so the worker still boots if the binding is absent. */
+  AI?: CfAiBinding;
 }
 
 const STAGING_TEST_USER_ID = 'staging-test-user';
@@ -241,6 +246,16 @@ export async function handleDumpRoute(req: Request, env: DumpRouteEnv): Promise<
     if (cacheRow) {
       cacheHits++;
       const tiered = applyConfidencePolicy(cacheRow.module, cacheRow.payload, cacheRow.confidence);
+      // remindIn always re-anchors against the CURRENT clock — even on a cache
+      // hit. "remind me in 1 minute" said now must fire 60s from now, never
+      // 60s from when the cache row was first written.
+      const reminderStatus = injectScheduledAt(tiered.payload, Date.now());
+      if (reminderStatus.status === 'dropped') {
+        console.warn(
+          '[route/dump] remindIn dropped (cache)',
+          JSON.stringify({ reason: reminderStatus.reason, dumpId, fragment: i }),
+        );
+      }
       slots[i] = {
         text,
         language,
@@ -267,7 +282,7 @@ export async function handleDumpRoute(req: Request, env: DumpRouteEnv): Promise<
     try {
       results = await classifyBatch(
         misses.map((m) => ({ text: m.text, language: m.language })),
-        { groq: env.GROQ_API_KEY, gemini: env.GEMINI_API_KEY },
+        { groq: env.GROQ_API_KEY, gemini: env.GEMINI_API_KEY, cfAI: env.AI },
       );
     } catch (err) {
       // Both providers busy: Groq 429 (rate) AND Gemini fallback 429/503
@@ -286,6 +301,16 @@ export async function handleDumpRoute(req: Request, env: DumpRouteEnv): Promise<
       const m = misses[j];
       const result = results[j];
       const tiered = applyConfidencePolicy(result.module, result.payload, result.confidence);
+      // Resolve remindIn → scheduledAtMs against the current clock BEFORE the
+      // cache upsert below so the cached entry carries the canonical hint
+      // shape (handlers always see scheduledAtMs already injected on re-hits).
+      const reminderStatus = injectScheduledAt(tiered.payload, Date.now());
+      if (reminderStatus.status === 'dropped') {
+        console.warn(
+          '[route/dump] remindIn dropped (ai)',
+          JSON.stringify({ reason: reminderStatus.reason, dumpId, fragment: m.index }),
+        );
+      }
       slots[m.index] = {
         text: m.text,
         language: m.language,

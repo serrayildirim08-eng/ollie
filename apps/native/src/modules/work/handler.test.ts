@@ -38,10 +38,15 @@ vi.mock('../body/repo', () => ({
   },
 }));
 
+vi.mock('../../notify/systemNotify', () => ({
+  scheduleAt: vi.fn(() => ({ cancel: () => {} })),
+}));
+
 // ─── imports after mocks ───────────────────────────────────────────────────────
 
 import { events as workEvents } from './repo';
 import { events as bodyEvents } from '../body/repo';
+import { scheduleAt } from '../../notify/systemNotify';
 import { workHandler } from './handler';
 import type { Fragment } from '../../router/schema';
 
@@ -124,5 +129,51 @@ describe('workHandler — cross-route', () => {
 
     expect(vi.mocked(workEvents.remove)).toHaveBeenCalledWith('focus-mock-id');
     expect(vi.mocked(bodyEvents.remove)).toHaveBeenCalledWith('body-mock-id');
+  });
+});
+
+describe('workHandler — time-deferred reminder (remindIn)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('create_task with remindIn schedules a "to do · text" notification at scheduledAtMs', async () => {
+    const fireAt = Date.now() + 600_000;
+    const fragment: Fragment = {
+      text: 'remind me to ping boran in 10 minutes',
+      language: 'en',
+      module: 'work',
+      payload: {
+        module: 'work',
+        action: 'create_task',
+        text: 'ping boran',
+        remindIn: { amount: 10, unit: 'min', scheduledAtMs: fireAt },
+      },
+      confidence: 0.92,
+      source: 'ai',
+    };
+
+    await workHandler.apply(fragment);
+
+    expect(vi.mocked(scheduleAt)).toHaveBeenCalledOnce();
+    expect(vi.mocked(scheduleAt)).toHaveBeenCalledWith(fireAt, {
+      title: 'to do',
+      body: 'ping boran',
+    });
+  });
+
+  it('create_task WITHOUT remindIn does NOT schedule anything', async () => {
+    const fragment: Fragment = {
+      text: 'write the PRD',
+      language: 'en',
+      module: 'work',
+      payload: { module: 'work', action: 'create_task', text: 'write the PRD' },
+      confidence: 0.92,
+      source: 'ai',
+    };
+
+    await workHandler.apply(fragment);
+
+    expect(vi.mocked(scheduleAt)).not.toHaveBeenCalled();
   });
 });

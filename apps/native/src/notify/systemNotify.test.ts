@@ -14,12 +14,23 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // ─── plugin mock ───────────────────────────────────────────────────────────
 
+interface SendNotificationOpts {
+  title: string;
+  body?: string;
+  schedule?: unknown;
+}
+
+const scheduleAtMock = vi.fn((date: Date) => ({ kind: 'at-schedule', date }));
+
 const pluginMock = {
   isPermissionGranted: vi.fn(() => Promise.resolve(false)),
   requestPermission: vi.fn(
     () => Promise.resolve('default' as 'granted' | 'denied' | 'default'),
   ),
-  sendNotification: vi.fn((_opts: { title: string; body?: string }) => undefined),
+  sendNotification: vi.fn((_opts: SendNotificationOpts) => undefined),
+  Schedule: {
+    at: scheduleAtMock,
+  },
 };
 
 vi.mock('@tauri-apps/plugin-notification', () => pluginMock);
@@ -32,6 +43,7 @@ import {
   sendSystemNotification,
   installNotifyListener,
   scheduleSystemNotification,
+  scheduleAt,
   loadNotificationPlugin,
   _resetPluginCacheForTests,
   NOTIFY_EVENT,
@@ -56,6 +68,8 @@ beforeEach(() => {
   pluginMock.isPermissionGranted.mockReset();
   pluginMock.requestPermission.mockReset();
   pluginMock.sendNotification.mockReset();
+  scheduleAtMock.mockClear();
+  scheduleAtMock.mockImplementation((date: Date) => ({ kind: 'at-schedule', date }));
   setTauriContext(false);
   vi.useFakeTimers();
 });
@@ -276,5 +290,115 @@ describe('scheduleSystemNotification', () => {
         body: 'in a bit',
       });
     });
+  });
+});
+
+// ─── scheduleAt (ad-hoc reminders) ────────────────────────────────────────
+
+describe('scheduleAt', () => {
+  it('fires immediately when fireAt is now / in the past (no schedule used)', async () => {
+    setTauriContext(true);
+    pluginMock.isPermissionGranted.mockResolvedValue(true);
+
+    scheduleAt(Date.now() - 100, { title: 'gone', body: 'past' });
+
+    await vi.waitFor(() => {
+      expect(pluginMock.sendNotification).toHaveBeenCalledWith({
+        title: 'gone',
+        body: 'past',
+      });
+    });
+    expect(scheduleAtMock).not.toHaveBeenCalled();
+  });
+
+  it('uses the Tauri Schedule.at() native path when in Tauri context', async () => {
+    setTauriContext(true);
+    pluginMock.isPermissionGranted.mockResolvedValue(true);
+
+    const fireAt = Date.now() + 60_000;
+    scheduleAt(fireAt, { title: 'call', body: 'mama' });
+
+    await vi.waitFor(() => {
+      expect(scheduleAtMock).toHaveBeenCalledOnce();
+    });
+    const scheduleArg = scheduleAtMock.mock.calls[0]?.[0];
+    expect(scheduleArg).toBeInstanceOf(Date);
+    expect((scheduleArg as Date).getTime()).toBe(fireAt);
+
+    expect(pluginMock.sendNotification).toHaveBeenCalledWith({
+      title: 'call',
+      body: 'mama',
+      schedule: { kind: 'at-schedule', date: new Date(fireAt) },
+    });
+
+    // The OS holds the schedule — no in-process timer should be needed.
+    pluginMock.sendNotification.mockClear();
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(pluginMock.sendNotification).not.toHaveBeenCalled();
+  });
+
+  it('drops the schedule when permission is not granted (Tauri path)', async () => {
+    setTauriContext(true);
+    pluginMock.isPermissionGranted.mockResolvedValue(false);
+
+    scheduleAt(Date.now() + 60_000, { title: 'call', body: 'mama' });
+
+    // Let the async branch settle.
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(scheduleAtMock).not.toHaveBeenCalled();
+    expect(pluginMock.sendNotification).not.toHaveBeenCalled();
+  });
+
+  it('falls back to setTimeout outside Tauri (web preview / vitest)', async () => {
+    setTauriContext(false);
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    scheduleAt(Date.now() + 3_000, { title: 'remember', body: 'thing' });
+
+    // Native schedule path never invoked (no plugin available).
+    expect(scheduleAtMock).not.toHaveBeenCalled();
+    expect(logSpy).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(3_001);
+
+    await vi.waitFor(() => {
+      expect(logSpy).toHaveBeenCalled();
+      const msg = logSpy.mock.calls[0]?.[0];
+      expect(typeof msg).toBe('string');
+      expect(msg as string).toContain('remember');
+    });
+    logSpy.mockRestore();
+  });
+
+  it('cancel() in the fallback path clears the timer before it fires', async () => {
+    setTauriContext(false);
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    const handle = scheduleAt(Date.now() + 5_000, { title: 'unwanted', body: 'cancel' });
+
+    // Allow the async loader to settle and the setTimeout to be registered.
+    await vi.advanceTimersByTimeAsync(0);
+
+    handle.cancel();
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    // Nothing fired — the timer was cleared.
+    const calls = logSpy.mock.calls.filter((c) => typeof c[0] === 'string' && c[0].includes('unwanted'));
+    expect(calls).toHaveLength(0);
+    logSpy.mockRestore();
+  });
+
+  it('cancel() before the native schedule even resolves prevents the call', async () => {
+    setTauriContext(true);
+    pluginMock.isPermissionGranted.mockResolvedValue(true);
+
+    const handle = scheduleAt(Date.now() + 60_000, { title: 'oops', body: 'cancel' });
+    handle.cancel();
+
+    // Let any pending microtasks / plugin load drain.
+    await vi.advanceTimersByTimeAsync(10);
+    expect(scheduleAtMock).not.toHaveBeenCalled();
+    expect(pluginMock.sendNotification).not.toHaveBeenCalled();
   });
 });
