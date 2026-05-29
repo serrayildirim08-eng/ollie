@@ -30,8 +30,8 @@
  *     hairline list rules) are hand-rolled — no @drei / @phosphor deps.
  *
  * Visual elements intentionally dropped:
- *   - the `feed me` mode + recipe matcher (no recipe data wired into the
- *     box; the switch is shop · pantry only, with "feed me" deferred)
+ *   - feed me is now wired — see FeedMeView. The 3rd tab calls into the
+ *     live /feed-me/:user worker and renders the AI suggestion stack.
  *   - the ShelfBar fill + the critical/watching/stocked grouping (no
  *     shelf-life timestamps tracked on PantryItem yet)
  *   - the AmberButton "add" CTA (the box's add path is the Brain Dump
@@ -58,6 +58,7 @@ import {
   shopping as shoppingRepo,
 } from './repo';
 import type { PantryItem, ShoppingItem } from './types';
+import { FeedMeView } from './FeedMeView';
 
 // ─── style atoms ──────────────────────────────────────────────────────────
 
@@ -68,7 +69,7 @@ const SMCP_STYLE: CSSProperties = {
 
 const POLL_MS = 6000;
 
-type Mode = 'shop' | 'pantry';
+type Mode = 'shop' | 'pantry' | 'feed-me';
 
 // ─── component ────────────────────────────────────────────────────────────
 
@@ -179,13 +180,15 @@ export function GroceryBox(): JSX.Element {
           openCount={openCount}
           onCheckOff={(id) => void handleCheckOffShopping(id)}
         />
-      ) : (
+      ) : mode === 'pantry' ? (
         <PantryList
           items={pantryItems}
           totalCount={pantryCount}
           cadenceByName={cadenceByName}
           onRemove={(id) => void handleRemovePantry(id)}
         />
+      ) : (
+        <FeedMeView pantryItems={pantryItems} />
       )}
     </Stack>
   );
@@ -196,7 +199,12 @@ export function GroceryBox(): JSX.Element {
 const MODE_LABELS: Record<Mode, string> = {
   shop: 'shop',
   pantry: 'pantry',
+  'feed-me': 'feed me',
 };
+// Render order — `pantry` is the default voice (where the user lives),
+// `shop` is on the left as the entry point when adding, `feed me` closes
+// the row on the right as the action-oriented destination.
+const MODE_ORDER: ReadonlyArray<Mode> = ['shop', 'pantry', 'feed-me'];
 
 function ModeSwitch({
   mode,
@@ -207,7 +215,7 @@ function ModeSwitch({
 }): JSX.Element {
   return (
     <Row gap={28} align="center" style={{ paddingBottom: 2 }}>
-      {(Object.keys(MODE_LABELS) as Mode[]).map((m) => {
+      {MODE_ORDER.map((m) => {
         const on = m === mode;
         return (
           <button

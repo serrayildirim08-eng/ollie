@@ -303,6 +303,96 @@ async function logPurchase(name: string, ts: number): Promise<void> {
   );
 }
 
+// ─── cook history (local cache for the Feed Me view) ─────────────────────
+//
+// Mirror table for cook events written through the /cook-history worker.
+// The cloud row is source of truth for adaptive recipe learning; this local
+// table is purely the "made recently" strip cache so the UI can render
+// without a round-trip on every mount. Best-effort: a failed `add` here
+// just means the strip lags one entry on this device.
+
+export interface CookHistoryEntry {
+  id: string;
+  recipeName: string;
+  ingredients: Array<{ name: string; canonical: string | null }>;
+  cookedAtMs: number;
+}
+
+interface CookHistoryRow {
+  id: string;
+  recipe_name: string;
+  ingredients: string | null;
+  cooked_at_ms: number;
+  [col: string]: unknown;
+}
+
+function parseIngredientsJson(raw: string | null): CookHistoryEntry['ingredients'] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    const out: CookHistoryEntry['ingredients'] = [];
+    for (const item of parsed) {
+      if (!item || typeof item !== 'object') continue;
+      const i = item as Record<string, unknown>;
+      if (typeof i.name !== 'string') continue;
+      out.push({
+        name: i.name,
+        canonical: typeof i.canonical === 'string' ? i.canonical : null,
+      });
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+export const cookHistory = {
+  /** Most-recent-first cook entries for the "made recently" strip. */
+  async listRecent(limit = 10): Promise<CookHistoryEntry[]> {
+    const rows = await sql.select<CookHistoryRow>(
+      `SELECT id, recipe_name, ingredients, cooked_at_ms
+       FROM grocery_cook_history
+       ORDER BY cooked_at_ms DESC
+       LIMIT ?`,
+      [limit],
+    );
+    return rows.map((r) => ({
+      id: r.id,
+      recipeName: r.recipe_name,
+      ingredients: parseIngredientsJson(r.ingredients),
+      cookedAtMs: r.cooked_at_ms,
+    }));
+  },
+
+  /**
+   * Append a cook entry. Called after the /cook-history worker write resolves
+   * so the local strip reflects the same event the cloud row records. The
+   * caller may pass an explicit `cookedAtMs` (mirrors the request body the
+   * worker received); we default to NOW when omitted.
+   */
+  async add(input: {
+    recipeName: string;
+    ingredients?: Array<{ name: string; canonical: string | null }>;
+    cookedAtMs?: number;
+  }): Promise<CookHistoryEntry> {
+    const id = newId();
+    const cookedAtMs = input.cookedAtMs ?? Date.now();
+    const ingredients = input.ingredients ?? [];
+    await sql.execute(
+      `INSERT INTO grocery_cook_history (id, recipe_name, ingredients, cooked_at_ms)
+       VALUES (?, ?, ?, ?)`,
+      [id, input.recipeName, JSON.stringify(ingredients), cookedAtMs],
+    );
+    return {
+      id,
+      recipeName: input.recipeName,
+      ingredients,
+      cookedAtMs,
+    };
+  },
+};
+
 export const cadence = {
   /**
    * Cadence estimate for one canonical (e.g. "milk"). Returns a

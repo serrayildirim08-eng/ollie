@@ -40,6 +40,20 @@ const MIGRATIONS = [
     logged_at   INTEGER NOT NULL
   )`,
 
+  // cook_history — local mirror of the cloud cook_history events written by
+  // the /cook-history worker. Used by the Feed Me view's "made recently"
+  // strip so the user sees their own cooking without a round-trip on every
+  // mount. Cloud row is the source of truth for the learning signal; this
+  // table is a UI cache, no encryption, no sync. JSON ingredients column
+  // is a serialised RecipeIngredient[] (just `name` + `canonical` actually
+  // round-trip — we don't surface qty/unit in the strip).
+  `CREATE TABLE IF NOT EXISTS grocery_cook_history (
+    id           TEXT PRIMARY KEY,
+    recipe_name  TEXT NOT NULL,
+    ingredients  TEXT,
+    cooked_at_ms INTEGER NOT NULL
+  )`,
+
   // Index for the common UI query (most recent first).
   `CREATE INDEX IF NOT EXISTS idx_grocery_pantry_added_at
     ON grocery_pantry(added_at DESC)`,
@@ -47,6 +61,8 @@ const MIGRATIONS = [
     ON grocery_shopping(added_at DESC)`,
   `CREATE INDEX IF NOT EXISTS idx_grocery_purchase_log_name_ts
     ON grocery_purchase_log(name, logged_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_grocery_cook_history_cooked_at
+    ON grocery_cook_history(cooked_at_ms DESC)`,
 ];
 
 let migrationPromise: Promise<void> | null = null;

@@ -190,6 +190,81 @@ export interface ClaimInviteResponse {
   reason?: 'not_found' | 'used' | 'expired' | 'unknown';
 }
 
+// ─── /feed-me/:user (POST) — Layer 2 recipe suggestion ───────────────────────
+//
+// Mirrors workers/ai-proxy/src/router/feed-me.ts. The worker accepts a body
+// shaped by FeedMeRequest and replies with FeedMeResponse. Source of truth
+// for the contract: feed-me.ts:62-77 and feed-me.config.ts:31-46.
+//
+// The endpoint is per-user (path UUID) and Clerk-JWT gated. Worker returns
+// `{ suggestions: [], source: 'static_fallback' }` with status 200 when
+// Voyage or Gemini fail upstream — the UI treats source='static_fallback'
+// + empty suggestions as "nothing to show, suggest dumping more".
+
+export type FeedDietFilter = 'all' | 'vegetarian' | 'vegan' | 'mediterranean' | 'turkish';
+export type FeedLocale = 'en' | 'es' | 'tr';
+export type FeedTarget = 'user' | 'pet';
+export type FeedSource = 'gemini' | 'cache_hit' | 'static_fallback';
+
+export interface FeedMeRequest {
+  pantry: string[];
+  diet?: FeedDietFilter;
+  feedTarget?: FeedTarget;
+  petName?: string;
+  count?: number;
+  locale: FeedLocale;
+  excludeDishes?: string[];
+}
+
+export interface FeedRecipeIngredient {
+  name: string;
+  canonical: string | null;
+  have: boolean;
+  qty?: number;
+  unit?: string;
+}
+
+export interface FeedRecipeSuggestion {
+  dish: string;
+  cuisine: string;
+  diet: string[];
+  ingredients: FeedRecipeIngredient[];
+  steps: string[];
+  prepMinutes: number;
+  cookMinutes: number;
+  servings: number;
+  reasonSuggested?: string;
+}
+
+export interface FeedMeResponse {
+  suggestions: FeedRecipeSuggestion[];
+  source: FeedSource;
+  latencyMs: number;
+}
+
+// ─── /cook-history (POST) — cook event ingestion ─────────────────────────────
+//
+// Mirrors workers/ai-proxy/src/router/cook-history.ts. Body shape frozen with
+// backend-senior; UI omits cuisine/diet/cookedAt for "just cooked it" v1 path.
+
+export type CookRating = -1 | 0 | 1;
+
+export interface CookHistoryRequest {
+  dish: string;
+  cuisine?: string;
+  diet?: string[];
+  rating: CookRating;
+  feedTarget: FeedTarget;
+  petName?: string | null;
+  ingredientsUsed?: Array<{ name: string; canonical: string | null }>;
+  cookedAt?: number;
+}
+
+export interface CookHistoryResponse {
+  inserted: true;
+  id?: string;
+}
+
 // ─── /push (POST) — apns-push worker ──────────────────────────────────────────
 
 export interface PushRegisterRequest {
