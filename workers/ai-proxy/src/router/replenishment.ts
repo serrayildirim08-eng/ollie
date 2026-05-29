@@ -70,8 +70,10 @@ interface RpcRow {
 const DAY_MS = 24 * 60 * 60 * 1000;
 const STATIC_FALLBACK_DAYS = 14; // unknown canonical, default ~2 weeks
 
-/** Strict UUID v4-ish — same shape index.ts route matcher uses. */
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** Accepts UUIDs (legacy) AND Clerk user IDs (user_xxx). Real auth boundary
+ *  is the downstream Clerk JWT ownership check; this regex only blocks
+ *  injection-shaped garbage. */
+const UUID_RE = /^[A-Za-z0-9_-]{8,128}$/;
 
 // ─── handler ─────────────────────────────────────────────────────────────────
 
