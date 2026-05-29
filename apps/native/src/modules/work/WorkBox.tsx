@@ -40,6 +40,7 @@ import {
   tasks as tasksRepo,
 } from './repo';
 import type { WorkEvent, WorkTask } from './types';
+import { FocusTimer } from './FocusTimer';
 
 const SMCP_STYLE: CSSProperties = {
   fontVariantCaps: 'all-small-caps',
@@ -213,6 +214,17 @@ export function WorkBox(): JSX.Element {
         {/* card body — the three sections, indented to align under the glance
             line (matches the v2 face's 78px gutter offset = 62 glyph + 16 gap). */}
         <div style={{ marginTop: 18, marginLeft: 78 }}>
+          {/* Focus timer — always visible, independent of data readiness */}
+          <FocusTimer onSessionLogged={() => void refresh()} />
+
+          {/* Data sections — separated by a hairline */}
+          <div
+            style={{
+              marginTop: 32,
+              paddingTop: 28,
+              borderTop: `1px solid ${colors.hairlineSoft}`,
+            }}
+          >
           {!ready ? (
             <Text scale="caption" color={colors.inkFaint}>
               loading…
@@ -270,6 +282,7 @@ export function WorkBox(): JSX.Element {
               />
             </Stack>
           )}
+          </div>
         </div>
       </div>
 
