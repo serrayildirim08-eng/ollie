@@ -27,7 +27,7 @@ export interface CfAiBinding {
       max_tokens?: number;
       temperature?: number;
     },
-  ): Promise<{ response?: string } | string>;
+  ): Promise<{ response?: unknown } | string>;
 }
 
 /** Strip ```json … ``` fences some models wrap JSON in, returning the inner
@@ -47,7 +47,7 @@ export async function cloudflareJson(
   opts: { system: string; user: string; maxTokens?: number },
   label: string,
 ): Promise<string> {
-  let out: { response?: string } | string;
+  let out: { response?: unknown } | string;
   try {
     out = await ai.run(CF_MODEL, {
       messages: [
@@ -64,7 +64,12 @@ export async function cloudflareJson(
     throw err;
   }
 
-  const text = typeof out === 'string' ? out : out.response ?? '';
+  // Workers AI returns `{ response: string }` for most chat models, but some
+  // hand back `response` as an already-parsed object — stringify so the
+  // caller's JSON.parse round-trips either way.
+  const raw = typeof out === 'string' ? out : out.response;
+  const text =
+    typeof raw === 'string' ? raw : raw && typeof raw === 'object' ? JSON.stringify(raw) : '';
   if (!text.trim()) {
     throw new Error(`${label} cloudflare-ai returned empty content`);
   }
