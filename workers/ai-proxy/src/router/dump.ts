@@ -52,6 +52,11 @@ import {
   cacheUpsert,
   type VectorizeIndex,
 } from './vectorize';
+import { base64ByteSize, isVisionImage, visionExtract, type VisionImage } from './vision';
+
+/** Hard upper bound on the raw image bytes the worker accepts. Frontend
+ *  resizes to ~700KB; this is defensive against direct API callers. */
+const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 
 const VOYAGE_MODEL = 'voyage-multilingual-2';
 const VOYAGE_EMBED_DIM = 1024;
@@ -59,6 +64,10 @@ const VOYAGE_EMBED_DIM = 1024;
 export interface DumpRouteEnv {
   VOYAGE_API_KEY: string;
   GROQ_API_KEY: string;
+  /** Used when the request carries an `image` field. Already declared as a
+   *  worker-wide secret (same one FeedMe uses). Missing/empty value with
+   *  image present → 503 upstream-unavailable. Text-only dumps ignore it. */
+  GEMINI_API_KEY: string;
   /** Required at runtime for /route/dump; declared optional here so it
    *  remains compatible with the broader Env shape (InvitesEnv keeps it
    *  optional during Clerk migration). The handler returns 503 if missing. */
@@ -98,21 +107,65 @@ export async function handleDumpRoute(req: Request, env: DumpRouteEnv): Promise<
   }
 
   // Parse body
-  let body: { text: string; dumpId?: string; locale?: string };
+  let body: {
+    text?: string;
+    dumpId?: string;
+    locale?: string;
+    image?: VisionImage;
+  };
   try {
     body = (await req.json()) as typeof body;
   } catch {
     return json({ error: 'bad_json' }, 400);
   }
-  if (!body || typeof body.text !== 'string' || body.text.trim().length === 0) {
+  if (!body) {
+    return json({ error: 'bad_json' }, 400);
+  }
+
+  const userText = typeof body.text === 'string' ? body.text.trim() : '';
+  const hasImage = body.image !== undefined;
+
+  if (hasImage && !isVisionImage(body.image)) {
+    return json({ error: 'bad_image' }, 400);
+  }
+
+  if (!userText && !hasImage) {
     return json({ error: 'missing_text' }, 400);
   }
+
+  if (hasImage && base64ByteSize((body.image as VisionImage).data) > MAX_IMAGE_BYTES) {
+    return json({ error: 'image_too_large' }, 413);
+  }
+
+  // Vision pre-pass — if image present, ask Gemini Flash 2.5 to describe
+  // what's in it. The description is prepended to the user's text dump
+  // (if any) and the combined string flows through Layer 1 + Layer 2.
+  let visionUsed = false;
+  let visionDescription = '';
+  if (hasImage) {
+    if (!env.GEMINI_API_KEY) {
+      return json({ error: 'gemini_key_unset' }, 503);
+    }
+    try {
+      const extract = await visionExtract(body.image as VisionImage, env.GEMINI_API_KEY);
+      visionDescription = extract.text;
+      visionUsed = true;
+    } catch (err) {
+      return upstreamError('vision_failed', 502, err, { dumpId: body.dumpId });
+    }
+  }
+
+  const combinedDump = visionDescription
+    ? userText
+      ? `[image: ${visionDescription} ]\n\n${userText}`
+      : `[image: ${visionDescription} ]`
+    : userText;
 
   const dumpId = body.dumpId ?? crypto.randomUUID();
   const locale = body.locale ?? 'tr';
 
   // PII scrub once on the whole dump; preserves segmentation faithfulness.
-  const { scrubbed: cleanDump } = scrubPII(body.text);
+  const { scrubbed: cleanDump } = scrubPII(combinedDump);
 
   // 2 + 3. Segmentation (pass-1 + pass-2 for flagged fragments).
   const pass1 = pass1Segment(cleanDump, locale);
@@ -140,7 +193,10 @@ export async function handleDumpRoute(req: Request, env: DumpRouteEnv): Promise<
   // (Per fragment also acceptable; the lexicon library does the right
   // thing either way, but checking the whole dump avoids missing signals
   // that span a fragment boundary like "I want to" + "die tonight".)
-  const crisis = detectCrisis(body.text) ?? undefined;
+  // Crisis detection runs over the combined dump so a photo of a note
+  // ("kendime zarar vermek istiyorum" scrawled on paper) still triggers
+  // the upstream lexicon path even with no typed text.
+  const crisis = detectCrisis(combinedDump) ?? undefined;
 
   // 6. Per-fragment classification.
   const fragments: Fragment[] = [];
@@ -225,7 +281,8 @@ export async function handleDumpRoute(req: Request, env: DumpRouteEnv): Promise<
   console.log(
     '[route/dump]',
     JSON.stringify({
-      input: body.text.slice(0, 120),
+      input: combinedDump.slice(0, 120),
+      visionUsed,
       fragments: fragments.map((f) => ({
         text: f.text.slice(0, 60),
         module: f.module,
@@ -240,10 +297,11 @@ export async function handleDumpRoute(req: Request, env: DumpRouteEnv): Promise<
 
   const output: RouterOutput = {
     schemaVersion: '1.0',
-    originalDump: body.text,
+    originalDump: combinedDump,
     dumpId,
     timestamp: Date.now(),
-    language: detectFragmentLanguage(body.text),
+    language: detectFragmentLanguage(combinedDump),
+    ...(visionUsed ? { visionUsed: true } : {}),
     crisis,
     fragments,
     summary: {
