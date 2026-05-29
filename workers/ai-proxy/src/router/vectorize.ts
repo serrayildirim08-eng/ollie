@@ -101,10 +101,19 @@ export async function cacheLookup(
   const createdAt = typeof meta.createdAt === 'number' ? meta.createdAt : 0;
   if (Date.now() - createdAt > TTL_MS) return null;
 
+  // payload is stored as a JSON string — Vectorize metadata cannot hold
+  // nested objects. Parse it back; tolerate legacy object-shaped rows.
+  let payload: Record<string, unknown> = {};
+  if (typeof meta.payload === 'string') {
+    try { payload = JSON.parse(meta.payload) as Record<string, unknown>; } catch { payload = {}; }
+  } else if (meta.payload && typeof meta.payload === 'object') {
+    payload = meta.payload as Record<string, unknown>;
+  }
+
   return {
     id: top.id,
     module: meta.module as Module,
-    payload: (meta.payload as Record<string, unknown>) ?? {},
+    payload,
     confidence: typeof meta.confidence === 'number' ? meta.confidence : 0.8,
     language: typeof meta.language === 'string' ? meta.language : 'unknown',
     similarity: top.score,
@@ -137,7 +146,9 @@ export async function cacheUpsert(
       metadata: {
         userId: params.userId,
         module: params.module,
-        payload: params.payload,
+        // Vectorize metadata is flat — nested objects are rejected. Store
+        // the payload as a JSON string; cacheLookup parses it back.
+        payload: JSON.stringify(params.payload),
         confidence: params.confidence,
         language: params.language,
         hitCount: 0,
@@ -164,7 +175,7 @@ export async function cacheHitBump(
       metadata: {
         userId,
         module: row.module,
-        payload: row.payload,
+        payload: JSON.stringify(row.payload),
         confidence: row.confidence,
         language: row.language,
         hitCount: row.hitCount + 1,
