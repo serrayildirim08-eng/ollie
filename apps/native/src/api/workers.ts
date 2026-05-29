@@ -23,8 +23,12 @@ import type {
   ApiResult,
   BrainDumpRequest,
   BrainDumpResponse,
+  CookHistoryRequest,
+  CookHistoryResponse,
   EnrichDumpRequest,
   EnrichDumpResponse,
+  FeedMeRequest,
+  FeedMeResponse,
   IngestEventRequest,
   IngestEventResponse,
   LabelRequest,
@@ -84,6 +88,48 @@ export function routeModule(
     `${urls.aiProxy}/route/${module}`,
     req,
     { authJwt: opts.bearer, timeoutMs: opts.timeoutMs ?? 15_000 },
+  );
+}
+
+// ─── ai-proxy: /feed-me/:user — Layer 2 recipe suggestion ────────────────────
+
+/**
+ * Ask the worker for AI-generated recipes derived from the user's pantry.
+ * Worker handles PII scrub + Voyage embedding cache + Gemini call, returning
+ * either `source='gemini' | 'cache_hit'` with suggestions or, on upstream
+ * failure, `source='static_fallback'` with an empty list (HTTP 200). The
+ * caller treats an empty static_fallback as "nothing to render right now".
+ *
+ * `userId` is the path UUID — must match the verified JWT `sub` claim or
+ * the worker returns 403.
+ */
+export function routeFeedMe(
+  userId: string,
+  req: FeedMeRequest,
+  opts: { bearer: string; timeoutMs?: number },
+): Promise<ApiResult<FeedMeResponse>> {
+  return post<FeedMeResponse>(
+    `${urls.aiProxy}/feed-me/${encodeURIComponent(userId)}`,
+    req,
+    { authJwt: opts.bearer, timeoutMs: opts.timeoutMs ?? 20_000 },
+  );
+}
+
+// ─── ai-proxy: /cook-history — event ingest ───────────────────────────────────
+
+/**
+ * Record a cook event. Used by the "cooked it" affordance under each recipe
+ * card. Fire-and-forget on the calling side: a failed write only loses one
+ * cook signal, doesn't block the optimistic UI.
+ */
+export function routeCookHistory(
+  req: CookHistoryRequest,
+  opts: { bearer: string; timeoutMs?: number },
+): Promise<ApiResult<CookHistoryResponse>> {
+  return post<CookHistoryResponse>(
+    `${urls.aiProxy}/cook-history`,
+    req,
+    { authJwt: opts.bearer, timeoutMs: opts.timeoutMs ?? 10_000 },
   );
 }
 
