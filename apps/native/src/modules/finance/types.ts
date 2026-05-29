@@ -34,9 +34,11 @@ export interface FinanceBill {
 export interface FinanceSubscription {
   id: string;
   name: string;
-  /** Per-cycle cost. Treated as monthly for burn math (the dominant cadence). */
+  /** Per-cycle cost, amortised to monthly via `cadence` for burn math. */
   amount: number | null;
   currency: string | null;
+  /** Billing cadence. Null = unknown; burn math treats null as monthly. */
+  cadence: Cadence | null;
   addedAt: number;
 }
 

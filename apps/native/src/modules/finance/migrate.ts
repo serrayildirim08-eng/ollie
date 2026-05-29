@@ -41,12 +41,14 @@ const CREATE_STATEMENTS = [
   )`,
 
   // finance_subscriptions — named services, deduped by lowercased name.
-  // amount + currency added 2026-05-28 so subs feed monthly burn.
+  // amount + currency added 2026-05-28; cadence added 2026-05-29 so a
+  // yearly sub amortises correctly instead of counting as monthly.
   `CREATE TABLE IF NOT EXISTS finance_subscriptions (
     id           TEXT PRIMARY KEY,
     name         TEXT NOT NULL,
     amount       REAL,
     currency     TEXT,
+    cadence      TEXT,
     added_at     INTEGER NOT NULL
   )`,
 
@@ -79,6 +81,9 @@ export function migrateFinance(): Promise<void> {
       }
       if (!have.has('currency')) {
         await sql.execute(`ALTER TABLE finance_subscriptions ADD COLUMN currency TEXT`);
+      }
+      if (!have.has('cadence')) {
+        await sql.execute(`ALTER TABLE finance_subscriptions ADD COLUMN cadence TEXT`);
       }
     })();
   }

@@ -54,6 +54,7 @@ interface SubscriptionRow {
   name: string;
   amount: number | null;
   currency: string | null;
+  cadence: string | null;
   added_at: number;
   [col: string]: unknown;
 }
@@ -176,7 +177,7 @@ export const bills = {
 export const subscriptions = {
   async list(): Promise<FinanceSubscription[]> {
     const rows = await sql.select<SubscriptionRow>(
-      `SELECT id, name, amount, currency, added_at
+      `SELECT id, name, amount, currency, cadence, added_at
        FROM finance_subscriptions
        ORDER BY added_at DESC`,
     );
@@ -185,22 +186,24 @@ export const subscriptions = {
 
   /**
    * Dedupe by lowercased name — refreshes added_at on duplicate. If the
-   * caller passes a non-null amount/currency, those overwrite the prior
-   * values (so "netflix 15" then "netflix 18" lands the user on 18).
+   * caller passes a non-null amount/currency/cadence, those overwrite the
+   * prior values (so "netflix 15" then "netflix 18" lands the user on 18).
    * Nulls leave the prior values alone.
    */
   async add(input: {
     name: string;
     amount?: number | null;
     currency?: string | null;
+    cadence?: Cadence | null;
   }): Promise<FinanceSubscription> {
     const name = normaliseSubscriptionName(input.name);
     const amount = input.amount ?? null;
     const currency = normaliseCurrency(input.currency ?? null);
+    const cadence = normaliseCadence(input.cadence ?? null);
     const now = Date.now();
 
     const existing = await sql.select<SubscriptionRow>(
-      `SELECT id, name, amount, currency, added_at
+      `SELECT id, name, amount, currency, cadence, added_at
        FROM finance_subscriptions WHERE name = ? LIMIT 1`,
       [name],
     );
@@ -208,28 +211,30 @@ export const subscriptions = {
       const row = existing[0]!;
       const nextAmount = amount ?? row.amount;
       const nextCurrency = currency ?? row.currency;
+      const nextCadence = cadence ?? row.cadence;
       await sql.execute(
         `UPDATE finance_subscriptions
-            SET amount = ?, currency = ?, added_at = ?
+            SET amount = ?, currency = ?, cadence = ?, added_at = ?
           WHERE id = ?`,
-        [nextAmount, nextCurrency, now, row.id],
+        [nextAmount, nextCurrency, nextCadence, now, row.id],
       );
       return {
         id: row.id,
         name: row.name,
         amount: nextAmount,
         currency: nextCurrency,
+        cadence: (nextCadence as Cadence | null) ?? null,
         addedAt: now,
       };
     }
 
     const id = newId();
     await sql.execute(
-      `INSERT INTO finance_subscriptions (id, name, amount, currency, added_at)
-       VALUES (?, ?, ?, ?, ?)`,
-      [id, name, amount, currency, now],
+      `INSERT INTO finance_subscriptions (id, name, amount, currency, cadence, added_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [id, name, amount, currency, cadence, now],
     );
-    return { id, name, amount, currency, addedAt: now };
+    return { id, name, amount, currency, cadence, addedAt: now };
   },
 
   async remove(id: string): Promise<void> {
@@ -300,6 +305,7 @@ function rowToSubscription(r: SubscriptionRow): FinanceSubscription {
     amount: r.amount,
     // Re-normalise on read so legacy "$"/"dollars" rows group with USD.
     currency: normaliseCurrency(r.currency),
+    cadence: (r.cadence as Cadence | null) ?? null,
     addedAt: r.added_at,
   };
 }
@@ -327,7 +333,7 @@ export async function getMonthlyBurn(): Promise<MonthlyBurn[]> {
       `SELECT id, merchant, amount, currency, cadence, added_at FROM finance_bills`,
     ),
     sql.select<SubscriptionRow>(
-      `SELECT id, name, amount, currency, added_at FROM finance_subscriptions`,
+      `SELECT id, name, amount, currency, cadence, added_at FROM finance_subscriptions`,
     ),
   ]);
 
@@ -350,8 +356,13 @@ export async function getMonthlyBurn(): Promise<MonthlyBurn[]> {
   }
   for (const r of subRows) {
     if (r.amount == null) continue;
+    // Null cadence defaults to monthly (subscriptions were assumed monthly
+    // before cadence existed); a known yearly/weekly cadence amortises so a
+    // $120/yr sub adds $10/mo, not $120/mo.
+    const cadence = (r.cadence as Cadence | null) ?? 'monthly';
+    const monthly = monthlyEquivalent(r.amount, cadence);
     const currency = normaliseCurrency(r.currency);
-    ensure(currency).subscriptions += r.amount;
+    ensure(currency).subscriptions += monthly;
   }
   for (const r of billRows) {
     if (r.amount == null) continue;

@@ -32,8 +32,8 @@ export const groceryHandler: ModuleHandler<'grocery'> = {
         // shows up in both boxes. Per ARCH_DECISION_NEEDED.md (Serra,
         // 2026-05-28): grocery is the primary, finance is the side effect,
         // only when a price is actually present.
-        const price = (p as { price?: number | null }).price;
-        const currency = (p as { currency?: string | null }).currency ?? null;
+        const price = p.price;
+        const currency = p.currency ?? null;
         let financeRowId: string | null = null;
         if (typeof price === 'number' && Number.isFinite(price) && price > 0) {
           try {
