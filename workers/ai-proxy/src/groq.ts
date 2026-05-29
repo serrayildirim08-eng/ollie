@@ -10,7 +10,7 @@
  * Auth:     Bearer <GROQ_API_KEY>  (Worker secret; never client-shipped)
  */
 
-export const GROQ_MODEL = 'llama-3.3-70b-versatile';
+export const GROQ_MODEL = 'openai/gpt-oss-120b';
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 
 export interface GroqMessage {
