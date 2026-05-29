@@ -44,6 +44,10 @@ export interface GoalCreateModalProps {
   onClose: () => void;
   /** Called after a successful create so the parent can refresh its list. */
   onCreated: () => void;
+  /** Pre-fill "what" — used when the dump AI detected a goal intent. */
+  initialWhat?: string;
+  /** Pre-fill "why" — the motivation the AI extracted, if any. */
+  initialWhy?: string;
 }
 
 /** Parse a `<input type="date">` value (yyyy-mm-dd) to ms-epoch, or null. */
@@ -56,9 +60,11 @@ function dateToMs(value: string): number | null {
 export function GoalCreateModal({
   onClose,
   onCreated,
+  initialWhat = '',
+  initialWhy = '',
 }: GoalCreateModalProps): JSX.Element {
-  const [what, setWhat] = useState('');
-  const [why, setWhy] = useState('');
+  const [what, setWhat] = useState(initialWhat);
+  const [why, setWhy] = useState(initialWhy);
   const [targetDate, setTargetDate] = useState(''); // yyyy-mm-dd or ''
   const [obstacle, setObstacle] = useState('');
   const [premortem, setPremortem] = useState('');
@@ -214,13 +220,15 @@ export function GoalCreateModal({
               label="target date"
               hint="optional · no punishment for missing"
             >
+              {/* Plain editorial text field — the native date picker rendered
+                  an OS calendar that broke the page's quiet visual language.
+                  Accepts yyyy-mm-dd; dateToMs parses it (blank = no date). */}
               <Input
                 label="target date"
                 labelHidden
-                // Input's `type` union doesn't list "date", but it forwards the
-                // prop straight to the DOM input — so the native date picker
-                // renders. Cast to satisfy the narrowed union.
-                type={'date' as 'text'}
+                type="text"
+                inputMode="numeric"
+                placeholder="2026-08-01"
                 value={targetDate}
                 onChange={setTargetDate}
               />

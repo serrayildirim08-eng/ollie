@@ -21,6 +21,7 @@ import { dispatchRouterOutput } from '../modules';
 import type { DispatchEntry } from '../modules';
 import type { CrisisSignal, RouterOutput } from '../router/schema';
 import { NeedsConfirmCard } from './NeedsConfirmCard';
+import { GoalCreateModal } from '../modules/goals/GoalCreateModal';
 import styles from './DumpScreen.module.css';
 
 const SMCP_STYLE: React.CSSProperties = {
@@ -63,6 +64,10 @@ export function DumpScreen(): JSX.Element {
   const [ackKey, setAckKey] = useState<number | null>(null);
   const [crisis, setCrisis] = useState<CrisisSignal | null>(null);
   const [pendingConfirms, setPendingConfirms] = useState<PendingConfirm[]>([]);
+  // Rich goal capture from the home screen: when a dump is classified as a
+  // new goal, the modal opens PRE-FILLED with what/why the AI extracted so
+  // the user just completes obstacle/premortem/ulysses. Null = closed.
+  const [goalDraft, setGoalDraft] = useState<{ what: string; why: string } | null>(null);
 
   // Auto-clear the ack so the DOM cleans up after the fade-out and the
   // screen returns to its quiet default state.
@@ -86,9 +91,31 @@ export function DumpScreen(): JSX.Element {
   }, []);
 
   const onResult = useCallback(async (output: RouterOutput) => {
+    // Goal intent → rich capture. When the AI classifies a fragment as a new
+    // goal ("i want to go to greece this year"), DON'T silently file a bare
+    // goal — open the create modal pre-filled with the what/why it extracted
+    // so the user completes obstacle/premortem/ulysses. We strip those
+    // fragments from the silent dispatch to avoid creating a duplicate row.
+    const goalFragment = output.fragments.find((f) => {
+      const pl = f.payload as { action?: string };
+      return f.module === 'goals' && pl.action === 'create_goal';
+    });
+    if (goalFragment) {
+      const pl = goalFragment.payload as { what?: string; why?: string };
+      setGoalDraft({ what: pl.what ?? goalFragment.text, why: pl.why ?? '' });
+    }
+    const dispatchOutput: RouterOutput = goalFragment
+      ? {
+          ...output,
+          fragments: output.fragments.filter(
+            (f) => !(f.module === 'goals' && (f.payload as { action?: string }).action === 'create_goal'),
+          ),
+        }
+      : output;
+
     // Dispatch is silent: the result entries update module-local state but
     // we do not render them. The user goes to the module to see the change.
-    const dispatched = await dispatchRouterOutput(output);
+    const dispatched = await dispatchRouterOutput(dispatchOutput);
     if (dispatched.crisisSkipped) return;
 
     // Surface a confirm card for each uncertain fragment. Both the fragment-
@@ -145,6 +172,19 @@ export function DumpScreen(): JSX.Element {
       </Stack>
 
       <BrainDumpInput getBearer={getBearer} onResult={onResult} onCrisis={onCrisis} />
+
+      {goalDraft && (
+        <GoalCreateModal
+          initialWhat={goalDraft.what}
+          initialWhy={goalDraft.why}
+          onClose={() => setGoalDraft(null)}
+          onCreated={() => {
+            setGoalDraft(null);
+            _ackTick += 1;
+            setAckKey(_ackTick);
+          }}
+        />
+      )}
 
       {crisis && <CrisisBanner crisis={crisis} onDismiss={() => setCrisis(null)} />}
 
