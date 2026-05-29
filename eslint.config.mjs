@@ -12,6 +12,7 @@
 import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import globals from 'globals';
+import reactHooks from 'eslint-plugin-react-hooks';
 import ollie from './tools/eslint-plugin-ollie/index.cjs';
 
 export default tseslint.config(
@@ -41,10 +42,15 @@ export default tseslint.config(
     languageOptions: {
       globals: { ...globals.browser, ...globals.node, ...globals.es2022 },
     },
-    plugins: { ollie },
+    plugins: { ollie, 'react-hooks': reactHooks },
     rules: {
       // Voice-library guard — the orphaned rule, now enforced.
       'ollie/no-banned-copy': 'error',
+
+      // React hooks safety. rules-of-hooks catches real bugs (conditional
+      // hooks) → error. exhaustive-deps is advisory on a mature tree → warn.
+      'react-hooks/rules-of-hooks': 'error',
+      'react-hooks/exhaustive-deps': 'warn',
 
       // High-value bug catchers stay as errors.
       'no-debugger': 'error',

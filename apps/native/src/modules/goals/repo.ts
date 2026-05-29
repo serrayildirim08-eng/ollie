@@ -16,14 +16,32 @@
  */
 
 import { computeCadence, type CadenceEstimate } from '@ollie/cadence';
+import { detectLowMood } from '@ollie/logic/goals';
 import { sql } from '../../storage';
 import {
+  ACTIVE_GOAL_CAP,
+  DELETE_LOCK_MS,
   normaliseName,
+  type DeleteGate,
   type Goal,
+  type GoalDraft,
   type GoalEvent,
   type GoalEventKind,
   type GoalWithLatest,
 } from './types';
+
+/**
+ * Thrown by `goals.create` when the active-goal cap is reached. The UI
+ * catches `.code === 'goal_cap'` to show the "you already have 5 going"
+ * surface instead of a generic failure (brief G2).
+ */
+export class GoalCapError extends Error {
+  readonly code = 'goal_cap';
+  constructor(message = 'active goal cap reached') {
+    super(message);
+    this.name = 'GoalCapError';
+  }
+}
 
 // Index signature satisfies the sql<T extends ShimRow>() constraint; the
 // strongly-typed properties still win in autocomplete + narrowing.
@@ -31,9 +49,24 @@ interface GoalRow {
   id: string;
   name: string;
   why: string | null;
+  target_date: number | null;
+  obstacle: string | null;
+  premortem: string | null;
+  ulysses_contract: string | null;
   created_at: number;
   [col: string]: unknown;
 }
+
+interface MoodRow {
+  id: string;
+  text: string;
+  logged_at: number;
+  [col: string]: unknown;
+}
+
+/** Columns selected for every goals_registry read. */
+const GOAL_COLS =
+  'id, name, why, target_date, obstacle, premortem, ulysses_contract, created_at';
 
 interface EventRow {
   id: string;
@@ -55,7 +88,7 @@ function newId(): string {
 export const goals = {
   async list(): Promise<Goal[]> {
     const rows = await sql.select<GoalRow>(
-      `SELECT id, name, why, created_at
+      `SELECT ${GOAL_COLS}
        FROM goals_registry
        ORDER BY created_at DESC`,
     );
@@ -90,7 +123,7 @@ export const goals = {
   async findByName(name: string): Promise<Goal | null> {
     const n = normaliseName(name);
     const rows = await sql.select<GoalRow>(
-      `SELECT id, name, why, created_at
+      `SELECT ${GOAL_COLS}
        FROM goals_registry WHERE name = ? LIMIT 1`,
       [n],
     );
@@ -123,7 +156,125 @@ export const goals = {
        VALUES (?, ?, ?, ?)`,
       [id, n, why ?? null, now],
     );
-    return { id, name: n, why: why ?? null, createdAt: now };
+    return {
+      id,
+      name: n,
+      why: why ?? null,
+      targetDate: null,
+      obstacle: null,
+      premortem: null,
+      ulyssesContract: null,
+      createdAt: now,
+    };
+  },
+
+  /**
+   * Explicit rich-create path (the create modal). Persists every captured
+   * field. Enforces the active-goal cap BEFORE inserting — throws
+   * `GoalCapError` (code 'goal_cap') when the registry is already at
+   * `ACTIVE_GOAL_CAP` so the UI can show its own surface. Unlike `ensure`,
+   * this is a deliberate user action so refusing is correct (brief G2).
+   */
+  async create(draft: GoalDraft): Promise<Goal> {
+    const count = await goals.activeCount();
+    if (count >= ACTIVE_GOAL_CAP) {
+      throw new GoalCapError();
+    }
+    const id = newId();
+    const now = Date.now();
+    const name = normaliseName(draft.name);
+    const why = draft.why ?? null;
+    const targetDate = draft.targetDate ?? null;
+    const obstacle = draft.obstacle ?? null;
+    const premortem = draft.premortem ?? null;
+    const ulyssesContract = draft.ulyssesContract ?? null;
+    await sql.execute(
+      `INSERT INTO goals_registry
+         (id, name, why, target_date, obstacle, premortem, ulysses_contract, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, name, why, targetDate, obstacle, premortem, ulyssesContract, now],
+    );
+    return {
+      id,
+      name,
+      why,
+      targetDate,
+      obstacle,
+      premortem,
+      ulyssesContract,
+      createdAt: now,
+    };
+  },
+
+  /** Count of active goals. All registry rows are active (no archive flag). */
+  async activeCount(): Promise<number> {
+    const rows = await sql.select<{ n: number; [col: string]: unknown }>(
+      `SELECT COUNT(*) AS n FROM goals_registry`,
+    );
+    return rows.length > 0 ? Number(rows[0]!.n) : 0;
+  },
+
+  /**
+   * Append a mood signal to the local mood log (brief G4). Fed by the dump
+   * pipeline / mood capture so `canDelete` has something real to read.
+   * Self-pruning: keeps only the last ~50 rows / 14 days so the table
+   * stays tiny.
+   */
+  async recordMoodSignal(text: string): Promise<void> {
+    const id = newId();
+    const now = Date.now();
+    await sql.execute(
+      `INSERT INTO goals_mood_log (id, text, logged_at) VALUES (?, ?, ?)`,
+      [id, text, now],
+    );
+    // Prune: drop anything older than 14 days, then keep only the newest 50.
+    const cutoff = now - 14 * 24 * 60 * 60 * 1000;
+    await sql.execute(`DELETE FROM goals_mood_log WHERE logged_at < ?`, [cutoff]);
+    await sql.execute(
+      `DELETE FROM goals_mood_log
+       WHERE id NOT IN (
+         SELECT id FROM goals_mood_log ORDER BY logged_at DESC LIMIT 50
+       )`,
+    );
+  },
+
+  /**
+   * Low-mood delete gate (brief G4). Reads the last 14 days of the local
+   * mood log, builds a DumpHistory, and asks `detectLowMood`. A signal
+   * locks deletion for `DELETE_LOCK_MS`.
+   *
+   * FAILS OPEN: no mood data, no signal, or any error → { allowed: true }.
+   * We never block a deletion just because the gate couldn't decide.
+   */
+  async canDelete(_id: string): Promise<DeleteGate> {
+    try {
+      const now = Date.now();
+      const windowStart = now - 14 * 24 * 60 * 60 * 1000;
+      const rows = await sql.select<MoodRow>(
+        `SELECT id, text, logged_at
+         FROM goals_mood_log
+         WHERE logged_at >= ?
+         ORDER BY logged_at DESC`,
+        [windowStart],
+      );
+      if (rows.length === 0) return { allowed: true };
+      const history = {
+        dumps: rows.map((r) => ({ ts: r.logged_at, rawText: r.text })),
+        now,
+      };
+      const signal = detectLowMood(history);
+      if (signal) {
+        return {
+          allowed: false,
+          lockedUntil: now + DELETE_LOCK_MS,
+          reason: 'low_mood',
+        };
+      }
+      return { allowed: true };
+    } catch {
+      // Fail open — never block deletion on a gate failure.
+      return { allowed: true };
+    }
   },
 
   async remove(id: string): Promise<void> {
@@ -196,6 +347,10 @@ function rowToGoal(r: GoalRow): Goal {
     id: r.id,
     name: r.name,
     why: r.why,
+    targetDate: r.target_date,
+    obstacle: r.obstacle,
+    premortem: r.premortem,
+    ulyssesContract: r.ulysses_contract,
     createdAt: r.created_at,
   };
 }
