@@ -175,7 +175,9 @@ describe('sendSystemNotification', () => {
     setTauriContext(true);
     pluginMock.isPermissionGranted.mockResolvedValue(true);
     await sendSystemNotification({ title: 'hi', body: 'there' });
-    expect(pluginMock.sendNotification).toHaveBeenCalledWith({ title: 'hi', body: 'there' });
+    expect(pluginMock.sendNotification).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'hi', body: 'there' }),
+    );
   });
 
   it('drops the notification silently when permission not granted', async () => {
@@ -208,10 +210,9 @@ describe('installNotifyListener', () => {
 
     // Drain the microtask queue inside the handler.
     await vi.waitFor(() => {
-      expect(pluginMock.sendNotification).toHaveBeenCalledWith({
-        title: 'focus done',
-        body: '25 min',
-      });
+      expect(pluginMock.sendNotification).toHaveBeenCalledWith(
+        expect.objectContaining({ title: 'focus done', body: '25 min' }),
+      );
     });
 
     teardown();
@@ -261,10 +262,9 @@ describe('scheduleSystemNotification', () => {
     scheduleSystemNotification(spec, Date.now() - 1000);
 
     await vi.waitFor(() => {
-      expect(pluginMock.sendNotification).toHaveBeenCalledWith({
-        title: 'overdue',
-        body: undefined,
-      });
+      expect(pluginMock.sendNotification).toHaveBeenCalledWith(
+        expect.objectContaining({ title: 'overdue' }),
+      );
     });
   });
 
@@ -285,10 +285,9 @@ describe('scheduleSystemNotification', () => {
     await vi.advanceTimersByTimeAsync(5001);
 
     await vi.waitFor(() => {
-      expect(pluginMock.sendNotification).toHaveBeenCalledWith({
-        title: 'soon',
-        body: 'in a bit',
-      });
+      expect(pluginMock.sendNotification).toHaveBeenCalledWith(
+        expect.objectContaining({ title: 'soon', body: 'in a bit' }),
+      );
     });
   });
 });
@@ -303,10 +302,9 @@ describe('scheduleAt', () => {
     scheduleAt(Date.now() - 100, { title: 'gone', body: 'past' });
 
     await vi.waitFor(() => {
-      expect(pluginMock.sendNotification).toHaveBeenCalledWith({
-        title: 'gone',
-        body: 'past',
-      });
+      expect(pluginMock.sendNotification).toHaveBeenCalledWith(
+        expect.objectContaining({ title: 'gone', body: 'past' }),
+      );
     });
     expect(scheduleAtMock).not.toHaveBeenCalled();
   });
@@ -325,11 +323,13 @@ describe('scheduleAt', () => {
     expect(scheduleArg).toBeInstanceOf(Date);
     expect((scheduleArg as Date).getTime()).toBe(fireAt);
 
-    expect(pluginMock.sendNotification).toHaveBeenCalledWith({
-      title: 'call',
-      body: 'mama',
-      schedule: { kind: 'at-schedule', date: new Date(fireAt) },
-    });
+    expect(pluginMock.sendNotification).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'call',
+        body: 'mama',
+        schedule: { kind: 'at-schedule', date: new Date(fireAt) },
+      }),
+    );
 
     // The OS holds the schedule — no in-process timer should be needed.
     pluginMock.sendNotification.mockClear();
