@@ -20,6 +20,14 @@ import { Router } from "./navigation";
 // Side-effect import — evaluating this module runs `createOrchestrator(...).init()`.
 // Must precede first render so cadence sources are live before any module mounts.
 import "./store";
+// Wire the global `ollie:notify` CustomEvent bridge → system notifications.
+// Singleton; never torn down for the lifetime of the app window. Any
+// feature can fire:
+//   window.dispatchEvent(new CustomEvent('ollie:notify', { detail: { title, body } }))
+// and get a real macOS / desktop notification when the user has granted
+// permission, otherwise a console.log fallback (web preview / pre-grant).
+import { installNotifyListener } from "./notify/systemNotify";
+installNotifyListener();
 
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as
   | string
