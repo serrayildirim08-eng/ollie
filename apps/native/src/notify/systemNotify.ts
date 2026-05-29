@@ -63,7 +63,13 @@ interface PluginScheduleApi {
 interface PluginApi {
   isPermissionGranted: () => Promise<boolean>;
   requestPermission: () => Promise<'granted' | 'denied' | 'default'>;
-  sendNotification: (opts: { title: string; body?: string; schedule?: unknown }) => void;
+  sendNotification: (opts: {
+    title: string;
+    body?: string;
+    schedule?: unknown;
+    icon?: string;
+    sound?: string;
+  }) => void;
   Schedule: PluginScheduleApi;
 }
 
@@ -181,7 +187,16 @@ export async function sendSystemNotification({ title, body }: NotifyEventDetail)
       // a user gesture (see requestNotificationPermission()).
       return;
     }
-    plugin.sendNotification({ title, body });
+    // Ollie wordmark icon (cream ceramic + DM Serif lowercase 'o') — shipped
+    // with the app bundle. macOS dev-mode notifications otherwise fall back to
+    // the launcher's icon (terminal glyph), which is what shipped commit
+    // 31e2e19 surfaced and Serra rightly hated.
+    plugin.sendNotification({
+      title,
+      body,
+      icon: 'icons/128x128.png',
+      sound: 'default',
+    });
   } catch (err) {
     console.warn('[systemNotify] sendNotification failed', err);
   }
