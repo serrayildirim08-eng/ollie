@@ -25,13 +25,7 @@ export default tseslint.config(
       '**/.claude/**',
       '**/src-tauri/**',
       '**/*.d.ts',
-      // Legacy surfaces slated for deletion (see audit 2026-05-29):
-      'apps/web/**',
-      'apps/ios/**',
       'marketing/**',
-      // Dead: passphrase auth superseded by Clerk (main.tsx). Nothing outside
-      // src/auth/ imports it — kept for reference until the folder is removed.
-      'apps/native/src/auth/**',
       // Tooling + plugin internals are CommonJS scripts with their own checks:
       'tools/**',
       '**/*.config.{js,mjs,cjs,ts}',
