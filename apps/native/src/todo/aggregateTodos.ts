@@ -31,6 +31,77 @@ import type { AdminRenewal, AdminTask } from '../modules/admin/types';
 import type { ShoppingItem } from '../modules/grocery/types';
 import type { WorkTask } from '../modules/work/types';
 
+// ─── grocery safety-net filter ───────────────────────────────────────────────
+//
+// When Layer 1 loses the verb in a segmented dump (e.g. "i bought milk" →
+// orphan "milk" → admin.create_task("milk")), this set catches the leak and
+// silently drops the row before it surfaces on the To-Do screen.
+//
+// Rule (Serra, 2026-05-30): "to-do is shit i said i needed to do or shit
+// with deadlines as today. past purchases are never todo."
+//
+// Applies only to admin.create_task and work.create_task. Other actions
+// (phone tasks, appointments, renewals, deadlines, grocery.shopping_list_add)
+// pass through untouched.
+//
+// Multi-word entries (e.g. "toilet paper") stay as-is; the check is
+// `text.trim().toLowerCase() === entry`, so "buy milk" (two words) is KEPT.
+
+export const GROCERY_WORDS: ReadonlySet<string> = new Set([
+  // ── EN · food ──────────────────────────────────────────────────────────
+  'milk', 'eggs', 'bread', 'butter', 'cheese', 'yogurt', 'rice', 'pasta',
+  'oil', 'sugar', 'salt', 'flour', 'honey', 'jam', 'cereal', 'oats',
+  'beans', 'lentils', 'chicken', 'beef', 'fish', 'tuna', 'salmon',
+  'shrimp', 'tomatoes', 'onions', 'garlic', 'potatoes', 'carrots',
+  'lemons', 'apples', 'bananas', 'oranges', 'grapes', 'berries',
+  'lettuce', 'spinach', 'broccoli', 'pepper', 'coffee', 'tea', 'juice',
+  'water', 'wine', 'beer', 'chocolate', 'biscuits', 'crackers', 'chips',
+  'snacks', 'ice cream',
+  // ── EN · household / personal care ────────────────────────────────────
+  'soap', 'shampoo', 'conditioner', 'toothpaste', 'deodorant', 'tampons',
+  'pads', 'toilet paper', 'paper towels', 'detergent', 'dish soap',
+  'sponges', 'trash bags', 'diapers', 'wipes',
+  // ── TR · food ──────────────────────────────────────────────────────────
+  'süt', 'yumurta', 'ekmek', 'tereyağı', 'peynir', 'yoğurt', 'pirinç',
+  'makarna', 'yağ', 'şeker', 'tuz', 'un', 'bal', 'reçel',
+  'mısır gevreği', 'yulaf', 'fasulye', 'mercimek', 'tavuk', 'et', 'balık',
+  'domates', 'soğan', 'sarımsak', 'patates', 'havuç', 'limon', 'elma',
+  'muz', 'portakal', 'üzüm', 'çilek', 'marul', 'ıspanak', 'brokoli',
+  'biber', 'kahve', 'çay', 'su', 'şarap', 'bira', 'çikolata',
+  // ── TR · household / personal care ───────────────────────────────────
+  'sabun', 'şampuan', 'diş macunu', 'ped', 'mendil', 'deterjan',
+  // ── ES · food ──────────────────────────────────────────────────────────
+  'leche', 'huevos', 'pan', 'mantequilla', 'queso', 'yogur', 'arroz',
+  'pasta', 'aceite', 'azúcar', 'sal', 'harina', 'miel', 'mermelada',
+  'cereales', 'avena', 'frijoles', 'lentejas', 'pollo', 'carne', 'pescado',
+  'tomates', 'cebolla', 'ajo', 'papas', 'zanahorias', 'limones',
+  'manzanas', 'plátanos', 'naranjas', 'uvas', 'lechuga', 'espinaca',
+  'brócoli', 'café', 'té', 'agua', 'vino', 'cerveza',
+  // ── ES · household / personal care ───────────────────────────────────
+  'jabón', 'champú', 'pasta de dientes', 'toallas', 'detergente',
+]);
+
+/**
+ * Returns true when `text` is a bare grocery noun that should not appear on
+ * the To-Do screen. Normalises whitespace + case before checking.
+ */
+function isGroceryWord(text: string): boolean {
+  return GROCERY_WORDS.has(text.trim().toLowerCase());
+}
+
+/**
+ * Counts how many raw admin/work create_task rows would be silently dropped
+ * by the grocery filter. Useful for a future "n grocery items hidden" footer
+ * without coupling it to the render path. Does NOT mutate rows.
+ */
+export function getGroceryLeakCount(
+  rows: ReadonlyArray<{ kind: string; text: string }>,
+): number {
+  return rows.filter(
+    (r) => (r.kind === 'task') && isGroceryWord(r.text),
+  ).length;
+}
+
 // ─── normalized shape ─────────────────────────────────────────────────────
 
 export type TodoSource = 'admin' | 'work' | 'grocery';
@@ -76,6 +147,9 @@ export type TodoAction =
  *  admin_tasks; we surface only the three that count as todos. */
 export function normalizeAdminTask(row: AdminTask): TodoItem | null {
   if (row.kind === 'task') {
+    // Safety-net: drop single grocery nouns that Layer 1 mis-classified as
+    // create_task (e.g. orphan "milk" from "i bought milk").
+    if (isGroceryWord(row.text)) return null;
     return {
       id: `admin:${row.id}`,
       source: 'admin',
@@ -139,7 +213,7 @@ export function normalizeAdminRenewal(row: AdminRenewal): TodoItem {
 
 /** work.create_task and work.log_deadline both come from work_tasks; the
  *  `kind` discriminator picks which action this row represents. */
-export function normalizeWorkTask(row: WorkTask): TodoItem {
+export function normalizeWorkTask(row: WorkTask): TodoItem | null {
   if (row.kind === 'deadline') {
     const text = row.dueDate
       ? `${row.text} · due ${row.dueDate}`
@@ -154,6 +228,8 @@ export function normalizeWorkTask(row: WorkTask): TodoItem {
       rowId: row.id,
     };
   }
+  // Safety-net: drop single grocery nouns mis-classified as work.create_task.
+  if (isGroceryWord(row.text)) return null;
   return {
     id: `work:${row.id}`,
     source: 'work',
@@ -208,7 +284,8 @@ export function aggregateTodos(input: AggregateInput): TodoItem[] {
     items.push(normalizeAdminRenewal(row));
   }
   for (const row of input.work.tasks) {
-    items.push(normalizeWorkTask(row));
+    const item = normalizeWorkTask(row);
+    if (item) items.push(item);
   }
   for (const row of input.grocery.shopping) {
     items.push(normalizeGroceryShopping(row));

@@ -13,6 +13,7 @@ import { describe, it, expect } from 'vitest';
 import {
   aggregateTodos,
   bucketTodos,
+  getGroceryLeakCount,
   isoToday,
   normalizeAdminRenewal,
   normalizeAdminTask,
@@ -153,9 +154,9 @@ describe('aggregateTodos · normalization', () => {
     const item = normalizeWorkTask(
       workTask({ id: 'w1', text: 'send invoice', kind: 'task' }),
     );
-    expect(item.action).toBe('create_task');
-    expect(item.text).toBe('send invoice');
-    expect(item.date).toBeUndefined();
+    expect(item!.action).toBe('create_task');
+    expect(item!.text).toBe('send invoice');
+    expect(item!.date).toBeUndefined();
   });
 
   it('work log_deadline → "<text> · due <date>"', () => {
@@ -167,8 +168,8 @@ describe('aggregateTodos · normalization', () => {
         dueDate: '2026-06-10',
       }),
     );
-    expect(item.text).toBe('q3 report · due 2026-06-10');
-    expect(item.date).toBe('2026-06-10');
+    expect(item!.text).toBe('q3 report · due 2026-06-10');
+    expect(item!.date).toBe('2026-06-10');
   });
 
   it('grocery shopping_list_add → row.name', () => {
@@ -387,6 +388,126 @@ describe('bucketTodos', () => {
       rowId: id,
     };
   }
+});
+
+// ─── grocery safety-net filter ───────────────────────────────────────────────
+
+describe('grocery safety-net filter', () => {
+  // ── admin.create_task · dropped ──────────────────────────────────────────
+
+  it('"milk" admin.create_task → dropped', () => {
+    expect(
+      normalizeAdminTask(adminTask({ id: 'g1', kind: 'task', text: 'milk' })),
+    ).toBeNull();
+  });
+
+  it('"oil" work.create_task → dropped', () => {
+    expect(
+      normalizeWorkTask(workTask({ id: 'g2', kind: 'task', text: 'oil' })),
+    ).toBeNull();
+  });
+
+  it('"toilet paper" admin.create_task → dropped (multi-word)', () => {
+    expect(
+      normalizeAdminTask(adminTask({ id: 'g3', kind: 'task', text: 'toilet paper' })),
+    ).toBeNull();
+  });
+
+  it('"süt" admin.create_task → dropped (TR)', () => {
+    expect(
+      normalizeAdminTask(adminTask({ id: 'g4', kind: 'task', text: 'süt' })),
+    ).toBeNull();
+  });
+
+  it('"leche" admin.create_task → dropped (ES)', () => {
+    expect(
+      normalizeAdminTask(adminTask({ id: 'g5', kind: 'task', text: 'leche' })),
+    ).toBeNull();
+  });
+
+  // ── kept ─────────────────────────────────────────────────────────────────
+
+  it('"write the PRD" admin.create_task → kept (not a grocery noun)', () => {
+    const item = normalizeAdminTask(
+      adminTask({ id: 'g6', kind: 'task', text: 'write the PRD' }),
+    );
+    expect(item).not.toBeNull();
+    expect(item!.text).toBe('write the PRD');
+  });
+
+  it('"call mom" admin.create_phone_task → kept (filter does not apply to phone tasks)', () => {
+    const item = normalizeAdminTask(
+      adminTask({
+        id: 'g7',
+        kind: 'phone',
+        text: 'mom',
+        data: { kind: 'phone' },
+      }),
+    );
+    expect(item).not.toBeNull();
+    expect(item!.action).toBe('create_phone_task');
+  });
+
+  // ── normalisation ─────────────────────────────────────────────────────────
+
+  it('"Milk" with capital M → dropped (case-insensitive)', () => {
+    expect(
+      normalizeAdminTask(adminTask({ id: 'g8', kind: 'task', text: 'Milk' })),
+    ).toBeNull();
+  });
+
+  it('"  milk  " with surrounding whitespace → dropped (trim)', () => {
+    expect(
+      normalizeAdminTask(adminTask({ id: 'g9', kind: 'task', text: '  milk  ' })),
+    ).toBeNull();
+  });
+
+  it('"buy milk" admin.create_task → kept (multi-word phrase, not a bare noun)', () => {
+    const item = normalizeAdminTask(
+      adminTask({ id: 'g10', kind: 'task', text: 'buy milk' }),
+    );
+    expect(item).not.toBeNull();
+    expect(item!.text).toBe('buy milk');
+  });
+
+  // ── getGroceryLeakCount ──────────────────────────────────────────────────
+
+  it('getGroceryLeakCount counts only create_task grocery hits', () => {
+    const rows = [
+      { kind: 'task', text: 'milk' },
+      { kind: 'task', text: 'oil' },
+      { kind: 'task', text: 'write the PRD' },
+      { kind: 'phone', text: 'milk' },       // phone kind → not counted
+    ];
+    expect(getGroceryLeakCount(rows)).toBe(2);
+  });
+
+  // ── aggregate integration ────────────────────────────────────────────────
+
+  it('aggregate silently drops grocery-word create_task rows from both admin + work', () => {
+    const result = aggregateTodos({
+      admin: {
+        tasks: [
+          adminTask({ id: 't-milk', kind: 'task', text: 'milk' }),
+          adminTask({ id: 't-real', kind: 'task', text: 'pay rent' }),
+        ],
+        renewals: [],
+      },
+      work: {
+        tasks: [
+          workTask({ id: 'w-oil', kind: 'task', text: 'oil' }),
+          workTask({ id: 'w-real', kind: 'task', text: 'send invoice' }),
+        ],
+      },
+      grocery: { shopping: [] },
+    });
+
+    const texts = result.map((i) => i.text);
+    expect(texts).not.toContain('milk');
+    expect(texts).not.toContain('oil');
+    expect(texts).toContain('pay rent');
+    expect(texts).toContain('send invoice');
+  });
 });
 
 // ─── isoToday ─────────────────────────────────────────────────────────────
