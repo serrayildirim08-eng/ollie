@@ -44,6 +44,8 @@ interface PendingConfirm {
   routeLabel: string;
   /** Called when user clicks undo — best-effort remove on the module handler. */
   onUndo: () => void;
+  /** True when the source RouterOutput had visionUsed === true. */
+  fromPhoto: boolean;
 }
 
 function buildRouteLabel(entry: DispatchEntry): string {
@@ -92,6 +94,7 @@ export function DumpScreen(): JSX.Element {
     // Surface a confirm card for each uncertain fragment. Both the fragment-
     // level flag (set by the router before dispatch) and the handler result
     // flag are checked — whichever layer sets needsConfirm wins.
+    const fromPhoto = output.visionUsed === true;
     const cards: PendingConfirm[] = dispatched.entries
       .filter(
         (e) => e.fragment.needsConfirm === true || e.result.needsConfirm === true,
@@ -103,6 +106,7 @@ export function DumpScreen(): JSX.Element {
           id,
           fragmentPreview: e.fragment.text.slice(0, 60),
           routeLabel: buildRouteLabel(e),
+          fromPhoto,
           // Run the handler's real undo closure first (removes the written
           // row), then dismiss the card. Handlers that did not persist
           // (dump_only, validation reject) omit `undo` — we just dismiss.
@@ -153,6 +157,7 @@ export function DumpScreen(): JSX.Element {
               key={card.id}
               fragmentPreview={card.fragmentPreview}
               routeLabel={card.routeLabel}
+              fromPhoto={card.fromPhoto}
               onKeep={() => dismissConfirm(card.id)}
               onUndo={card.onUndo}
             />

@@ -23,6 +23,8 @@ export type {
   BrainDumpRequest,
   BrainDumpResponse,
   RouteDumpRequest,
+  RouteDumpImage,
+  RouteDumpImageMime,
   EnrichDumpRequest,
   EnrichDumpResponse,
   IngestEventRequest,
