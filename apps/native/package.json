@@ -18,6 +18,7 @@
     "@ollie/api": "workspace:*",
     "@ollie/cadence": "workspace:*",
     "@ollie/crypto": "workspace:*",
+    "@ollie/logic": "workspace:*",
     "@ollie/notifications": "workspace:*",
     "@ollie/orchestrator": "workspace:*",
     "@ollie/store": "workspace:*",

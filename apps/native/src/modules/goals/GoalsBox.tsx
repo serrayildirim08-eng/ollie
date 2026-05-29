@@ -33,8 +33,8 @@ import {
   type CadenceEstimate,
 } from '@ollie/cadence';
 import { Stack, Row } from '../../layout';
-import { Text } from '../../ui';
-import { colors, fonts, fontWeights } from '../../theme/tokens';
+import { Text, Button } from '../../ui';
+import { colors, fonts, fontWeights, zIndex } from '../../theme/tokens';
 import { WhenCaption } from '../../lib/WhenCaption';
 import { migrateGoals } from './migrate';
 import {
@@ -42,6 +42,7 @@ import {
   events as eventsRepo,
   goals as goalsRepo,
 } from './repo';
+import { GoalCreateModal } from './GoalCreateModal';
 import type { GoalEvent, GoalWithLatest } from './types';
 
 const SMCP_STYLE: React.CSSProperties = {
@@ -62,6 +63,13 @@ export function GoalsBox(): JSX.Element {
   const [ready, setReady] = useState(false);
   // which goal in the deck is in focus — the swipe index
   const [focus, setFocus] = useState(0);
+  // the rich create-a-goal overlay
+  const [creating, setCreating] = useState(false);
+  // delete-gating: the goal whose removal the user tapped, plus the gate's
+  // verdict. `phase` drives which surface shows (the gentle low-mood hold,
+  // or the ulysses-contract confirm). null = no removal in flight.
+  const [pendingRemoval, setPendingRemoval] =
+    useState<{ goal: GoalWithLatest; phase: 'confirm' | 'held' } | null>(null);
 
   const refresh = useCallback(async () => {
     const [g, m, o, u] = await Promise.all([
@@ -113,13 +121,35 @@ export function GoalsBox(): JSX.Element {
     };
   }, [refresh]);
 
-  const handleRemoveGoal = useCallback(
-    async (id: string) => {
-      await goalsRepo.remove(id);
-      await refresh();
+  // Tapping "remove" on a goal row no longer deletes immediately. We first
+  // ask the repo whether deletion is allowed (the low-mood gate). If it's
+  // held, we show a kind hold message and keep the goal. If it's allowed, we
+  // open a confirm step that surfaces past-you's ulysses contract before any
+  // destructive call.
+  const handleRequestRemoveGoal = useCallback(
+    async (goal: GoalWithLatest) => {
+      const gate = await goalsRepo.canDelete(goal.id);
+      if (!gate.allowed) {
+        setPendingRemoval({ goal, phase: 'held' });
+        return;
+      }
+      setPendingRemoval({ goal, phase: 'confirm' });
     },
-    [refresh],
+    [],
   );
+
+  // Explicit Remove confirm — the only path that actually deletes.
+  const handleConfirmRemoveGoal = useCallback(async () => {
+    const goal = pendingRemoval?.goal;
+    if (!goal) return;
+    setPendingRemoval(null);
+    await goalsRepo.remove(goal.id);
+    await refresh();
+  }, [pendingRemoval, refresh]);
+
+  const handleDismissRemoval = useCallback(() => {
+    setPendingRemoval(null);
+  }, []);
 
   const handleRemoveEvent = useCallback(
     async (id: string) => {
@@ -146,12 +176,16 @@ export function GoalsBox(): JSX.Element {
 
   return (
     <Stack gap={48}>
-      <Stack gap={8}>
-        <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
-          box
-        </Text>
-        <Text scale="display">Goals</Text>
-      </Stack>
+      <Row justify="space-between" align="flex-end" gap={16}>
+        <Stack gap={8}>
+          <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
+            box
+          </Text>
+          <Text scale="display">Goals</Text>
+        </Stack>
+        {/* a quiet affordance to open the rich create flow */}
+        <NewGoalButton onClick={() => setCreating(true)} />
+      </Row>
 
       {!ready ? (
         <Text scale="caption" color={colors.inkFaint}>
@@ -181,7 +215,7 @@ export function GoalsBox(): JSX.Element {
                 key={g.id}
                 goal={g}
                 cadence={progressCadence.get(g.id)}
-                onRemove={() => void handleRemoveGoal(g.id)}
+                onRemove={() => void handleRequestRemoveGoal(g)}
               />
             )}
           />
@@ -229,7 +263,231 @@ export function GoalsBox(): JSX.Element {
           />
         </Stack>
       )}
+
+      {/* the rich create-a-goal overlay */}
+      {creating ? (
+        <GoalCreateModal
+          onClose={() => setCreating(false)}
+          onCreated={() => void refresh()}
+        />
+      ) : null}
+
+      {/* delete-gating surfaces — a kind hold on hard days, or a ulysses
+          confirm that shows past-you's note before anything is removed */}
+      {pendingRemoval?.phase === 'held' ? (
+        <DeleteHeldOverlay onClose={handleDismissRemoval} />
+      ) : null}
+      {pendingRemoval?.phase === 'confirm' ? (
+        <DeleteConfirmOverlay
+          goal={pendingRemoval.goal}
+          onRemove={() => void handleConfirmRemoveGoal()}
+          onKeep={handleDismissRemoval}
+        />
+      ) : null}
     </Stack>
+  );
+}
+
+// ─── delete-gating overlays ─────────────────────────────────────────────────
+
+const OVERLAY_BACKDROP: React.CSSProperties = {
+  position: 'fixed',
+  inset: 0,
+  zIndex: zIndex.modal,
+  background: 'rgba(20, 20, 15, 0.32)',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: '48px 20px',
+};
+
+const OVERLAY_CARD: React.CSSProperties = {
+  width: '100%',
+  maxWidth: 420,
+  background: colors.cream,
+  border: `1px solid ${colors.hairline}`,
+  borderRadius: 14,
+  boxShadow: '0 12px 40px rgba(20, 25, 20, 0.10)',
+  padding: '32px 28px',
+  outline: 'none',
+};
+
+/**
+ * Low-mood hold. The repo refused deletion (reason 'low_mood'): a goal can't
+ * be deleted in the middle of a hard day. Non-dismissive copy — we're not
+ * scolding, we're holding the door. The only action is to close; the goal
+ * stays. It can be removed later, once the window lifts.
+ */
+function DeleteHeldOverlay({ onClose }: { onClose: () => void }): JSX.Element {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  return (
+    <div onClick={onClose} style={OVERLAY_BACKDROP}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="this goal is being kept for now"
+        onClick={(e) => e.stopPropagation()}
+        style={OVERLAY_CARD}
+      >
+        <Stack gap={24} align="center">
+          <div
+            style={{
+              fontFamily: fonts.serif,
+              fontSize: 24,
+              fontWeight: fontWeights.regular,
+              color: colors.ink,
+              letterSpacing: '-0.02em',
+              lineHeight: 1.25,
+              textAlign: 'center',
+            }}
+          >
+            this is a hard day.
+          </div>
+          <div
+            style={{
+              fontFamily: fonts.serif,
+              fontStyle: 'italic',
+              fontSize: 17,
+              color: colors.sageDeep,
+              lineHeight: 1.5,
+              textAlign: 'center',
+              maxWidth: 320,
+            }}
+          >
+            the goal isn&rsquo;t going anywhere. you can take it off the list
+            another day, when it feels less heavy.
+          </div>
+          <Button variant="primary" onClick={onClose} aria-label="okay, keep it">
+            okay
+          </Button>
+        </Stack>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Ulysses confirm. Deletion is allowed, but before we remove anything we put
+ * past-you's contract front and centre — the note current-you left for exactly
+ * this moment. Remove only fires on the explicit "remove" press; "keep it"
+ * (and backdrop / Esc) dismiss without deleting.
+ */
+function DeleteConfirmOverlay({
+  goal,
+  onRemove,
+  onKeep,
+}: {
+  goal: GoalWithLatest;
+  onRemove: () => void;
+  onKeep: () => void;
+}): JSX.Element {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onKeep();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onKeep]);
+
+  return (
+    <div onClick={onKeep} style={OVERLAY_BACKDROP}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={`remove ${goal.name}?`}
+        onClick={(e) => e.stopPropagation()}
+        style={OVERLAY_CARD}
+      >
+        <Stack gap={24}>
+          <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
+            a note from past-you
+          </Text>
+
+          {/* the ulysses contract — the centerpiece */}
+          {goal.ulyssesContract ? (
+            <div
+              style={{
+                fontFamily: fonts.serif,
+                fontStyle: 'italic',
+                fontSize: 21,
+                fontWeight: fontWeights.regular,
+                color: colors.ink,
+                letterSpacing: '-0.012em',
+                lineHeight: 1.45,
+              }}
+            >
+              &ldquo;{goal.ulyssesContract}&rdquo;
+            </div>
+          ) : (
+            <div
+              style={{
+                fontFamily: fonts.serif,
+                fontStyle: 'italic',
+                fontSize: 18,
+                color: colors.inkSoft,
+                lineHeight: 1.45,
+              }}
+            >
+              you didn&rsquo;t leave a note on this one — but you set it down for
+              a reason once.
+            </div>
+          )}
+
+          <Text scale="caption" color={colors.inkSoft}>
+            removing <em style={{ fontFamily: fonts.serif }}>{goal.name}</em> takes
+            it off your list for good.
+          </Text>
+
+          <Row gap={16} justify="flex-end" align="center">
+            <Button variant="ghost" onClick={onKeep} aria-label="keep this goal">
+              keep it
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={onRemove}
+              aria-label={`remove ${goal.name}`}
+            >
+              remove
+            </Button>
+          </Row>
+        </Stack>
+      </div>
+    </div>
+  );
+}
+
+// ─── the quiet "new goal" affordance ────────────────────────────────────────
+
+function NewGoalButton({ onClick }: { onClick: () => void }): JSX.Element {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label="add a new goal"
+      style={{
+        background: 'none',
+        border: `1px solid ${colors.hairline}`,
+        borderRadius: 999,
+        padding: '8px 16px',
+        color: colors.sageDeep,
+        cursor: 'pointer',
+        fontFamily: fonts.sans,
+        fontSize: 13,
+        fontVariantCaps: 'all-small-caps',
+        letterSpacing: '0.08em',
+        whiteSpace: 'nowrap',
+        WebkitTapHighlightColor: 'transparent',
+      }}
+    >
+      + new goal
+    </button>
   );
 }
 
