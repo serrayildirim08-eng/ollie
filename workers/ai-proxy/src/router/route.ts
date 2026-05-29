@@ -52,6 +52,12 @@ import {
   FINANCE_ESCALATE_THRESHOLD,
 } from '../modules/finance.config';
 import {
+  goalsConfig,
+  GOALS_MODEL_FAST,
+  GOALS_MODEL_ACCURATE,
+  GOALS_ESCALATE_THRESHOLD,
+} from '../modules/goals.config';
+import {
   habitsConfig,
   HABITS_MODEL_FAST,
   HABITS_MODEL_ACCURATE,
@@ -75,6 +81,12 @@ import {
   SLEEP_MODEL_ACCURATE,
   SLEEP_ESCALATE_THRESHOLD,
 } from '../modules/sleep.config';
+import {
+  workConfig,
+  WORK_MODEL_FAST,
+  WORK_MODEL_ACCURATE,
+  WORK_ESCALATE_THRESHOLD,
+} from '../modules/work.config';
 import { verifyClerkJwt } from '../clerk-verify';
 import { groqChat } from '../groq';
 
@@ -109,10 +121,12 @@ const MODULE_CONFIGS: Record<string, ModuleConfig<any, any>> = {
   body: bodyConfig,
   cycle: cycleConfig,
   finance: financeConfig,
+  goals: goalsConfig,
   habits: habitsConfig,
   medication: medicationConfig,
   pets: petsConfig,
   sleep: sleepConfig,
+  work: workConfig,
 };
 
 /**
@@ -148,6 +162,10 @@ const MODULE_TIERS: Record<string, TierConfig> = {
     models: [FINANCE_MODEL_FAST, FINANCE_MODEL_ACCURATE],
     threshold: FINANCE_ESCALATE_THRESHOLD,
   },
+  goals: {
+    models: [GOALS_MODEL_FAST, GOALS_MODEL_ACCURATE],
+    threshold: GOALS_ESCALATE_THRESHOLD,
+  },
   habits: {
     models: [HABITS_MODEL_FAST, HABITS_MODEL_ACCURATE],
     threshold: HABITS_ESCALATE_THRESHOLD,
@@ -163,6 +181,10 @@ const MODULE_TIERS: Record<string, TierConfig> = {
   sleep: {
     models: [SLEEP_MODEL_FAST, SLEEP_MODEL_ACCURATE],
     threshold: SLEEP_ESCALATE_THRESHOLD,
+  },
+  work: {
+    models: [WORK_MODEL_FAST, WORK_MODEL_ACCURATE],
+    threshold: WORK_ESCALATE_THRESHOLD,
   },
 };
 
