@@ -34,6 +34,18 @@ import {
   BODY_ESCALATE_THRESHOLD,
 } from '../modules/body.config';
 import {
+  cycleConfig,
+  CYCLE_MODEL_FAST,
+  CYCLE_MODEL_ACCURATE,
+  CYCLE_ESCALATE_THRESHOLD,
+} from '../modules/cycle.config';
+import {
+  medicationConfig,
+  MEDICATION_MODEL_FAST,
+  MEDICATION_MODEL_ACCURATE,
+  MEDICATION_ESCALATE_THRESHOLD,
+} from '../modules/medication.config';
+import {
   sleepConfig,
   SLEEP_MODEL_FAST,
   SLEEP_MODEL_ACCURATE,
@@ -70,6 +82,8 @@ export interface RouteEnv {
 const MODULE_CONFIGS: Record<string, ModuleConfig<any, any>> = {
   grocery: groceryConfig,
   body: bodyConfig,
+  cycle: cycleConfig,
+  medication: medicationConfig,
   sleep: sleepConfig,
 };
 
@@ -93,6 +107,14 @@ const MODULE_TIERS: Record<string, TierConfig> = {
   body: {
     models: [BODY_MODEL_FAST, BODY_MODEL_ACCURATE],
     threshold: BODY_ESCALATE_THRESHOLD,
+  },
+  cycle: {
+    models: [CYCLE_MODEL_FAST, CYCLE_MODEL_ACCURATE],
+    threshold: CYCLE_ESCALATE_THRESHOLD,
+  },
+  medication: {
+    models: [MEDICATION_MODEL_FAST, MEDICATION_MODEL_ACCURATE],
+    threshold: MEDICATION_ESCALATE_THRESHOLD,
   },
   sleep: {
     models: [SLEEP_MODEL_FAST, SLEEP_MODEL_ACCURATE],
