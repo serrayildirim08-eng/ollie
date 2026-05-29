@@ -41,7 +41,7 @@ Input may be in Turkish, English, Spanish, or any mix of the three within a sing
 
 Modules and their action vocabularies:
 - crisis: boundary_shown  (defensive fallback ONLY — upstream lexicon catches first; see CRISIS section below)
-- work: log_focus_session | create_task | log_deadline | log_meeting | distraction_journal
+- work: log_focus_session | create_task | log_deadline | log_meeting | distraction_journal | start_timer
 - admin: create_task | create_phone_task | schedule_appointment | log_paperwork | recurring_decision | log_renewal
 - pets: log_care | log_observation | log_vet | log_feed | log_supplement
 - cycle: log_period_start | log_period_end | log_symptom | pill_logged
@@ -55,6 +55,8 @@ Modules and their action vocabularies:
 - dump_only: archive_only  (use when no module fits OR confidence < 0.6)
 
 Action disambiguation hints:
+- ❗ PAST-TENSE PURCHASE IS NEVER A TO-DO. If the fragment uses past-tense purchase wording (bought, got, picked up, paid for, grabbed, aldım, compré, kestim, llevé, etc.) the action MUST be grocery.pantry_add OR finance.log_transaction. NEVER admin.create_task, NEVER work.create_task, NEVER dump_only. Decision rule: if the item is food, drink, toiletry, cleaning supply, or other pantry/bathroom consumable → grocery.pantry_add. Otherwise (books, magazines, electronics, gadgets, clothes, makeup, furniture, software, services, anything that lives on a shelf or in a closet rather than the pantry/bathroom) → finance.log_transaction. If you cannot tell what was bought, prefer finance.log_transaction with an empty payload — never admin.create_task and never dump_only.
+- ❗ ORPHAN SINGLE-WORD NOUNS INHERIT PURCHASE INTENT. A multi-item dump like "i bought oil milk etc" may arrive at the classifier already split into "i bought oil" + "milk" + "etc". The orphan "milk" has no verb but is plainly a grocery item. Rule: when a fragment is a SINGLE noun (or a short bare noun phrase like "toilet paper") that matches a common pantry/bathroom item — milk, oil, eggs, bread, rice, pasta, sugar, salt, flour, butter, cheese, yogurt, soap, shampoo, tampons, toilet paper, detergent, dish soap, diapers, coffee, tea, etc. — it MUST classify as grocery.pantry_add with that noun as \`item\`. NEVER admin.create_task, NEVER work.create_task. If the orphan noun is plainly NON-grocery (a book title, brand name, electronics word, "headphones", "book") and no verb is visible, fall back to dump_only — NOT create_task. Filler orphans like "etc", "and", "stuff" → dump_only.
 - "bought/got/picked up + a store-bought consumable" → grocery.pantry_add (NOT finance.log_transaction). This covers FOOD *and* household / personal-care goods: groceries, toiletries, cleaning supplies. Examples: "bought milk", "got eggs", "süt aldım", "compré pasta", "bought tampons", "got toilet paper", "picked up shampoo", "bought dish soap", "diapers".
 - If the user mentions a PRICE alongside such an item ("bought milk for $5", "got lemons for 3 dollars", "bought tampons for 10 dollars"), STILL classify as grocery.pantry_add and include \`price\` (number) and \`currency\` (string, e.g. "USD"/"EUR") on the payload. The grocery handler mirrors the purchase to finance automatically — DO NOT emit a separate finance.log_transaction.
 - MULTIPLE ITEMS in one clause → emit a SEPARATE fragment per distinct item, each its own pantry_add / shopping_list_add. "bought tampons, rice" → TWO pantry_add fragments (item:"tampons"; item:"rice"). "need milk, eggs and bread" → THREE shopping_list_add fragments. BUT keep genuine compound product names intact as ONE item — "mac and cheese", "salt and pepper", "peanut butter", "half and half" are single items, do NOT split them. When a price is given for a multi-item purchase with no per-item breakdown ("bought tampons and rice for $12"), attach the \`price\` to ONLY the first item's fragment so finance isn't double-counted.
@@ -62,7 +64,7 @@ Action disambiguation hints:
   - Movement that involves a pet ("walked the dog", "took buddy for a run", "tontin'i gezdirdim", "saqué a buddy a pasear") → body.log_movement with \`pet\` (string, the proper noun like "buddy"/"tontin"; omit for species-only mentions like "the dog"). The body handler mirrors to pets.log_care.
   - Insomnia paired with a sleep aid ("couldn't sleep so took melatonin", "uyuyamadım, melatonin aldım", "no podía dormir, tomé melatonina") → sleep.log_insomnia with \`med_taken\` (string, the med name like "melatonin") and optional \`med_dose\` (string). The sleep handler mirrors to medication.log_dose.
   - Hyperfocus + skipped meals ("hyperfocused all morning, didn't eat", "deep work 3 hours, forgot lunch", "odaklandım hiç yemedim") → work.log_focus_session with \`skipped_meals: true\`. The work handler mirrors to body.log_hunger.
-- Finance.log_transaction is ONLY for spending with no store-bought consumable item — services, experiences, non-grocery shopping ("paid rent", "spent $40 on impulse stuff at sephora", "$30 uber", "movie tickets"), or for bills/subscriptions. A named consumable good (food, toiletries, household) ALWAYS goes to grocery.pantry_add even with a price.
+- Finance.log_transaction is the home for ALL non-grocery purchases — services, experiences, non-grocery shopping ("paid rent", "spent $40 on impulse stuff at sephora", "$30 uber", "movie tickets", "bought a book", "got new headphones", "compré un libro", "yeni gözlük aldım"), plus bills and subscriptions. A named consumable good (food, toiletries, household) ALWAYS goes to grocery.pantry_add even with a price; a named non-consumable good (book, electronics, makeup, clothes, gadgets) ALWAYS goes to finance.log_transaction even when no price is given.
 - grocery.pantry_low_flag (warning, "running low") vs shopping_list_add (active need, "out of"/"need to buy")
 - pets.log_supplement (typed vitamin/calcium with dose) vs log_care (generic care event)
 - sleep.log_insomnia (couldn't sleep at all) vs log_sleep with quality=1 (slept badly)
@@ -109,6 +111,8 @@ The primary crisis detector is the upstream lexicon (@ollie/crisis-lexicon), whi
   Ex: "30 min sync with boran" → { with: "boran", durationMin: 30 }
 - distraction_journal: { what: string (REQUIRED — what pulled them away) }
   Ex: "got sucked into twitter again" → { what: "twitter" }
+- start_timer: { durationMin?: number (omit for the default 30 min) } — use for "start a timer", "set a timer", "timer", "start a 25 min timer", "kronometre başlat", "pon un temporizador". The handler schedules a background notification when it ends. Extract durationMin only when the user states a number; bare "start a timer" → { }.
+  Ex: "start a timer" → { } ; "set a 45 min timer" → { durationMin: 45 } ; "start a 25 minute timer" → { durationMin: 25 } ; "timer for an hour" → { durationMin: 60 }
 
 ── ADMIN ──
 - create_task: { text: string (REQUIRED), remindIn?: { amount: number, unit: "sec"|"min"|"hr"|"day" } (cross-route hint — schedules a system notification when the timer fires; see TIME-DEFERRED REMINDER above) }
@@ -153,6 +157,9 @@ NOTE on petName: ALWAYS the proper noun / actual pet name (Tontin, Olivia, Pinpo
 ── FINANCE ──
 - log_transaction: { amount?: number, currency?: string, merchant?: string }
   Ex: "spent $40 at sephora" → { amount: 40, currency: "USD", merchant: "sephora" }
+  Ex (non-grocery purchase, no price): "bought a book" → { } ; "got new headphones" → { } ; "compré un libro" → { } ; "yeni gözlük aldım" → { }
+  Ex (non-grocery purchase, with price/merchant): "picked up some makeup at sephora" → { merchant: "sephora" } ; "got headphones for $80" → { amount: 80, currency: "USD" } ; "bought a book at the bookstore for 15" → { amount: 15, currency: "USD", merchant: "bookstore" }
+  Reminder: past-tense purchases NEVER route to admin.create_task / work.create_task / dump_only. If you cannot identify the item, still emit finance.log_transaction with an empty payload.
 - add_bill: { merchant: string (REQUIRED), amount?: number, cadence?: "monthly"|"yearly"|"weekly" }
   Ex: "rent is $1800/month" → { merchant: "rent", amount: 1800, cadence: "monthly" }
 - savings_note: { amount?: number, note?: string }
@@ -191,6 +198,8 @@ NOTE on petName: ALWAYS the proper noun / actual pet name (Tontin, Olivia, Pinpo
 
 ── GROCERY ── (existing hints above already cover pricing/disambiguation)
 - pantry_add: { item: string (REQUIRED), quantity?: string, price?: number, currency?: string }
+  Ex (orphan from multi-item dump): "milk" → { item: "milk" } ; "oil" → { item: "oil" } ; "eggs" → { item: "eggs" } ; "tampons" → { item: "tampons" } ; "toilet paper" → { item: "toilet paper" }
+  Ex (verb present): "bought milk" → { item: "milk" } ; "got tampons and toilet paper" → TWO fragments → { item: "tampons" } and { item: "toilet paper" } ; "süt aldım" → { item: "milk" }
 - pantry_use: { item: string (REQUIRED) }
 - shopping_list_add: { item: string (REQUIRED) }
 - pantry_low_flag: { item: string (REQUIRED) }
@@ -209,6 +218,8 @@ NOTE on petName: ALWAYS the proper noun / actual pet name (Tontin, Olivia, Pinpo
 
 ── DUMP_ONLY ──
 - archive_only: { reason?: "no_module_match"|"low_confidence"|"user_only" }
+  ❗ NEVER use dump_only for past-tense purchases. Even if you cannot identify what was bought, the fragment STILL routes to finance.log_transaction (or grocery.pantry_add if the object is clearly a consumable). Negative example: "bought a fancy thing I can't name" → finance.log_transaction { }, NOT dump_only.
+  ❗ NEVER use dump_only as a substitute for create_task on past-tense purchases. "bought X" / "got X" / "X aldım" / "compré X" are always purchases, never to-dos, never archive-only.
 
 ═══════════════════════════════════════════════════════════════════════
 

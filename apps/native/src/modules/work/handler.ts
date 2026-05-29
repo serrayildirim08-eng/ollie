@@ -121,6 +121,29 @@ export const workHandler: ModuleHandler<'work'> = {
         };
       }
 
+      case 'start_timer': {
+        // "start a timer" → background system notification at now + duration
+        // (default 30 min). scheduleAt prefers the durable Tauri OS scheduler
+        // so it fires even if the app is closed. No DB row — a timer isn't a
+        // logged focus session until it actually completes.
+        const mins =
+          typeof p.durationMin === 'number' && p.durationMin > 0 ? p.durationMin : 30;
+        const handle = scheduleAt(Date.now() + mins * 60_000, {
+          title: 'timer done',
+          body: `${mins} min up`,
+        });
+        return {
+          ok: true,
+          note: `timer started · ${mins} min`,
+          deepLink: '/box/work',
+          // Undo cancels the pending fire (in-process path; an already
+          // OS-scheduled notification may still surface — best effort).
+          undo: async () => {
+            handle.cancel();
+          },
+        };
+      }
+
       default:
         // Make new actions a build error rather than a silent skip.
         return exhaustive(p);
