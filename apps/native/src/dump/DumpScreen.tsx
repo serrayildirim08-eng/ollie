@@ -154,8 +154,12 @@ export function DumpScreen(): JSX.Element {
       setPendingConfirms((prev) => [...prev, ...cards]);
     }
 
-    _ackTick += 1;
-    setAckKey(_ackTick);
+    // Don't ack a goal-intent dump yet — nothing is filed until the user
+    // completes + saves the modal. The "okay!" fires from onCreated instead.
+    if (!goalFragment) {
+      _ackTick += 1;
+      setAckKey(_ackTick);
+    }
   }, [dismissConfirm]);
 
   const onCrisis = useCallback((signal: CrisisSignal) => {
