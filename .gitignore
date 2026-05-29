@@ -34,3 +34,6 @@ OLLIE_COFOUNDER_PRESENTATION.*
 
 # Swift Package Manager build output (apps/desktop/native helpers)
 .build/
+
+# Cloudflare Worker local dev secrets (NEVER commit)
+.dev.vars

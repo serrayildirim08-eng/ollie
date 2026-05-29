@@ -27,6 +27,12 @@
 import { json, upstreamError } from '@ollie/worker-http';
 import { scrubPII } from '../pii';
 import { groceryConfig, type ModuleConfig } from '../modules/grocery.config';
+import {
+  bodyConfig,
+  BODY_MODEL_FAST,
+  BODY_MODEL_ACCURATE,
+  BODY_ESCALATE_THRESHOLD,
+} from '../modules/body.config';
 import { verifyClerkJwt } from '../clerk-verify';
 import { groqChat } from '../groq';
 
@@ -57,6 +63,30 @@ export interface RouteEnv {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const MODULE_CONFIGS: Record<string, ModuleConfig<any, any>> = {
   grocery: groceryConfig,
+  body: bodyConfig,
+};
+
+/**
+ * Per-module tier ladder. Modules with an entry here opt in to
+ * fast-model-first classification with confidence-based escalation:
+ *   1. Call models[0] (cheap).
+ *   2. Parse confidence from the returned classification.
+ *   3. If confidence < threshold AND a next-tier model exists, call it.
+ *   4. Return the highest-confidence response observed.
+ *
+ * Modules without an entry use the default GROQ_MODEL single-call path.
+ * This keeps grocery (existing cache rows + golden tests) on its
+ * current model exactly.
+ */
+interface TierConfig {
+  models: string[];
+  threshold: number;
+}
+const MODULE_TIERS: Record<string, TierConfig> = {
+  body: {
+    models: [BODY_MODEL_FAST, BODY_MODEL_ACCURATE],
+    threshold: BODY_ESCALATE_THRESHOLD,
+  },
 };
 
 // ─── types ────────────────────────────────────────────────────────────────────
@@ -177,7 +207,14 @@ export async function handleRoute(
   let classification: unknown;
   let language = 'en';
   try {
-    const result = await groqClassify(cleanText, config, env.GROQ_API_KEY, body.context);
+    const tier = MODULE_TIERS[module];
+    const result = await groqClassify(
+      cleanText,
+      config,
+      env.GROQ_API_KEY,
+      body.context,
+      tier,
+    );
     classification = result.classification;
     language = result.language;
   } catch (err) {
@@ -341,6 +378,7 @@ async function groqClassify(
   config: ModuleConfig<any, any>,
   apiKey: string,
   context?: unknown,
+  tier?: { models: string[]; threshold: number },
 ): Promise<GroqClassifyResult> {
   const baseSystemPrompt = config.buildSystemPrompt(context);
   const fnSchema = config.buildFunctionSchema() as {
@@ -363,40 +401,66 @@ async function groqClassify(
     ? `${baseSystemPrompt}\n\n${examplesBlock}`
     : baseSystemPrompt;
 
-  const choice = await groqChat(
-    {
-      apiKey,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: text },
-      ],
-      tools: [{ type: 'function', function: fnSchema }],
-      toolChoice: { type: 'function', function: { name: fnSchema.name } },
-      maxTokens: 1024,
-    },
-    'route',
-  );
+  // Tier ladder — try cheap model first, escalate when self-reported
+  // confidence < threshold. When no tier config is given we make a
+  // single call with the worker's default model (existing behavior,
+  // unchanged for grocery + any future module without a tier entry).
+  const modelLadder = tier?.models ?? [undefined];
+  const threshold = tier?.threshold ?? 0;
 
-  const toolCalls = choice.message.tool_calls ?? [];
-  const call =
-    toolCalls.find((tc) => tc.function.name === fnSchema.name) ?? toolCalls[0];
-  if (!call) {
-    throw new Error(
-      `groq returned no tool call (finish=${choice.finish_reason})`,
+  let best: { args: Record<string, unknown>; confidence: number } | null = null;
+
+  for (const model of modelLadder) {
+    const choice = await groqChat(
+      {
+        apiKey,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: text },
+        ],
+        tools: [{ type: 'function', function: fnSchema }],
+        toolChoice: { type: 'function', function: { name: fnSchema.name } },
+        maxTokens: 1024,
+        model,
+      },
+      'route',
     );
+
+    const toolCalls = choice.message.tool_calls ?? [];
+    const call =
+      toolCalls.find((tc) => tc.function.name === fnSchema.name) ?? toolCalls[0];
+    if (!call) {
+      throw new Error(
+        `groq returned no tool call (finish=${choice.finish_reason})`,
+      );
+    }
+
+    let args: Record<string, unknown>;
+    try {
+      args = JSON.parse(call.function.arguments) as Record<string, unknown>;
+    } catch {
+      throw new Error(
+        `groq bad tool args json: ${call.function.arguments.slice(0, 300)}`,
+      );
+    }
+
+    const confidence = typeof args.confidence === 'number' ? args.confidence : 1;
+
+    if (!best || confidence > best.confidence) {
+      best = { args, confidence };
+    }
+    // Confident enough — stop the ladder.
+    if (confidence >= threshold) break;
   }
 
-  let args: Record<string, unknown>;
-  try {
-    args = JSON.parse(call.function.arguments) as Record<string, unknown>;
-  } catch {
-    throw new Error(
-      `groq bad tool args json: ${call.function.arguments.slice(0, 300)}`,
-    );
+  // Defensive: loop guarantees `best` is set unless modelLadder was empty
+  // (impossible — default is [undefined]). Narrow for TS strict mode.
+  if (!best) {
+    throw new Error('groq tier ladder produced no result');
   }
 
   return {
-    classification: args,
-    language: typeof args.language === 'string' ? args.language : 'en',
+    classification: best.args,
+    language: typeof best.args.language === 'string' ? best.args.language : 'en',
   };
 }

@@ -16,19 +16,28 @@ export const habitsHandler: ModuleHandler<'habits'> = {
   async apply(fragment): Promise<HandlerResult> {
     await migrateHabits();
     const p = fragment.payload as HabitsAction;
+
+    // Undo factory for the streak_break + identity rows (habits_events).
+    // Completions live in their own table and undo through completions.remove.
+    const undoEvent = (id: string) => () => events.remove(id);
+
     switch (p.action) {
       case 'complete': {
         const habit = await registry.ensure(p.habitName);
-        await completions.add(habit.id);
+        const comp = await completions.add(habit.id);
+        // Undo removes the completion row only — registry rows persist by
+        // design (the habit was always going to auto-register on first sight;
+        // undoing this completion shouldn't retroactively un-register it).
         return {
           ok: true,
           note: `marked ${habit.name} as done`,
           deepLink: '/box/habits',
+          undo: () => completions.remove(comp.id),
         };
       }
 
       case 'streak_break_note': {
-        await events.logStreakBreak({
+        const ev = await events.logStreakBreak({
           habitName: p.habitName,
           reason: p.reason,
         });
@@ -36,15 +45,17 @@ export const habitsHandler: ModuleHandler<'habits'> = {
           ok: true,
           note: `noted a break in ${p.habitName}`,
           deepLink: '/box/habits',
+          undo: undoEvent(ev.id),
         };
       }
 
       case 'identity_statement': {
-        await events.logIdentity(p.text);
+        const ev = await events.logIdentity(p.text);
         return {
           ok: true,
           note: 'saved your identity note',
           deepLink: '/box/habits',
+          undo: undoEvent(ev.id),
         };
       }
 

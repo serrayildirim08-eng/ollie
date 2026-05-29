@@ -52,6 +52,10 @@ Modules and their action vocabularies:
 Action disambiguation hints:
 - "bought/got/picked up + a food/household item" → grocery.pantry_add (NOT finance.log_transaction). Examples: "bought milk", "got eggs", "süt aldım", "compré pasta".
 - If the user mentions a PRICE alongside the food item ("bought milk for $5", "got lemons for 3 dollars"), still classify as grocery.pantry_add but include \`price\` (number) and \`currency\` (string, e.g. "USD"/"EUR") on the payload. The grocery handler will mirror the purchase to finance automatically — DO NOT emit a separate finance.log_transaction.
+- CROSS-MODULE SIDE-EFFECT HINTS (Approach B: single primary fragment carries a hint field; the primary handler mirrors to a secondary module — DO NOT emit a separate fragment for the secondary):
+  - Movement that involves a pet ("walked the dog", "took buddy for a run", "tontin'i gezdirdim", "saqué a buddy a pasear") → body.log_movement with \`pet\` (string, the proper noun like "buddy"/"tontin"; omit for species-only mentions like "the dog"). The body handler mirrors to pets.log_care.
+  - Insomnia paired with a sleep aid ("couldn't sleep so took melatonin", "uyuyamadım, melatonin aldım", "no podía dormir, tomé melatonina") → sleep.log_insomnia with \`med_taken\` (string, the med name like "melatonin") and optional \`med_dose\` (string). The sleep handler mirrors to medication.log_dose.
+  - Hyperfocus + skipped meals ("hyperfocused all morning, didn't eat", "deep work 3 hours, forgot lunch", "odaklandım hiç yemedim") → work.log_focus_session with \`skipped_meals: true\`. The work handler mirrors to body.log_hunger.
 - Finance is only for explicit spending with no purchased food item ("paid rent", "spent $40 on impulse stuff at sephora"), or for bills/subscriptions.
 - grocery.pantry_low_flag (warning, "running low") vs shopping_list_add (active need, "out of"/"need to buy")
 - pets.log_supplement (typed vitamin/calcium with dose) vs log_care (generic care event)
@@ -76,12 +80,12 @@ Each action below lists the EXACT keys to put inside \`payload\`. Required keys 
   Ex: "panic attack lasted 10 min" → { kind: "panic attack", duration: "10 min" }
 - log_posture: { } — no fields
 - log_hunger: { } — no fields
-- log_movement: { type: string (REQUIRED — "walk"/"stretch"/"lift"/"yoga"/"run"/"swim"/etc.), duration_min?: number }
-  Ex: "did yoga" → { type: "yoga" } ; "20 min walk" → { type: "walk", duration_min: 20 } ; "yoga yaptım 30dk" → { type: "yoga", duration_min: 30 } ; "hice estiramientos" → { type: "stretch" }
+- log_movement: { type: string (REQUIRED — "walk"/"stretch"/"lift"/"yoga"/"run"/"swim"/etc.), duration_min?: number, pet?: string (cross-route hint — proper noun like "buddy"/"tontin" when the movement involved a pet; handler mirrors to pets.log_care) }
+  Ex: "did yoga" → { type: "yoga" } ; "20 min walk" → { type: "walk", duration_min: 20 } ; "yoga yaptım 30dk" → { type: "yoga", duration_min: 30 } ; "hice estiramientos" → { type: "stretch" } ; "walked buddy 30 min" → { type: "walk", duration_min: 30, pet: "buddy" } ; "tontin'i gezdirdim" → { type: "walk", pet: "tontin" }
 
 ── WORK ──
-- log_focus_session: { durationMin?: number, project?: string }
-  Ex: "90 min deep work on atelier" → { durationMin: 90, project: "atelier" }
+- log_focus_session: { durationMin?: number, project?: string, skipped_meals?: boolean (cross-route hint — true when the user paired hyperfocus with not eating; handler mirrors to body.log_hunger) }
+  Ex: "90 min deep work on atelier" → { durationMin: 90, project: "atelier" } ; "hyperfocused all morning, didn't eat" → { skipped_meals: true } ; "deep work 3h forgot lunch" → { durationMin: 180, skipped_meals: true }
 - create_task: { text: string (REQUIRED — the task itself), project?: string }
   Ex: "need to write the PRD" → { text: "write the PRD" }
 - log_deadline: { text: string (REQUIRED), dueDate?: string (ISO yyyy-mm-dd preferred) }
@@ -145,8 +149,8 @@ NOTE on petName: ALWAYS the proper noun / actual pet name (Tontin, Olivia, Pinpo
   Ex: "read for 20 min before bed" → { note: "read for 20 min before bed" }
 - dream_log: { text: string (REQUIRED — the dream itself) }
   Ex: "dreamt I was flying" → { text: "I was flying" }
-- log_insomnia: { duration_attempted_min?: number, woke_count?: number }
-  Ex: "couldn't sleep at all, lay there 2 hours" → { duration_attempted_min: 120 }
+- log_insomnia: { duration_attempted_min?: number, woke_count?: number, med_taken?: string (cross-route hint — med name like "melatonin" when the user took a sleep aid; handler mirrors to medication.log_dose), med_dose?: string }
+  Ex: "couldn't sleep at all, lay there 2 hours" → { duration_attempted_min: 120 } ; "couldn't sleep so took melatonin" → { med_taken: "melatonin" } ; "uyuyamadım, 5mg melatonin aldım" → { med_taken: "melatonin", med_dose: "5mg" }
 
 ── HABITS ──
 - complete: { habitName: string (REQUIRED — the habit done) }
@@ -196,6 +200,21 @@ Respond with a JSON object EXACTLY matching this shape (no extra keys, no prose)
   "confidence": number between 0 and 1,
   "payload": object with action-specific fields
 }
+
+═══════════════════════════════════════════════════════════════════════
+NEGATION — classify the MISSED/SKIPPED intent, not the positive action
+═══════════════════════════════════════════════════════════════════════
+- "ilacımı almadım" → { module: "medication", action: "missed_dose", payload: { medName: "<inferred>" } }
+- "did NOT take my meds today" → { module: "medication", action: "missed_dose", payload: { medName: "<inferred>" } }
+- "skipped my vitamins" → { module: "medication", action: "missed_dose", payload: { medName: "vitamins" } }
+- "no comí nada" → { module: "body", action: "log_hunger", payload: { } }  (user reports not eating → hunger event)
+
+═══════════════════════════════════════════════════════════════════════
+RETROSPECTIVE LOGGING — optional \`daysAgo\` field on any payload
+═══════════════════════════════════════════════════════════════════════
+When the user references a past time ("dün"/"yesterday"/"3 days ago"/etc.), add \`daysAgo: number\` to the payload. The module handler uses it to back-date the entry.
+- "dün 5km koştum" → { module: "body", action: "log_movement", payload: { type: "run", duration_min: null, daysAgo: 1 } }
+- "yesterday finished the PRD" → { module: "work", action: "create_task", payload: { text: "finished the PRD", daysAgo: 1 } }
 
 Be conservative — if a fragment is ambiguous, pick dump_only with confidence 0.5. Errors of caution land the user in a "want to confirm?" UI, errors of over-confidence land bad data in a module.`;
 

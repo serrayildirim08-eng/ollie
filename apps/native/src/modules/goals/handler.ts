@@ -20,6 +20,11 @@ export const goalsHandler: ModuleHandler<'goals'> = {
   async apply(fragment): Promise<HandlerResult> {
     await migrateGoals();
     const p = fragment.payload as GoalsAction;
+
+    // Undo factory for goals_events rows. `create_goal` uses goals.remove
+    // directly since the registry has its own DELETE path.
+    const undoEvent = (id: string) => () => events.remove(id);
+
     switch (p.action) {
       case 'create_goal': {
         const goal = await goals.ensure(p.what, p.why ?? null);
@@ -27,42 +32,46 @@ export const goalsHandler: ModuleHandler<'goals'> = {
           ok: true,
           note: `added goal "${goal.name}"`,
           deepLink: '/box/goals',
+          undo: () => goals.remove(goal.id),
         };
       }
 
       case 'progress_note': {
         const goalId = await resolveGoalId(p.goalName);
-        await events.add({ goalId, kind: 'progress', text: p.note });
+        const ev = await events.add({ goalId, kind: 'progress', text: p.note });
         return {
           ok: true,
           note: goalId
             ? `logged progress on "${p.goalName}"`
             : 'logged a progress note',
           deepLink: '/box/goals',
+          undo: undoEvent(ev.id),
         };
       }
 
       case 'milestone_hit': {
         const goalId = await resolveGoalId(p.goalName);
-        await events.add({ goalId, kind: 'milestone', text: p.milestone });
+        const ev = await events.add({ goalId, kind: 'milestone', text: p.milestone });
         return {
           ok: true,
           note: goalId
             ? `milestone on "${p.goalName}": ${p.milestone}`
             : `milestone: ${p.milestone}`,
           deepLink: '/box/goals',
+          undo: undoEvent(ev.id),
         };
       }
 
       case 'obstacle_note': {
         const goalId = await resolveGoalId(p.goalName);
-        await events.add({ goalId, kind: 'obstacle', text: p.obstacle });
+        const ev = await events.add({ goalId, kind: 'obstacle', text: p.obstacle });
         return {
           ok: true,
           note: goalId
             ? `noted obstacle on "${p.goalName}"`
             : 'noted an obstacle',
           deepLink: '/box/goals',
+          undo: undoEvent(ev.id),
         };
       }
 
