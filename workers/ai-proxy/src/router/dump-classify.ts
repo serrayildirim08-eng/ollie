@@ -52,13 +52,14 @@ Modules and their action vocabularies:
 - dump_only: archive_only  (use when no module fits OR confidence < 0.6)
 
 Action disambiguation hints:
-- "bought/got/picked up + a food/household item" → grocery.pantry_add (NOT finance.log_transaction). Examples: "bought milk", "got eggs", "süt aldım", "compré pasta".
-- If the user mentions a PRICE alongside the food item ("bought milk for $5", "got lemons for 3 dollars"), still classify as grocery.pantry_add but include \`price\` (number) and \`currency\` (string, e.g. "USD"/"EUR") on the payload. The grocery handler will mirror the purchase to finance automatically — DO NOT emit a separate finance.log_transaction.
+- "bought/got/picked up + a store-bought consumable" → grocery.pantry_add (NOT finance.log_transaction). This covers FOOD *and* household / personal-care goods: groceries, toiletries, cleaning supplies. Examples: "bought milk", "got eggs", "süt aldım", "compré pasta", "bought tampons", "got toilet paper", "picked up shampoo", "bought dish soap", "diapers".
+- If the user mentions a PRICE alongside such an item ("bought milk for $5", "got lemons for 3 dollars", "bought tampons for 10 dollars"), STILL classify as grocery.pantry_add and include \`price\` (number) and \`currency\` (string, e.g. "USD"/"EUR") on the payload. The grocery handler mirrors the purchase to finance automatically — DO NOT emit a separate finance.log_transaction.
+- MULTIPLE ITEMS in one clause → emit a SEPARATE fragment per distinct item, each its own pantry_add / shopping_list_add. "bought tampons, rice" → TWO pantry_add fragments (item:"tampons"; item:"rice"). "need milk, eggs and bread" → THREE shopping_list_add fragments. BUT keep genuine compound product names intact as ONE item — "mac and cheese", "salt and pepper", "peanut butter", "half and half" are single items, do NOT split them. When a price is given for a multi-item purchase with no per-item breakdown ("bought tampons and rice for $12"), attach the \`price\` to ONLY the first item's fragment so finance isn't double-counted.
 - CROSS-MODULE SIDE-EFFECT HINTS (Approach B: single primary fragment carries a hint field; the primary handler mirrors to a secondary module — DO NOT emit a separate fragment for the secondary):
   - Movement that involves a pet ("walked the dog", "took buddy for a run", "tontin'i gezdirdim", "saqué a buddy a pasear") → body.log_movement with \`pet\` (string, the proper noun like "buddy"/"tontin"; omit for species-only mentions like "the dog"). The body handler mirrors to pets.log_care.
   - Insomnia paired with a sleep aid ("couldn't sleep so took melatonin", "uyuyamadım, melatonin aldım", "no podía dormir, tomé melatonina") → sleep.log_insomnia with \`med_taken\` (string, the med name like "melatonin") and optional \`med_dose\` (string). The sleep handler mirrors to medication.log_dose.
   - Hyperfocus + skipped meals ("hyperfocused all morning, didn't eat", "deep work 3 hours, forgot lunch", "odaklandım hiç yemedim") → work.log_focus_session with \`skipped_meals: true\`. The work handler mirrors to body.log_hunger.
-- Finance is only for explicit spending with no purchased food item ("paid rent", "spent $40 on impulse stuff at sephora"), or for bills/subscriptions.
+- Finance.log_transaction is ONLY for spending with no store-bought consumable item — services, experiences, non-grocery shopping ("paid rent", "spent $40 on impulse stuff at sephora", "$30 uber", "movie tickets"), or for bills/subscriptions. A named consumable good (food, toiletries, household) ALWAYS goes to grocery.pantry_add even with a price.
 - grocery.pantry_low_flag (warning, "running low") vs shopping_list_add (active need, "out of"/"need to buy")
 - pets.log_supplement (typed vitamin/calcium with dose) vs log_care (generic care event)
 - sleep.log_insomnia (couldn't sleep at all) vs log_sleep with quality=1 (slept badly)
@@ -277,4 +278,84 @@ export async function classifyFragment(
     payload: { ...parsed.payload, module: parsed.module, action: parsed.action },
     confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0,
   };
+}
+
+/**
+ * Classify MULTIPLE fragments in a single Groq call.
+ *
+ * The ~4k-token SYSTEM_PROMPT is the dominant token cost; sending it once
+ * per dump instead of once per fragment is the difference between a
+ * 3-fragment dump costing ~12k tokens (3 separate calls) and ~4.5k (one
+ * batched call). On Groq's free tier (8k tokens/minute) that's the
+ * difference between a reliable 502 and a working dump.
+ *
+ * Falls through to the single-fragment path for n≤1 so the prompt framing
+ * (and the well-tested single-object contract) is preserved for the common
+ * case. Output order is guaranteed to match the input order; a count
+ * mismatch throws so the caller can fail loudly rather than misalign
+ * classifications to fragments.
+ */
+export async function classifyBatch(
+  items: Array<{ text: string; language: FragmentLanguage }>,
+  apiKey: string,
+): Promise<ClassifyResult[]> {
+  if (items.length === 0) return [];
+  if (items.length === 1) {
+    return [await classifyFragment(items[0].text, items[0].language, apiKey)];
+  }
+
+  const list = items
+    .map((it, i) => `[${i}] (lang=${it.language}) ${it.text}`)
+    .join('\n');
+  const userMessage =
+    `You are given ${items.length} fragments below, one per line, each prefixed with its index [i].\n` +
+    `Classify EACH fragment independently using the rules above.\n` +
+    `IGNORE the single-object response instruction above. Instead respond with a JSON object EXACTLY of the form:\n` +
+    `{ "results": [ { "module": ..., "action": ..., "confidence": ..., "payload": {...} } ] }\n` +
+    `The results array MUST contain exactly ${items.length} objects, in the SAME order as the input indices.\n\n` +
+    `Fragments:\n${list}`;
+
+  const choice = await groqChat(
+    {
+      apiKey,
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content: userMessage },
+      ],
+      jsonMode: true,
+      maxTokens: 256 * items.length + 256,
+    },
+    'classify-batch',
+  );
+
+  const rawText = choice.message.content ?? '';
+  if (!rawText) {
+    throw new Error(`classify-batch groq empty content (finish=${choice.finish_reason})`);
+  }
+
+  let parsed: {
+    results?: Array<{
+      module: Module;
+      action: string;
+      confidence: number;
+      payload: Record<string, unknown>;
+    }>;
+  };
+  try {
+    parsed = JSON.parse(rawText);
+  } catch {
+    throw new Error(`classify-batch groq bad json: ${rawText.slice(0, 300)}`);
+  }
+
+  const results = parsed?.results;
+  if (!Array.isArray(results) || results.length !== items.length) {
+    const got = Array.isArray(results) ? results.length : 'none';
+    throw new Error(`classify-batch count mismatch: got ${got} want ${items.length}`);
+  }
+
+  return results.map((r) => ({
+    module: r.module,
+    payload: { ...r.payload, module: r.module, action: r.action },
+    confidence: typeof r.confidence === 'number' ? r.confidence : 0,
+  }));
 }
