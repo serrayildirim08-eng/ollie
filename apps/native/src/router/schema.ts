@@ -43,7 +43,7 @@ export interface RouterOutput {
   originalDump: string;
   dumpId: string;          // archive lookup key
   timestamp: number;       // ms since epoch
-  language: 'en' | 'es' | 'tr' | 'unknown';
+  language: 'en' | 'es' | 'tr' | 'mixed' | 'unknown';
 
   // Crisis detection — ALWAYS run first. If true, UI shows crisis screen
   // and per-fragment routing is paused until user dismisses.
@@ -195,11 +195,11 @@ export type FinanceAction =
   | { module: 'finance'; action: 'log_transaction'; amount?: number; currency?: string; merchant?: string }
   | { module: 'finance'; action: 'add_bill'; merchant: string; amount?: number; cadence?: 'monthly' | 'yearly' | 'weekly' }
   | { module: 'finance'; action: 'savings_note'; amount?: number; note?: string }
-  // amount/currency are optional — the worker prompt currently emits only
-  // `name`, but the native handler stores them when present so subscriptions
-  // can feed the monthly-burn headline. Backfilling the worker prompt is a
-  // separate task; this surface stays forward-compatible.
-  | { module: 'finance'; action: 'subscription_log'; name: string; amount?: number; currency?: string };
+  // amount/currency/cadence are optional — the worker emits them when the
+  // user states a price/cadence ("netflix $15/month"); the native handler
+  // stores them so subscriptions feed the monthly-burn headline at the
+  // correct amortised rate.
+  | { module: 'finance'; action: 'subscription_log'; name: string; amount?: number; currency?: string; cadence?: 'monthly' | 'yearly' | 'weekly' };
 
 // ── SLEEP ────────────────────────────────────────────────────────────
 
@@ -237,7 +237,10 @@ export type GoalsAction =
 // ── GROCERY ──────────────────────────────────────────────────────────
 
 export type GroceryAction =
-  | { module: 'grocery'; action: 'pantry_add'; item: string; quantity?: string }
+  // price/currency present when the user states a cost ("bought milk for
+  // $5") — the grocery handler mirrors them to a finance transaction
+  // (primary grocery, side-effect finance; see grocery/handler.ts).
+  | { module: 'grocery'; action: 'pantry_add'; item: string; quantity?: string; price?: number; currency?: string }
   | { module: 'grocery'; action: 'pantry_use'; item: string }
   | { module: 'grocery'; action: 'shopping_list_add'; item: string }
   | { module: 'grocery'; action: 'meal_request'; query: string }

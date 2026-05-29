@@ -74,13 +74,13 @@ export const financeHandler: ModuleHandler<'finance'> = {
       }
 
       case 'subscription_log': {
-        // amount + currency are forward-compat — the router prompt only
-        // emits `name` today, but the column is here so the burn headline
-        // picks them up the moment the prompt is taught to extract them.
+        // amount/currency/cadence are stored when the user states them
+        // ("netflix $15/month") so the burn headline amortises correctly.
         const sub = await subscriptions.add({
           name: p.name,
           amount: p.amount ?? null,
           currency: p.currency ?? null,
+          cadence: p.cadence ?? null,
         });
         return {
           ok: true,
