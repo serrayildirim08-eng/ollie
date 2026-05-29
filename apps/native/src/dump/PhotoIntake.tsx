@@ -59,7 +59,8 @@ export interface PhotoIntakeState {
   /** Compressed payload ready to ship in /route/dump. null until selection. */
   image: RouteDumpImage | null;
 
-  /** Local preview URL for the thumbnail. null until selection / after clear. */
+  /** Local preview URL for the image thumbnail. null for PDFs or when nothing
+   *  is staged. PDFs render the PDF glyph instead of an image preview. */
   previewUrl: string | null;
 
   /** Inline error copy. null when no error. */
@@ -118,10 +119,11 @@ export function usePhotoIntake(): PhotoIntakeState {
         setError(reasonCopy(result.reason));
         return;
       }
-      // swap preview URL atomically — revoke the previous one
+      // PDFs have no inline image preview; skip the object URL so the bar
+      // renders the PDF glyph branch instead of a broken <img>.
       setPreviewUrl((prev) => {
         if (prev) URL.revokeObjectURL(prev);
-        return URL.createObjectURL(blob);
+        return blob.type === 'application/pdf' ? null : URL.createObjectURL(blob);
       });
       setImage(result.image);
     } finally {
@@ -167,7 +169,9 @@ export function usePhotoIntake(): PhotoIntakeState {
       if (!items) return;
       for (let i = 0; i < items.length; i++) {
         const it = items[i];
-        if (it.kind === 'file' && it.type.startsWith('image/')) {
+        const isImage = it.kind === 'file' && it.type.startsWith('image/');
+        const isPdf = it.kind === 'file' && it.type === 'application/pdf';
+        if (isImage || isPdf) {
           const f = it.getAsFile();
           if (f) {
             e.preventDefault();
@@ -283,7 +287,7 @@ export function PhotoIntakeBar({ intake, disabled = false }: PhotoIntakeBarProps
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/jpeg,image/png,image/webp,image/*"
+        accept="image/jpeg,image/png,image/webp,application/pdf"
         onChange={onPick}
         style={{ display: 'none' }}
         data-testid="photo-intake-file"
@@ -297,7 +301,11 @@ export function PhotoIntakeBar({ intake, disabled = false }: PhotoIntakeBarProps
         />
       )}
 
-      {intake.isProcessing && !intake.previewUrl && (
+      {intake.image?.mime === 'application/pdf' && !intake.previewUrl && (
+        <PdfChip onRemove={intake.clear} processing={intake.isProcessing} />
+      )}
+
+      {intake.isProcessing && !intake.previewUrl && !intake.image && (
         <span
           style={{
             fontFamily: 'inherit',
@@ -366,6 +374,68 @@ function Thumbnail({
       <button
         type="button"
         aria-label="Remove photo"
+        onClick={onRemove}
+        style={{
+          position: 'absolute',
+          top: 2,
+          right: 2,
+          width: 16,
+          height: 16,
+          padding: 0,
+          background: colors.cream,
+          color: colors.ink,
+          border: `1px solid ${colors.hairline}`,
+          borderRadius: 999,
+          cursor: 'pointer',
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          lineHeight: 1,
+          fontSize: 11,
+          fontFamily: 'inherit',
+        }}
+      >
+        <XGlyph />
+      </button>
+    </span>
+  );
+}
+
+// ─── PDF chip · matches Thumbnail dimensions, swaps img for "PDF" label ──────
+
+function PdfChip({
+  onRemove,
+  processing,
+}: {
+  onRemove: () => void;
+  processing: boolean;
+}): JSX.Element {
+  return (
+    <span
+      style={{
+        position: 'relative',
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: 56,
+        height: 56,
+        borderRadius: 5,
+        border: `1px solid ${colors.hairline}`,
+        background: colors.paper,
+        color: colors.inkSoft,
+        fontFamily: 'inherit',
+        fontSize: 11,
+        letterSpacing: '0.12em',
+        textTransform: 'uppercase',
+        opacity: processing ? 0.6 : 1,
+        transition: 'opacity 200ms cubic-bezier(0.18, 0, 0.22, 1)',
+      }}
+      aria-label="Attached PDF"
+    >
+      PDF
+      <button
+        type="button"
+        aria-label="Remove PDF"
         onClick={onRemove}
         style={{
           position: 'absolute',
