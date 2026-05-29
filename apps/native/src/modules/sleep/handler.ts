@@ -5,19 +5,81 @@
  * router emits to a real repository call. Notes are kept short — the dump
  * UX is silent ("okay!" only); these notes feed dev logging + any future
  * surface that wants to show what happened.
+ *
+ * Layer 2 re-routing:
+ *   When Layer 1 returns `module: 'dump_only'` for a sleep fragment OR
+ *   marks the fragment `needsConfirm: true` (confidence 0.60–0.80), we
+ *   call `routeModule('sleep', text)` to let the sleep-specific AI model
+ *   attempt a precise classification. If it returns at least one action
+ *   we use the first; otherwise we fall through to the original Layer 1
+ *   action. Mirrors body's `maybeUpgradeFragment` one-to-one.
  */
 
-import type { ModuleHandler, HandlerResult, SleepAction } from '../../router/schema';
+import type { ModuleHandler, HandlerResult, SleepAction, Fragment } from '../../router/schema';
 import { migrateSleep } from './migrate';
 import { sleepRepo } from './repo';
 import { parseHHMM } from './types';
 import { migrateMedication } from '../medication/migrate';
 import { events as medEvents } from '../medication/repo';
+import { routeModule } from '../../api/workers';
+import { getSupabaseClient } from '../../api/supabase';
+
+// ─── bearer helper ────────────────────────────────────────────────────────────
+
+async function getBearer(): Promise<string | null> {
+  try {
+    const { data } = await getSupabaseClient().auth.getSession();
+    return data.session?.access_token ?? null;
+  } catch {
+    return null;
+  }
+}
+
+// ─── Layer 2 re-routing ───────────────────────────────────────────────────────
+
+/**
+ * Returns an upgraded fragment if Layer 2 returns at least one action.
+ * Returns the original fragment unchanged on any failure path.
+ */
+async function maybeUpgradeFragment(fragment: Fragment): Promise<Fragment> {
+  const needsLayer2 =
+    fragment.module === 'dump_only' || fragment.needsConfirm === true;
+
+  if (!needsLayer2) return fragment;
+
+  const bearer = await getBearer();
+  if (!bearer) {
+    // No auth session — fall back silently.
+    return fragment;
+  }
+
+  const res = await routeModule('sleep', fragment.text, { bearer });
+
+  if (!res.ok || res.data.actions.length === 0) {
+    // Network / parse / empty — preserve original.
+    return fragment;
+  }
+
+  const first = res.data.actions[0];
+  let parsedPayload: SleepAction;
+  try {
+    parsedPayload = JSON.parse(first.data) as SleepAction;
+  } catch {
+    // data isn't valid JSON — can't upgrade, fall back.
+    return fragment;
+  }
+  return {
+    ...fragment,
+    module: 'sleep',
+    payload: parsedPayload,
+  };
+}
 
 export const sleepHandler: ModuleHandler<'sleep'> = {
   module: 'sleep',
-  async apply(fragment): Promise<HandlerResult> {
+  async apply(rawFragment): Promise<HandlerResult> {
     await migrateSleep();
+    const fragment = await maybeUpgradeFragment(rawFragment);
     const p = fragment.payload as SleepAction;
 
     // Single undo factory — every sleep_events kind funnels through the same

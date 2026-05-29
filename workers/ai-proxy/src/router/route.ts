@@ -33,6 +33,12 @@ import {
   BODY_MODEL_ACCURATE,
   BODY_ESCALATE_THRESHOLD,
 } from '../modules/body.config';
+import {
+  sleepConfig,
+  SLEEP_MODEL_FAST,
+  SLEEP_MODEL_ACCURATE,
+  SLEEP_ESCALATE_THRESHOLD,
+} from '../modules/sleep.config';
 import { verifyClerkJwt } from '../clerk-verify';
 import { groqChat } from '../groq';
 
@@ -64,6 +70,7 @@ export interface RouteEnv {
 const MODULE_CONFIGS: Record<string, ModuleConfig<any, any>> = {
   grocery: groceryConfig,
   body: bodyConfig,
+  sleep: sleepConfig,
 };
 
 /**
@@ -86,6 +93,10 @@ const MODULE_TIERS: Record<string, TierConfig> = {
   body: {
     models: [BODY_MODEL_FAST, BODY_MODEL_ACCURATE],
     threshold: BODY_ESCALATE_THRESHOLD,
+  },
+  sleep: {
+    models: [SLEEP_MODEL_FAST, SLEEP_MODEL_ACCURATE],
+    threshold: SLEEP_ESCALATE_THRESHOLD,
   },
 };
 
