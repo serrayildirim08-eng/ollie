@@ -76,7 +76,7 @@ function installFetchMock(opts: VisionFetchOptions = {}) {
   let geminiCalls = 0;
   const fetchSpy = vi.spyOn(globalThis, 'fetch');
 
-  fetchSpy.mockImplementation(async (input: Request | string | URL) => {
+  fetchSpy.mockImplementation(async (input: Request | string | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input instanceof Request ? input.url : input.toString();
 
     if (url.includes('generativelanguage.googleapis.com')) {
@@ -110,10 +110,29 @@ function installFetchMock(opts: VisionFetchOptions = {}) {
         confidence: 0.9,
         payload: classificationPayload,
       };
+      // classifyBatch sends ALL fragments in one call and expects a
+      // { results: [...] } array sized to the fragment count. Parse how many
+      // fragments the request asked for so the mock returns a matching array
+      // (replicates the old once-per-fragment classify behaviour exactly).
+      let n = 1;
+      try {
+        const reqBody = JSON.parse(typeof init?.body === 'string' ? init.body : '{}');
+        const userMsg: string =
+          reqBody?.messages?.find((m: { role: string }) => m.role === 'user')?.content ?? '';
+        const matches = userMsg.match(/\[\d+\] \(lang=/g);
+        if (matches) n = matches.length;
+      } catch {
+        // fall back to a single result
+      }
       return new Response(
         JSON.stringify({
           choices: [
-            { message: { content: JSON.stringify(fakeClassification) }, finish_reason: 'stop' },
+            {
+              message: {
+                content: JSON.stringify({ results: Array(n).fill(fakeClassification) }),
+              },
+              finish_reason: 'stop',
+            },
           ],
         }),
         { status: 200, headers: { 'content-type': 'application/json' } },

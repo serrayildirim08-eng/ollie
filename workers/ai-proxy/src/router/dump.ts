@@ -39,9 +39,10 @@ import { scrubPII } from '../pii';
 import { pass1Segment } from './segmentation';
 import { pass2Split } from './segmentation-llm';
 import { detectFragmentLanguage } from './lang-detect';
-import { classifyFragment } from './dump-classify';
+import { classifyBatch, type ClassifyResult } from './dump-classify';
 import {
   type Fragment,
+  type FragmentLanguage,
   type Module,
   type RouterOutput,
   applyConfidencePolicy,
@@ -201,11 +202,26 @@ export async function handleDumpRoute(req: Request, env: DumpRouteEnv): Promise<
   const crisis = detectCrisis(combinedDump) ?? undefined;
 
   // 6. Per-fragment classification.
-  const fragments: Fragment[] = [];
+  //    Pass A: embed + Vectorize cache lookup for every fragment.
+  //    Pass B: ONE batched Groq classify for all cache misses — the ~4k-token
+  //    classifier prompt is sent once per dump rather than once per fragment,
+  //    which keeps multi-fragment dumps under Groq's free-tier 8k tokens/min
+  //    rate limit (a 3-fragment dump drops from ~12k tokens to ~4.5k).
+  const slots: Array<Fragment | null> = new Array(fragmentsText.length).fill(null);
   let aiCalls = 0;
   let cacheHits = 0;
 
-  for (const text of fragmentsText) {
+  interface Miss {
+    index: number;
+    text: string;
+    language: FragmentLanguage;
+    embedding: number[];
+  }
+  const misses: Miss[] = [];
+
+  // ── Pass A — embed + cache lookup ──
+  for (let i = 0; i < fragmentsText.length; i++) {
+    const text = fragmentsText[i];
     const language = detectFragmentLanguage(text);
 
     let embedding: number[];
@@ -225,7 +241,7 @@ export async function handleDumpRoute(req: Request, env: DumpRouteEnv): Promise<
     if (cacheRow) {
       cacheHits++;
       const tiered = applyConfidencePolicy(cacheRow.module, cacheRow.payload, cacheRow.confidence);
-      fragments.push({
+      slots[i] = {
         text,
         language,
         module: tiered.module,
@@ -233,7 +249,7 @@ export async function handleDumpRoute(req: Request, env: DumpRouteEnv): Promise<
         confidence: cacheRow.confidence,
         needsConfirm: tiered.needsConfirm,
         source: 'cache',
-      });
+      };
       // Bump hit count asynchronously.
       void cacheHitBump(env.VECTORIZE_INDEX, cacheRow, userId, embedding).catch((e) =>
         console.error('[route/dump] cache bump failed', e),
@@ -241,38 +257,60 @@ export async function handleDumpRoute(req: Request, env: DumpRouteEnv): Promise<
       continue;
     }
 
-    // MISS — Groq classify.
-    aiCalls++;
-    let result: Awaited<ReturnType<typeof classifyFragment>>;
+    misses.push({ index: i, text, language, embedding });
+  }
+
+  // ── Pass B — single batched Groq classify for all misses ──
+  if (misses.length > 0) {
+    aiCalls = 1; // one upstream call regardless of how many fragments missed
+    let results: ClassifyResult[];
     try {
-      result = await classifyFragment(text, language, env.GROQ_API_KEY);
+      results = await classifyBatch(
+        misses.map((m) => ({ text: m.text, language: m.language })),
+        { groq: env.GROQ_API_KEY, gemini: env.GEMINI_API_KEY },
+      );
     } catch (err) {
+      // Both providers busy: Groq 429 (rate) AND Gemini fallback 429/503
+      // (rate / model-overloaded). Recoverable, not a real failure — surface
+      // it softly (client shows "going too fast, your words are saved" and
+      // keeps the draft) instead of an alarming 502.
+      const status = (err as { status?: number })?.status;
+      if (status === 429 || status === 503) {
+        return json({ error: 'rate_limited' }, 429);
+      }
       const msg = err instanceof Error ? err.message : String(err);
-      return upstreamError('groq_classify_failed', 502, msg, { dumpId, fragment: text.slice(0, 80) });
+      return upstreamError('groq_classify_failed', 502, msg, { dumpId });
     }
 
-    const tiered = applyConfidencePolicy(result.module, result.payload, result.confidence);
-    fragments.push({
-      text,
-      language,
-      module: tiered.module,
-      payload: tiered.payload,
-      confidence: result.confidence,
-      needsConfirm: tiered.needsConfirm,
-      source: 'ai',
-    });
+    for (let j = 0; j < misses.length; j++) {
+      const m = misses[j];
+      const result = results[j];
+      const tiered = applyConfidencePolicy(result.module, result.payload, result.confidence);
+      slots[m.index] = {
+        text: m.text,
+        language: m.language,
+        module: tiered.module,
+        payload: tiered.payload,
+        confidence: result.confidence,
+        needsConfirm: tiered.needsConfirm,
+        source: 'ai',
+      };
 
-    // Fire-and-forget cache write — never block response.
-    void cacheUpsert(env.VECTORIZE_INDEX, {
-      userId,
-      text,
-      embedding,
-      module: tiered.module,
-      payload: tiered.payload,
-      confidence: result.confidence,
-      language,
-    }).catch((e) => console.error('[route/dump] cache upsert failed', e));
+      // Fire-and-forget cache write — never block response.
+      void cacheUpsert(env.VECTORIZE_INDEX, {
+        userId,
+        text: m.text,
+        embedding: m.embedding,
+        module: tiered.module,
+        payload: tiered.payload,
+        confidence: result.confidence,
+        language: m.language,
+      }).catch((e) => console.error('[route/dump] cache upsert failed', e));
+    }
   }
+
+  // Every slot is now filled (cache hit or AI); compact to a dense array.
+  const fragments: Fragment[] = slots.filter((f): f is Fragment => f !== null);
 
   const durationMs = Date.now() - t0;
   const moduleCount: Partial<Record<Module, number>> = {};
