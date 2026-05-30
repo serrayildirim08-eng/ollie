@@ -156,6 +156,9 @@ function pantry(names: string[]): PantryItem[] {
     addedAt: Date.now() - i * 1000,
     lowFlag: false,
     archivedAtMs: null,
+    predictedOutAtMs: null,
+    remindMe: false,
+    pushedAtMs: null,
   }));
 }
 

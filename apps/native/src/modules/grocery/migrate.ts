@@ -20,14 +20,29 @@ const MIGRATIONS = [
   // `archived_at_ms` (added 2026-05-30 for the shelf-life aging surface) is
   // null while the row is live and set when the row leaves the active list
   // — either via auto-archive at shelfLife × 2.0 or the user marking gone.
+  //
+  // Replenishment columns (added 2026-05-30, Plan B — silent shopping add +
+  // opt-in push):
+  //   - `predicted_out_at_ms`: ms timestamp the cadence layer predicts the
+  //     row will be out. NULL while we don't yet have enough signal. Once
+  //     this <= now AND archived_at_ms IS NULL, the row renders in Shop as
+  //     "≈ likely needed".
+  //   - `remind_me`: 0/1 user opt-in for the (separate) push notification.
+  //     Defaults are set by the backend's isCriticalReminder() — meds,
+  //     tampons, contact solution, baby formula, pet meds → 1, else 0.
+  //   - `pushed_at_ms`: bookkeeping so we never push the same prediction
+  //     twice. Cleared when predicted_out_at_ms rolls forward.
   `CREATE TABLE IF NOT EXISTS grocery_pantry (
-    id              TEXT PRIMARY KEY,
-    name            TEXT NOT NULL,
-    quantity        REAL,
-    unit            TEXT,
-    added_at        INTEGER NOT NULL,
-    low_flag        INTEGER NOT NULL DEFAULT 0,
-    archived_at_ms  INTEGER
+    id                  TEXT PRIMARY KEY,
+    name                TEXT NOT NULL,
+    quantity            REAL,
+    unit                TEXT,
+    added_at            INTEGER NOT NULL,
+    low_flag            INTEGER NOT NULL DEFAULT 0,
+    archived_at_ms      INTEGER,
+    predicted_out_at_ms INTEGER,
+    remind_me           INTEGER NOT NULL DEFAULT 0,
+    pushed_at_ms        INTEGER
   )`,
 
   // shopping_list — what you need to buy.
@@ -109,6 +124,34 @@ export function migrateGrocery(): Promise<void> {
         `CREATE INDEX IF NOT EXISTS idx_grocery_pantry_archived_at_ms
            ON grocery_pantry(archived_at_ms DESC)
            WHERE archived_at_ms IS NOT NULL`,
+      );
+
+      // ── replenishment backfill (2026-05-30) ─────────────────────────────
+      // The "Shop ≈ likely needed" surface + per-row remind toggle land
+      // three additive columns. Same PRAGMA-probe pattern keeps it idempotent
+      // for users already on the older schema.
+      if (!have.has('predicted_out_at_ms')) {
+        await sql.execute(
+          `ALTER TABLE grocery_pantry ADD COLUMN predicted_out_at_ms INTEGER`,
+        );
+      }
+      if (!have.has('remind_me')) {
+        await sql.execute(
+          `ALTER TABLE grocery_pantry ADD COLUMN remind_me INTEGER NOT NULL DEFAULT 0`,
+        );
+      }
+      if (!have.has('pushed_at_ms')) {
+        await sql.execute(
+          `ALTER TABLE grocery_pantry ADD COLUMN pushed_at_ms INTEGER`,
+        );
+      }
+      // Partial index — only rows with a live prediction. The Shop view's
+      // "≈ likely needed" query filters by `predicted_out_at_ms <= ?` AND
+      // `archived_at_ms IS NULL`, so this is the right cluster.
+      await sql.execute(
+        `CREATE INDEX IF NOT EXISTS idx_grocery_pantry_predicted_out_at_ms
+           ON grocery_pantry(predicted_out_at_ms)
+           WHERE predicted_out_at_ms IS NOT NULL`,
       );
     })();
   }
