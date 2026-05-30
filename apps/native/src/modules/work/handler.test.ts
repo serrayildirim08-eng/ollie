@@ -162,10 +162,11 @@ describe('workHandler — time-deferred reminder (remindIn)', () => {
     await workHandler.apply(fragment);
 
     expect(vi.mocked(scheduleAt)).toHaveBeenCalledOnce();
-    expect(vi.mocked(scheduleAt)).toHaveBeenCalledWith(fireAt, {
-      title: 'to do',
-      body: 'ping boran',
-    });
+    expect(vi.mocked(scheduleAt)).toHaveBeenCalledWith(
+      fireAt,
+      { title: 'to do', body: 'ping boran' },
+      'reminder:task-mock-id',
+    );
     // Durable app-closed path fires too, same fireAt + stable dedupe_key.
     expect(vi.mocked(scheduleServerReminder)).toHaveBeenCalledWith(
       {

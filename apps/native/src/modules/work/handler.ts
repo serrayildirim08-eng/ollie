@@ -157,17 +157,18 @@ function exhaustive(p: never): never {
 }
 
 /**
- * Schedule a reminder two ways for the same fire time when the routed task
- * carries a worker-resolved `remindIn` hint:
+ * Schedule a reminder for the same fire time when the routed task carries a
+ * worker-resolved `remindIn` hint:
  *
- *   1. client setTimeout (scheduleAt) — fires while the app is open /
- *      minimised, identically on macOS + iOS.
+ *   1. scheduleAt — on Tauri this hands the reminder to the native OS local
+ *      scheduler (fires even if the app is QUIT); off Tauri it falls back to
+ *      an in-process setTimeout (fires while the page is open).
  *   2. server-side Supabase `scheduled_jobs` row (scheduleServerReminder)
  *      — drained by the cron → APNs, so it fires even with the app fully
  *      CLOSED. No-op when not signed in / sync off / api absent.
  *
- * Both carry the SAME stable `dedupe_key` (`reminder:<taskId>`) so the two
- * paths can never double-fire. Mirrors the admin handler's helper —
+ * All paths carry the SAME stable id (`reminder:<taskId>`) so they can never
+ * double-fire. Mirrors the admin handler's helper —
  * intentionally not promoted to a shared util while only two callers exist
  * (Approach B's cross-route hint pattern keeps logic with its primary
  * handler; collapse later if a third caller appears).
@@ -179,9 +180,12 @@ function scheduleReminderIfPresent(
   body: string,
 ): void {
   if (!remindIn || typeof remindIn.scheduledAtMs !== 'number') return;
-  scheduleAt(remindIn.scheduledAtMs, { title, body });
+  // Same stable id across all three paths (OS local notification, in-process
+  // timer, server-push job) so the dispatcher / cron dedupe to one ping.
+  const id = `reminder:${taskId}`;
+  scheduleAt(remindIn.scheduledAtMs, { title, body }, id);
   scheduleServerReminder(
-    { title, body, category: 'REMINDER', dedupe_key: `reminder:${taskId}` },
+    { title, body, category: 'REMINDER', dedupe_key: id },
     remindIn.scheduledAtMs,
   );
 }

@@ -1,3 +1,7 @@
+mod local_notifications;
+
+use local_notifications::{cancel_local_notification, schedule_local_notification};
+
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
 fn greet(name: &str) -> String {
@@ -11,7 +15,11 @@ pub fn run() {
         .plugin(tauri_plugin_sql::Builder::default().build())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_notification::init())
-        .invoke_handler(tauri::generate_handler![greet])
+        .invoke_handler(tauri::generate_handler![
+            greet,
+            schedule_local_notification,
+            cancel_local_notification
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

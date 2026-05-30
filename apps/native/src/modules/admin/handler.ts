@@ -90,15 +90,16 @@ function exhaustive(p: never): never {
 
 /**
  * If a routed task carries a `remindIn` hint (worker-resolved against the
- * dump clock), schedule the notification two ways for the same fire time:
+ * dump clock), schedule the notification for the same fire time via:
  *
- *   1. client setTimeout (scheduleAt) — fires while the app is open /
- *      minimised, identically on macOS + iOS.
+ *   1. scheduleAt — on Tauri this hands the reminder to the native OS local
+ *      scheduler (fires even if the app is QUIT); off Tauri it falls back to
+ *      an in-process setTimeout (fires while the page is open).
  *   2. server-side Supabase `scheduled_jobs` row (scheduleServerReminder)
  *      — drained by the cron → APNs, so it fires even with the app fully
  *      CLOSED. No-op when not signed in / sync off / api absent.
  *
- * Both carry the SAME stable `dedupe_key` (`reminder:<taskId>`); the notify
+ * All paths carry the SAME stable id (`reminder:<taskId>`); the notify
  * dispatcher and the cron both honor dedupe_key, so whichever lands first
  * wins and the user is never double-pinged.
  *
@@ -112,9 +113,12 @@ function scheduleReminderIfPresent(
   body: string,
 ): void {
   if (!remindIn || typeof remindIn.scheduledAtMs !== 'number') return;
-  scheduleAt(remindIn.scheduledAtMs, { title, body });
+  // Same stable id across all three paths (OS local notification, in-process
+  // timer, server-push job) so the dispatcher / cron dedupe to one ping.
+  const id = `reminder:${taskId}`;
+  scheduleAt(remindIn.scheduledAtMs, { title, body }, id);
   scheduleServerReminder(
-    { title, body, category: 'REMINDER', dedupe_key: `reminder:${taskId}` },
+    { title, body, category: 'REMINDER', dedupe_key: id },
     remindIn.scheduledAtMs,
   );
 }

@@ -97,10 +97,11 @@ describe('adminHandler — time-deferred reminder (remindIn)', () => {
     await adminHandler.apply(fragment);
 
     expect(vi.mocked(scheduleAt)).toHaveBeenCalledOnce();
-    expect(vi.mocked(scheduleAt)).toHaveBeenCalledWith(fireAt, {
-      title: 'call',
-      body: 'mama',
-    });
+    expect(vi.mocked(scheduleAt)).toHaveBeenCalledWith(
+      fireAt,
+      { title: 'call', body: 'mama' },
+      'reminder:task-id',
+    );
     // Durable app-closed path fires too, same fireAt + stable dedupe_key.
     expect(vi.mocked(scheduleServerReminder)).toHaveBeenCalledWith(
       {
@@ -132,10 +133,11 @@ describe('adminHandler — time-deferred reminder (remindIn)', () => {
 
     await adminHandler.apply(fragment);
 
-    expect(vi.mocked(scheduleAt)).toHaveBeenCalledWith(fireAt, {
-      title: 'call',
-      body: 'mama · christmas',
-    });
+    expect(vi.mocked(scheduleAt)).toHaveBeenCalledWith(
+      fireAt,
+      { title: 'call', body: 'mama · christmas' },
+      'reminder:task-id',
+    );
   });
 
   it('create_task with remindIn schedules a "to do · text" notification', async () => {
@@ -156,10 +158,11 @@ describe('adminHandler — time-deferred reminder (remindIn)', () => {
 
     await adminHandler.apply(fragment);
 
-    expect(vi.mocked(scheduleAt)).toHaveBeenCalledWith(fireAt, {
-      title: 'to do',
-      body: 'take zoloft',
-    });
+    expect(vi.mocked(scheduleAt)).toHaveBeenCalledWith(
+      fireAt,
+      { title: 'to do', body: 'take zoloft' },
+      'reminder:task-id',
+    );
     expect(vi.mocked(scheduleServerReminder)).toHaveBeenCalledWith(
       {
         title: 'to do',
