@@ -14,6 +14,7 @@
 
 import { computeCadence, type CadenceEstimate } from '@ollie/cadence';
 import { sql } from '../../storage';
+import { isCriticalReminderLocal } from './criticalReminder';
 import {
   normaliseName,
   normaliseUnit,
@@ -32,6 +33,9 @@ interface PantryRow {
   added_at: number;
   low_flag: number;
   archived_at_ms: number | null;
+  predicted_out_at_ms: number | null;
+  remind_me: number;
+  pushed_at_ms: number | null;
   [col: string]: unknown;
 }
 
@@ -73,7 +77,8 @@ export const pantry = {
    */
   async list(): Promise<PantryItem[]> {
     const rows = await sql.select<PantryRow>(
-      `SELECT id, name, quantity, unit, added_at, low_flag, archived_at_ms
+      `SELECT id, name, quantity, unit, added_at, low_flag, archived_at_ms,
+              predicted_out_at_ms, remind_me, pushed_at_ms
        FROM grocery_pantry
        WHERE archived_at_ms IS NULL
        ORDER BY added_at DESC`,
@@ -96,7 +101,8 @@ export const pantry = {
    */
   async listArchived(): Promise<PantryItem[]> {
     const rows = await sql.select<PantryRow>(
-      `SELECT id, name, quantity, unit, added_at, low_flag, archived_at_ms
+      `SELECT id, name, quantity, unit, added_at, low_flag, archived_at_ms,
+              predicted_out_at_ms, remind_me, pushed_at_ms
        FROM grocery_pantry
        WHERE archived_at_ms IS NOT NULL
        ORDER BY archived_at_ms DESC`,
@@ -119,14 +125,28 @@ export const pantry = {
     quantity?: number | null;
     unit?: string | null;
     nowMs?: number;
+    /**
+     * Initial reminder state. Backend's `isCriticalReminder()` is the
+     * authority on the default (meds / tampons / contact solution / baby
+     * formula / pet meds → true, else false); the handler calls add()
+     * with the computed bool. Defaults to false here so direct repo
+     * callers (tests, screens) don't accidentally opt the user in.
+     */
+    remindMe?: boolean;
   }): Promise<PantryItem> {
     const name = normaliseName(input.name);
     const unit = normaliseUnit(input.unit ?? null);
     const quantity = input.quantity ?? null;
     const now = input.nowMs ?? Date.now();
+    // Critical-category default: meds / tampons / contact solution / baby
+    // formula / pet meds → remind by default; everything else → silent.
+    // Caller may override (handler path or test) by passing remindMe
+    // explicitly; the explicit value always wins over the default gate.
+    const remindMe = input.remindMe ?? isCriticalReminderLocal(name);
 
     const existing = await sql.select<PantryRow>(
-      `SELECT id, name, quantity, unit, added_at, low_flag, archived_at_ms
+      `SELECT id, name, quantity, unit, added_at, low_flag, archived_at_ms,
+              predicted_out_at_ms, remind_me, pushed_at_ms
        FROM grocery_pantry WHERE name = ? LIMIT 1`,
       [name],
     );
@@ -140,10 +160,16 @@ export const pantry = {
         quantity != null;
       const mergedQty = canMerge ? (row.quantity ?? 0) + (quantity ?? 0) : (quantity ?? row.quantity);
       const mergedUnit = unit ?? row.unit;
+      // Re-adding doesn't overwrite the user's remind toggle — once they've
+      // flipped it we honour it across restocks. Same for predicted_out:
+      // clear it on restock because the cadence prediction needs to recompute
+      // against the new "out" baseline.
       await sql.execute(
         `UPDATE grocery_pantry
            SET quantity = ?, unit = ?, added_at = ?, low_flag = 0,
-               archived_at_ms = NULL
+               archived_at_ms = NULL,
+               predicted_out_at_ms = NULL,
+               pushed_at_ms = NULL
          WHERE id = ?`,
         [mergedQty, mergedUnit, now, row.id],
       );
@@ -156,17 +182,33 @@ export const pantry = {
         addedAt: now,
         lowFlag: false,
         archivedAtMs: null,
+        predictedOutAtMs: null,
+        remindMe: row.remind_me === 1,
+        pushedAtMs: null,
       };
     }
 
     const id = newId();
     await sql.execute(
-      `INSERT INTO grocery_pantry (id, name, quantity, unit, added_at, low_flag, archived_at_ms)
-       VALUES (?, ?, ?, ?, ?, 0, NULL)`,
-      [id, name, quantity, unit, now],
+      `INSERT INTO grocery_pantry
+         (id, name, quantity, unit, added_at, low_flag, archived_at_ms,
+          predicted_out_at_ms, remind_me, pushed_at_ms)
+       VALUES (?, ?, ?, ?, ?, 0, NULL, NULL, ?, NULL)`,
+      [id, name, quantity, unit, now, remindMe ? 1 : 0],
     );
     await logPurchase(name, now);
-    return { id, name, quantity, unit, addedAt: now, lowFlag: false, archivedAtMs: null };
+    return {
+      id,
+      name,
+      quantity,
+      unit,
+      addedAt: now,
+      lowFlag: false,
+      archivedAtMs: null,
+      predictedOutAtMs: null,
+      remindMe,
+      pushedAtMs: null,
+    };
   },
 
   /**
@@ -274,6 +316,106 @@ export const pantry = {
   async remove(id: string): Promise<void> {
     await sql.execute(`DELETE FROM grocery_pantry WHERE id = ?`, [id]);
   },
+
+  // ─── replenishment (Plan B · 2026-05-30) ────────────────────────────────
+  //
+  // The UI surface (Shop "≈ likely needed" + per-row remind toggle) reads
+  // through these helpers. Backend pod wires the prediction logic + push
+  // gate against the same column set; both sides stay query-agnostic.
+
+  /**
+   * Toggle the per-row push opt-in. The Pantry tab's `remind` / `silent`
+   * smcp text-button calls this; no chrome, no badge — the toggle text IS
+   * the indicator. Backend's notifier checks remind_me === 1 + push gate
+   * before firing.
+   */
+  async setRemindMe(id: string, remindMe: boolean): Promise<void> {
+    await sql.execute(
+      `UPDATE grocery_pantry SET remind_me = ? WHERE id = ?`,
+      [remindMe ? 1 : 0, id],
+    );
+  },
+
+  /**
+   * Update the predicted out-of-stock timestamp. The cadence layer (or the
+   * backend pod's predictOutAt()) calls this; pass `null` to clear (e.g.
+   * when we drop below the low-data threshold again).
+   *
+   * Setting a new prediction clears `pushed_at_ms` so the push gate gets
+   * one fresh shot per prediction window.
+   */
+  async setPredictedOut(id: string, predictedOutAtMs: number | null): Promise<void> {
+    await sql.execute(
+      `UPDATE grocery_pantry
+         SET predicted_out_at_ms = ?, pushed_at_ms = NULL
+       WHERE id = ?`,
+      [predictedOutAtMs, id],
+    );
+  },
+
+  /**
+   * Record that we fired the prediction push for this row. The notifier
+   * sets `pushed_at_ms = now` on success so the gate doesn't fire twice
+   * for the same prediction window.
+   */
+  async markPushed(id: string, nowMs?: number): Promise<void> {
+    const ts = nowMs ?? Date.now();
+    await sql.execute(
+      `UPDATE grocery_pantry SET pushed_at_ms = ? WHERE id = ?`,
+      [ts, id],
+    );
+  },
+
+  /**
+   * User said "still have it" on a Shop "≈ likely needed" row. Bumps the
+   * prediction forward by 7 days so the row vanishes from the section
+   * until the new prediction date — silent, no acknowledgement.
+   *
+   * NOTE: backend pod will own the *cadence* bump (its own helper may
+   * also lengthen the median interval). This helper just shifts the
+   * timestamp so the UI behaviour is correct in isolation; landing the
+   * cadence-aware version on top is additive, not breaking.
+   */
+  async dismissPrediction(id: string, nowMs?: number): Promise<void> {
+    const ts = nowMs ?? Date.now();
+    const SEVEN_DAYS_MS = 7 * 86_400_000;
+    await sql.execute(
+      `UPDATE grocery_pantry
+         SET predicted_out_at_ms = ?, pushed_at_ms = NULL
+       WHERE id = ?`,
+      [ts + SEVEN_DAYS_MS, id],
+    );
+  },
+
+  /**
+   * The rows that should appear in Shop as "≈ likely needed":
+   *   - have a `predicted_out_at_ms` that has passed
+   *   - aren't archived
+   *
+   * The caller (GroceryBox) filters the result against the active shopping
+   * list by canonical name to avoid double-rendering an item that's already
+   * on the explicit list. We don't do that JOIN here because the shopping
+   * table is small enough to filter in JS, and the test surface stays
+   * straightforward (a single source SELECT, dedupe in component land).
+   *
+   * Sorted by `predicted_out_at_ms ASC` — the one that went predicted-out
+   * longest ago lands at the top of the section, matching "the oldest miss
+   * is the most likely true positive" intuition.
+   */
+  async listPredictedOut(nowMs?: number): Promise<PantryItem[]> {
+    const now = nowMs ?? Date.now();
+    const rows = await sql.select<PantryRow>(
+      `SELECT id, name, quantity, unit, added_at, low_flag, archived_at_ms,
+              predicted_out_at_ms, remind_me, pushed_at_ms
+       FROM grocery_pantry
+       WHERE archived_at_ms IS NULL
+         AND predicted_out_at_ms IS NOT NULL
+         AND predicted_out_at_ms <= ?
+       ORDER BY predicted_out_at_ms ASC`,
+      [now],
+    );
+    return rows.map(rowToPantryItem);
+  },
 };
 
 // ─── shopping list ────────────────────────────────────────────────────────
@@ -362,6 +504,9 @@ function rowToPantryItem(r: PantryRow): PantryItem {
     addedAt: r.added_at,
     lowFlag: r.low_flag === 1,
     archivedAtMs: r.archived_at_ms ?? null,
+    predictedOutAtMs: r.predicted_out_at_ms ?? null,
+    remindMe: r.remind_me === 1,
+    pushedAtMs: r.pushed_at_ms ?? null,
   };
 }
 

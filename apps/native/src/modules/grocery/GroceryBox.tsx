@@ -78,6 +78,7 @@ type Mode = 'shop' | 'pantry' | 'feed-me';
 export function GroceryBox(): JSX.Element {
   const [pantryItems, setPantryItems] = useState<PantryItem[]>([]);
   const [archivedItems, setArchivedItems] = useState<PantryItem[]>([]);
+  const [predictedOutItems, setPredictedOutItems] = useState<PantryItem[]>([]);
   const [shoppingItems, setShoppingItems] = useState<ShoppingItem[]>([]);
   const [cadenceByName, setCadenceByName] = useState<Map<string, CadenceEstimate>>(
     () => new Map(),
@@ -85,20 +86,35 @@ export function GroceryBox(): JSX.Element {
   const [ready, setReady] = useState(false);
   // Pantry is the default — it's the surface you live in most of the time.
   // Shop mode is for the few minutes you're actually adding to the list.
-  const [mode, setMode] = useState<Mode>('pantry');
+  // Persisted in sessionStorage so a hot-reload / refresh keeps you on the
+  // tab you were on (e.g. feed-me) instead of snapping back to pantry.
+  const [mode, setModeState] = useState<Mode>(() => {
+    const saved = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('grocery:mode') : null;
+    return saved === 'shop' || saved === 'pantry' || saved === 'feed-me' ? saved : 'pantry';
+  });
+  const setMode = useCallback((m: Mode) => {
+    try {
+      sessionStorage.setItem('grocery:mode', m);
+    } catch {
+      // sessionStorage unavailable (private mode / SSR) — non-fatal.
+    }
+    setModeState(m);
+  }, []);
   // Bumps whenever the background shelf-life table finishes loading; lets
   // the pantry view recompute aging states without a poll cycle.
   const [shelfTableTick, setShelfTableTick] = useState(0);
 
   const refresh = useCallback(async () => {
-    const [p, a, s] = await Promise.all([
+    const [p, a, s, pred] = await Promise.all([
       pantryRepo.list(),
       pantryRepo.listArchived(),
       shoppingRepo.list(),
+      pantryRepo.listPredictedOut(),
     ]);
     setPantryItems(p);
     setArchivedItems(a);
     setShoppingItems(s);
+    setPredictedOutItems(pred);
     // Fan-out cadence reads in parallel — one per pantry name. Keeps the
     // pantry view a single state cycle (no per-row async in render).
     const pairs = await Promise.all(
@@ -236,6 +252,46 @@ export function GroceryBox(): JSX.Element {
     [refresh],
   );
 
+  // ── replenishment (Plan B · 2026-05-30) ─────────────────────────────────
+  //
+  // The "≈ likely needed" Shop section reads pantryRepo.listPredictedOut()
+  // and renders an inline "add to list / still have" choice per row.
+  //   - add to list  → shopping.add(name) + setPredictedOut(null) so the row
+  //                    immediately leaves the ≈ section.
+  //   - still have   → dismissPrediction(now) (bumps prediction +7d).
+  // The per-row Pantry `remind`/`silent` toggle calls setRemindMe directly.
+  const handleAddPredictedToList = useCallback(
+    async (row: PantryItem) => {
+      await shoppingRepo.add({
+        name: row.name,
+        quantity: row.quantity,
+        unit: row.unit,
+      });
+      // Clearing predicted_out_at_ms makes the row vanish from the ≈ section
+      // on the next read — the cadence layer / backend pod's predictOutAt()
+      // will set a fresh prediction the next time it runs against the row.
+      await pantryRepo.setPredictedOut(row.id, null);
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const handleStillHavePredicted = useCallback(
+    async (row: PantryItem) => {
+      await pantryRepo.dismissPrediction(row.id);
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const handleSetRemindMe = useCallback(
+    async (id: string, remindMe: boolean) => {
+      await pantryRepo.setRemindMe(id, remindMe);
+      await refresh();
+    },
+    [refresh],
+  );
+
   const shopNames = useMemo(
     () => new Set(shoppingItems.map((it) => it.name.toLowerCase())),
     [shoppingItems],
@@ -269,7 +325,11 @@ export function GroceryBox(): JSX.Element {
         <ShopList
           items={shoppingItems}
           openCount={openCount}
+          predictedOut={predictedOutItems}
+          shopNames={shopNames}
           onCheckOff={(id) => void handleCheckOffShopping(id)}
+          onAddPredicted={(row) => void handleAddPredictedToList(row)}
+          onStillHavePredicted={(row) => void handleStillHavePredicted(row)}
         />
       ) : mode === 'pantry' ? (
         <PantryList
@@ -282,6 +342,7 @@ export function GroceryBox(): JSX.Element {
           onStillHere={(id) => void handleTouchPantry(id)}
           onGone={(id) => void handleArchivePantry(id)}
           onUnarchive={(id) => void handleUnarchivePantry(id)}
+          onSetRemindMe={(id, v) => void handleSetRemindMe(id, v)}
         />
       ) : (
         <FeedMeView
@@ -349,92 +410,277 @@ function ModeSwitch({
 function ShopList({
   items,
   openCount,
+  predictedOut,
+  shopNames,
   onCheckOff,
+  onAddPredicted,
+  onStillHavePredicted,
 }: {
   items: ShoppingItem[];
   openCount: number;
+  predictedOut: PantryItem[];
+  shopNames: Set<string>;
   onCheckOff: (id: string) => void;
+  onAddPredicted: (row: PantryItem) => void;
+  onStillHavePredicted: (row: PantryItem) => void;
 }): JSX.Element {
-  if (items.length === 0) return <ColdShop />;
+  // Dedupe predicted-out rows against the active shopping list — never
+  // show the same canonical in both sections (it would read as a bug to
+  // the user). The shopNames set is normalised at the GroceryBox level.
+  const predictedFiltered = useMemo(
+    () => predictedOut.filter((p) => !shopNames.has(p.name.toLowerCase())),
+    [predictedOut, shopNames],
+  );
+
+  if (items.length === 0 && predictedFiltered.length === 0) return <ColdShop />;
 
   return (
     <Stack gap={14}>
-      {/* the running stat above the torn note */}
-      <Text scale="caption" color={colors.inkFaint} style={{ letterSpacing: '0.02em' }}>
-        <strong style={{ color: colors.ink, fontWeight: 600 }}>{openCount}</strong>
-        {" on the list · tap one when it's in the basket"}
-      </Text>
+      {items.length > 0 && (
+        <>
+          {/* the running stat above the torn note */}
+          <Text scale="caption" color={colors.inkFaint} style={{ letterSpacing: '0.02em' }}>
+            <strong style={{ color: colors.ink, fontWeight: 600 }}>{openCount}</strong>
+            {" on the list · tap one when it's in the basket"}
+          </Text>
 
-      {/* THE LIST — a torn-paper note, hairline rules, soft round tick */}
-      <Stack gap={0}>
-        {items.map((row, i) => (
-          <button
-            key={row.id}
-            type="button"
-            onClick={() => onCheckOff(row.id)}
-            aria-label={`check off ${row.name}`}
-            style={{
-              width: '100%',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 15,
-              padding: '15px 2px',
-              borderTop: `1px solid ${colors.hairline}`,
-              borderBottom:
-                i === items.length - 1 ? `1px solid ${colors.hairline}` : 'none',
-              borderLeft: 'none',
-              borderRight: 'none',
-              background: 'transparent',
-              cursor: 'pointer',
-              textAlign: 'left',
-              fontFamily: 'inherit',
-              color: 'inherit',
-            }}
-          >
-            <TickCircle />
-            <span
-              style={{
-                flex: 1,
-                minWidth: 0,
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 2,
-              }}
-            >
-              <span
+          {/* THE LIST — a torn-paper note, hairline rules, soft round tick */}
+          <Stack gap={0}>
+            {items.map((row, i) => (
+              <button
+                key={row.id}
+                type="button"
+                onClick={() => onCheckOff(row.id)}
+                aria-label={`check off ${row.name}`}
                 style={{
-                  fontSize: 17,
-                  fontWeight: 400,
-                  letterSpacing: '-0.01em',
-                  color: colors.ink,
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 15,
+                  padding: '15px 2px',
+                  borderTop: `1px solid ${colors.hairline}`,
+                  borderBottom:
+                    i === items.length - 1 ? `1px solid ${colors.hairline}` : 'none',
+                  borderLeft: 'none',
+                  borderRight: 'none',
+                  background: 'transparent',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  fontFamily: 'inherit',
+                  color: 'inherit',
                 }}
               >
-                {row.name}
-              </span>
-              <WhenCaption ts={row.addedAt} />
-            </span>
-            {qtyLabel(row.quantity, row.unit) && (
-              <span
-                style={{
-                  fontSize: 13,
-                  fontWeight: 500,
-                  letterSpacing: '0.01em',
-                  color: colors.inkFaint,
-                  flexShrink: 0,
-                }}
-              >
-                {qtyLabel(row.quantity, row.unit)}
-              </span>
-            )}
-          </button>
-        ))}
-      </Stack>
+                <TickCircle />
+                <span
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 2,
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: 17,
+                      fontWeight: 400,
+                      letterSpacing: '-0.01em',
+                      color: colors.ink,
+                    }}
+                  >
+                    {row.name}
+                  </span>
+                  <WhenCaption ts={row.addedAt} />
+                </span>
+                {qtyLabel(row.quantity, row.unit) && (
+                  <span
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 500,
+                      letterSpacing: '0.01em',
+                      color: colors.inkFaint,
+                      flexShrink: 0,
+                    }}
+                  >
+                    {qtyLabel(row.quantity, row.unit)}
+                  </span>
+                )}
+              </button>
+            ))}
+          </Stack>
+        </>
+      )}
+
+      {predictedFiltered.length > 0 && (
+        <LikelyNeededSection
+          items={predictedFiltered}
+          onAdd={onAddPredicted}
+          onStillHave={onStillHavePredicted}
+        />
+      )}
 
       {/* the closing sage-dot honest note */}
-      <SageNote>
-        each thing you check off the list lands in the pantry — nothing to set up.
-      </SageNote>
+      {items.length > 0 && (
+        <SageNote>
+          each thing you check off the list lands in the pantry — nothing to set up.
+        </SageNote>
+      )}
     </Stack>
+  );
+}
+
+// ─── ≈ likely needed section ──────────────────────────────────────────────
+//
+// A second, quieter group below the active shopping list. Rows are rendered
+// AS IF they were on the shop list (visual continuity), but with a smcp
+// sage `≈ likely needed` section header and a tiny italic "predicted from
+// your pattern" caption per row. One tap opens an inline `add to list` /
+// `still have` choice — no chrome, no badges.
+
+function LikelyNeededSection({
+  items,
+  onAdd,
+  onStillHave,
+}: {
+  items: PantryItem[];
+  onAdd: (row: PantryItem) => void;
+  onStillHave: (row: PantryItem) => void;
+}): JSX.Element {
+  return (
+    <Stack gap={0} style={{ marginTop: 16 }} aria-label="likely needed">
+      {/* hairline rule above + 11px smcp sage section caption */}
+      <div
+        style={{
+          borderTop: `1px solid ${colors.hairline}`,
+          paddingTop: 16,
+        }}
+      >
+        <span
+          style={{
+            ...SMCP_STYLE,
+            fontSize: 11,
+            color: colors.sage,
+            letterSpacing: '0.08em',
+            fontStyle: 'italic',
+          }}
+        >
+          {'≈'} likely needed
+        </span>
+      </div>
+      <Stack gap={0} style={{ marginTop: 12 }}>
+        {items.map((row, i) => (
+          <LikelyNeededRow
+            key={row.id}
+            row={row}
+            isLast={i === items.length - 1}
+            onAdd={onAdd}
+            onStillHave={onStillHave}
+          />
+        ))}
+      </Stack>
+    </Stack>
+  );
+}
+
+function LikelyNeededRow({
+  row,
+  isLast,
+  onAdd,
+  onStillHave,
+}: {
+  row: PantryItem;
+  isLast: boolean;
+  onAdd: (row: PantryItem) => void;
+  onStillHave: (row: PantryItem) => void;
+}): JSX.Element {
+  const [open, setOpen] = useState(false);
+  return (
+    <div
+      style={{
+        borderTop: `1px solid ${colors.hairline}`,
+        borderBottom: isLast ? `1px solid ${colors.hairline}` : 'none',
+        padding: '13px 2px',
+      }}
+    >
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-label={`${row.name} — likely needed`}
+        style={{
+          width: '100%',
+          background: 'transparent',
+          border: 'none',
+          padding: 0,
+          cursor: 'pointer',
+          textAlign: 'left',
+          fontFamily: 'inherit',
+          color: 'inherit',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 2,
+        }}
+      >
+        <span
+          style={{
+            fontSize: 16,
+            fontWeight: 400,
+            letterSpacing: '-0.01em',
+            color: colors.ink,
+          }}
+        >
+          {row.name}
+        </span>
+        <span
+          style={{
+            fontSize: 11,
+            color: colors.inkSoft,
+            fontStyle: 'italic',
+            letterSpacing: '0.02em',
+          }}
+        >
+          {'≈'} predicted from your pattern
+        </span>
+      </button>
+      {open && (
+        <Row gap={16} align="baseline" style={{ marginTop: 10 }}>
+          <button
+            type="button"
+            onClick={() => onAdd(row)}
+            style={{
+              ...SMCP_STYLE,
+              background: 'none',
+              border: 'none',
+              padding: 0,
+              fontSize: 11,
+              color: colors.sage,
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+              transition: 'color 200ms cubic-bezier(0.18, 0, 0.22, 1)',
+            }}
+          >
+            add to list
+          </button>
+          <button
+            type="button"
+            onClick={() => onStillHave(row)}
+            style={{
+              ...SMCP_STYLE,
+              background: 'none',
+              border: 'none',
+              padding: 0,
+              fontSize: 11,
+              color: colors.inkSoft,
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+              transition: 'color 200ms cubic-bezier(0.18, 0, 0.22, 1)',
+            }}
+          >
+            still have
+          </button>
+        </Row>
+      )}
+    </div>
   );
 }
 
@@ -450,6 +696,7 @@ function PantryList({
   onStillHere,
   onGone,
   onUnarchive,
+  onSetRemindMe,
 }: {
   items: PantryItem[];
   archivedItems: PantryItem[];
@@ -461,6 +708,7 @@ function PantryList({
   onStillHere: (id: string) => void;
   onGone: (id: string) => void;
   onUnarchive: (id: string) => void;
+  onSetRemindMe: (id: string, remindMe: boolean) => void;
 }): JSX.Element {
   // Compute aging state per row from the live shelf-life table. `shelfTick`
   // is in the dep list so the memo recomputes when the cache populates.
@@ -499,6 +747,7 @@ function PantryList({
                 onRemove={onRemove}
                 onStillHere={onStillHere}
                 onGone={onGone}
+                onSetRemindMe={onSetRemindMe}
               />
             ))}
           </Stack>
@@ -529,6 +778,7 @@ function PantryRow({
   onRemove,
   onStillHere,
   onGone,
+  onSetRemindMe,
 }: {
   item: PantryItem;
   aging: AgingState;
@@ -537,6 +787,7 @@ function PantryRow({
   onRemove: (id: string) => void;
   onStillHere: (id: string) => void;
   onGone: (id: string) => void;
+  onSetRemindMe: (id: string, remindMe: boolean) => void;
 }): JSX.Element {
   const [promptOpen, setPromptOpen] = useState(false);
 
@@ -614,8 +865,54 @@ function PantryRow({
         <WhenCaption ts={item.addedAt} />
         <CadenceHint estimate={cadence} />
       </Stack>
-      <RemoveButton onClick={() => onRemove(item.id)} />
+      <Row gap={10} align="center" style={{ flexShrink: 0 }}>
+        <RemindToggle
+          remindMe={item.remindMe}
+          onChange={(next) => onSetRemindMe(item.id, next)}
+        />
+        <RemoveButton onClick={() => onRemove(item.id)} />
+      </Row>
     </Row>
+  );
+}
+
+// ─── remind toggle ────────────────────────────────────────────────────────
+//
+// A single very small smcp text button that flips between `remind` (sage,
+// active) and `silent` (inkSoft, inactive). No checkbox chrome, no switch
+// widget — the text IS the indicator. Default state is seeded by the
+// backend's isCriticalReminder() at insert; the UI just reads remind_me.
+
+function RemindToggle({
+  remindMe,
+  onChange,
+}: {
+  remindMe: boolean;
+  onChange: (next: boolean) => void;
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={remindMe}
+      aria-label={remindMe ? 'remind me when out' : 'silent — no reminder'}
+      onClick={() => onChange(!remindMe)}
+      style={{
+        ...SMCP_STYLE,
+        background: 'none',
+        border: 'none',
+        padding: '4px 6px',
+        margin: 0,
+        fontSize: 11,
+        color: remindMe ? colors.sage : colors.inkFaint,
+        cursor: 'pointer',
+        fontFamily: 'inherit',
+        flexShrink: 0,
+        transition: 'color 200ms cubic-bezier(0.18, 0, 0.22, 1)',
+      }}
+    >
+      {remindMe ? 'remind' : 'silent'}
+    </button>
   );
 }
 

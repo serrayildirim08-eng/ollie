@@ -27,6 +27,19 @@ export type Unit =
  * user marks it gone from the "still here?" prompt. Archived rows leave
  * the active pantry list but are recoverable from the collapsed archived
  * section. Never null on archived rows; always null on active rows.
+ *
+ * Replenishment (Plan B · 2026-05-30):
+ *   - `predictedOutAtMs` — cadence-derived guess at when this row goes
+ *     to zero. When it has passed and the row isn't already on the
+ *     active shopping list, Shop renders a quiet "≈ likely needed" row.
+ *     `null` means "we don't have enough signal yet" (silence wins).
+ *   - `remindMe` — opt-in flag for the (separate) push notification on
+ *     the prediction. Default true for critical categories (meds,
+ *     tampons, contact solution, baby formula, pet meds) and false for
+ *     everything else; the backend's `isCriticalReminder()` seeds it on
+ *     insert and the UI just reads it.
+ *   - `pushedAtMs` — bookkeeping so push fires at most once per
+ *     prediction window. Cleared when the prediction rolls forward.
  */
 export interface PantryItem {
   id: string;
@@ -36,6 +49,9 @@ export interface PantryItem {
   addedAt: number;   // ms since epoch — doubles as the aging clock
   lowFlag: boolean;
   archivedAtMs: number | null;
+  predictedOutAtMs: number | null;
+  remindMe: boolean;
+  pushedAtMs: number | null;
 }
 
 /** One thing on the shopping list. Smaller surface than pantry items. */
