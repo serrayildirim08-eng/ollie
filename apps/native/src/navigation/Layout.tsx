@@ -64,7 +64,10 @@ const responsiveCss = `
      behind the bottom tab bar with no way to reach them. */
   html, body, #root { height: 100%; margin: 0; }
   .ollie-shell-root {
-    height: 100vh;
+    /* dvh, not vh: on iOS WebKit 100vh is the LARGEST viewport (ignores the
+       dynamic toolbar), which clips the bottom of the shell. 100dvh tracks
+       the actual visible height. */
+    height: 100dvh;
     overflow: hidden;
   }
   .ollie-main {

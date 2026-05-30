@@ -50,7 +50,7 @@ function Sidebar({ items }: ListProps) {
       aria-label="Primary"
       style={{
         width: 220,
-        height: "100vh",
+        height: "100dvh",
         padding: `${space[6]} ${space[5]}`,
         borderRight: `1px solid ${colors.hairline}`,
         background: colors.cream,
