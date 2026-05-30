@@ -63,6 +63,11 @@ import { handlePurchase, type PurchaseEnv } from './router/purchase';
 import { handleCookHistory, type CookHistoryEnv } from './router/cook-history';
 import { handleReplenishment, type ReplenishmentEnv } from './router/replenishment';
 import { handleFeedMe, type FeedMeEnv } from './router/feed-me';
+import {
+  handleShelfLifeAll,
+  handleShelfLifeLookup,
+  type ShelfLifeEnv,
+} from './router/shelf-life';
 import { verifyClerkJwt } from './clerk-verify';
 
 /**
@@ -83,6 +88,7 @@ export interface Env
     PurchaseEnv,
     ReplenishmentEnv,
     FeedMeEnv,
+    ShelfLifeEnv,
     CookHistoryEnv {
   ANTHROPIC_API_KEY: string;
   CACHE_KV: KVNamespace;
@@ -206,6 +212,53 @@ export default {
     );
     if (replenishMatch && req.method === 'GET') {
       return withCors(await handleReplenishment(req, env, replenishMatch[1]));
+    }
+
+    // ── /shelf-life/all — full canonical table + alias map (public, 24h cache) ─
+    // GET only. No auth — public reference data, no PII. 24h Cache-Control
+    // + strong ETag mean re-hits are 304s; still apply a soft per-caller
+    // rate-limit so a malicious actor cannot loop on cache-busting headers.
+    if (url.pathname === '/shelf-life/all' && req.method === 'GET') {
+      const slUser = await resolveUserIdForRateLimit(req, env);
+      if (slUser) {
+        const allowed = await checkRate(
+          env.TELEM_RATE_LIMITER,
+          env.RATE_KV,
+          `rl:shelflife-all:${slUser}`,
+          PURCHASE_RATE_MAX, // generous — full table re-fetch is rare
+        );
+        if (!allowed) {
+          return withCors(json({ error: 'rate_limited' }, 429));
+        }
+      }
+      return withCors(await handleShelfLifeAll(req, env));
+    }
+
+    // ── /shelf-life/lookup/:item — single-item resolution (public, 24h cache) ──
+    // GET only. No auth. Rate-limited per caller because 720 items × N callers
+    // could burn CPU without the cache helping (different keys = different
+    // responses). Item segment is the rest of the path so encoded spaces,
+    // hyphens, and TR/ES diacritics all pass through.
+    const shelfLookupMatch = url.pathname.match(/^\/shelf-life\/lookup\/(.+)$/);
+    if (shelfLookupMatch && req.method === 'GET') {
+      const slUser = await resolveUserIdForRateLimit(req, env);
+      if (slUser) {
+        const allowed = await checkRate(
+          env.TELEM_RATE_LIMITER,
+          env.RATE_KV,
+          `rl:shelflife-lookup:${slUser}`,
+        );
+        if (!allowed) {
+          return withCors(json({ error: 'rate_limited' }, 429));
+        }
+      }
+      return withCors(await handleShelfLifeLookup(req, env, shelfLookupMatch[1]));
+    }
+
+    // ── /shelf-life/lookup/ (empty item) — explicit 404 instead of falling
+    //    through to method-not-allowed. Caller sent a malformed URL.
+    if (url.pathname === '/shelf-life/lookup' || url.pathname === '/shelf-life/lookup/') {
+      return withCors(json({ error: 'not_found' }, 404));
     }
 
     if (req.method !== 'POST') {
