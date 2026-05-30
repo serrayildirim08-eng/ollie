@@ -309,42 +309,41 @@ describe('scheduleAt', () => {
     expect(scheduleAtMock).not.toHaveBeenCalled();
   });
 
-  it('uses the Tauri Schedule.at() native path when in Tauri context', async () => {
+  it('uses an in-process timer (NOT the native Schedule.at) in Tauri context', async () => {
+    // Regression guard: the Tauri plugin's Schedule.at() fires immediately on
+    // macOS desktop instead of deferring (a mobile-only feature), which made
+    // "remind me to call mama in 1 minute" ping instantly. scheduleAt must
+    // NEVER touch the native scheduler — it arms a setTimeout that fires at
+    // the right wall-clock moment, identically on macOS and iOS.
     setTauriContext(true);
     pluginMock.isPermissionGranted.mockResolvedValue(true);
 
     const fireAt = Date.now() + 60_000;
     scheduleAt(fireAt, { title: 'call', body: 'mama' });
 
-    await vi.waitFor(() => {
-      expect(scheduleAtMock).toHaveBeenCalledOnce();
-    });
-    const scheduleArg = scheduleAtMock.mock.calls[0]?.[0];
-    expect(scheduleArg).toBeInstanceOf(Date);
-    expect((scheduleArg as Date).getTime()).toBe(fireAt);
-
-    expect(pluginMock.sendNotification).toHaveBeenCalledWith(
-      expect.objectContaining({
-        title: 'call',
-        body: 'mama',
-        schedule: { kind: 'at-schedule', date: new Date(fireAt) },
-      }),
-    );
-
-    // The OS holds the schedule — no in-process timer should be needed.
-    pluginMock.sendNotification.mockClear();
-    await vi.advanceTimersByTimeAsync(120_000);
+    // Nothing fires up front — no instant ping, no native schedule.
+    await vi.advanceTimersByTimeAsync(0);
+    expect(scheduleAtMock).not.toHaveBeenCalled();
     expect(pluginMock.sendNotification).not.toHaveBeenCalled();
+
+    // It fires once the timer elapses.
+    await vi.advanceTimersByTimeAsync(60_001);
+    await vi.waitFor(() => {
+      expect(pluginMock.sendNotification).toHaveBeenCalledWith(
+        expect.objectContaining({ title: 'call', body: 'mama' }),
+      );
+    });
+    // The native scheduler is never used.
+    expect(scheduleAtMock).not.toHaveBeenCalled();
   });
 
-  it('drops the schedule when permission is not granted (Tauri path)', async () => {
+  it('drops the notification at fire-time when permission is not granted', async () => {
     setTauriContext(true);
     pluginMock.isPermissionGranted.mockResolvedValue(false);
 
     scheduleAt(Date.now() + 60_000, { title: 'call', body: 'mama' });
 
-    // Let the async branch settle.
-    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(60_001);
 
     expect(scheduleAtMock).not.toHaveBeenCalled();
     expect(pluginMock.sendNotification).not.toHaveBeenCalled();
@@ -389,15 +388,14 @@ describe('scheduleAt', () => {
     logSpy.mockRestore();
   });
 
-  it('cancel() before the native schedule even resolves prevents the call', async () => {
+  it('cancel() clears the pending timer in Tauri context too', async () => {
     setTauriContext(true);
     pluginMock.isPermissionGranted.mockResolvedValue(true);
 
     const handle = scheduleAt(Date.now() + 60_000, { title: 'oops', body: 'cancel' });
     handle.cancel();
 
-    // Let any pending microtasks / plugin load drain.
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(60_001);
     expect(scheduleAtMock).not.toHaveBeenCalled();
     expect(pluginMock.sendNotification).not.toHaveBeenCalled();
   });
