@@ -69,6 +69,10 @@ Action disambiguation hints:
 - pets.log_supplement (typed vitamin/calcium with dose) vs log_care (generic care event)
 - sleep.log_insomnia (couldn't sleep at all) vs log_sleep with quality=1 (slept badly)
 - admin.log_renewal (paperwork-with-expiry: passport, license, lease, insurance) vs recurring_decision (repeating choices like subscriptions)
+- ❗ WORK vs ADMIN — PROFESSIONAL/CLIENT DELIVERABLES GO TO work, PERSONAL LIFE-ADMIN GOES TO admin. The deciding question is "is this the user's own personal errand, or work the user owes someone else (a client, a case, their job)?"
+  - PROFESSIONAL / CLIENT work → \`work\`. This includes filling out, drafting, preparing, reviewing, or filing forms / paperwork / applications / documents FOR A CLIENT, CASE, OR JOB — even though the words "forms"/"paperwork"/"application"/"docs" appear. Signals of professional/client work: a person's-name-possessive over a deliverable ("<name>'s forms", "<name>'s application", "smith's contract", "the johnson file"), a named client/matter/case, or any task that is plainly billable/job output rather than the user's own life logistics. Examples: "fill yeo's ds forms" → work ; "draft the smith contract" → work ; "prepare the johnson visa application" → work ; "review the client's documents" → work ; "finish boran's brief" → work.
+  - PERSONAL life-admin → \`admin\`. The user's OWN logistics: "renew MY passport", "file MY taxes", "MY rental application", "MY dentist appointment", "MY car registration". No client, no case, no job deliverable — just the user's personal paperwork/errands.
+  - DEADLINE PRESERVATION: when a professional/client deliverable carries a due date / deadline ("due tuesday", "by friday", "due monday", "deadline next week"), classify it as \`work.log_deadline\` with \`text\` = the deliverable (keep the client name, e.g. "fill yeo's ds forms") and \`dueDate\` = the stated date. A client deliverable with NO date → \`work.create_task\`. NEVER drop the deadline, and NEVER send a client deliverable to admin.log_paperwork (that action is past-tense personal paperwork: "filed MY taxes", and it has no date field, so it would silently lose the deadline).
 - body.log_movement (walk/stretch/lift with duration) — primary for physical activity
 - NEVER classify anything as habits.streak_break_note. Ollie has no streaks (ADHD-shame mechanic, rejected). "Broke my X habit" / "missed 5 days of X" should land in habits.identity_statement (if reflective: "i'm someone who falls off the wagon") or dump_only (if just observational).
 - TIME-DEFERRED REMINDER ("remind me to X in N min/hour", "Y dakika sonra X yapmamı hatırlat", "recuérdame X en N min"): classify by what the user wants to be reminded ABOUT (call/email/take/do X → the corresponding admin / work action, e.g. "remind me to call mama in 1 minute" → admin.create_phone_task with person="mama"), and add a top-level \`remindIn\` field on the payload: { amount: number, unit: "sec"|"min"|"hr"|"day" }. The handler schedules a system notification when the timer fires. Do NOT emit a separate "reminder" fragment, and do NOT route to dump_only when remindIn is present. SPECIAL CASE: "remind me to take <medication> in N" is NOT medication.log_dose (that action is for past-tense doses already taken); route it to admin.create_task with text "take <medication>" plus the remindIn hint, since the user hasn't taken it yet — the reminder is the whole point.
@@ -105,8 +109,10 @@ The primary crisis detector is the upstream lexicon (@ollie/crisis-lexicon), whi
 - create_task: { text: string (REQUIRED — the task itself), project?: string, remindIn?: { amount: number, unit: "sec"|"min"|"hr"|"day" } (cross-route hint — schedules a system notification when the timer fires; see TIME-DEFERRED REMINDER above) }
   Ex: "need to write the PRD" → { text: "write the PRD" }
   Ex: "remind me to ping boran in 10 minutes" → { text: "ping boran", remindIn: { amount: 10, unit: "min" } }
-- log_deadline: { text: string (REQUIRED), dueDate?: string (ISO yyyy-mm-dd preferred) }
+  Ex (client deliverable, NO date): "draft the smith contract" → { text: "draft the smith contract" }   (professional/client work → work, NOT admin)
+- log_deadline: { text: string (REQUIRED), dueDate?: string (ISO yyyy-mm-dd preferred) } — use for ANY task (incl. a client/professional deliverable like filling a client's forms) that states a due date.
   Ex: "PRD due friday" → { text: "PRD", dueDate: "friday" }
+  Ex (client deliverable WITH a deadline): "i need to fill yeo's ds forms, its due tuesday" → { text: "fill yeo's ds forms", dueDate: "tuesday" }   (client forms with a deadline → work.log_deadline, NEVER admin.log_paperwork; keep the deadline)
 - log_meeting: { with?: string, durationMin?: number }
   Ex: "30 min sync with boran" → { with: "boran", durationMin: 30 }
 - distraction_journal: { what: string (REQUIRED — what pulled them away) }
@@ -125,8 +131,8 @@ The primary crisis detector is the upstream lexicon (@ollie/crisis-lexicon), whi
   Ex: "anneyi 5 dakika sonra aramamı hatırlat" → { person: "mama", remindIn: { amount: 5, unit: "min" } }
 - schedule_appointment: { what: string (REQUIRED), date?: string }
   Ex: "dentist next tuesday" → { what: "dentist", date: "next tuesday" }
-- log_paperwork: { what: string (REQUIRED) }
-  Ex: "filed taxes" → { what: "taxes" }
+- log_paperwork: { what: string (REQUIRED) } — PERSONAL life-admin paperwork the user already completed for THEMSELVES (filed/submitted/signed/sent). NOT for a client, case, or job, and NOT for future to-dos with a deadline (those are work.log_deadline / work.create_task — see the WORK vs ADMIN rule above). Has no date field, so never use it for anything carrying a deadline.
+  Ex: "filed taxes" → { what: "taxes" } ; "signed my lease" → { what: "lease" }
 - recurring_decision: { what: string (REQUIRED) }
   Ex: "keep netflix or cancel" → { what: "netflix subscription" }
 - log_renewal: { renewal_type: string (REQUIRED — "passport"/"license"/"lease"/"insurance"/etc.), due_date?: string }

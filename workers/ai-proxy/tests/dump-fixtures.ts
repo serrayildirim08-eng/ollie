@@ -160,6 +160,9 @@ const WORK: DumpFixture[] = [
   { text: 'prd yazmam lazım', expected: { module: 'work', action: 'create_task', payloadKeys: ['text'], payload: { text: 'prd yazmak' } } },
   { text: 'kodu review etmem lazım', expected: { module: 'work', action: 'create_task', payloadKeys: ['text'], payload: { text: 'kodu review etmek' } } },
   { text: 'migration push edilecek', expected: { module: 'work', action: 'create_task', payloadKeys: ['text'], payload: { text: 'migration push' } } },
+  // Client/professional deliverable with NO deadline → work.create_task (NOT admin). Pins the
+  // WORK-vs-ADMIN boundary so "<client>'s forms/contract" stays in work even without a date.
+  { text: "draft yeo's ds forms", expected: { module: 'work', action: 'create_task', payloadKeys: ['text'], payload: { text: "draft yeo's ds forms" } } },
 
   // log_deadline × 10
   { text: 'PRD due friday', expected: { module: 'work', action: 'log_deadline', payloadKeys: ['text'], payload: { text: 'PRD', dueDate: 'friday' } } },
@@ -172,6 +175,11 @@ const WORK: DumpFixture[] = [
   { text: 'prd cuma deadline', expected: { module: 'work', action: 'log_deadline', payloadKeys: ['text'], payload: { text: 'prd', dueDate: 'friday' } } },
   { text: 'rapor pazartesi teslim', expected: { module: 'work', action: 'log_deadline', payloadKeys: ['text'], payload: { text: 'rapor', dueDate: 'monday' } } },
   { text: 'son tarih 30 mayıs', expected: { module: 'work', action: 'log_deadline', payloadKeys: ['text'], payload: { text: 'project', dueDate: '2026-05-30' } } },
+  // Client/professional deliverables WITH a deadline → work.log_deadline (NOT admin.log_paperwork);
+  // the client name stays in `text` and the deadline MUST be preserved. Regression for
+  // "i need to fill yeo's ds forms, its due tuesday" mis-routing to admin + dropping the date.
+  { text: "i need to fill yeo's ds forms, its due tuesday", expected: { module: 'work', action: 'log_deadline', payloadKeys: ['text'], payload: { text: "fill yeo's ds forms", dueDate: 'tuesday' } } },
+  { text: 'finish the smith visa application by friday', expected: { module: 'work', action: 'log_deadline', payloadKeys: ['text'], payload: { text: 'finish the smith visa application', dueDate: 'friday' } } },
 
   // log_meeting × 10
   { text: '30 min sync with boran', expected: { module: 'work', action: 'log_meeting', payloadKeys: [], payload: { with: 'boran', durationMin: 30 } } },
@@ -212,6 +220,9 @@ const ADMIN: DumpFixture[] = [
   { text: 'kütüphane kartı yenilemem lazım', expected: { module: 'admin', action: 'create_task', payloadKeys: ['text'], payload: { text: 'kütüphane kartı yenilemek' } } },
   { text: 'kargo göndermem lazım', expected: { module: 'admin', action: 'create_task', payloadKeys: ['text'], payload: { text: 'kargo göndermek' } } },
   { text: 'ev sahibine mail atmam lazım', expected: { module: 'admin', action: 'create_task', payloadKeys: ['text'], payload: { text: 'ev sahibine mail atmak' } } },
+  // PERSONAL paperwork contrast — the user's OWN forms (no client/case) stay in admin even
+  // though "forms" appears. Boundary partner to the work.* client-deliverable fixtures above.
+  { text: 'i need to fill out my own immigration forms', expected: { module: 'admin', action: 'create_task', payloadKeys: ['text'], payload: { text: 'fill out my immigration forms' } } },
 
   // create_phone_task × 10
   { text: 'call mom about christmas', expected: { module: 'admin', action: 'create_phone_task', payloadKeys: ['person'], payload: { person: 'mom', reason: 'christmas' } } },
