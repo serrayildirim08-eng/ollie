@@ -10,15 +10,24 @@
 
 import { sql } from '../../storage';
 
+interface PragmaColumnRow {
+  name: string;
+  [col: string]: unknown;
+}
+
 const MIGRATIONS = [
-  // pantry_items — what you have at home.
+  // pantry_items — what you have at home. `added_at` IS the aging clock;
+  // `archived_at_ms` (added 2026-05-30 for the shelf-life aging surface) is
+  // null while the row is live and set when the row leaves the active list
+  // — either via auto-archive at shelfLife × 2.0 or the user marking gone.
   `CREATE TABLE IF NOT EXISTS grocery_pantry (
-    id          TEXT PRIMARY KEY,
-    name        TEXT NOT NULL,
-    quantity    REAL,
-    unit        TEXT,
-    added_at    INTEGER NOT NULL,
-    low_flag    INTEGER NOT NULL DEFAULT 0
+    id              TEXT PRIMARY KEY,
+    name            TEXT NOT NULL,
+    quantity        REAL,
+    unit            TEXT,
+    added_at        INTEGER NOT NULL,
+    low_flag        INTEGER NOT NULL DEFAULT 0,
+    archived_at_ms  INTEGER
   )`,
 
   // shopping_list — what you need to buy.
@@ -73,6 +82,34 @@ export function migrateGrocery(): Promise<void> {
       for (const stmt of MIGRATIONS) {
         await sql.execute(stmt);
       }
+
+      // ── pantry aging backfill (2026-05-30) ──────────────────────────────
+      // The shelf-life × {1, 1.5, 2}× aging surface needs an `archived_at_ms`
+      // column on grocery_pantry. The existing `added_at` column is already
+      // ms-since-epoch (see repo.ts: "All times are ms-since-epoch integers"),
+      // so we reuse it as the row's "added at" clock rather than duplicating
+      // the field. `pantry.touch()` resets THIS column.
+      //
+      // SQLite has no "ADD COLUMN IF NOT EXISTS"; we probe with
+      // PRAGMA table_info first so the migration is idempotent for users
+      // already on the older schema. New tables created above already have
+      // the column shape — the ALTER is the backfill path only.
+      const cols = await sql.select<PragmaColumnRow>(
+        `PRAGMA table_info(grocery_pantry)`,
+      );
+      const have = new Set(cols.map((c) => c.name));
+      if (!have.has('archived_at_ms')) {
+        await sql.execute(
+          `ALTER TABLE grocery_pantry ADD COLUMN archived_at_ms INTEGER`,
+        );
+      }
+      // Partial index — only archived rows. The active-list query (the hot
+      // path) is unchanged and continues to use idx_grocery_pantry_added_at.
+      await sql.execute(
+        `CREATE INDEX IF NOT EXISTS idx_grocery_pantry_archived_at_ms
+           ON grocery_pantry(archived_at_ms DESC)
+           WHERE archived_at_ms IS NOT NULL`,
+      );
     })();
   }
   return migrationPromise;

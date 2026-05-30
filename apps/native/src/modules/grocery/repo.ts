@@ -31,6 +31,7 @@ interface PantryRow {
   unit: string | null;
   added_at: number;
   low_flag: number;
+  archived_at_ms: number | null;
   [col: string]: unknown;
 }
 
@@ -59,11 +60,46 @@ function newId(): string {
 // ─── pantry ───────────────────────────────────────────────────────────────
 
 export const pantry = {
+  /**
+   * Active pantry rows — anything not archived. Archived rows are still
+   * in the table (so "bring back" can resurface them) but are excluded
+   * from the default UI list + cross-module signals. Most callers want
+   * this; reach for `listArchived()` only when rendering the collapsed
+   * archived section.
+   *
+   * Naming kept as `list()` for backward compat with existing callers
+   * (the GroceryBox + cadence scanner enumerator). Both already meant
+   * "live pantry"; archiving makes the implicit semantics explicit.
+   */
   async list(): Promise<PantryItem[]> {
     const rows = await sql.select<PantryRow>(
-      `SELECT id, name, quantity, unit, added_at, low_flag
+      `SELECT id, name, quantity, unit, added_at, low_flag, archived_at_ms
        FROM grocery_pantry
+       WHERE archived_at_ms IS NULL
        ORDER BY added_at DESC`,
+    );
+    return rows.map(rowToPantryItem);
+  },
+
+  /**
+   * Aliased name for clarity at call sites where archived-vs-active is
+   * load-bearing in the caller's logic. Identical to `list()`.
+   */
+  async listActive(): Promise<PantryItem[]> {
+    return pantry.list();
+  },
+
+  /**
+   * Archived rows ordered most-recently-archived first. The Pantry tab
+   * renders these inside a collapsed section ("n archived"). Empty
+   * result means the section doesn't render at all.
+   */
+  async listArchived(): Promise<PantryItem[]> {
+    const rows = await sql.select<PantryRow>(
+      `SELECT id, name, quantity, unit, added_at, low_flag, archived_at_ms
+       FROM grocery_pantry
+       WHERE archived_at_ms IS NOT NULL
+       ORDER BY archived_at_ms DESC`,
     );
     return rows.map(rowToPantryItem);
   },
@@ -73,19 +109,24 @@ export const pantry = {
    * already exists, the quantity is added on (when both old + new have
    * numeric quantities and matching units) and the timestamp refreshes.
    * Otherwise a new row is inserted.
+   *
+   * If the matched row was archived, re-adding it clears the archive
+   * flag (the user obviously has it again) — this is the "I bought it
+   * again" → resurface path. `nowMs` is injectable for tests.
    */
   async add(input: {
     name: string;
     quantity?: number | null;
     unit?: string | null;
+    nowMs?: number;
   }): Promise<PantryItem> {
     const name = normaliseName(input.name);
     const unit = normaliseUnit(input.unit ?? null);
     const quantity = input.quantity ?? null;
-    const now = Date.now();
+    const now = input.nowMs ?? Date.now();
 
     const existing = await sql.select<PantryRow>(
-      `SELECT id, name, quantity, unit, added_at, low_flag
+      `SELECT id, name, quantity, unit, added_at, low_flag, archived_at_ms
        FROM grocery_pantry WHERE name = ? LIMIT 1`,
       [name],
     );
@@ -93,6 +134,7 @@ export const pantry = {
     if (existing.length > 0) {
       const row = existing[0]!;
       const canMerge =
+        row.archived_at_ms == null &&
         row.unit === (unit ?? row.unit) &&
         row.quantity != null &&
         quantity != null;
@@ -100,7 +142,8 @@ export const pantry = {
       const mergedUnit = unit ?? row.unit;
       await sql.execute(
         `UPDATE grocery_pantry
-           SET quantity = ?, unit = ?, added_at = ?, low_flag = 0
+           SET quantity = ?, unit = ?, added_at = ?, low_flag = 0,
+               archived_at_ms = NULL
          WHERE id = ?`,
         [mergedQty, mergedUnit, now, row.id],
       );
@@ -112,17 +155,62 @@ export const pantry = {
         unit: (mergedUnit as Unit | null) ?? null,
         addedAt: now,
         lowFlag: false,
+        archivedAtMs: null,
       };
     }
 
     const id = newId();
     await sql.execute(
-      `INSERT INTO grocery_pantry (id, name, quantity, unit, added_at, low_flag)
-       VALUES (?, ?, ?, ?, ?, 0)`,
+      `INSERT INTO grocery_pantry (id, name, quantity, unit, added_at, low_flag, archived_at_ms)
+       VALUES (?, ?, ?, ?, ?, 0, NULL)`,
       [id, name, quantity, unit, now],
     );
     await logPurchase(name, now);
-    return { id, name, quantity, unit, addedAt: now, lowFlag: false };
+    return { id, name, quantity, unit, addedAt: now, lowFlag: false, archivedAtMs: null };
+  },
+
+  /**
+   * Reset the aging clock on a row — the "yes, still here" reply to a
+   * "still here?" prompt. Internally just refreshes `added_at` so the
+   * row is treated as fresh again.
+   */
+  async touch(id: string, nowMs?: number): Promise<void> {
+    const ts = nowMs ?? Date.now();
+    await sql.execute(
+      `UPDATE grocery_pantry
+         SET added_at = ?, archived_at_ms = NULL
+       WHERE id = ?`,
+      [ts, id],
+    );
+  },
+
+  /**
+   * Move a row out of the active list. The row stays in the table so the
+   * user can "bring it back" from the archived section — we never lose
+   * data here. Auto-archive (≥ shelf × 2.0) and the "gone" reply both
+   * call this.
+   */
+  async archive(id: string, nowMs?: number): Promise<void> {
+    const ts = nowMs ?? Date.now();
+    await sql.execute(
+      `UPDATE grocery_pantry SET archived_at_ms = ? WHERE id = ?`,
+      [ts, id],
+    );
+  },
+
+  /**
+   * Bring an archived row back to the active list. Resets the aging
+   * clock at the same time — if the user explicitly resurfaces an item
+   * they're claiming it's current.
+   */
+  async unarchive(id: string, nowMs?: number): Promise<void> {
+    const ts = nowMs ?? Date.now();
+    await sql.execute(
+      `UPDATE grocery_pantry
+         SET archived_at_ms = NULL, added_at = ?
+       WHERE id = ?`,
+      [ts, id],
+    );
   },
 
   /**
@@ -164,8 +252,8 @@ export const pantry = {
       // We've never seen this item — record a flagged placeholder so the
       // user still sees the cue. Quantity null, low_flag true.
       await sql.execute(
-        `INSERT INTO grocery_pantry (id, name, quantity, unit, added_at, low_flag)
-         VALUES (?, ?, NULL, NULL, ?, 1)`,
+        `INSERT INTO grocery_pantry (id, name, quantity, unit, added_at, low_flag, archived_at_ms)
+         VALUES (?, ?, NULL, NULL, ?, 1, NULL)`,
         [newId(), n, Date.now()],
       );
       return;
@@ -273,6 +361,7 @@ function rowToPantryItem(r: PantryRow): PantryItem {
     unit: (r.unit as Unit | null) ?? null,
     addedAt: r.added_at,
     lowFlag: r.low_flag === 1,
+    archivedAtMs: r.archived_at_ms ?? null,
   };
 }
 

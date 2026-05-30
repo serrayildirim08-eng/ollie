@@ -45,6 +45,7 @@ import type {
   RouteModuleRequest,
   RouteModuleResponse,
   SentryEnvelope,
+  ShelfLifeAllResponse,
 } from './types';
 import type { RouterOutput } from '../router/schema';
 
@@ -131,6 +132,73 @@ export function routeCookHistory(
     req,
     { authJwt: opts.bearer, timeoutMs: opts.timeoutMs ?? 10_000 },
   );
+}
+
+// ─── ai-proxy: /shelf-life/all — pantry aging reference table ────────────────
+
+/**
+ * Fetch the canonical shelf-life table + alias map. Supports ETag
+ * conditional GET — pass the last seen ETag in `ifNoneMatch` and the
+ * worker may return 304 (no body) when the table hasn't bumped.
+ *
+ * The returned `etag` (when present) should be persisted by the caller
+ * alongside the body so the next call can use it. On 304 the caller
+ * keeps its existing cached body.
+ *
+ * Unauthenticated by design — the table is the same for every user.
+ */
+export async function getShelfLifeAll(
+  opts: { ifNoneMatch?: string | null; timeoutMs?: number } = {},
+): Promise<
+  | { ok: true; status: 200; data: ShelfLifeAllResponse; etag: string | null }
+  | { ok: true; status: 304; etag: string | null }
+  | { ok: false; error: { code: string; status?: number; message: string } }
+> {
+  const controller = new AbortController();
+  const timer = setTimeout(
+    () => controller.abort(),
+    opts.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+  );
+
+  const headers: Record<string, string> = { accept: 'application/json' };
+  if (opts.ifNoneMatch) headers['if-none-match'] = opts.ifNoneMatch;
+
+  try {
+    const res = await fetch(`${urls.aiProxy}/shelf-life/all`, {
+      method: 'GET',
+      headers,
+      signal: controller.signal,
+    });
+    const etag = res.headers.get('etag');
+
+    if (res.status === 304) {
+      return { ok: true, status: 304, etag };
+    }
+    if (!res.ok) {
+      return {
+        ok: false,
+        error: { code: 'http', status: res.status, message: `http ${res.status}` },
+      };
+    }
+    let data: ShelfLifeAllResponse;
+    try {
+      data = (await res.json()) as ShelfLifeAllResponse;
+    } catch (e) {
+      return {
+        ok: false,
+        error: { code: 'parse', status: res.status, message: `parse failed: ${(e as Error).message}` },
+      };
+    }
+    return { ok: true, status: 200, data, etag };
+  } catch (err) {
+    const e = err as Error & { name?: string };
+    if (e?.name === 'AbortError') {
+      return { ok: false, error: { code: 'timeout', message: 'shelf-life fetch timeout' } };
+    }
+    return { ok: false, error: { code: 'network', message: e?.message ?? 'network error' } };
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 // ─── ai-proxy: /route/dump — v2 brain-dump router ─────────────────────────────

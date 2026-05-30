@@ -204,7 +204,7 @@ export interface ClaimInviteResponse {
 export type FeedDietFilter = 'all' | 'vegetarian' | 'vegan' | 'mediterranean' | 'turkish';
 export type FeedLocale = 'en' | 'es' | 'tr';
 export type FeedTarget = 'user' | 'pet';
-export type FeedSource = 'gemini' | 'cache_hit' | 'static_fallback';
+export type FeedSource = 'gemini' | 'groq' | 'cache_hit' | 'static_fallback';
 
 export interface FeedMeRequest {
   pantry: string[];
@@ -263,6 +263,27 @@ export interface CookHistoryRequest {
 export interface CookHistoryResponse {
   inserted: true;
   id?: string;
+}
+
+// ─── /shelf-life/all (GET) — pantry aging reference table ───────────────────
+//
+// Mirrors workers/ai-proxy/src/router/shelf-life.ts (backend-senior pod,
+// shipping in parallel). Returns the canonical 721-item shelf-life table
+// plus its alias map. The endpoint is ETag-cacheable so the client only
+// pays the full body once per version bump — see shelfLifeCache.ts for
+// the If-None-Match handshake.
+//
+// `version` is monotonic; the cache bumps its KV record only when the
+// version changes. Days are integer days from open/added → mild-faded.
+// `null` would be allowed by the spec but the worker omits null rows.
+
+export interface ShelfLifeAllResponse {
+  /** canonical → shelf-life days (integer) */
+  items: Record<string, number>;
+  /** alias → canonical name (e.g. "skim milk" → "milk") */
+  aliases: Record<string, string>;
+  /** monotonic version of the table; bumps invalidate cache */
+  version: number;
 }
 
 // ─── /push (POST) — apns-push worker ──────────────────────────────────────────
