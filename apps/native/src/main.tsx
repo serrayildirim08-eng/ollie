@@ -29,6 +29,24 @@ import "./store";
 import { installNotifyListener } from "./notify/systemNotify";
 installNotifyListener();
 
+// Replenishment push scanner — wakes every 30 minutes while the app is open
+// and fires `ollie:notify` for any pantry item that's predicted-out within
+// the next 24h, gated on the per-item `remind_me` flag. The scanner is a
+// no-op when the user has no flagged items or none have crossed the predict
+// threshold, so the polling cost is bounded. Runs once immediately so a
+// fresh app open doesn't miss a same-day prediction.
+import { scanPantryPushes } from "./modules/grocery/pushScanner";
+const PUSH_SCAN_INTERVAL_MS = 30 * 60 * 1000;
+void scanPantryPushes().catch((err) =>
+  console.warn("[pushScanner] initial scan failed", err),
+);
+setInterval(() => {
+  if (document.visibilityState !== "visible") return;
+  void scanPantryPushes().catch((err) =>
+    console.warn("[pushScanner] interval scan failed", err),
+  );
+}, PUSH_SCAN_INTERVAL_MS);
+
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as
   | string
   | undefined;
