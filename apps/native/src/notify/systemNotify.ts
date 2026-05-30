@@ -197,58 +197,120 @@ export async function sendSystemNotification({ title, body }: NotifyEventDetail)
 // ─── scheduled delivery (ad-hoc reminders) ────────────────────────────────
 
 /** Returned from `scheduleAt` — `cancel()` aborts the pending fire if it
- *  hasn't happened yet. For the Tauri schedule path cancellation only works
- *  on the in-process record (the OS-scheduled notification will still fire);
- *  for the setTimeout fallback it clears the timer cleanly. */
+ *  hasn't happened yet. In a Tauri context this cancels the OS-held local
+ *  notification (via `cancel_local_notification`); in the setTimeout fallback
+ *  it clears the timer cleanly. Never throws. */
 export interface ScheduledNotificationHandle {
   cancel(): void;
 }
 
 /**
- * Schedule a system notification to fire at an absolute wall-clock time.
+ * Schedule a system notification to fire at an absolute wall-clock time,
+ * keyed by a stable `id` so the OS notification can be deduped / cancelled.
  *
- * Strategy: in-process `setTimeout`. Identical on macOS desktop and iOS.
+ * Two strategies, picked by context:
  *
- * We deliberately do NOT use the Tauri plugin's native `Schedule.at(date)`
- * path. That API is mobile-oriented and DOES NOT DEFER on macOS desktop — a
- * scheduled notification fires the instant it's registered (the exact
- * "remind me to call mama in 1 minute → pings immediately" bug Serra hit).
- * The work module's `start_timer` ran into the same wall and resolved it the
- * same way (see modules/work/handler.ts → start_timer). setTimeout fires at
- * the correct moment while the app is open / minimised — the same on both
- * platforms.
+ *   1. Tauri (macOS / iOS) — the DURABLE path. We hand the reminder to the
+ *      native OS local-notification scheduler via the Rust command
+ *      `schedule_local_notification`. The OS holds it and fires it at the
+ *      right wall-clock moment EVEN IF THE APP IS QUIT — the in-process timer
+ *      can't do that (it dies with the process; iOS freezes JS timers when
+ *      backgrounded). We do NOT also arm a setTimeout on this path, or the
+ *      reminder would double-fire (OS + timer). If the invoke rejects we warn
+ *      and fall back to a setTimeout so an open app still pings.
  *
- * Trade-off — NOT durable across an app QUIT: an in-process timer dies when
- * the process exits, and iOS freezes JS timers once the app is backgrounded.
- * True app-fully-closed delivery is the server-push path
- * (scheduleServerJob → cron → APNs), which is blocked on device-token
- * registration that this app does not yet do on EITHER platform (no APNs
- * registration in the Tauri shell). When that lands, the server path
- * composes alongside this timer — dedupe_key keeps them from double-firing.
+ *   2. Web preview / vitest — in-process `setTimeout`. No native scheduler
+ *      reachable, so this keeps dev/preview working; fires while the page is
+ *      open.
  *
- * Permission is checked at fire-time inside sendSystemNotification; if denied
- * we drop quietly (the in-app surfaces still record the underlying row).
+ * History: we used to take the setTimeout path on Tauri too, deliberately
+ * avoiding the plugin's `Schedule.at(date)` (mobile-oriented, fired instantly
+ * on macOS desktop — the "remind me to call mama in 1 minute → pings now" bug
+ * Serra hit). The new Rust `schedule_local_notification` command is the real
+ * deferred OS scheduler that behaves correctly on both platforms, so it
+ * supersedes the timer on Tauri. The work module's `start_timer` still uses a
+ * raw setTimeout (see modules/work/handler.ts → start_timer).
+ *
+ * This composes alongside the server-push path (scheduleServerReminder → cron
+ * → APNs): all three (OS local, in-process timer, server job) share the SAME
+ * stable id (`reminder:<taskId>`), and the notify dispatcher + cron honor
+ * dedupe_key — so whichever lands first wins, never a double ping.
+ *
+ * Permission is checked at fire-time inside sendSystemNotification (timer
+ * path) / by the OS (native path); if denied we drop quietly.
  *
  * Never throws.
  */
 export function scheduleAt(
   at: number,
   payload: NotifyEventDetail,
+  id: string,
 ): ScheduledNotificationHandle {
   const delay = at - Date.now();
 
-  // Past or near-immediate (< 1s) — fire now so we don't arm a no-op timer.
+  // Past or near-immediate (< 1s) — fire now so we don't arm a no-op timer
+  // or hand the OS a fire time it would treat as "now" anyway.
   if (delay <= 1000) {
     void sendSystemNotification(payload);
     return { cancel: () => {} };
   }
 
-  const timerId = setTimeout(() => {
-    void sendSystemNotification(payload);
-  }, delay);
+  // Mutable timer slot — the native path leaves this null (OS owns the fire);
+  // the fallback / non-Tauri path fills it so cancel() can clear it.
+  let timerId: ReturnType<typeof setTimeout> | null = null;
+  // Set once we've committed to the native OS scheduler, so cancel() knows to
+  // route through `cancel_local_notification` instead of clearing a timer.
+  let nativeScheduled = false;
+
+  const armTimer = (): void => {
+    timerId = setTimeout(() => {
+      void sendSystemNotification(payload);
+    }, delay);
+  };
+
+  // Decide the path asynchronously: loadNotificationPlugin() resolves whether
+  // we're in a Tauri context (same __TAURI_INTERNALS__ detection used above).
+  // The handle is returned synchronously; cancel() reads the flags whenever
+  // it's eventually called.
+  void loadNotificationPlugin().then(async (plugin) => {
+    if (!plugin) {
+      // Web preview / vitest — no native scheduler, keep the timer fallback.
+      armTimer();
+      return;
+    }
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      // Tauri v2 maps the Rust snake_case param `fire_at_ms` to camelCase
+      // `fireAtMs` in this args object.
+      await invoke('schedule_local_notification', {
+        id,
+        title: payload.title,
+        body: payload.body,
+        fireAtMs: at,
+      });
+      nativeScheduled = true;
+    } catch (err) {
+      // Native scheduler unreachable/failed — fall back to the in-process
+      // timer so an open app still fires (no double-fire: native didn't take).
+      console.warn('[systemNotify] schedule_local_notification failed; falling back to timer', err);
+      armTimer();
+    }
+  });
 
   return {
-    cancel: () => clearTimeout(timerId),
+    cancel: () => {
+      if (timerId !== null) {
+        clearTimeout(timerId);
+        timerId = null;
+      }
+      if (nativeScheduled) {
+        void import('@tauri-apps/api/core')
+          .then(({ invoke }) => invoke('cancel_local_notification', { id }))
+          .catch((err) => {
+            console.warn('[systemNotify] cancel_local_notification failed', err);
+          });
+      }
+    },
   };
 }
 
