@@ -40,7 +40,7 @@
  *     which depend on `patterns` selectors not present in this repo
  */
 
-import { useCallback, useEffect, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import {
   daysSinceLast,
   isOverdue,
@@ -59,6 +59,8 @@ import {
 } from './repo';
 import type { PantryItem, ShoppingItem } from './types';
 import { FeedMeView } from './FeedMeView';
+import { ageOf, type AgingState } from './aging';
+import { loadShelfLifeTable, lookupDays } from './shelfLifeCache';
 
 // ─── style atoms ──────────────────────────────────────────────────────────
 
@@ -75,6 +77,7 @@ type Mode = 'shop' | 'pantry' | 'feed-me';
 
 export function GroceryBox(): JSX.Element {
   const [pantryItems, setPantryItems] = useState<PantryItem[]>([]);
+  const [archivedItems, setArchivedItems] = useState<PantryItem[]>([]);
   const [shoppingItems, setShoppingItems] = useState<ShoppingItem[]>([]);
   const [cadenceByName, setCadenceByName] = useState<Map<string, CadenceEstimate>>(
     () => new Map(),
@@ -83,10 +86,18 @@ export function GroceryBox(): JSX.Element {
   // Pantry is the default — it's the surface you live in most of the time.
   // Shop mode is for the few minutes you're actually adding to the list.
   const [mode, setMode] = useState<Mode>('pantry');
+  // Bumps whenever the background shelf-life table finishes loading; lets
+  // the pantry view recompute aging states without a poll cycle.
+  const [shelfTableTick, setShelfTableTick] = useState(0);
 
   const refresh = useCallback(async () => {
-    const [p, s] = await Promise.all([pantryRepo.list(), shoppingRepo.list()]);
+    const [p, a, s] = await Promise.all([
+      pantryRepo.list(),
+      pantryRepo.listArchived(),
+      shoppingRepo.list(),
+    ]);
     setPantryItems(p);
+    setArchivedItems(a);
     setShoppingItems(s);
     // Fan-out cadence reads in parallel — one per pantry name. Keeps the
     // pantry view a single state cycle (no per-row async in render).
@@ -104,6 +115,11 @@ export function GroceryBox(): JSX.Element {
       await refresh();
       if (cancelled) return;
       setReady(true);
+      // Kick the shelf-life table load — non-blocking. When it resolves
+      // we bump the tick so the pantry recomputes aging from the live table.
+      void loadShelfLifeTable().then(() => {
+        if (!cancelled) setShelfTableTick((n) => n + 1);
+      });
     })();
     return () => {
       cancelled = true;
@@ -132,6 +148,66 @@ export function GroceryBox(): JSX.Element {
     [refresh],
   );
 
+  // "yes, still here" — reset the aging clock to now.
+  const handleTouchPantry = useCallback(
+    async (id: string) => {
+      await pantryRepo.touch(id);
+      await refresh();
+    },
+    [refresh],
+  );
+
+  // "gone" / auto-archive — move the row into the archived section.
+  const handleArchivePantry = useCallback(
+    async (id: string) => {
+      await pantryRepo.archive(id);
+      await refresh();
+    },
+    [refresh],
+  );
+
+  // "bring back" from the archived section.
+  const handleUnarchivePantry = useCallback(
+    async (id: string) => {
+      await pantryRepo.unarchive(id);
+      await refresh();
+    },
+    [refresh],
+  );
+
+  // ── auto-archive side-effect ────────────────────────────────────────────
+  // Any active row that has aged past shelfLife × 2.0 leaves the active
+  // list. We do this in an effect (not render) so we don't mutate state
+  // during a render pass + we don't re-fire the archive call repeatedly.
+  //
+  // The set of "should archive" ids is computed from the snapshot the
+  // effect closes over; once the archive calls resolve, `refresh()` pulls
+  // fresh state and the cycle is naturally broken (those rows now have
+  // archived_at_ms set and listActive() excludes them).
+  useEffect(() => {
+    if (!ready) return;
+    // Re-read inside the effect to avoid re-running on shelfTableTick when
+    // the table just became available but nothing else moved.
+    void shelfTableTick;
+    const now = Date.now();
+    const toArchive = pantryItems.filter((it) => {
+      const days = lookupDays(it.name);
+      return ageOf(it.addedAt, days, now) === 'should_archive';
+    });
+    if (toArchive.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      for (const it of toArchive) {
+        await pantryRepo.archive(it.id);
+        if (cancelled) return;
+      }
+      if (!cancelled) await refresh();
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [pantryItems, ready, refresh, shelfTableTick]);
+
   // Checking a shopping row off means the user just bought it — move it
   // from the shopping list into the pantry rather than just deleting.
   const handleCheckOffShopping = useCallback(
@@ -148,6 +224,21 @@ export function GroceryBox(): JSX.Element {
       await refresh();
     },
     [refresh, shoppingItems],
+  );
+
+  // Add a missing recipe ingredient (a "need" item from Feed Me) onto the
+  // shopping list, then refresh so the shop view + "added" state reflect it.
+  const handleAddToShop = useCallback(
+    async (name: string, quantity?: number | null, unit?: string | null) => {
+      await shoppingRepo.add({ name, quantity: quantity ?? null, unit: unit ?? null });
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const shopNames = useMemo(
+    () => new Set(shoppingItems.map((it) => it.name.toLowerCase())),
+    [shoppingItems],
   );
 
   const openCount = shoppingItems.length;
@@ -183,12 +274,21 @@ export function GroceryBox(): JSX.Element {
       ) : mode === 'pantry' ? (
         <PantryList
           items={pantryItems}
+          archivedItems={archivedItems}
           totalCount={pantryCount}
           cadenceByName={cadenceByName}
+          shelfTick={shelfTableTick}
           onRemove={(id) => void handleRemovePantry(id)}
+          onStillHere={(id) => void handleTouchPantry(id)}
+          onGone={(id) => void handleArchivePantry(id)}
+          onUnarchive={(id) => void handleUnarchivePantry(id)}
         />
       ) : (
-        <FeedMeView pantryItems={pantryItems} />
+        <FeedMeView
+          pantryItems={pantryItems}
+          shopNames={shopNames}
+          onAddToShop={(name, quantity, unit) => void handleAddToShop(name, quantity, unit)}
+        />
       )}
     </Stack>
   );
@@ -342,88 +442,344 @@ function ShopList({
 
 function PantryList({
   items,
+  archivedItems,
   totalCount,
   cadenceByName,
+  shelfTick,
   onRemove,
+  onStillHere,
+  onGone,
+  onUnarchive,
 }: {
   items: PantryItem[];
+  archivedItems: PantryItem[];
   totalCount: number;
   cadenceByName: Map<string, CadenceEstimate>;
+  /** Bumps when shelf-life table loads; included so memo recomputes. */
+  shelfTick: number;
   onRemove: (id: string) => void;
+  onStillHere: (id: string) => void;
+  onGone: (id: string) => void;
+  onUnarchive: (id: string) => void;
 }): JSX.Element {
-  if (items.length === 0) return <ColdPantry />;
+  // Compute aging state per row from the live shelf-life table. `shelfTick`
+  // is in the dep list so the memo recomputes when the cache populates.
+  const agingByName = useMemo(() => {
+    const now = Date.now();
+    const map = new Map<string, AgingState>();
+    for (const it of items) {
+      const days = lookupDays(it.name);
+      map.set(it.id, ageOf(it.addedAt, days, now));
+    }
+    // `shelfTick` referenced to satisfy the dep linter and to force the
+    // recompute when the shelf-life cache hot-swaps in.
+    void shelfTick;
+    return map;
+  }, [items, shelfTick]);
+
+  if (items.length === 0 && archivedItems.length === 0) return <ColdPantry />;
 
   return (
     <Stack gap={14}>
-      <Text scale="caption" color={colors.inkFaint} style={{ letterSpacing: '0.02em' }}>
-        <strong style={{ color: colors.ink, fontWeight: 600 }}>{totalCount}</strong>
-        {' in the pantry'}
-      </Text>
+      {items.length > 0 && (
+        <>
+          <Text scale="caption" color={colors.inkFaint} style={{ letterSpacing: '0.02em' }}>
+            <strong style={{ color: colors.ink, fontWeight: 600 }}>{totalCount}</strong>
+            {' in the pantry'}
+          </Text>
 
-      <Stack gap={0}>
-        {items.map((item, i) => (
-          <Row
-            key={item.id}
-            gap={14}
-            align="center"
-            justify="space-between"
+          <Stack gap={0}>
+            {items.map((item, i) => (
+              <PantryRow
+                key={item.id}
+                item={item}
+                aging={agingByName.get(item.id) ?? 'fresh'}
+                cadence={cadenceByName.get(item.name)}
+                isLast={i === items.length - 1}
+                onRemove={onRemove}
+                onStillHere={onStillHere}
+                onGone={onGone}
+              />
+            ))}
+          </Stack>
+        </>
+      )}
+
+      {items.length > 0 && (
+        <SageNote>
+          the pantry fills on its own — each thing lands here when you check it
+          off the shopping list.
+        </SageNote>
+      )}
+
+      {archivedItems.length > 0 && (
+        <ArchivedSection items={archivedItems} onUnarchive={onUnarchive} />
+      )}
+    </Stack>
+  );
+}
+
+// ─── pantry row · aging-aware ─────────────────────────────────────────────
+
+function PantryRow({
+  item,
+  aging,
+  cadence,
+  isLast,
+  onRemove,
+  onStillHere,
+  onGone,
+}: {
+  item: PantryItem;
+  aging: AgingState;
+  cadence: CadenceEstimate | undefined;
+  isLast: boolean;
+  onRemove: (id: string) => void;
+  onStillHere: (id: string) => void;
+  onGone: (id: string) => void;
+}): JSX.Element {
+  const [promptOpen, setPromptOpen] = useState(false);
+
+  // Visual fade — 60% opacity from 'faded' onward. The "should_archive"
+  // case never renders here (auto-archive effect moves it before paint).
+  const faded = aging === 'faded' || aging === 'still_here_prompt';
+  const showStillHere = aging === 'still_here_prompt';
+
+  return (
+    <Row
+      gap={14}
+      align="flex-start"
+      justify="space-between"
+      style={{
+        padding: '15px 2px',
+        borderTop: `1px solid ${colors.hairline}`,
+        borderBottom: isLast ? `1px solid ${colors.hairline}` : 'none',
+        opacity: faded ? 0.6 : 1,
+        transition: 'opacity 240ms cubic-bezier(0.18, 0, 0.22, 1)',
+      }}
+    >
+      <Stack gap={4} style={{ flex: 1, minWidth: 0 }}>
+        <Row gap={10} align="baseline" style={{ flexWrap: 'wrap' }}>
+          <span
             style={{
-              padding: '15px 2px',
-              borderTop: `1px solid ${colors.hairline}`,
-              borderBottom:
-                i === items.length - 1 ? `1px solid ${colors.hairline}` : 'none',
+              fontSize: 15,
+              color: colors.ink,
+              fontWeight: 500,
+              letterSpacing: '-0.012em',
             }}
           >
-            <Stack gap={4} style={{ flex: 1, minWidth: 0 }}>
+            {item.name}
+          </span>
+          {item.lowFlag && (
+            <span
+              aria-hidden
+              style={{
+                fontSize: 11,
+                fontWeight: 600,
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                color: colors.amber,
+              }}
+            >
+              low
+            </span>
+          )}
+          {showStillHere && (
+            <StillHereAffordance
+              open={promptOpen}
+              onToggle={() => setPromptOpen((v) => !v)}
+              onYes={() => {
+                setPromptOpen(false);
+                onStillHere(item.id);
+              }}
+              onGone={() => {
+                setPromptOpen(false);
+                onGone(item.id);
+              }}
+            />
+          )}
+        </Row>
+        {qtyLabel(item.quantity, item.unit) && (
+          <span
+            style={{
+              fontSize: 12,
+              color: colors.inkFaint,
+              fontWeight: 500,
+              letterSpacing: '0.02em',
+            }}
+          >
+            {qtyLabel(item.quantity, item.unit)}
+          </span>
+        )}
+        <WhenCaption ts={item.addedAt} />
+        <CadenceHint estimate={cadence} />
+      </Stack>
+      <RemoveButton onClick={() => onRemove(item.id)} />
+    </Row>
+  );
+}
+
+// ─── still-here affordance ────────────────────────────────────────────────
+//
+// Closed: a single smcp sage "still here?" trailing the item name.
+// Open: the prompt swaps for two quiet text buttons — "yes, still here"
+// (sage) and "gone" (inkSoft). No chrome, no bg, no border. The opacity
+// + max-height tween is gentle (200ms) to honour editorial restraint.
+
+function StillHereAffordance({
+  open,
+  onToggle,
+  onYes,
+  onGone,
+}: {
+  open: boolean;
+  onToggle: () => void;
+  onYes: () => void;
+  onGone: () => void;
+}): JSX.Element {
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={false}
+        aria-label="still here?"
+        style={{
+          ...SMCP_STYLE,
+          background: 'none',
+          border: 'none',
+          padding: 0,
+          margin: 0,
+          fontSize: 11,
+          color: colors.sage,
+          cursor: 'pointer',
+          fontFamily: 'inherit',
+        }}
+      >
+        still here?
+      </button>
+    );
+  }
+  return (
+    <Row gap={12} align="baseline">
+      <button
+        type="button"
+        onClick={onYes}
+        style={{
+          ...SMCP_STYLE,
+          background: 'none',
+          border: 'none',
+          padding: 0,
+          fontSize: 11,
+          color: colors.sage,
+          cursor: 'pointer',
+          fontFamily: 'inherit',
+        }}
+      >
+        yes, still here
+      </button>
+      <button
+        type="button"
+        onClick={onGone}
+        style={{
+          ...SMCP_STYLE,
+          background: 'none',
+          border: 'none',
+          padding: 0,
+          fontSize: 11,
+          color: colors.inkSoft,
+          cursor: 'pointer',
+          fontFamily: 'inherit',
+        }}
+      >
+        gone
+      </button>
+    </Row>
+  );
+}
+
+// ─── archived section ─────────────────────────────────────────────────────
+//
+// A collapsed-by-default editorial drawer at the bottom of the pantry list.
+// Header is a tiny smcp count framed by hairlines. Click expands; each
+// archived row has a tiny smcp sage "bring back" action.
+
+function ArchivedSection({
+  items,
+  onUnarchive,
+}: {
+  items: PantryItem[];
+  onUnarchive: (id: string) => void;
+}): JSX.Element {
+  const [open, setOpen] = useState(false);
+  return (
+    <Stack gap={0} style={{ marginTop: 24 }}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        style={{
+          ...SMCP_STYLE,
+          width: '100%',
+          background: 'none',
+          border: 'none',
+          borderTop: `1px solid ${colors.hairline}`,
+          borderBottom: `1px solid ${colors.hairline}`,
+          padding: '10px 2px',
+          fontSize: 11,
+          color: colors.inkFaint,
+          textAlign: 'left',
+          cursor: 'pointer',
+          fontFamily: 'inherit',
+        }}
+      >
+        {items.length} archived
+      </button>
+      {open && (
+        <Stack gap={0}>
+          {items.map((item, i) => (
+            <Row
+              key={item.id}
+              gap={14}
+              align="center"
+              justify="space-between"
+              style={{
+                padding: '12px 2px',
+                borderBottom:
+                  i === items.length - 1 ? `1px solid ${colors.hairline}` : 'none',
+                opacity: 0.6,
+              }}
+            >
               <span
                 style={{
-                  fontSize: 15,
-                  color: colors.ink,
+                  fontSize: 14,
+                  color: colors.inkSoft,
                   fontWeight: 500,
-                  letterSpacing: '-0.012em',
+                  letterSpacing: '-0.01em',
                 }}
               >
                 {item.name}
-                {item.lowFlag && (
-                  <span
-                    aria-hidden
-                    style={{
-                      marginLeft: 10,
-                      fontSize: 11,
-                      fontWeight: 600,
-                      letterSpacing: '0.08em',
-                      textTransform: 'uppercase',
-                      color: colors.amber,
-                    }}
-                  >
-                    low
-                  </span>
-                )}
               </span>
-              {qtyLabel(item.quantity, item.unit) && (
-                <span
-                  style={{
-                    fontSize: 12,
-                    color: colors.inkFaint,
-                    fontWeight: 500,
-                    letterSpacing: '0.02em',
-                  }}
-                >
-                  {qtyLabel(item.quantity, item.unit)}
-                </span>
-              )}
-              <WhenCaption ts={item.addedAt} />
-              <CadenceHint estimate={cadenceByName.get(item.name)} />
-            </Stack>
-            <RemoveButton onClick={() => onRemove(item.id)} />
-          </Row>
-        ))}
-      </Stack>
-
-      <SageNote>
-        the pantry fills on its own — each thing lands here when you check it
-        off the shopping list.
-      </SageNote>
+              <button
+                type="button"
+                onClick={() => onUnarchive(item.id)}
+                style={{
+                  ...SMCP_STYLE,
+                  background: 'none',
+                  border: 'none',
+                  padding: 0,
+                  fontSize: 10,
+                  color: colors.sage,
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                }}
+              >
+                bring back
+              </button>
+            </Row>
+          ))}
+        </Stack>
+      )}
     </Stack>
   );
 }

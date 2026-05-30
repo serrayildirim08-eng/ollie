@@ -22,14 +22,20 @@ export type Unit =
  * One item the user has at home. `addedAt` lets the UI sort by recency;
  * `lowFlag` is a soft "running low" hint surfaced as a quiet badge —
  * never a blocker.
+ *
+ * `archivedAtMs` is set when an item ages out (≥ shelfLife × 2.0) OR the
+ * user marks it gone from the "still here?" prompt. Archived rows leave
+ * the active pantry list but are recoverable from the collapsed archived
+ * section. Never null on archived rows; always null on active rows.
  */
 export interface PantryItem {
   id: string;
   name: string;
   quantity: number | null;
   unit: Unit | null;
-  addedAt: number;   // ms since epoch
+  addedAt: number;   // ms since epoch — doubles as the aging clock
   lowFlag: boolean;
+  archivedAtMs: number | null;
 }
 
 /** One thing on the shopping list. Smaller surface than pantry items. */
