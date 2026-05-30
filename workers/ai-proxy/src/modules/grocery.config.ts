@@ -1220,6 +1220,99 @@ export function lookupShelfLifeDetail(name: string): ShelfLifeEntry | undefined 
   return undefined;
 }
 
+// ─── CRITICAL_REMINDER whitelist (Plan B push-default gate) ─────────────────
+//
+// Locked product rule (Serra, 2026-05-30): Plan B — silent shopping-list add
+// for all pantry items at predicted out; opt-in push only for items flagged
+// `remind_me=true`. This whitelist defines the canonicals that DEFAULT to
+// remind_me=true on insert. The frontend's pantry repo calls
+// `isCriticalReminder(canonical)` when creating new pantry rows.
+//
+// Composition:
+//   - the entire 'wellness' shelf-category (meds, vitamins, eye drops, etc.)
+//   - the entire 'pet' shelf-category (food, treats, litter, etc.) — running
+//     out of pet food is never a "silent add to list" event
+//   - explicit personal_care subset (period products, baby supplies, contacts)
+//
+// We derive the wellness + pet defaults at module init by walking
+// SHELF_LIFE_DETAIL so adding a new wellness/pet entry automatically becomes
+// a critical reminder. The explicit set below covers the personal_care
+// exceptions that aren't a whole-category default.
+
+/**
+ * Explicit additional canonicals that default to remind_me=true beyond the
+ * wellness + pet categories. These are personal_care items where running
+ * out has outsized impact (cycle products, baby supplies, contact lenses).
+ */
+export const CRITICAL_REMINDER_CANONICAL: ReadonlySet<string> = new Set<string>([
+  // ── period products ─────────────────────────────────────────────────────
+  'tampons',
+  'pads',
+  'panty liners',
+  'liners',
+  'menstrual cup',
+  // ── baby supplies ───────────────────────────────────────────────────────
+  'diapers',
+  'baby wipes',
+  'baby formula',
+  // ── vision (contacts kept here even though personal_care, not wellness) ──
+  'contact solution',
+  'contact lens solution',
+  'contact lenses',
+  'contacts',
+  // ── pet exceptions called out by the brief, kept explicit even though
+  //    they ALSO match the 'pet' category default. Belt-and-braces for
+  //    canonicals readers might check against this set directly. ──────────
+  'pet medication',
+  'flea treatment',
+  'tick treatment',
+  'cat litter',
+  'dog food',
+  'cat food',
+  'puppy food',
+  'kitten food',
+]);
+
+/**
+ * Does this canonical default to remind_me=true?
+ *
+ * Resolution order (mirrors lookupShelfLifeDetail):
+ *   1. Direct hit in SHELF_LIFE_DETAIL → check category + explicit set.
+ *   2. Alias hit via ALIAS_MAP → resolve to canonical, then check.
+ *   3. Explicit set hit on the raw lowercased name (covers names not yet
+ *      in SHELF_LIFE_DETAIL — e.g. user-typed 'baby formula' before it
+ *      lands in the dataset).
+ *   4. false.
+ *
+ * Case-insensitive.
+ */
+export function isCriticalReminder(name: string): boolean {
+  if (typeof name !== 'string' || name.length === 0) return false;
+  const norm = name.trim().toLowerCase();
+  if (norm.length === 0) return false;
+
+  const direct = SHELF_LIFE_DETAIL[norm];
+  if (direct) {
+    if (direct.category === 'wellness') return true;
+    if (direct.category === 'pet') return true;
+    if (CRITICAL_REMINDER_CANONICAL.has(norm)) return true;
+    return false;
+  }
+
+  const canonical = ALIAS_MAP[norm];
+  if (canonical) {
+    const detail = SHELF_LIFE_DETAIL[canonical];
+    if (detail) {
+      if (detail.category === 'wellness') return true;
+      if (detail.category === 'pet') return true;
+    }
+    if (CRITICAL_REMINDER_CANONICAL.has(canonical)) return true;
+  }
+
+  // Final fallback: explicit set hit on the raw name.
+  return CRITICAL_REMINDER_CANONICAL.has(norm);
+}
+
 const FEW_SHOT_EXAMPLES: Array<{ input: string; output: GroceryClassification }> = [
   {
     input: 'need to get milk eggs and bread',
