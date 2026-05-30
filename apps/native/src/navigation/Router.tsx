@@ -29,6 +29,7 @@ import { GoalsBox } from "../modules/goals";
 import { MedicationBox } from "../modules/medication";
 import { CycleBox } from "../modules/cycle";
 import { TodoScreen } from "../todo/TodoScreen";
+import { useServerReminderBridge } from "../notify/serverReminderBridge";
 
 const SMCP_STYLE: React.CSSProperties = {
   fontVariantCaps: "all-small-caps",
@@ -36,6 +37,10 @@ const SMCP_STYLE: React.CSSProperties = {
 };
 
 export function Router() {
+  // Wire the durable app-closed reminder path (Supabase scheduled_jobs →
+  // cron → APNs). Mounted here under <SignedIn> so it always has a Clerk
+  // identity to resolve. No-op until a device push token exists.
+  useServerReminderBridge();
   return (
     <BrowserRouter>
       <Routes>

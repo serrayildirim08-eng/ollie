@@ -27,8 +27,13 @@ vi.mock('../../notify/systemNotify', () => ({
   scheduleAt: vi.fn(() => ({ cancel: () => {} })),
 }));
 
+vi.mock('../../notify/serverReminder', () => ({
+  scheduleServerReminder: vi.fn(),
+}));
+
 import { tasks, renewals } from './repo';
 import { scheduleAt } from '../../notify/systemNotify';
+import { scheduleServerReminder } from '../../notify/serverReminder';
 import { adminHandler } from './handler';
 import type { Fragment } from '../../router/schema';
 
@@ -96,6 +101,16 @@ describe('adminHandler — time-deferred reminder (remindIn)', () => {
       title: 'call',
       body: 'mama',
     });
+    // Durable app-closed path fires too, same fireAt + stable dedupe_key.
+    expect(vi.mocked(scheduleServerReminder)).toHaveBeenCalledWith(
+      {
+        title: 'call',
+        body: 'mama',
+        category: 'REMINDER',
+        dedupe_key: 'reminder:task-id',
+      },
+      fireAt,
+    );
   });
 
   it('create_phone_task with reason adds " · reason" to the body', async () => {
@@ -145,6 +160,15 @@ describe('adminHandler — time-deferred reminder (remindIn)', () => {
       title: 'to do',
       body: 'take zoloft',
     });
+    expect(vi.mocked(scheduleServerReminder)).toHaveBeenCalledWith(
+      {
+        title: 'to do',
+        body: 'take zoloft',
+        category: 'REMINDER',
+        dedupe_key: 'reminder:task-id',
+      },
+      fireAt,
+    );
   });
 
   it('create_phone_task WITHOUT remindIn does NOT schedule anything', async () => {
@@ -160,6 +184,7 @@ describe('adminHandler — time-deferred reminder (remindIn)', () => {
     await adminHandler.apply(fragment);
 
     expect(vi.mocked(scheduleAt)).not.toHaveBeenCalled();
+    expect(vi.mocked(scheduleServerReminder)).not.toHaveBeenCalled();
   });
 
   it('create_task WITHOUT remindIn does NOT schedule anything', async () => {
@@ -175,5 +200,6 @@ describe('adminHandler — time-deferred reminder (remindIn)', () => {
     await adminHandler.apply(fragment);
 
     expect(vi.mocked(scheduleAt)).not.toHaveBeenCalled();
+    expect(vi.mocked(scheduleServerReminder)).not.toHaveBeenCalled();
   });
 });

@@ -40,6 +40,11 @@ vi.mock('../body/repo', () => ({
 
 vi.mock('../../notify/systemNotify', () => ({
   scheduleAt: vi.fn(() => ({ cancel: () => {} })),
+  sendSystemNotification: vi.fn(),
+}));
+
+vi.mock('../../notify/serverReminder', () => ({
+  scheduleServerReminder: vi.fn(),
 }));
 
 // ─── imports after mocks ───────────────────────────────────────────────────────
@@ -47,6 +52,7 @@ vi.mock('../../notify/systemNotify', () => ({
 import { events as workEvents } from './repo';
 import { events as bodyEvents } from '../body/repo';
 import { scheduleAt } from '../../notify/systemNotify';
+import { scheduleServerReminder } from '../../notify/serverReminder';
 import { workHandler } from './handler';
 import type { Fragment } from '../../router/schema';
 
@@ -160,6 +166,16 @@ describe('workHandler — time-deferred reminder (remindIn)', () => {
       title: 'to do',
       body: 'ping boran',
     });
+    // Durable app-closed path fires too, same fireAt + stable dedupe_key.
+    expect(vi.mocked(scheduleServerReminder)).toHaveBeenCalledWith(
+      {
+        title: 'to do',
+        body: 'ping boran',
+        category: 'REMINDER',
+        dedupe_key: 'reminder:task-mock-id',
+      },
+      fireAt,
+    );
   });
 
   it('create_task WITHOUT remindIn does NOT schedule anything', async () => {
@@ -175,5 +191,6 @@ describe('workHandler — time-deferred reminder (remindIn)', () => {
     await workHandler.apply(fragment);
 
     expect(vi.mocked(scheduleAt)).not.toHaveBeenCalled();
+    expect(vi.mocked(scheduleServerReminder)).not.toHaveBeenCalled();
   });
 });
