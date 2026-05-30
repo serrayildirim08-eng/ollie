@@ -13,6 +13,7 @@ import { tasks, events } from './repo';
 import { migrateBody } from '../body/migrate';
 import { events as bodyEvents } from '../body/repo';
 import { scheduleAt, sendSystemNotification } from '../../notify/systemNotify';
+import { scheduleServerReminder } from '../../notify/serverReminder';
 
 export const workHandler: ModuleHandler<'work'> = {
   module: 'work',
@@ -70,7 +71,7 @@ export const workHandler: ModuleHandler<'work'> = {
         });
         // Time-deferred reminder side-effect (Approach B). The worker resolved
         // scheduledAtMs against its clock; we just hand it to the OS.
-        scheduleReminderIfPresent(p.remindIn, 'to do', p.text);
+        scheduleReminderIfPresent(p.remindIn, task.id, 'to do', p.text);
         // NOTE: tasks.add upserts on (text, done=0). Undo removes the row
         // regardless of whether it was fresh or refreshed — see finance.add_bill
         // comment for the same trade-off rationale.
@@ -156,17 +157,31 @@ function exhaustive(p: never): never {
 }
 
 /**
- * Fire a scheduled system notification when the routed task carries a
- * worker-resolved `remindIn` hint. Mirrors the admin handler's helper —
+ * Schedule a reminder two ways for the same fire time when the routed task
+ * carries a worker-resolved `remindIn` hint:
+ *
+ *   1. client setTimeout (scheduleAt) — fires while the app is open /
+ *      minimised, identically on macOS + iOS.
+ *   2. server-side Supabase `scheduled_jobs` row (scheduleServerReminder)
+ *      — drained by the cron → APNs, so it fires even with the app fully
+ *      CLOSED. No-op when not signed in / sync off / api absent.
+ *
+ * Both carry the SAME stable `dedupe_key` (`reminder:<taskId>`) so the two
+ * paths can never double-fire. Mirrors the admin handler's helper —
  * intentionally not promoted to a shared util while only two callers exist
  * (Approach B's cross-route hint pattern keeps logic with its primary
  * handler; collapse later if a third caller appears).
  */
 function scheduleReminderIfPresent(
   remindIn: RemindIn | undefined,
+  taskId: string,
   title: string,
   body: string,
 ): void {
   if (!remindIn || typeof remindIn.scheduledAtMs !== 'number') return;
   scheduleAt(remindIn.scheduledAtMs, { title, body });
+  scheduleServerReminder(
+    { title, body, category: 'REMINDER', dedupe_key: `reminder:${taskId}` },
+    remindIn.scheduledAtMs,
+  );
 }

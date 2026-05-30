@@ -49,6 +49,9 @@ export type {
   NotificationSpec,
 } from './types';
 export { DEFAULT_BUDGET, readBudget, isMuted, isRecentlySeen } from './budget';
+export { scheduleServerJob, cancelServerJob } from './server-schedule';
+export type { ServerScheduleDeps } from './server-schedule';
+export type { NotificationBudget } from './types';
 
 const ALLOWED_CATEGORIES: NotificationCategory[] = [
   'REMINDER',

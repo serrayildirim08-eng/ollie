@@ -11,6 +11,7 @@ import type { AdminAction, ModuleHandler, HandlerResult, RemindIn } from '../../
 import { migrateAdmin } from './migrate';
 import { renewals, tasks } from './repo';
 import { scheduleAt } from '../../notify/systemNotify';
+import { scheduleServerReminder } from '../../notify/serverReminder';
 
 export const adminHandler: ModuleHandler<'admin'> = {
   module: 'admin',
@@ -28,7 +29,7 @@ export const adminHandler: ModuleHandler<'admin'> = {
         const task = await tasks.add({ kind: 'task', text: p.text, data: { kind: 'task' } });
         // Time-deferred reminder side-effect (Approach B). The worker
         // computes scheduledAtMs from the user's "in N min/hr" hint.
-        scheduleReminderIfPresent(p.remindIn, 'to do', p.text);
+        scheduleReminderIfPresent(p.remindIn, task.id, 'to do', p.text);
         return { ok: true, note: `noted: ${p.text}`, deepLink: '/box/admin', undo: undoTask(task.id) };
       }
 
@@ -42,7 +43,7 @@ export const adminHandler: ModuleHandler<'admin'> = {
         const note = p.reason ? `call ${p.person} — ${p.reason}` : `call ${p.person}`;
         // Time-deferred reminder side-effect (Approach B).
         const reminderBody = p.reason ? `${p.person} · ${p.reason}` : p.person;
-        scheduleReminderIfPresent(p.remindIn, 'call', reminderBody);
+        scheduleReminderIfPresent(p.remindIn, task.id, 'call', reminderBody);
         return { ok: true, note, deepLink: '/box/admin', undo: undoTask(task.id) };
       }
 
@@ -89,15 +90,31 @@ function exhaustive(p: never): never {
 
 /**
  * If a routed task carries a `remindIn` hint (worker-resolved against the
- * dump clock), ask the system to fire a notification when the timer hits.
+ * dump clock), schedule the notification two ways for the same fire time:
+ *
+ *   1. client setTimeout (scheduleAt) — fires while the app is open /
+ *      minimised, identically on macOS + iOS.
+ *   2. server-side Supabase `scheduled_jobs` row (scheduleServerReminder)
+ *      — drained by the cron → APNs, so it fires even with the app fully
+ *      CLOSED. No-op when not signed in / sync off / api absent.
+ *
+ * Both carry the SAME stable `dedupe_key` (`reminder:<taskId>`); the notify
+ * dispatcher and the cron both honor dedupe_key, so whichever lands first
+ * wins and the user is never double-pinged.
+ *
  * Fire-and-forget — the schedule is a side-effect of the row write, never
  * a blocker. No-op when remindIn is absent or its scheduledAtMs is missing.
  */
 function scheduleReminderIfPresent(
   remindIn: RemindIn | undefined,
+  taskId: string,
   title: string,
   body: string,
 ): void {
   if (!remindIn || typeof remindIn.scheduledAtMs !== 'number') return;
   scheduleAt(remindIn.scheduledAtMs, { title, body });
+  scheduleServerReminder(
+    { title, body, category: 'REMINDER', dedupe_key: `reminder:${taskId}` },
+    remindIn.scheduledAtMs,
+  );
 }
