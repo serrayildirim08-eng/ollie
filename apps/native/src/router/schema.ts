@@ -220,7 +220,7 @@ export type CycleAction =
 // ── FINANCE ──────────────────────────────────────────────────────────
 
 export type FinanceAction =
-  | { module: 'finance'; action: 'log_transaction'; amount?: number; currency?: string; merchant?: string }
+  | { module: 'finance'; action: 'log_transaction'; amount?: number; currency?: string; merchant?: string; renewal_for?: 'passport' | 'license' | 'visa' | 'lease' | 'insurance' | 'id' | 'work_permit' | 'residency_permit' }
   | { module: 'finance'; action: 'add_bill'; merchant: string; amount?: number; cadence?: 'monthly' | 'yearly' | 'weekly' }
   | { module: 'finance'; action: 'savings_note'; amount?: number; note?: string }
   // amount/currency/cadence are optional — the worker emits them when the

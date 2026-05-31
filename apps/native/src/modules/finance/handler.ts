@@ -15,6 +15,8 @@
 import type { FinanceAction, ModuleHandler, HandlerResult } from '../../router/schema';
 import { migrateFinance } from './migrate';
 import { bills, subscriptions, transactions } from './repo';
+import { migrateAdmin } from '../admin/migrate';
+import { renewals as adminRenewals } from '../admin/repo';
 
 export const financeHandler: ModuleHandler<'finance'> = {
   module: 'finance',
@@ -29,12 +31,38 @@ export const financeHandler: ModuleHandler<'finance'> = {
           currency: p.currency ?? null,
           merchant: p.merchant ?? null,
         });
+
+        // Cross-module mirror (Approach B): when the payment is explicitly for
+        // a renewal-able document, also log an admin renewal so the upcoming
+        // event surfaces in the admin box + /todo aggregate.
+        // If the mirror fails we log but do NOT roll back the primary write.
+        const ALLOWED_RENEWAL_TYPES = new Set([
+          'passport', 'license', 'visa', 'lease', 'insurance',
+          'id', 'work_permit', 'residency_permit',
+        ]);
+        let adminRenewalId: string | null = null;
+        if (p.renewal_for && ALLOWED_RENEWAL_TYPES.has(p.renewal_for)) {
+          try {
+            await migrateAdmin();
+            const ren = await adminRenewals.add({ renewalType: p.renewal_for, dueDate: null });
+            adminRenewalId = ren.id;
+          } catch (err) {
+            console.error('[finance] admin renewal mirror failed', err);
+          }
+        }
+
         const label = tx.merchant ?? 'transaction';
         return {
           ok: true,
           note: `logged ${label}`,
           deepLink: '/box/finance',
-          undo: () => transactions.remove(tx.id),
+          undo: async () => {
+            // Remove admin mirror first (reverse order), then primary row.
+            if (adminRenewalId) {
+              try { await adminRenewals.remove(adminRenewalId); } catch { /* best-effort */ }
+            }
+            await transactions.remove(tx.id);
+          },
         };
       }
 
