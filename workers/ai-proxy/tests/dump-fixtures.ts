@@ -451,6 +451,11 @@ const FINANCE: DumpFixture[] = [
   { text: 'spotify 50 TL aylık', expected: { module: 'finance', action: 'subscription_log', payloadKeys: ['name'], payload: { name: 'spotify', amount: 50, currency: 'TRY', cadence: 'monthly' } } },
   { text: 'netflix yenilendi 15 dolar', expected: { module: 'finance', action: 'subscription_log', payloadKeys: ['name'], payload: { name: 'netflix', amount: 15, currency: 'USD', cadence: 'monthly' } } },
   { text: 'icloud 120 dolar yıllık', expected: { module: 'finance', action: 'subscription_log', payloadKeys: ['name'], payload: { name: 'icloud', amount: 120, currency: 'USD', cadence: 'yearly' } } },
+
+  // log_transaction with renewal_for (cross-route hint → admin.log_renewal) × 3
+  { text: 'expedite fee 89 dollars for passport', expected: { module: 'finance', action: 'log_transaction', payloadKeys: ['renewal_for'], payload: { amount: 89, currency: 'USD', merchant: 'passport expedite', renewal_for: 'passport' }, crossRoute: { module: 'admin', action: 'log_renewal' } } },
+  { text: 'visa fee 180 euros', expected: { module: 'finance', action: 'log_transaction', payloadKeys: ['renewal_for'], payload: { amount: 180, currency: 'EUR', merchant: 'visa fee', renewal_for: 'visa' }, crossRoute: { module: 'admin', action: 'log_renewal' } } },
+  { text: 'pasaport harcı 600 lira', expected: { module: 'finance', action: 'log_transaction', payloadKeys: ['renewal_for'], payload: { amount: 600, currency: 'TRY', merchant: 'passport fee', renewal_for: 'passport' }, crossRoute: { module: 'admin', action: 'log_renewal' } } },
 ];
 
 // ─── SLEEP ──────────────────────────────────────────────────────────────────
