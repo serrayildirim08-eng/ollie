@@ -8,14 +8,29 @@ import { canonicalMerchantKey } from './recurring';
 
 export { financeHandler } from './handler';
 export { migrateFinance } from './migrate';
-export { bills, getMonthlyBurn, subscriptions, transactions, cadence } from './repo';
+export {
+  bills,
+  cadence,
+  getMonthlyBurn,
+  income,
+  pending,
+  reflections,
+  refunds,
+  subscriptions,
+  transactions,
+} from './repo';
+export type { PendingDecisionRow } from './repo';
 export { FinanceBox } from './FinanceBox';
 export type {
   Cadence,
   FinanceBill,
+  FinanceIncome,
+  FinanceRefund,
+  FinanceSpendingReflection,
   FinanceSubscription,
   FinanceTransaction,
   MonthlyBurn,
+  ReflectionSentiment,
 } from './types';
 
 /**

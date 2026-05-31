@@ -14,7 +14,15 @@
 
 import type { FinanceAction, ModuleHandler, HandlerResult } from '../../router/schema';
 import { migrateFinance } from './migrate';
-import { bills, subscriptions, transactions } from './repo';
+import {
+  bills,
+  income,
+  pending,
+  reflections,
+  refunds,
+  subscriptions,
+  transactions,
+} from './repo';
 import { migrateAdmin } from '../admin/migrate';
 import { renewals as adminRenewals } from '../admin/repo';
 
@@ -115,6 +123,78 @@ export const financeHandler: ModuleHandler<'finance'> = {
           note: `tracked subscription: ${sub.name}`,
           deepLink: '/box/finance',
           undo: () => subscriptions.remove(sub.id),
+        };
+      }
+
+      case 'log_income': {
+        const row = await income.add({
+          amount: p.amount ?? null,
+          currency: p.currency ?? null,
+          source: p.source ?? null,
+        });
+        const label = row.source ?? 'income';
+        return {
+          ok: true,
+          note: `logged income: ${label}`,
+          deepLink: '/box/finance',
+          undo: () => income.remove(row.id),
+        };
+      }
+
+      case 'log_refund': {
+        const row = await refunds.add({
+          amount: p.amount ?? null,
+          currency: p.currency ?? null,
+          merchant: p.merchant ?? null,
+          originalItem: p.originalItem ?? null,
+        });
+        const label = row.originalItem ?? row.merchant ?? 'refund';
+        return {
+          ok: true,
+          note: `logged refund: ${label}`,
+          deepLink: '/box/finance',
+          undo: () => refunds.remove(row.id),
+        };
+      }
+
+      case 'spending_reflection': {
+        // `note` is REQUIRED at the schema level; the handler treats it
+        // defensively and falls back to a generic label if the worker
+        // somehow emits an empty string. We do NOT skip — the user took
+        // the time to dump a reflection; silently dropping it is worse
+        // than persisting a slightly-thin row.
+        const note = (p.note ?? '').trim() || 'spending reflection';
+        const row = await reflections.add({
+          note,
+          category: p.category ?? null,
+          sentiment: p.sentiment ?? null,
+        });
+        return {
+          ok: true,
+          note: row.category
+            ? `reflection: ${row.category}`
+            : 'reflection logged',
+          deepLink: '/box/finance',
+          undo: () => reflections.remove(row.id),
+        };
+      }
+
+      case 'pending_decision': {
+        // Lands in the To-Do aggregate alongside admin.recurring_decision.
+        // `what` is REQUIRED at the schema level; defensive fallback as
+        // above. amount / currency / deadline pass through when present.
+        const what = (p.what ?? '').trim() || 'pending decision';
+        const row = await pending.add({
+          what,
+          amount: p.amount ?? null,
+          currency: p.currency ?? null,
+          deadline: p.deadline ?? null,
+        });
+        return {
+          ok: true,
+          note: `pending: ${row.what}`,
+          deepLink: '/box/finance',
+          undo: () => pending.remove(row.id),
         };
       }
 

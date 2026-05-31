@@ -18,11 +18,15 @@
  * but the Layer 2 prompt also instructs the model to label the language
  * field so the response is self-describing for downstream consumers.
  *
- * Actions mirror the finance block in src/router/dump-classify.ts (~line 134):
- *   - log_transaction  — { amount?, currency?, merchant? }
- *   - add_bill         — { merchant: REQUIRED, amount?, cadence? }
- *   - savings_note     — { amount?, note? }
- *   - subscription_log — { name: REQUIRED, amount?, currency?, cadence? }
+ * Actions mirror the finance block in src/router/dump-classify.ts:
+ *   - log_transaction       — { amount?, currency?, merchant? }
+ *   - log_income            — { amount?, currency?, source? }            (2026-05-31)
+ *   - log_refund            — { amount?, currency?, merchant?, originalItem? }
+ *   - spending_reflection   — { note: REQUIRED, category?, sentiment? }
+ *   - pending_decision      — { what: REQUIRED, amount?, currency?, deadline? }
+ *   - add_bill              — { merchant: REQUIRED, amount?, cadence? }
+ *   - savings_note          — { amount?, note? }
+ *   - subscription_log      — { name: REQUIRED, amount?, currency?, cadence? }
  *
  * No cross-route mirror. Finance is standalone Layer 2.
  *
@@ -44,6 +48,10 @@ import type { ModuleConfig } from './grocery.config';
 
 export type FinanceAction =
   | 'log_transaction'
+  | 'log_income'
+  | 'log_refund'
+  | 'spending_reflection'
+  | 'pending_decision'
   | 'add_bill'
   | 'savings_note'
   | 'subscription_log';
@@ -67,7 +75,7 @@ export const FINANCE_MODEL_FAST = 'llama-3.1-8b-instant';
 export const FINANCE_MODEL_ACCURATE = 'openai/gpt-oss-120b';
 export const FINANCE_ESCALATE_THRESHOLD = 0.7;
 
-// ─── trilingual few-shot examples (8 = 2 per action) ─────────────────────────
+// ─── trilingual few-shot examples (16 = 2 per action × 8 actions) ────────────
 // Mix EN / ES / TR across the set. Natural everyday phrases.
 
 const FEW_SHOT_EXAMPLES: Array<{ input: string; output: FinanceClassification }> = [
@@ -151,6 +159,90 @@ const FEW_SHOT_EXAMPLES: Array<{ input: string; output: FinanceClassification }>
       language: 'tr',
     },
   },
+  // log_income — EN
+  {
+    input: 'akalan paycheck deposited',
+    output: {
+      action: 'log_income',
+      payload: { source: 'akalan' },
+      confidence: 0.96,
+      language: 'en',
+    },
+  },
+  // log_income — TR
+  {
+    input: 'maaş geldi',
+    output: {
+      action: 'log_income',
+      payload: { source: 'salary' },
+      confidence: 0.95,
+      language: 'tr',
+    },
+  },
+  // log_refund — EN
+  {
+    input: 'amazon refunded me $40',
+    output: {
+      action: 'log_refund',
+      payload: { amount: 40, currency: 'USD', merchant: 'Amazon' },
+      confidence: 0.96,
+      language: 'en',
+    },
+  },
+  // log_refund — ES
+  {
+    input: 'me devolvieron los zapatos',
+    output: {
+      action: 'log_refund',
+      payload: { originalItem: 'shoes' },
+      confidence: 0.93,
+      language: 'es',
+    },
+  },
+  // spending_reflection — ES
+  {
+    input: 'gastando demasiado en café',
+    output: {
+      action: 'spending_reflection',
+      payload: { note: 'spending too much on coffee', category: 'café', sentiment: 'concerned' },
+      confidence: 0.94,
+      language: 'es',
+    },
+  },
+  // spending_reflection — EN
+  {
+    input: "this is the third mouse i've bought this year",
+    output: {
+      action: 'spending_reflection',
+      payload: {
+        note: 'third mouse this year — repeated pattern',
+        category: 'electronics',
+        sentiment: 'concerned',
+      },
+      confidence: 0.93,
+      language: 'en',
+    },
+  },
+  // pending_decision — EN
+  {
+    input: 'moving quote 2400',
+    output: {
+      action: 'pending_decision',
+      payload: { what: 'moving quote', amount: 2400 },
+      confidence: 0.95,
+      language: 'en',
+    },
+  },
+  // pending_decision — TR
+  {
+    input: 'yeni laptop almalı mıyım',
+    output: {
+      action: 'pending_decision',
+      payload: { what: 'new laptop' },
+      confidence: 0.92,
+      language: 'tr',
+    },
+  },
 ];
 
 // ─── prompt (compressed, JSON-only, no chain-of-thought) ─────────────────────
@@ -161,9 +253,22 @@ function buildSystemPrompt(): string {
 LANGUAGE: detect the primary language (en/es/tr/other). Handle mixed-language fragments — don't refuse.
 
 ACTIONS (pick exactly one):
-- log_transaction: a one-off payment, purchase, or expense. payload: { amount? (number), currency? (ISO 4217: "USD"/"EUR"/"TRY"/"GBP"), merchant? (string, title-case the business name) }
+- log_transaction: a one-off payment, purchase, or expense (money OUT). payload: { amount? (number), currency? (ISO 4217: "USD"/"EUR"/"TRY"/"GBP"), merchant? (string, title-case the business name) }
     Currency symbols: $ → "USD", £ → "GBP", € → "EUR", TL/TRY → "TRY". Leave omitted when not stated.
     Triggers: "spent X at Y", "paid X", "gasté X en Y", "X TL harcadım", "pagué X de Y", "gastos X en Y".
+- log_income: money IN — salary, freelance payment, client payment, gift, asset sale. NOT a refund (use log_refund). payload: { amount? (number), currency? (ISO 4217), source? (string — the payer name when stated, or "salary" / "freelance" as a generic) }
+    Triggers: "got paid", "deposited", "received", "hit my account", "geldi", "ödediler", "depositaron", "me pagaron", "paycheck", "maaş", "salary".
+    Examples: "maaş geldi" → { source: "salary" } ; "akalan paycheck deposited" → { source: "akalan" } ; "elin energy paid me 500" → { amount: 500, source: "elin energy" } ; "depositaron el sueldo" → { source: "salary" } ; "freelance 5000 TL geldi" → { amount: 5000, currency: "TRY", source: "freelance" }.
+- log_refund: money came back from a previous purchase. payload: { amount? (number), currency? (ISO 4217), merchant? (string), originalItem? (string — what was returned) }
+    Triggers: "refunded me", "returned the X", "got a refund for X", "iade aldım", "me devolvieron", "X devuelto".
+    Examples: "returned the scarf" → { originalItem: "scarf" } ; "amazon refunded me $40" → { amount: 40, currency: "USD", merchant: "Amazon" } ; "me devolvieron los zapatos" → { originalItem: "shoes" } ; "iade aldım" → { } ; "amazon 200 TL iade etti" → { amount: 200, currency: "TRY", merchant: "Amazon" }.
+- spending_reflection: user is reflecting on a SPENDING PATTERN, not logging a single transaction. payload: { note (REQUIRED — the reflection itself, paraphrased into English), category? (string — what's being reflected on: "café"/"takeout"/"electronics"/"subscriptions"/"impulse"), sentiment? ("concerned"|"satisfied"|"neutral") }
+    Triggers: "too much", "demasiado", "çok harcıyorum", "always", "again", "Nth time" ("third mouse this year"), "i always end up at X", "keep buying", "forgot to cancel … again".
+    Sentiment defaults to "concerned" for pattern-marker reflections; "satisfied" when the user is happy about it.
+    Examples: "gastando demasiado en café" → { note: "spending too much on coffee", category: "café", sentiment: "concerned" } ; "this is the third mouse I've bought this year" → { note: "third mouse this year — repeated pattern", category: "electronics", sentiment: "concerned" } ; "kahveye çok harcıyorum" → { note: "spending too much on coffee", category: "café", sentiment: "concerned" }.
+- pending_decision: money-related decision the user has NOT yet made. Quotes, options being weighed, "should I…" money questions. payload: { what (REQUIRED — the decision in English), amount? (number), currency? (ISO 4217), deadline? (string) }
+    Triggers: "should I…", "thinking about…", "quote", "deposit (no payment verb)", "comprar o no", "almalı mıyım", "looking at the X", "got a quote".
+    Examples: "moving quote 2400" → { what: "moving quote", amount: 2400 } ; "should I get the new laptop?" → { what: "new laptop" } ; "comprar o no el sofá" → { what: "buy the sofa" } ; "yeni laptop almalı mıyım" → { what: "new laptop" }.
 - add_bill: a recurring fixed expense like rent, utilities, insurance. payload: { merchant (REQUIRED — the bill name or payee, title-case), amount? (number), cadence? ("monthly"|"yearly"|"weekly") }
     Cadence: "monthly"/"aylık"/"mensual"/"$X/month" → "monthly"; "yearly"/"yıllık"/"anual"/"$X/year" → "yearly"; "weekly"/"haftalık"/"semanal" → "weekly".
     Triggers: "rent is X/month", "electricity bill X", "kira X aylık", "luz X mensual".
@@ -180,6 +285,13 @@ DISAMBIGUATION:
 - "pagé 50 dólares de luz" → add_bill with merchant="Luz" (utility bill triggers add_bill, not log_transaction).
 - "200 pesos en farmacia" → log_transaction with amount=200, merchant="Farmacia" (one-off pharmacy spend).
 - "subscribed €15/month" → subscription_log with currency="EUR", cadence="monthly".
+- "maaş geldi" → log_income, NOT log_transaction (money IN, not money OUT).
+- "akalan paycheck deposited" → log_income with source="akalan", NOT log_transaction.
+- "amazon refunded me $40" → log_refund, NOT log_income (refund of a prior purchase, not new income).
+- "gastando demasiado en café" → spending_reflection (pattern marker "demasiado"), NOT log_transaction (no single discrete spend).
+- "forgot to cancel free trial again" → spending_reflection with category="subscriptions", NOT subscription_log (it's a self-observation about a pattern, not a new subscription).
+- "moving quote 2400" → pending_decision (quote received, decision pending), NOT log_transaction (no payment happened).
+- "should I get the new laptop?" → pending_decision, NOT log_transaction and NOT dump_only.
 - Currency when unstated: leave currency field omitted — do NOT default to USD.
 
 OUTPUT — respond ONLY with the classify_finance_action function call. JSON only, no prose, no chain-of-thought.
@@ -201,6 +313,10 @@ function buildFunctionSchema(): Record<string, unknown> {
           type: 'string',
           enum: [
             'log_transaction',
+            'log_income',
+            'log_refund',
+            'spending_reflection',
+            'pending_decision',
             'add_bill',
             'savings_note',
             'subscription_log',
@@ -218,16 +334,26 @@ function buildFunctionSchema(): Record<string, unknown> {
           type: 'object',
           description: 'Action-specific fields. See action enum for the per-action shape.',
           properties: {
-            // log_transaction + add_bill
+            // log_transaction + add_bill + log_income + log_refund + pending_decision
             amount: { type: 'number' },
             currency: { type: 'string' },
             merchant: { type: 'string' },
             // add_bill + subscription_log
             cadence: { type: 'string', enum: ['monthly', 'yearly', 'weekly'] },
-            // savings_note
+            // savings_note + spending_reflection
             note: { type: 'string' },
             // subscription_log
             name: { type: 'string' },
+            // log_income
+            source: { type: 'string' },
+            // log_refund
+            originalItem: { type: 'string' },
+            // spending_reflection
+            category: { type: 'string' },
+            sentiment: { type: 'string', enum: ['concerned', 'satisfied', 'neutral'] },
+            // pending_decision
+            what: { type: 'string' },
+            deadline: { type: 'string' },
           },
         },
       },
