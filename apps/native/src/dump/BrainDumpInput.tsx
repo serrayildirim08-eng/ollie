@@ -32,6 +32,7 @@ import { kv } from '../storage';
 import { colors } from '../theme/tokens';
 import type { RouterOutput, CrisisSignal } from '../router/schema';
 import { usePhotoIntake, PhotoIntakeBar } from './PhotoIntake';
+import { MicButton } from './MicButton';
 import { NotifyPrimeLine } from '../notify/NotifyPrimeLine';
 import styles from './BrainDumpInput.module.css';
 
@@ -125,8 +126,11 @@ export function BrainDumpInput({
     return () => clearTimeout(timer);
   }, [text, restored]);
 
-  const submit = useCallback(async () => {
-    const trimmed = text.trim();
+  const submit = useCallback(async (overrideText?: string) => {
+    // `overrideText` lets a caller (e.g. the voice mic, which auto-submits the
+    // transcript) submit a known string without waiting for the `text` state
+    // update to flush. Falls back to the live textarea value otherwise.
+    const trimmed = (overrideText ?? text).trim();
     const hasText = trimmed.length > 0;
     const hasImage = photo.image !== null;
     // No-op when both sides are empty. Spec: "If text is empty AND image is
@@ -254,6 +258,17 @@ export function BrainDumpInput({
         <Row align="center" justify="space-between">
           <Row align="center" gap={16}>
             <PhotoIntakeBar intake={photo} disabled={isLoading} />
+            <MicButton
+              getBearer={getBearer}
+              disabled={isLoading}
+              onTranscript={(t) => {
+                // Voice auto-sends: fold the transcript into any typed text and
+                // submit straight to the modules — no extra tap.
+                const combined = text.trim().length > 0 ? `${text.trim()} ${t}` : t;
+                setText(combined);
+                void submit(combined);
+              }}
+            />
             <Text scale="caption">
               {isLoading
                 ? photo.image

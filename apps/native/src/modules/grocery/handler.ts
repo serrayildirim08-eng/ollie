@@ -85,6 +85,20 @@ export const groceryHandler: ModuleHandler<'grocery'> = {
         return { ok: true, note: `marked ${p.item} as used`, deepLink: '/box/grocery' };
       }
 
+      case 'pantry_depleted': {
+        // "Out of X" — the user has run out: clear it from the pantry AND put
+        // it on the shopping list in one move. Undo only restores the shopping
+        // row (pantry-restore is omitted for the same reason as pantry_use).
+        await pantry.use({ name: p.item });
+        const item = await shopping.add({ name: p.item });
+        return {
+          ok: true,
+          note: `out of ${item.name} — cleared the pantry, added to your list`,
+          deepLink: '/box/grocery',
+          undo: () => shopping.remove(item.id),
+        };
+      }
+
       case 'pantry_low_flag': {
         // Undo intentionally omitted — flipping `low_flag` back to 0 isn't
         // a clean inverse (we don't know whether the row was flagged before

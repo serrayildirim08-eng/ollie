@@ -63,6 +63,7 @@ import { handlePurchase, type PurchaseEnv } from './router/purchase';
 import { handleCookHistory, type CookHistoryEnv } from './router/cook-history';
 import { handleReplenishment, type ReplenishmentEnv } from './router/replenishment';
 import { handleFeedMe, type FeedMeEnv } from './router/feed-me';
+import { handleTranscribe, type TranscribeEnv } from './router/transcribe';
 import {
   handleShelfLifeAll,
   handleShelfLifeLookup,
@@ -89,7 +90,8 @@ export interface Env
     ReplenishmentEnv,
     FeedMeEnv,
     ShelfLifeEnv,
-    CookHistoryEnv {
+    CookHistoryEnv,
+    TranscribeEnv {
   ANTHROPIC_API_KEY: string;
   CACHE_KV: KVNamespace;
   RATE_KV: KVNamespace;
@@ -180,6 +182,25 @@ export default {
         }
       }
       return withCors(await handleCookHistory(req, env));
+    }
+
+    // ── /transcribe — brain-dump mic → text (Groq Whisper) ─────────────────
+    // POST only; raw audio bytes in the body. Per-user rate-limited (a clip is
+    // not a burst) so one account can't drain the Whisper budget.
+    if (url.pathname === '/transcribe' && req.method === 'POST') {
+      const txUser = await resolveUserIdForRateLimit(req, env);
+      if (txUser) {
+        const allowed = await checkRate(
+          env.TELEM_RATE_LIMITER,
+          env.RATE_KV,
+          `rl:transcribe:${txUser}`,
+          PURCHASE_RATE_MAX,
+        );
+        if (!allowed) {
+          return withCors(json({ error: 'rate_limited' }, 429));
+        }
+      }
+      return withCors(await handleTranscribe(req, env));
     }
 
     // ── /feed-me/:user — AI recipe suggestion (user mode + pet mode) ────────

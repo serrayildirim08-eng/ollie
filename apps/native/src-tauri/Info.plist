@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Partial Info.plist merged into the macOS app bundle by Tauri v2.
+  NSMicrophoneUsageDescription is REQUIRED for the brain-dump voice button —
+  without it macOS denies getUserMedia(audio) outright (and can terminate the
+  app). The string is what the OS shows in the mic-permission prompt.
+-->
+<plist version="1.0">
+  <dict>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Ollie uses the microphone to turn what you say into a brain dump.</string>
+  </dict>
+</plist>

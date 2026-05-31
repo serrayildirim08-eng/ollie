@@ -95,11 +95,20 @@ type Phase =
 
 interface FeedMeViewProps {
   pantryItems: PantryItem[];
+  /** Lowercased names already on the shopping list — drives the "added" state
+   *  on a recipe's "need" ingredients so they don't read as still-missing. */
+  shopNames?: Set<string>;
+  /** Add a missing ("need") recipe ingredient to the shopping list. */
+  onAddToShop?: (name: string, quantity?: number | null, unit?: string | null) => void;
 }
 
 // ─── component ─────────────────────────────────────────────────────────────
 
-export function FeedMeView({ pantryItems }: FeedMeViewProps): JSX.Element {
+export function FeedMeView({
+  pantryItems,
+  shopNames,
+  onAddToShop,
+}: FeedMeViewProps): JSX.Element {
   const { getToken } = useAuth();
   const { user } = useUser();
 
@@ -284,6 +293,8 @@ export function FeedMeView({ pantryItems }: FeedMeViewProps): JSX.Element {
                 suggestion={s}
                 cooked={cookedIds.has(dishKey)}
                 onCookedIt={() => void onCookedIt(dishKey, s)}
+                shopNames={shopNames}
+                onAddToShop={onAddToShop}
               />
             );
           })}
@@ -504,10 +515,14 @@ function RecipeCard({
   suggestion,
   cooked,
   onCookedIt,
+  shopNames,
+  onAddToShop,
 }: {
   suggestion: FeedRecipeSuggestion;
   cooked: boolean;
   onCookedIt: () => void;
+  shopNames?: Set<string>;
+  onAddToShop?: (name: string, quantity?: number | null, unit?: string | null) => void;
 }): JSX.Element {
   const minutes = suggestion.prepMinutes + suggestion.cookMinutes;
   // Pull the first defined-but-non-generic diet tag for the subtitle. Most
@@ -522,6 +537,19 @@ function RecipeCard({
     .filter((i) => i.have)
     .map((i) => i.name);
 
+  // Collapsed by default — a clean stack of dish names — so the list stays
+  // scannable. Tapping the header reveals the full recipe (ingredients with
+  // quantities + numbered steps). One recipe open at a time keeps focus.
+  const [open, setOpen] = useState(false);
+  const hasRecipe = suggestion.steps.length > 0 || suggestion.ingredients.length > 0;
+
+  // Names the user has just tapped onto the shopping list this session — folded
+  // together with the names already on the list (shopNames) so a "need" item
+  // flips to "added" the moment it's tapped and stays that way.
+  const [addedNames, setAddedNames] = useState<Set<string>>(() => new Set());
+  const isAdded = (name: string): boolean =>
+    addedNames.has(name.toLowerCase()) || (shopNames?.has(name.toLowerCase()) ?? false);
+
   return (
     <article
       style={{
@@ -534,34 +562,197 @@ function RecipeCard({
         gap: 10,
       }}
     >
-      <span
+      {/* A plain <div role="button"> rather than a real <button>: the header
+          contains block-level layout (<Row> → div, <Text scale="body"> → p),
+          which is invalid inside a <button> and makes browsers reparent the DOM
+          — that broke click handling on the whole card. */}
+      <div
+        role={hasRecipe ? 'button' : undefined}
+        tabIndex={hasRecipe ? 0 : undefined}
+        aria-expanded={hasRecipe ? open : undefined}
+        onClick={hasRecipe ? () => setOpen((v) => !v) : undefined}
+        onKeyDown={
+          hasRecipe
+            ? (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  setOpen((v) => !v);
+                }
+              }
+            : undefined
+        }
         style={{
-          fontFamily: fonts.serif,
-          fontSize: 24,
-          lineHeight: 1.1,
-          letterSpacing: '-0.012em',
-          fontWeight: 400,
-          color: colors.ink,
+          textAlign: 'left',
+          cursor: hasRecipe ? 'pointer' : 'default',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 10,
+          width: '100%',
         }}
       >
-        {suggestion.dish}
-      </span>
+        <Row justify="space-between" align="baseline" gap={12} style={{ width: '100%' }}>
+          <span
+            style={{
+              fontFamily: fonts.serif,
+              fontSize: 24,
+              lineHeight: 1.1,
+              letterSpacing: '-0.012em',
+              fontWeight: 400,
+              color: colors.ink,
+            }}
+          >
+            {suggestion.dish}
+          </span>
+          {hasRecipe && (
+            <span
+              aria-hidden
+              style={{
+                flexShrink: 0,
+                fontSize: 11,
+                color: colors.inkFaint,
+                ...SMCP_STYLE,
+              }}
+            >
+              {open ? 'hide' : 'recipe'}
+            </span>
+          )}
+        </Row>
 
-      <Text scale="caption" color={colors.inkFaint}>
-        {minutes > 0 ? `about ${minutes} min` : 'a few minutes'}
-        {specificDiet && ` · ${specificDiet}`}
-      </Text>
+        <Text scale="caption" color={colors.inkFaint}>
+          {minutes > 0 ? `about ${minutes} min` : 'a few minutes'}
+          {specificDiet && ` · ${specificDiet}`}
+        </Text>
 
-      {usedIngredients.length > 0 && (
-        <span
-          style={{
-            fontSize: 11,
-            color: colors.inkSoft,
-            ...SMCP_STYLE,
-          }}
-        >
-          {usedIngredients.join(' · ')}
-        </span>
+        {!open && usedIngredients.length > 0 && (
+          <span
+            style={{
+              fontSize: 11,
+              color: colors.inkSoft,
+              ...SMCP_STYLE,
+            }}
+          >
+            {usedIngredients.join(' · ')}
+          </span>
+        )}
+      </div>
+
+      {open && hasRecipe && (
+        <Stack gap={14} style={{ marginTop: 4 }}>
+          {suggestion.ingredients.length > 0 && (
+            <Stack gap={6}>
+              <span style={{ fontSize: 11, color: colors.inkFaint, ...SMCP_STYLE }}>
+                ingredients{suggestion.servings > 0 ? ` · serves ${suggestion.servings}` : ''}
+              </span>
+              {suggestion.ingredients.map((ing, i) => {
+                const label = [ing.qty ? String(ing.qty) : '', ing.unit ?? '', ing.name]
+                  .filter(Boolean)
+                  .join(' ');
+                const key = `${ing.name}-${i}`;
+
+                // Have it already → plain line, no affordance.
+                if (ing.have) {
+                  return (
+                    <Text key={key} scale="caption" color={colors.ink}>
+                      {label}
+                    </Text>
+                  );
+                }
+
+                const added = isAdded(ing.name);
+
+                // Missing + already on the list (or no add handler) → static
+                // "added"/"need" tag, nothing to tap.
+                if (added || !onAddToShop) {
+                  return (
+                    <Row key={key} gap={6} align="baseline">
+                      <Text scale="caption" color={added ? colors.sage : colors.inkSoft}>
+                        {label}
+                      </Text>
+                      <span
+                        style={{
+                          fontSize: 11,
+                          color: added ? colors.sage : colors.inkFaint,
+                          fontWeight: added ? 600 : 400,
+                          ...SMCP_STYLE,
+                        }}
+                      >
+                        {added ? 'added' : 'need'}
+                      </span>
+                    </Row>
+                  );
+                }
+
+                // Missing → tap the row to add it to the shopping list.
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    aria-label={`add ${ing.name} to shopping list`}
+                    onClick={() => {
+                      onAddToShop(ing.name, ing.qty ?? null, ing.unit ?? null);
+                      setAddedNames((prev) => {
+                        const next = new Set(prev);
+                        next.add(ing.name.toLowerCase());
+                        return next;
+                      });
+                    }}
+                    style={{
+                      appearance: 'none',
+                      background: 'transparent',
+                      border: 'none',
+                      padding: 0,
+                      margin: 0,
+                      textAlign: 'left',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'baseline',
+                      gap: 6,
+                    }}
+                  >
+                    <Text scale="caption" color={colors.inkSoft}>
+                      {label}
+                    </Text>
+                    <span
+                      style={{
+                        fontSize: 11,
+                        color: colors.sage,
+                        fontWeight: 600,
+                        ...SMCP_STYLE,
+                      }}
+                    >
+                      + add
+                    </span>
+                  </button>
+                );
+              })}
+            </Stack>
+          )}
+
+          {suggestion.steps.length > 0 && (
+            <Stack gap={8}>
+              <span style={{ fontSize: 11, color: colors.inkFaint, ...SMCP_STYLE }}>
+                steps
+              </span>
+              {suggestion.steps.map((step, i) => (
+                <Row key={i} gap={10} align="baseline">
+                  <span
+                    style={{
+                      flexShrink: 0,
+                      fontFamily: fonts.serif,
+                      fontSize: 13,
+                      color: colors.inkFaint,
+                    }}
+                  >
+                    {i + 1}
+                  </span>
+                  <Text scale="body" color={colors.ink}>
+                    {step}
+                  </Text>
+                </Row>
+              ))}
+            </Stack>
+          )}
+        </Stack>
       )}
 
       <Row justify="flex-end" align="center" style={{ marginTop: 4 }}>
