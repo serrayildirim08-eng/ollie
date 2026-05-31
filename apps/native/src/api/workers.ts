@@ -134,6 +134,55 @@ export function routeCookHistory(
   );
 }
 
+// ─── ai-proxy: /transcribe — brain-dump mic → text (Groq Whisper) ────────────
+
+/**
+ * Send a recorded audio clip for transcription. Posts the raw bytes (the post()
+ * helper is JSON-only, so this is a bespoke fetch) and returns the recognised
+ * text for the dump input to pre-fill.
+ */
+export async function routeTranscribe(
+  audio: Blob,
+  opts: { bearer: string; timeoutMs?: number },
+): Promise<ApiResult<{ text: string }>> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? 30_000);
+  try {
+    const res = await fetch(`${urls.aiProxy}/transcribe`, {
+      method: 'POST',
+      headers: {
+        'content-type': audio.type || 'audio/webm',
+        authorization: `Bearer ${opts.bearer}`,
+      },
+      body: audio,
+      signal: controller.signal,
+    });
+    if (res.status === 401) {
+      return { ok: false, error: { code: 'unauthorized', status: 401, message: 'unauthorized' } };
+    }
+    if (res.status === 429) {
+      return { ok: false, error: { code: 'rate_limited', status: 429, message: 'rate limited' } };
+    }
+    if (!res.ok) {
+      const bodyText = await safeText(res);
+      return {
+        ok: false,
+        error: { code: 'http', status: res.status, message: `http ${res.status}`, body: bodyText },
+      };
+    }
+    const data = (await res.json()) as { text: string };
+    return { ok: true, data, status: res.status };
+  } catch (err) {
+    const e = err as Error & { name?: string };
+    if (e?.name === 'AbortError') {
+      return { ok: false, error: { code: 'timeout', message: 'transcription timed out' } };
+    }
+    return { ok: false, error: { code: 'network', message: e?.message ?? 'network error' } };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // ─── ai-proxy: /shelf-life/all — pantry aging reference table ────────────────
 
 /**

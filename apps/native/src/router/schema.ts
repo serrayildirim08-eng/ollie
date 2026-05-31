@@ -270,6 +270,12 @@ export type GroceryAction =
   // (primary grocery, side-effect finance; see grocery/handler.ts).
   | { module: 'grocery'; action: 'pantry_add'; item: string; quantity?: string; price?: number; currency?: string }
   | { module: 'grocery'; action: 'pantry_use'; item: string }
+  /**
+   * "Out of X" / ran out / used up — depletion. Unlike `pantry_use` (just
+   * consumed, no rebuy) this means the user no longer has it AND needs more:
+   * the handler removes it from the pantry AND adds it to the shopping list.
+   */
+  | { module: 'grocery'; action: 'pantry_depleted'; item: string }
   | { module: 'grocery'; action: 'shopping_list_add'; item: string }
   | { module: 'grocery'; action: 'meal_request'; query: string }
   | { module: 'grocery'; action: 'recipe_cooked'; name: string }

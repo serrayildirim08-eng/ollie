@@ -204,7 +204,13 @@ export interface ClaimInviteResponse {
 export type FeedDietFilter = 'all' | 'vegetarian' | 'vegan' | 'mediterranean' | 'turkish';
 export type FeedLocale = 'en' | 'es' | 'tr';
 export type FeedTarget = 'user' | 'pet';
-export type FeedSource = 'gemini' | 'groq' | 'cache_hit' | 'static_fallback';
+export type FeedSource =
+  | 'gemini'
+  | 'groq'
+  | 'cloudflare'
+  | 'openrouter'
+  | 'cache_hit'
+  | 'static_fallback';
 
 export interface FeedMeRequest {
   pantry: string[];

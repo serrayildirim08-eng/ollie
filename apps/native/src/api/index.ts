@@ -7,6 +7,7 @@ export { getSupabaseClient, supabase } from './supabase';
 export {
   brainDump,
   routeDump,
+  routeTranscribe,
   enrichDump,
   ingestEvent,
   label,

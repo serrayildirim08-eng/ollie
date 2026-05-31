@@ -38,6 +38,7 @@ function makeEnv(overrides: Partial<FeedMeEnv> = {}): FeedMeEnv {
     SUPABASE_SERVICE_ROLE: 'service-role-key',
     VOYAGE_API_KEY: 'voyage-key',
     GEMINI_API_KEY: 'gemini-key',
+    GROQ_API_KEY: 'groq-key',
     T0_JWT_ENFORCED: '0', // dev/open default; auth tests override with '1'
     ...overrides,
   };
@@ -80,6 +81,7 @@ interface FetchMocks {
   gemini?: () => Response | Promise<Response>;
   /** Capture the body sent to Gemini for assertions. */
   onGemini?: (body: unknown) => void;
+  groq?: () => Response | Promise<Response>;
 }
 
 const VOYAGE_EMBED_OK = () => okJson({ data: [{ embedding: Array(1024).fill(0.01) }] });
@@ -150,6 +152,14 @@ function defaultGeminiArgs(language = 'en') {
   };
 }
 
+/** Groq fallback returns a json_object chat completion whose content is the
+ *  stringified { language, suggestions } batch (parseRecipeBatch shape). */
+function groqOk(batch: unknown): Response {
+  return okJson({
+    choices: [{ message: { content: JSON.stringify(batch) }, finish_reason: 'stop' }],
+  });
+}
+
 function installFetch(mocks: FetchMocks): void {
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const url = typeof input === 'string' ? input : (input as Request).url;
@@ -178,6 +188,11 @@ function installFetch(mocks: FetchMocks): void {
         }
       }
       return await (mocks.gemini ?? (() => geminiOk(defaultGeminiArgs())))();
+    }
+    if (url.includes('api.groq.com')) {
+      // Unmocked groq → 404 so the cascade ends in static_fallback (matches
+      // the real "both providers down" path).
+      return await (mocks.groq ?? (() => new Response('not_routed', { status: 404 })))();
     }
     return new Response('not_routed', { status: 404 });
   });
@@ -288,16 +303,20 @@ describe('POST /feed-me/:user', () => {
     expect(body.error).toBe('forbidden');
   });
 
-  it('400: malformed path user_id (not a UUID)', async () => {
+  it('400: malformed path user_id (injection-shaped garbage)', async () => {
+    // Regex was widened (bb3eca9) to accept Clerk IDs (user_xxx) alongside
+    // UUIDs, so it only blocks chars outside [A-Za-z0-9_-]. Use a value with a
+    // space + slash to exercise the reject path.
     installFetch({});
+    const badId = 'bad/../id !';
     const res = await handleFeedMe(
-      new Request('https://worker.dev/feed-me/not-a-uuid', {
+      new Request(`https://worker.dev/feed-me/${encodeURIComponent(badId)}`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json', 'x-user-id': 'not-a-uuid' },
+        headers: { 'content-type': 'application/json', 'x-user-id': badId },
         body: JSON.stringify(validBody()),
       }),
       makeEnv(),
-      'not-a-uuid',
+      badId,
     );
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: string };
@@ -491,7 +510,59 @@ describe('POST /feed-me/:user', () => {
 
   // ── upstream failure → static_fallback ─────────────────────────────────────
 
-  it('gemini 5xx → static_fallback (NOT 500)', async () => {
+  it('gemini 429 → groq fallback succeeds (source=groq)', async () => {
+    // Gemini free tier exhausts its daily request quota mid-day (429). The
+    // cascade must fall through to Groq so a recipe still comes back instead of
+    // the empty "couldn't dream anything up" static_fallback.
+    installFetch({
+      gemini: () => new Response('{"error":{"code":429}}', { status: 429 }),
+      groq: () => groqOk(defaultGeminiArgs()),
+    });
+    const res = await handleFeedMe(makeReq(validBody()), makeEnv(), FAKE_USER);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as FeedMeResponse;
+    expect(body.source).toBe('groq');
+    expect(body.suggestions).toHaveLength(3);
+    expect(body.suggestions[0].dish).toBe('Shakshuka');
+  });
+
+  it('gemini + groq down → Cloudflare Workers AI fallback (source=cloudflare)', async () => {
+    // Third tier: both Gemini and Groq exhaust their daily caps, so the
+    // same-platform CF binding (separate neuron quota) carries the request.
+    installFetch({
+      gemini: () => new Response('{"error":{"code":429}}', { status: 429 }),
+      groq: () => new Response('{"error":{"code":429}}', { status: 429 }),
+    });
+    const env = makeEnv({
+      AI: { run: async () => ({ response: JSON.stringify(defaultGeminiArgs()) }) },
+    });
+    const res = await handleFeedMe(makeReq(validBody()), env, FAKE_USER);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as FeedMeResponse;
+    expect(body.source).toBe('cloudflare');
+    expect(body.suggestions).toHaveLength(3);
+  });
+
+  it('cloudflare wraps JSON in prose → extracted, not dropped', async () => {
+    // CF's llama model often prepends "Here are 3 recipes:" and fences the
+    // object despite the instruction. parseJsonBatch must recover the { … } span
+    // instead of failing the tier.
+    const wrapped = 'Here are some ideas!\n```json\n' + JSON.stringify(defaultGeminiArgs()) + '\n```';
+    installFetch({
+      gemini: () => new Response('{"error":{"code":429}}', { status: 429 }),
+      groq: () => new Response('{"error":{"code":429}}', { status: 429 }),
+    });
+    const env = makeEnv({ AI: { run: async () => ({ response: wrapped }) } });
+    const res = await handleFeedMe(makeReq(validBody()), env, FAKE_USER);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as FeedMeResponse;
+    expect(body.source).toBe('cloudflare');
+    expect(body.suggestions).toHaveLength(3);
+  });
+
+  it('every tier down → static_fallback (NOT 500)', async () => {
+    // No AI binding, no OpenRouter key, gemini 502, groq unmocked → 404. Only
+    // when EVERY available tier fails do we degrade to the empty fallback.
     installFetch({
       gemini: () => new Response('gemini exploded', { status: 502 }),
     });

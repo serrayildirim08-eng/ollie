@@ -27,6 +27,9 @@
 import { json, upstreamError } from '@ollie/worker-http';
 import { scrubPII, type Locale } from '@ollie/pii-scrub';
 import { verifyClerkJwt } from '../clerk-verify';
+import { groqChat, type GroqMessage } from '../groq';
+import { cloudflareJson, type CfAiBinding } from '../cloudflare-ai';
+import { openRouterJson } from '../openrouter';
 import {
   feedMeConfig,
   buildFeedMeSystemPrompt,
@@ -50,6 +53,11 @@ export interface FeedMeEnv {
   SUPABASE_SERVICE_ROLE: string;
   VOYAGE_API_KEY: string;
   GEMINI_API_KEY: string;
+  GROQ_API_KEY: string;
+  /** OpenRouter free-tier key — final cascade tier. */
+  OPENROUTER_API_KEY?: string;
+  /** Cloudflare Workers AI binding — same-platform fallback, separate quota. */
+  AI?: CfAiBinding;
   T0_JWT_ENFORCED?: string;
   CLERK_ISSUER?: string;
 }
@@ -57,7 +65,13 @@ export interface FeedMeEnv {
 // ─── types ───────────────────────────────────────────────────────────────────
 
 export type FeedTarget = 'user' | 'pet';
-export type FeedSource = 'gemini' | 'cache_hit' | 'static_fallback';
+export type FeedSource =
+  | 'gemini'
+  | 'groq'
+  | 'cloudflare'
+  | 'openrouter'
+  | 'cache_hit'
+  | 'static_fallback';
 
 export interface FeedMeRequestBody {
   pantry: string[];
@@ -244,18 +258,81 @@ export async function handleFeedMe(
     return json(hitResp);
   }
 
-  // ── MISS path — Gemini ───────────────────────────────────────────────────
-  let batch: RecipeBatch;
-  try {
-    batch = await geminiSuggest(
-      body,
-      sanitizedPantry,
-      sanitizedPetName,
-      signals,
-      env.GEMINI_API_KEY,
-    );
-  } catch (err) {
-    console.error('[feed-me] gemini failed, returning static_fallback', err);
+  // ── MISS path — free-tier cascade ─────────────────────────────────────────
+  // Gemini → Groq → Cloudflare Workers AI → OpenRouter. Every free tier has its
+  // own DAILY ceiling (Gemini: request count, Groq: tokens-per-day, CF: neurons,
+  // OpenRouter: request count) and they exhaust at different times, so stacking
+  // them makes a recipe almost always come back. On ANY provider error we
+  // advance to the next. Only if EVERY available tier fails do we return the
+  // empty static_fallback ("couldn't dream anything up").
+  const jsonMaxTokens = jsonMaxTokensFor(body.count);
+  const { systemPrompt: jsonSystem, userTurn } = buildBasePrompt(
+    body,
+    sanitizedPantry,
+    sanitizedPetName,
+    signals,
+  );
+  const jsonUserMessage = `${userTurn}${jsonShapeInstruction(body.count)}`;
+
+  const chain: Array<{ source: FeedSource; run: () => Promise<RecipeBatch> }> = [
+    {
+      source: 'gemini',
+      run: () =>
+        geminiSuggest(body, sanitizedPantry, sanitizedPetName, signals, env.GEMINI_API_KEY),
+    },
+    {
+      source: 'groq',
+      run: () =>
+        groqSuggest(body, sanitizedPantry, sanitizedPetName, signals, env.GROQ_API_KEY),
+    },
+  ];
+  if (env.AI) {
+    const ai = env.AI;
+    chain.push({
+      source: 'cloudflare',
+      run: async () =>
+        parseJsonBatch(
+          await cloudflareJson(
+            ai,
+            { system: jsonSystem, user: jsonUserMessage, maxTokens: jsonMaxTokens },
+            'feed-me',
+          ),
+          'cloudflare',
+        ),
+    });
+  }
+  if (env.OPENROUTER_API_KEY) {
+    const key = env.OPENROUTER_API_KEY;
+    chain.push({
+      source: 'openrouter',
+      run: async () =>
+        parseJsonBatch(
+          await openRouterJson(
+            { apiKey: key, system: jsonSystem, user: jsonUserMessage, maxTokens: jsonMaxTokens },
+            'feed-me',
+          ),
+          'openrouter',
+        ),
+    });
+  }
+
+  let batch: RecipeBatch | null = null;
+  let aiSource: FeedSource = 'gemini';
+  for (let i = 0; i < chain.length; i++) {
+    const provider = chain[i];
+    try {
+      batch = await provider.run();
+      aiSource = provider.source;
+      break;
+    } catch (err) {
+      const isLast = i === chain.length - 1;
+      console.error(
+        `[feed-me] ${provider.source} failed${isLast ? ', returning static_fallback' : ', falling through'}`,
+        err,
+      );
+    }
+  }
+  if (!batch) {
     const fallback: FeedMeResponse = {
       suggestions: [],
       source: 'static_fallback',
@@ -280,7 +357,7 @@ export async function handleFeedMe(
 
   const finalResp: FeedMeResponse = {
     suggestions: trimmed,
-    source: 'gemini',
+    source: aiSource,
     latencyMs: Date.now() - t0,
   };
   return json(finalResp);
@@ -728,19 +805,19 @@ async function cacheWrite(
   });
 }
 
-// ─── Gemini call ─────────────────────────────────────────────────────────────
+// ─── shared prompt + parse helpers ───────────────────────────────────────────
 
-async function geminiSuggest(
+/** Build the system prompt + user turn shared by every provider in the
+ *  cascade. Gemini drives output via a function schema; the JSON-mode providers
+ *  (groq/cloudflare/openrouter) append `jsonShapeInstruction` to the user turn. */
+function buildBasePrompt(
   body: ValidatedBody,
   sanitizedPantry: string[],
   sanitizedPetName: string,
   signals: CookSignals,
-  apiKey: string,
-): Promise<RecipeBatch> {
+): { systemPrompt: string; userTurn: string; config: typeof feedMeConfig | typeof petFeedConfig } {
   const isPet = body.feedTarget === 'pet';
   const config = isPet ? petFeedConfig : feedMeConfig;
-  const fnSchema = config.buildFunctionSchema();
-
   let systemPrompt: string;
   if (isPet) {
     const ctx: PetFeedPromptContext = {
@@ -763,6 +840,79 @@ async function geminiSuggest(
     };
     systemPrompt = buildFeedMeSystemPrompt(ctx);
   }
+  const userTurn = isPet
+    ? `Plan ${body.count} safe meal(s) for ${sanitizedPetName} from PANTRY: ${sanitizedPantry.join(', ')}. Respond in ${body.locale}.`
+    : `Suggest ${body.count} dishes I can cook from PANTRY: ${sanitizedPantry.join(', ')}. Diet: ${body.diet}. Respond in ${body.locale}.`;
+  return { systemPrompt, userTurn, config };
+}
+
+/** JSON-shape contract appended to the user turn for the non-Gemini providers,
+ *  which have no function-calling parity. Mirrors parseRecipeBatch's shape. */
+function jsonShapeInstruction(count: number): string {
+  return (
+    `\n\nRespond with a JSON object EXACTLY of the form: ` +
+    `{"language":"en"|"es"|"tr"|"other","suggestions":[{"dish":string,"cuisine":string,` +
+    `"diet":string[],"ingredients":[{"name":string,"canonical":string|null,"have":boolean,` +
+    `"qty"?:number,"unit"?:string}],"steps":string[],"prepMinutes":number,"cookMinutes":number,` +
+    `"servings":number,"reasonSuggested":string}]}. ` +
+    `The "suggestions" array MUST contain exactly ${count} item(s).`
+  );
+}
+
+/** Token budget for the JSON-mode providers. A single recipe (ingredients +
+ *  steps + metadata) runs ~400-600 JSON tokens, so a too-tight cap truncates
+ *  the array mid-object → invalid JSON. Budget generously; these models stop at
+ *  the closing brace well before the cap. */
+function jsonMaxTokensFor(count: number): number {
+  return 768 * count + 512;
+}
+
+/** Parse a raw string from a JSON-mode provider into a RecipeBatch. Some models
+ *  (esp. Cloudflare's llama) wrap the object in prose or markdown despite the
+ *  instruction, so on a failed direct parse we extract the outermost { … } span
+ *  and retry before giving up. Throws (so the cascade advances) on hard failure
+ *  or empty output. */
+function parseJsonBatch(raw: string, provider: string): RecipeBatch {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    const start = raw.indexOf('{');
+    const end = raw.lastIndexOf('}');
+    if (start !== -1 && end > start) {
+      try {
+        parsed = JSON.parse(raw.slice(start, end + 1));
+      } catch {
+        throw new Error(`feed-me ${provider} returned non-JSON content`);
+      }
+    } else {
+      throw new Error(`feed-me ${provider} returned non-JSON content`);
+    }
+  }
+  const batch = parseRecipeBatch(parsed);
+  if (batch.suggestions.length === 0) {
+    throw new Error(`feed-me ${provider} returned zero suggestions`);
+  }
+  return batch;
+}
+
+// ─── Gemini call ─────────────────────────────────────────────────────────────
+
+async function geminiSuggest(
+  body: ValidatedBody,
+  sanitizedPantry: string[],
+  sanitizedPetName: string,
+  signals: CookSignals,
+  apiKey: string,
+): Promise<RecipeBatch> {
+  const { systemPrompt, config } = buildBasePrompt(
+    body,
+    sanitizedPantry,
+    sanitizedPetName,
+    signals,
+  );
+  const isPet = body.feedTarget === 'pet';
+  const fnSchema = config.buildFunctionSchema();
 
   // Few-shot examples.
   const contents: unknown[] = [];
@@ -813,6 +963,46 @@ async function geminiSuggest(
     }
   }
   throw new Error('gemini returned no function call');
+}
+
+/** Groq fallback for the MISS path. Groq's OpenAI-style chat API has no
+ *  function-calling parity with the Gemini schema here, so we ask for a JSON
+ *  object matching parseRecipeBatch's shape directly (jsonMode) and reuse the
+ *  same system prompt + few-shot examples. config.examples[].output is already
+ *  the `{ language, suggestions }` shape Gemini's functionCall args use, so the
+ *  examples serialize verbatim. */
+async function groqSuggest(
+  body: ValidatedBody,
+  sanitizedPantry: string[],
+  sanitizedPetName: string,
+  signals: CookSignals,
+  apiKey: string,
+): Promise<RecipeBatch> {
+  const { systemPrompt, userTurn, config } = buildBasePrompt(
+    body,
+    sanitizedPantry,
+    sanitizedPetName,
+    signals,
+  );
+
+  const messages: GroqMessage[] = [
+    { role: 'system', content: systemPrompt + jsonShapeInstruction(body.count) },
+  ];
+  for (const ex of config.examples) {
+    messages.push({ role: 'user', content: ex.input });
+    messages.push({ role: 'assistant', content: JSON.stringify(ex.output) });
+  }
+  messages.push({ role: 'user', content: userTurn });
+
+  const choice = await groqChat(
+    { apiKey, messages, jsonMode: true, maxTokens: jsonMaxTokensFor(body.count) },
+    'feed-me',
+  );
+  const content = choice.message.content ?? '';
+  if (!content) {
+    throw new Error(`feed-me groq empty content (finish=${choice.finish_reason})`);
+  }
+  return parseJsonBatch(content, 'groq');
 }
 
 // Re-export the upstreamError helper for tests + parity with sibling modules.

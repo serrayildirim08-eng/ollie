@@ -207,7 +207,13 @@ NOTE on petName: ALWAYS the proper noun / actual pet name (Tontin, Olivia, Pinpo
   Ex (orphan from multi-item dump): "milk" → { item: "milk" } ; "oil" → { item: "oil" } ; "eggs" → { item: "eggs" } ; "tampons" → { item: "tampons" } ; "toilet paper" → { item: "toilet paper" }
   Ex (verb present): "bought milk" → { item: "milk" } ; "got tampons and toilet paper" → TWO fragments → { item: "tampons" } and { item: "toilet paper" } ; "süt aldım" → { item: "milk" }
 - pantry_use: { item: string (REQUIRED) }
+  Use ONLY for "consumed/used" with no rebuy implied: "used the last of the milk", "finished the yogurt".
+- pantry_depleted: { item: string (REQUIRED) }
+  DEPLETION — user ran OUT and needs more. Removes from pantry AND adds to the shopping list.
+  Ex: "out of lemons" → { item: "lemons" } ; "we ran out of milk" → { item: "milk" } ; "used up the oil" → { item: "oil" } ; "limon bitti" / "limon kalmadı" → { item: "lemons" } ; "se acabó el aceite" → { item: "oil" }
+  Prefer this over shopping_list_add whenever the phrasing says they HAD it and it's now gone ("out of", "ran out", "used up", "bitti", "kalmadı", "tükendi", "se acabó", "no queda").
 - shopping_list_add: { item: string (REQUIRED) }
+  Use for "need to buy / add to list" with NO depletion signal: "add coffee to the list", "we need paper towels", "buy garlic".
 - pantry_low_flag: { item: string (REQUIRED) }
 - meal_request: { query: string (REQUIRED — what they want to cook/eat) }
   Ex: "what can I make with chicken and rice" → { query: "chicken and rice" }
