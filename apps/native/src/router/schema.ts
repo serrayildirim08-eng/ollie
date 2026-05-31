@@ -227,7 +227,29 @@ export type FinanceAction =
   // user states a price/cadence ("netflix $15/month"); the native handler
   // stores them so subscriptions feed the monthly-burn headline at the
   // correct amortised rate.
-  | { module: 'finance'; action: 'subscription_log'; name: string; amount?: number; currency?: string; cadence?: 'monthly' | 'yearly' | 'weekly' };
+  | { module: 'finance'; action: 'subscription_log'; name: string; amount?: number; currency?: string; cadence?: 'monthly' | 'yearly' | 'weekly' }
+  /**
+   * Money IN. `source` is the payer name when stated ("akalan", "elin
+   * energy") or a generic "salary" / "freelance". NOT a refund — refunds
+   * carry the original-item context separately via log_refund.
+   */
+  | { module: 'finance'; action: 'log_income'; amount?: number; currency?: string; source?: string }
+  /**
+   * Money came back from a prior purchase. `originalItem` is the returned
+   * item when the user named it; `merchant` is the payer.
+   */
+  | { module: 'finance'; action: 'log_refund'; amount?: number; currency?: string; merchant?: string; originalItem?: string }
+  /**
+   * A reflection on a SPENDING PATTERN — not a single transaction.
+   * `note` is the reflection itself (paraphrased to English).
+   * Surfaces in a future "patterns I've noticed" card.
+   */
+  | { module: 'finance'; action: 'spending_reflection'; note: string; category?: string; sentiment?: 'concerned' | 'satisfied' | 'neutral' }
+  /**
+   * Money decision the user has NOT yet made. Surfaces in the To-Do
+   * aggregate alongside admin.recurring_decision until resolved.
+   */
+  | { module: 'finance'; action: 'pending_decision'; what: string; amount?: number; currency?: string; deadline?: string };
 
 // ── SLEEP ────────────────────────────────────────────────────────────
 
@@ -249,9 +271,10 @@ export type SleepAction =
 
 // ── HABITS ───────────────────────────────────────────────────────────
 
+// No streak actions — streaks are an ADHD-shame mechanic, rejected
+// (feedback-ollie-no-streaks). Habits track completions + identity only.
 export type HabitsAction =
   | { module: 'habits'; action: 'complete'; habitName: string }
-  | { module: 'habits'; action: 'streak_break_note'; habitName: string; reason?: string }
   | { module: 'habits'; action: 'identity_statement'; text: string };
 
 // ── GOALS ────────────────────────────────────────────────────────────
