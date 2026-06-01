@@ -14,7 +14,17 @@ export type CycleEventKind =
   | 'period_end'
   | 'symptom'
   | 'pill'
-  | 'bleeding';
+  | 'bleeding'
+  // Pregnancy pause — NOT pregnancy tracking. Two bare markers only:
+  //   pregnancy_start  the user declared they're pregnant → cycle goes dormant.
+  //   pregnancy_end    the pregnancy ended by ANY path (birth / miscarriage /
+  //                    termination) → cycle resumes from that point.
+  // "currently pregnant" is derived: a pregnancy_start with no later
+  // pregnancy_end. There is deliberately no due date, trimester, kind-of-end,
+  // weight, or any other pregnancy field — the end event is the sole resume
+  // trigger and carries no clinical detail.
+  | 'pregnancy_start'
+  | 'pregnancy_end';
 
 /**
  * Bleeding-intensity tags — the brief's 9 editorial flow descriptors. These

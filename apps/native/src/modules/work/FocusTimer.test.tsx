@@ -363,11 +363,11 @@ describe('on finish', () => {
 // ─── brown noise toggle ───────────────────────────────────────────────────────
 
 describe('brown noise toggle', () => {
-  it('noise toggle is NOT rendered when asset is unavailable', () => {
+  it('noise toggle IS rendered now that the brown-noise asset ships', () => {
     renderTimer();
     const noiseBtn = Array.from(container.querySelectorAll('button')).find(
       (b) => b.getAttribute('aria-label')?.toLowerCase().includes('brown noise'),
     );
-    expect(noiseBtn).toBeUndefined();
+    expect(noiseBtn).toBeDefined();
   });
 });

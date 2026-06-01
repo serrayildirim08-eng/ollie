@@ -41,7 +41,11 @@ export type CycleAction =
   | 'log_period_start'
   | 'log_period_end'
   | 'log_symptom'
-  | 'pill_logged';
+  | 'pill_logged'
+  // Pregnancy PAUSE (not tracking). set_pregnant → cycle dormant;
+  // end_pregnancy → resume. One neutral end for birth/miscarriage/termination.
+  | 'set_pregnant'
+  | 'end_pregnancy';
 
 export interface CycleClassification {
   action: CycleAction;
@@ -148,6 +152,56 @@ const FEW_SHOT_EXAMPLES: Array<{ input: string; output: CycleClassification }> =
       language: 'es',
     },
   },
+  // set_pregnant — EN (pause)
+  {
+    input: "i'm pregnant",
+    output: {
+      action: 'set_pregnant',
+      payload: {},
+      confidence: 0.97,
+      language: 'en',
+    },
+  },
+  // set_pregnant — TR
+  {
+    input: 'hamileyim',
+    output: {
+      action: 'set_pregnant',
+      payload: {},
+      confidence: 0.96,
+      language: 'tr',
+    },
+  },
+  // end_pregnancy — EN (birth)
+  {
+    input: 'i had the baby',
+    output: {
+      action: 'end_pregnancy',
+      payload: {},
+      confidence: 0.96,
+      language: 'en',
+    },
+  },
+  // end_pregnancy — EN (loss; must read as neutral as birth)
+  {
+    input: 'i lost the pregnancy',
+    output: {
+      action: 'end_pregnancy',
+      payload: {},
+      confidence: 0.95,
+      language: 'en',
+    },
+  },
+  // end_pregnancy — ES
+  {
+    input: 'el embarazo terminó',
+    output: {
+      action: 'end_pregnancy',
+      payload: {},
+      confidence: 0.94,
+      language: 'es',
+    },
+  },
 ];
 
 // ─── prompt (compressed, JSON-only, no chain-of-thought) ─────────────────────
@@ -166,8 +220,17 @@ ACTIONS (pick exactly one):
     Triggers: "cramps bad rn", "kramp girdim", "tengo calambres", "me siento hinchada", "şişkinlik var", "bloating", "mood swings".
 - pill_logged: the user took their birth-control pill (cycle context — Layer 1 has already distinguished this from general medication). payload: { } — no fields.
     Triggers: "took my pill", "took my birth control", "tomé la pastilla", "hapı aldım", "birth control taken".
+- set_pregnant: the user is declaring a pregnancy. This PAUSES the cycle. payload: { } — no fields. NOT pregnancy tracking — no due date, no trimester, no fields.
+    Triggers: "i'm pregnant", "i am pregnant", "we're expecting", "estoy embarazada", "hamileyim", "hamile kaldım".
+- end_pregnancy: the pregnancy ENDED by ANY path — birth, miscarriage, or termination. This RESUMES the cycle. payload: { } — no fields. ONE neutral action for every kind of ending; never branch on which, never ask the user to specify.
+    Triggers (birth): "i had the baby", "gave birth", "di a luz", "doğum yaptım".
+    Triggers (loss): "i lost the pregnancy", "i had a miscarriage", "perdí el embarazo", "düşük yaptım".
+    Triggers (termination / generic): "the pregnancy ended", "i had an abortion", "el embarazo terminó", "hamileliğim sona erdi", "i'm not pregnant anymore".
 
 DISAMBIGUATION:
+- "i'm pregnant" → set_pregnant. Do NOT treat as a symptom.
+- Any ending of a pregnancy — birth, miscarriage, termination — → end_pregnancy with EMPTY payload. Treat all three identically and neutrally; do not record which kind.
+- "i'm not pregnant anymore" / "lost it" in a pregnancy context → end_pregnancy.
 - "got my period" → log_period_start. Clear unambiguous trigger.
 - "my period started a few days ago" → log_period_start (log-now semantics; timestamp is applied at dispatch).
 - "cramps bad rn" → log_symptom with symptom="cramps". Even without "period" context, cramps in the cycle module = log_symptom.
@@ -199,6 +262,8 @@ function buildFunctionSchema(): Record<string, unknown> {
             'log_period_end',
             'log_symptom',
             'pill_logged',
+            'set_pregnant',
+            'end_pregnancy',
           ],
         },
         confidence: {

@@ -10,10 +10,9 @@
  *   2. Fires window CustomEvent 'ollie:notify' for the notification adapter.
  *
  * Brown noise: toggled via a quiet glyph button. Asset at
- * apps/native/src/assets/audio/brown-noise.m4a — if missing, the toggle
- * is hidden and a TODO comment marks the gap.
- * TODO(brown-noise-asset): add apps/native/src/assets/audio/brown-noise.m4a
- * and uncomment the audio block below to enable the noise toggle.
+ * apps/native/public/assets/audio/brown-noise.m4a (ffmpeg-generated 120s
+ * constant-level loop), served at /assets/audio/brown-noise.m4a and looped
+ * at 0.35 volume while a session runs.
  */
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
@@ -103,15 +102,14 @@ export function FocusTimer({ onSessionLogged }: FocusTimerProps): JSX.Element {
   const idleTotalSeconds = chosenDuration * 60;
 
   // ── audio ─────────────────────────────────────────────────────────────────
-  // TODO(brown-noise-asset): uncomment when brown-noise.m4a is available.
-  // const NOISE_AVAILABLE = true;
-  const NOISE_AVAILABLE = false;
+  // Brown noise asset lives at apps/native/public/assets/audio/brown-noise.m4a
+  // (ffmpeg-generated, 120s constant-level loop), served at /assets/audio/.
+  const NOISE_AVAILABLE = true;
 
   useEffect(() => {
     if (!NOISE_AVAILABLE) return;
     if (noiseOn && timerState === 'running') {
       if (!noiseRef.current) {
-        // TODO(brown-noise-asset): update path once asset is added
         noiseRef.current = new Audio('/assets/audio/brown-noise.m4a');
         noiseRef.current.loop = true;
         noiseRef.current.volume = 0.35;

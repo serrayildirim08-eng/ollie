@@ -41,6 +41,18 @@ export const cycleHandler: ModuleHandler<'cycle'> = {
         return { ok: true, note: 'pill logged', deepLink: '/box/cycle', undo: undoFor(ev.id) };
       }
 
+      case 'set_pregnant': {
+        // Pause the cycle. Neutral, quiet ack — no congratulations assumed.
+        const ev = await cycleRepo.setPregnant();
+        return { ok: true, note: 'cycle paused', deepLink: '/box/cycle', undo: undoFor(ev.id) };
+      }
+
+      case 'end_pregnancy': {
+        // Resume. Stays neutral for ANY end (birth / miscarriage / termination).
+        const ev = await cycleRepo.endPregnancy();
+        return { ok: true, note: 'cycle resumed', deepLink: '/box/cycle', undo: undoFor(ev.id) };
+      }
+
       default:
         // Make new actions a build error rather than a silent skip.
         return exhaustive(p);
