@@ -20,7 +20,6 @@ vi.mock('./repo', () => ({
     remove: vi.fn().mockResolvedValue(undefined),
   },
   events: {
-    logStreakBreak: vi.fn().mockResolvedValue({ id: 'ev-id' }),
     logIdentity: vi.fn().mockResolvedValue({ id: 'ev-id' }),
     remove: vi.fn().mockResolvedValue(undefined),
   },

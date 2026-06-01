@@ -66,6 +66,25 @@ export interface AdminRenewal {
 export const KNOWN_RENEWAL_TYPES = ['passport', 'license', 'lease', 'insurance'] as const;
 
 /**
+ * One row in `admin_recurring_decisions`. Surfaced on the /todo screen as a
+ * DECISION variant bullet with cancel / keep / later affordances.
+ *
+ * `decision` is null while the user hasn't acted. 'later' is never stored
+ * as a decision value — instead, `snoozeUntilMs` is bumped forward 7 days
+ * and `decision` stays null so the row re-surfaces automatically.
+ */
+export interface RecurringDecisionRow {
+  id: string;
+  /** The subscription / service / thing to decide on — e.g. "chatgpt subscription". */
+  what: string;
+  /** Set when the user clicks cancel or keep. Null while pending. */
+  decision: 'cancel' | 'keep' | null;
+  /** Ms-since-epoch snooze expiry. Null if not snoozed. */
+  snoozeUntilMs: number | null;
+  createdAt: number; // ms since epoch
+}
+
+/**
  * Days until the renewal is due. Negative numbers mean overdue. Returns
  * null when no due date is set so the caller can render "no date".
  */

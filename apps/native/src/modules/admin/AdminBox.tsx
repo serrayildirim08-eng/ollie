@@ -68,6 +68,7 @@ import { Stack, Row } from '../../layout';
 import { Text } from '../../ui';
 import { colors } from '../../theme/tokens';
 import { WhenCaption } from '../../lib/WhenCaption';
+import { PatternCards } from '../../patterns/PatternCards';
 import { migrateAdmin } from './migrate';
 import {
   cadence as cadenceRepo,
@@ -306,6 +307,11 @@ export function AdminBox(): JSX.Element {
             onToggle={handleToggleTask}
             onRemove={handleRemoveTask}
           />
+
+          {/* Layer-2 noticings — the admin watcher's computed patterns
+              (stale ball, renewal cues, cost-of-delay, …) surface here once
+              there's enough signal. Renders nothing when empty. */}
+          <PatternCards module="admin" />
         </Stack>
       )}
     </Stack>

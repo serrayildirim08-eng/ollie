@@ -30,6 +30,7 @@ import { Stack, Row } from '../../layout';
 import { Text } from '../../ui';
 import { colors, fontSizes, fontWeights, letterSpacings } from '../../theme/tokens';
 import { WhenCaption } from '../../lib/WhenCaption';
+import { PatternCards } from '../../patterns/PatternCards';
 import { migrateBody } from './migrate';
 import { cadence as cadenceRepo, events as eventsRepo } from './repo';
 import {
@@ -174,6 +175,10 @@ export function BodyBox(): JSX.Element {
               <Text scale="body">{formatLastMovement(lastMovement)}</Text>
             </Row>
           )}
+
+          {/* Layer-2 noticings — soft cards from the body watcher (hydration
+              drift, hyperfocus dehydration, hunger↔thirst, episode patterns). */}
+          <PatternCards module="body" />
 
           {!isEmpty && (
             <Stack gap={48}>

@@ -20,7 +20,7 @@
 
 import { computeCadence, type CadenceEstimate } from '@ollie/cadence';
 import { sql } from '../../storage';
-import type { AdminRenewal, AdminTask, AdminTaskData, AdminTaskKind } from './types';
+import type { AdminRenewal, AdminTask, AdminTaskData, AdminTaskKind, RecurringDecisionRow } from './types';
 
 // Index signature satisfies the sql<T extends ShimRow>() constraint; the
 // strongly-typed properties still win in autocomplete + narrowing.
@@ -219,6 +219,100 @@ function parseTaskData(raw: string | null, kind: AdminTaskKind): AdminTaskData {
   } catch {
     return { kind } as AdminTaskData;
   }
+}
+
+// ─── recurring decisions ──────────────────────────────────────────────────
+//
+// "cancel netflix?", "want to cancel chatgpt" — decisions the user still
+// needs to act on. Separate from admin_tasks so snooze semantics don't
+// pollute the generic task schema.
+
+interface RecurringDecisionDbRow {
+  id: string;
+  what: string;
+  decision: string | null;
+  snooze_until_ms: number | null;
+  created_at: number;
+  [col: string]: unknown;
+}
+
+const MS_PER_DAY = 86_400_000;
+const SNOOZE_DAYS = 7;
+
+export const recurringDecisions = {
+  /**
+   * Add a decision row (called from the admin handler when the router
+   * lands an `admin.recurring_decision` action).
+   */
+  async add(input: { what: string }): Promise<RecurringDecisionRow> {
+    const id = newId();
+    const now = Date.now();
+    await sql.execute(
+      `INSERT INTO admin_recurring_decisions (id, what, decision, snooze_until_ms, created_at)
+       VALUES (?, ?, NULL, NULL, ?)`,
+      [id, input.what.trim(), now],
+    );
+    return { id, what: input.what.trim(), decision: null, snoozeUntilMs: null, createdAt: now };
+  },
+
+  /**
+   * Open decisions for the /todo aggregate. Filters:
+   *   - rows with a non-null `decision` (already acted on) are excluded.
+   *   - rows where `snooze_until_ms > nowMs` are excluded (snoozed).
+   *
+   * `nowMs` defaults to Date.now() — injectable so tests can pin time.
+   */
+  async listOpen(nowMs: number = Date.now()): Promise<RecurringDecisionRow[]> {
+    const rows = await sql.select<RecurringDecisionDbRow>(
+      `SELECT id, what, decision, snooze_until_ms, created_at
+       FROM admin_recurring_decisions
+       WHERE decision IS NULL
+         AND (snooze_until_ms IS NULL OR snooze_until_ms <= ?)
+       ORDER BY created_at DESC`,
+      [nowMs],
+    );
+    return rows.map(rowToDecision);
+  },
+
+  /**
+   * Record the user's decision on a row.
+   *
+   * - 'cancel' / 'keep' → sets `decision` column; row drops from listOpen.
+   * - 'later'           → bumps `snooze_until_ms` forward 7 days from nowMs;
+   *                        row re-surfaces after that window expires.
+   */
+  async decide(
+    id: string,
+    decision: 'cancel' | 'keep' | 'later',
+    nowMs: number = Date.now(),
+  ): Promise<void> {
+    if (decision === 'later') {
+      const snoozeUntil = nowMs + SNOOZE_DAYS * MS_PER_DAY;
+      await sql.execute(
+        `UPDATE admin_recurring_decisions SET snooze_until_ms = ? WHERE id = ?`,
+        [snoozeUntil, id],
+      );
+    } else {
+      await sql.execute(
+        `UPDATE admin_recurring_decisions SET decision = ? WHERE id = ?`,
+        [decision, id],
+      );
+    }
+  },
+
+  async remove(id: string): Promise<void> {
+    await sql.execute(`DELETE FROM admin_recurring_decisions WHERE id = ?`, [id]);
+  },
+};
+
+function rowToDecision(r: RecurringDecisionDbRow): RecurringDecisionRow {
+  return {
+    id: r.id,
+    what: r.what,
+    decision: r.decision as RecurringDecisionRow['decision'],
+    snoozeUntilMs: r.snooze_until_ms,
+    createdAt: r.created_at,
+  };
 }
 
 // ─── cadence ──────────────────────────────────────────────────────────────

@@ -5,10 +5,10 @@
  * least once. Habits auto-register on first `complete` — there's no separate
  * "create habit" flow. The router (and the user) only need a name.
  *
- * Streaks here are quiet count-of-consecutive-days, NOT a gamified streak
- * bar. We deliberately allow a one-day grace period (see repo.computeStreak)
- * because ADHD habit formation literature (Barkley, Gollwitzer) treats
- * single-day misses as noise, not failure.
+ * No streaks, ever (mandate: feedback-ollie-no-streaks). There is no streak
+ * count, no consecutive-day run, no "streak broke" event — that's an
+ * ADHD-shame mechanic and is deliberately absent. Habits track only WHAT the
+ * user does and WHEN, never how many days in a row.
  */
 
 /** A habit the user has performed at least once. */
@@ -26,20 +26,14 @@ export interface HabitCompletion {
 }
 
 /** A non-completion event attached to a habit timeline. */
-export type HabitEventKind = 'streak_break' | 'identity';
+export type HabitEventKind = 'identity';
 
 export interface HabitEvent {
   id: string;
   kind: HabitEventKind;
-  /** JSON-encoded body — { habitName, reason } for breaks, { text } for identity. */
+  /** JSON-encoded body — { text } for identity. */
   data: string;
   loggedAt: number; // ms since epoch
-}
-
-/** Decoded payload for a streak_break event. */
-export interface StreakBreakData {
-  habitName: string;
-  reason?: string;
 }
 
 /** Decoded payload for an identity event. */
@@ -49,11 +43,11 @@ export interface IdentityData {
 
 /**
  * UI-ready row combining registry + computed stats. Shaped this way so the
- * box screen can render a single list without per-row async work.
+ * box screen can render a single list without per-row async work. No streak
+ * field by design — see the no-streaks note above.
  */
 export interface HabitRow {
   habit: Habit;
-  streak: number;            // consecutive days ending today (with grace)
   completedToday: boolean;   // true if ≥1 completion today (local time)
   lastCompletedAt: number | null;
 }

@@ -7,13 +7,14 @@ import { renewals as renewalsRepo, cadence as cadenceRepo } from './repo';
 
 export { adminHandler } from './handler';
 export { migrateAdmin } from './migrate';
-export { renewals, tasks, cadence } from './repo';
+export { renewals, tasks, recurringDecisions, cadence } from './repo';
 export { AdminBox } from './AdminBox';
 export type {
   AdminRenewal,
   AdminTask,
   AdminTaskData,
   AdminTaskKind,
+  RecurringDecisionRow,
 } from './types';
 
 /**

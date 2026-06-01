@@ -7,7 +7,7 @@ import { registry, cadence as cadenceRepo } from './repo';
 
 export { habitsHandler } from './handler';
 export { migrateHabits } from './migrate';
-export { registry, completions, events, cadence, listHabitRows, computeStreak } from './repo';
+export { registry, completions, events, cadence, listHabitRows } from './repo';
 export { HabitsBox } from './HabitsBox';
 export type {
   Habit,
@@ -16,7 +16,6 @@ export type {
   HabitEventKind,
   HabitRow,
   IdentityData,
-  StreakBreakData,
 } from './types';
 
 /**

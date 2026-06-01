@@ -18,6 +18,9 @@
 import type { Fragment, HandlerResult, Module, RouterOutput } from '../router/schema';
 import type { DispatchEntry, DispatchOutput } from './types';
 import { stubHandlers } from './stubs';
+import { store } from '../store';
+import { runAllSyncs } from '../bridge';
+import { recordMoodFromDump } from '../bridge/mood';
 
 export interface DispatchOptions {
   /**
@@ -62,6 +65,22 @@ export async function dispatchRouterOutput(
       });
     }
   }
+
+  // The great rewiring: handlers just wrote freshly-captured data into the
+  // module SQLite repos. Mirror it into the @ollie/store keys the Layer-2
+  // watchers read, BEFORE the next watcher tick, so a dump's effects can be
+  // noticed this cycle rather than next boot. Also tag the dump's mood (feeds
+  // goals' low-mood delete lock + finance doom-buying — see bridge/mood.ts).
+  //
+  // Both are awaited but fully isolated: runAllSyncs resolves-not-rejects and
+  // mood is try/caught here, so neither can throw into the dispatch path.
+  await Promise.all([
+    runAllSyncs(store),
+    recordMoodFromDump(store, output.originalDump).catch((err) => {
+      // eslint-disable-next-line no-console
+      console.error('[bridge] recordMoodFromDump failed (non-fatal):', err);
+    }),
+  ]);
 
   return { entries, crisisSkipped: false };
 }

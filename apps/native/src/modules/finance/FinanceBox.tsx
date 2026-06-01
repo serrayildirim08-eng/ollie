@@ -34,6 +34,7 @@ import { Stack, Row } from '../../layout';
 import { Text } from '../../ui';
 import { colors, fonts } from '../../theme/tokens';
 import { WhenCaption } from '../../lib/WhenCaption';
+import { PatternCards } from '../../patterns/PatternCards';
 import { migrateFinance } from './migrate';
 import {
   bills as billsRepo,
@@ -237,24 +238,26 @@ export function FinanceBox(): JSX.Element {
   }, []);
 
   /**
-   * Promote a suggestion to a real bill / subscription. TODO(serra): the
-   * brief asks us to wire the tap to the existing handler paths
-   * (`bills.add({ merchant, amount, cadence })` for monthly/yearly,
-   * `subscriptions.add({ name })` for things the user recognises as a
-   * named service). The handoff isn't trivial — we need a small confirm
-   * sheet ("Promote 'netflix' to a $15/mo bill?") because:
-   *   (a) the detected cadence may differ from how the user thinks of it
-   *   (b) the suggestion has no currency on rows where the router didn't
-   *       resolve one — we'd be writing a bill row with currency=null
-   *   (c) once promoted we shouldn't keep nagging — needs a "snoozed"
-   *       table or a hash-set we read in detection
-   * Lands in a follow-up. For now the tap just no-ops with a console hint
-   * so the surface ships and we can dogfood the detection accuracy first.
+   * Promote a suggestion to a real bill. The detected cadence
+   * (monthly/yearly/weekly) maps straight onto a bill row — bills.add upserts
+   * by (merchant, cadence) so a re-promote refreshes rather than duplicates.
+   * Currency may be null when the router never resolved one; that's fine —
+   * the bill row simply renders in umber ("no currency tag") like everywhere
+   * else, and the math layer skips null-amount rows. After promotion we
+   * refresh so the new bill lands in the Bills card; the suggestion naturally
+   * stops nagging once the merchant's transactions stop being the only signal.
    */
-  const handlePromoteSuggestion = useCallback((s: RecurringSuggestion) => {
-    // eslint-disable-next-line no-console
-    console.info('[finance] promote suggestion — wire pending', s);
-  }, []);
+  const handlePromoteSuggestion = useCallback(
+    async (s: RecurringSuggestion) => {
+      await billsRepo.add({
+        merchant: s.merchant,
+        amount: s.medianAmount,
+        cadence: s.cadence,
+      });
+      await refresh();
+    },
+    [refresh],
+  );
 
   // ── glance lines for area-cards ────────────────────────────────────────
 
@@ -388,9 +391,14 @@ export function FinanceBox(): JSX.Element {
           {suggestions.length > 0 && (
             <RecurringList
               suggestions={suggestions}
-              onPromote={handlePromoteSuggestion}
+              onPromote={(s) => void handlePromoteSuggestion(s)}
             />
           )}
+
+          {/* LAYER-2 NOTICINGS — the watcher's soft pattern cards (doom-buying,
+              duplicate, hyperfocus burst, cycle×spend …). Renders nothing when
+              the watcher hasn't surfaced anything. */}
+          <PatternCards module="finance" />
         </Stack>
       )}
     </Stack>

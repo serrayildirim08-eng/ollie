@@ -101,8 +101,10 @@ function localDayKey(ts: number): string {
  * Adapt completed focus_log entries (UI source of truth) into the
  * WorkSession shape the W0/W1/W3 detectors read.
  *
- * The UI writes to work.focus_log on every timer completion; nothing
- * writes to work.sessions. Before this adapter, detectors saw an empty
+ * work.focus_log is mirrored from the native FocusTimer's SQLite
+ * work_events on every sync (apps/native/src/modules/work/bridge.ts —
+ * runs on boot + after each dump dispatch); nothing writes to
+ * work.sessions on native. Before that bridge, detectors saw an empty
  * sessions array and never matched. Now we project focus_log → sessions
  * at orchestrator-boundary so the existing detector contracts stay
  * pure (still keyed off state.sessions).
@@ -149,10 +151,11 @@ export function createWorkOrchestrator(
     try {
       const now = getNow();
 
-      // UI writes completed focus sessions to work.focus_log. Detectors
-      // read state.sessions. Project the former into the latter at this
-      // boundary so legacy seeded `work.sessions` data still works AND
-      // real UI activity drives the detectors.
+      // The native bridge mirrors completed focus sessions (SQLite
+      // work_events) into work.focus_log. Detectors read state.sessions.
+      // Project the former into the latter at this boundary so legacy seeded
+      // `work.sessions` data still works AND real captured activity drives the
+      // detectors.
       const rawSessions = store.get<WorkSession[]>('work', 'sessions', []) ?? [];
       const rawFocusLog = store.get<FocusLogEntry[]>('work', 'focus_log', []) ?? [];
       const sessions: WorkSession[] = [...rawSessions, ...focusLogToSessions(rawFocusLog)];

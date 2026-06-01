@@ -38,11 +38,19 @@ import {
   detectDeferChain,
   detectTwoMinuteTask,
   detectRecurringPattern,
+  // Phase 3 (A7/A11/A13/A14/A15) — wired below in recomputePatterns().
+  surfaceCostOfDelay,
+  efStateFromDump,
+  sortByState,
+  detectRecurringDecision,
+  getDocRefs,
+  detectScheduleDrift,
 } from '@ollie/logic/admin';
 import type {
   AdminTask,
   DumpEntry,
   AdminHistory,
+  AdminState,
   PhoneTaskSignal,
   PaperworkSplitSignal,
   PaperworkSplitExistingSignal,
@@ -90,6 +98,26 @@ export function createAdminOrchestrator(
 
   function getDumps(): DumpEntry[] {
     return store.get<DumpEntry[]>('dump', 'items', []) ?? [];
+  }
+
+  /**
+   * admin.state holds the A13/A15 capture slices (decision_rules,
+   * scheduled_log). Native does not persist these yet (flagged in
+   * apps/native/src/modules/admin/bridge.ts) — so the Phase-3 recall + drift
+   * detectors run on whatever is present, usually empty. Reading defensively.
+   */
+  function getAdminState(): AdminState {
+    return store.get<AdminState>('admin', 'state', {}) ?? {};
+  }
+
+  /** Most-recent dump text — the EF-state + recurring-decision cue source. */
+  function latestDumpText(dumps: DumpEntry[]): string {
+    let newest: DumpEntry | null = null;
+    for (const d of dumps) {
+      if (!d) continue;
+      if (!newest || (typeof d.ts === 'number' && d.ts > (newest.ts ?? 0))) newest = d;
+    }
+    return (newest?.text ?? newest?.rawText ?? '').toString();
   }
 
   function buildHistory(now: number): AdminHistory {
@@ -309,6 +337,127 @@ export function createAdminOrchestrator(
             ts: s.ts,
           });
         }
+      }
+    }
+
+    // ── Phase 3 (A7/A11/A13/A14/A15) ────────────────────────────────────────
+    // These were coded + exported in @ollie/logic/admin/phase3 but never
+    // called here (the audit's "Phase 3 not wired"). Wired below with their
+    // real inputs. Several depend on capture fields native does not persist
+    // yet (ef_cost / cost_of_delay / decision_rules / scheduled_log) — those
+    // degrade to no-op on absence rather than fabricating data.
+    const adminState = getAdminState();
+    const dumpText = latestDumpText(history.dumps ?? []);
+    const opts = { now, consent: true };
+
+    // A7 — cost-of-delay: surface the stored cost on any task deferred ≥2× or
+    // past its scheduled_at. Per-task; null when the task carries no
+    // cost_of_delay (native rows currently don't).
+    for (const t of history.tasks ?? []) {
+      const cod = surfaceCostOfDelay(t, opts);
+      if (!cod) continue;
+      const p = toPattern(
+        { signal: 'admin_cost_of_delay', task_id: cod.task_id, copy: cod.copy, copy_es: cod.copy_es },
+        now,
+      );
+      next.push(p);
+      if (!prevKeys.has(signalKey(p))) {
+        events.emit('admin:cost_of_delay', { task_id: cod.task_id, ts: now });
+      }
+    }
+
+    // A11 — EF scaffolding: when the latest dump signals an EF state, surface
+    // the tasks that fit it (sorted ascending by EF cost). One notice carrying
+    // the doable shortlist; only when the dump actually reads as a non-default
+    // (crash/low/peak) state, so we don't nag on every recompute.
+    if (dumpText) {
+      const efState = efStateFromDump(dumpText);
+      const doable = sortByState(history.tasks ?? [], efState, opts);
+      if (efState !== 3 && doable.length > 0) {
+        const titles = doable.slice(0, 3).map((t) => t.title ?? t.label ?? '').filter(Boolean);
+        const p = toPattern(
+          {
+            signal: 'admin_ef_scaffold',
+            ef_state: efState,
+            task_ids: doable.map((t) => t.id),
+            copy: `given where you're at, these fit: ${titles.join(', ')}.`,
+            copy_es: `por cómo estás ahora, estas encajan: ${titles.join(', ')}.`,
+          },
+          now,
+        );
+        next.push(p);
+        if (!prevKeys.has(signalKey(p))) {
+          events.emit('admin:ef_scaffold', { ef_state: efState, count: doable.length, ts: now });
+        }
+      }
+    }
+
+    // A13 — recurring-decision recall: cross-reference the latest dump against
+    // stored decision rules (admin.state.decision_rules). Null when there are
+    // no rules (native doesn't capture them yet) or no topic overlap.
+    if (dumpText) {
+      const recall = detectRecurringDecision(dumpText, adminState, opts);
+      if (recall) {
+        const p = toPattern(
+          {
+            signal: 'admin_decision_recall',
+            rule_id: recall.rule_id,
+            topic_key: recall.topic_key,
+            choice: recall.choice,
+            copy: recall.copy,
+            copy_es: recall.copy_es,
+          },
+          now,
+        );
+        next.push(p);
+        if (!prevKeys.has(signalKey(p))) {
+          events.emit('admin:decision_recall', { rule_id: recall.rule_id, ts: now });
+        }
+      }
+    }
+
+    // A14 — doc refs: surface that a task has attached document references so
+    // the user doesn't re-hunt for them. Per-task; empty when no doc_refs
+    // (native rows don't persist them yet).
+    for (const t of history.tasks ?? []) {
+      const refs = getDocRefs(t);
+      if (refs.length === 0) continue;
+      const labels = refs.map((r) => r.label).join(', ');
+      const p = toPattern(
+        {
+          signal: 'admin_doc_refs',
+          task_id: t.id,
+          doc_refs: refs,
+          copy: `docs you saved for this: ${labels}.`,
+          copy_es: `documentos que guardaste para esto: ${labels}.`,
+        },
+        now,
+      );
+      next.push(p);
+      if (!prevKeys.has(signalKey(p))) {
+        events.emit('admin:doc_refs', { task_id: t.id, count: refs.length, ts: now });
+      }
+    }
+
+    // A15 — schedule drift: categories scheduled ≥N times without being done
+    // (the ADHD "scheduling = doing" illusion). Reads admin.state.scheduled_log
+    // (native doesn't capture it yet → empty → no drift).
+    const drifts = detectScheduleDrift(adminState, opts);
+    for (const d of drifts) {
+      const p = toPattern(
+        {
+          signal: 'admin_schedule_drift',
+          category: d.category,
+          drift_count: d.drift_count,
+          task_ids: d.task_ids,
+          copy: d.copy,
+          copy_es: d.copy_es,
+        },
+        now,
+      );
+      next.push(p);
+      if (!prevKeys.has(signalKey(p))) {
+        events.emit('admin:schedule_drift', { category: d.category, ts: now });
       }
     }
 

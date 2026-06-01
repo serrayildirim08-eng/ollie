@@ -31,6 +31,7 @@ import { Stack, Row } from '../../layout';
 import { Text } from '../../ui';
 import { colors, fonts } from '../../theme/tokens';
 import { WhenCaption } from '../../lib/WhenCaption';
+import { PatternCards } from '../../patterns/PatternCards';
 import { migratePets } from './migrate';
 import { cadence as cadenceRepo, events as eventsRepo } from './repo';
 import {
@@ -188,6 +189,10 @@ export function PetsBox(): JSX.Element {
 
       {/* the hero — soft disc + status line */}
       <Hero empty={empty} vitaminCToday={vitaminCToday} />
+
+      {/* Layer-2 noticings — care gaps, health flags, behavioral patterns.
+          Renders nothing until the watcher computes pets.patterns. */}
+      <PatternCards module="pets" />
 
       {!ready ? (
         <Text scale="caption" color={colors.inkFaint}>

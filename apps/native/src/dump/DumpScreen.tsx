@@ -17,10 +17,13 @@ import { Stack } from '../layout';
 import { Text } from '../ui';
 import { colors } from '../theme/tokens';
 import { BrainDumpInput } from './BrainDumpInput';
+import { dumpArchive } from './archive';
+import { tagDumpMood } from './mood-lexicon';
 import { dispatchRouterOutput } from '../modules';
 import type { DispatchEntry } from '../modules';
 import type { CrisisSignal, RouterOutput } from '../router/schema';
 import { NeedsConfirmCard } from './NeedsConfirmCard';
+import { PatternCards } from '../patterns/PatternCards';
 import { GoalCreateModal } from '../modules/goals/GoalCreateModal';
 import styles from './DumpScreen.module.css';
 
@@ -113,6 +116,21 @@ export function DumpScreen(): JSX.Element {
         }
       : output;
 
+    // Persist the raw dump BEFORE dispatch so the journal resurfacer + every
+    // cross-module consumer (admin/finance/goals/sleep read dump.items) finally
+    // see it (audit §MISSING: native discarded dump text). We archive only
+    // non-crisis dumps — a crisis fragment short-circuits dispatch and must not
+    // be re-surfaced later. Best-effort: archive.record swallows its own errors.
+    if (!output.crisis) {
+      void dumpArchive.record({
+        id: output.dumpId,
+        text: output.originalDump,
+        modules: Array.from(new Set(output.fragments.map((f) => f.module))),
+        mood: tagDumpMood(output.originalDump),
+        ts: output.timestamp,
+      });
+    }
+
     // Dispatch is silent: the result entries update module-local state but
     // we do not render them. The user goes to the module to see the change.
     const dispatched = await dispatchRouterOutput(dispatchOutput);
@@ -176,6 +194,11 @@ export function DumpScreen(): JSX.Element {
       </Stack>
 
       <BrainDumpInput getBearer={getBearer} onResult={onResult} onCrisis={onCrisis} />
+
+      {/* Layer-2 dump noticings — gentle resurface / anniversary cards from the
+          journal watcher. Renders nothing until patterns compute, so the dump
+          UX stays silent by default (no feed of past dumps). */}
+      <PatternCards module="dump" />
 
       {goalDraft && (
         <GoalCreateModal
