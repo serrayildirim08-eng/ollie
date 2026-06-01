@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Grocery · Now</title>
+<style>
+  :root{
+    --paper:#FAF8F3; --ink:#23211C; --soft:#6B675E; --faint:#A8A29A;
+    --hair:#EAE5DB; --sage:#7C8C6F;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{height:100%;}
+  body{
+    width:390px;height:844px;margin:0 auto;background:var(--paper);
+    color:var(--ink);font-family:"DM Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;display:flex;flex-direction:column;
+    padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+  }
+  .serif{font-family:"DM Serif Display",Georgia,"Times New Roman",serif;font-weight:400;}
+  .smcp{font-variant-caps:all-small-caps;letter-spacing:.13em;font-size:11px;color:var(--faint);}
+  .spine{display:flex;gap:24px;padding:18px 28px 0;}
+  .spine a{font-size:14px;color:var(--faint);text-decoration:none;padding-bottom:7px;font-weight:500;}
+  .spine a.on{color:var(--ink);font-weight:600;border-bottom:2px solid var(--sage);}
+  .scroll{flex:1;overflow:auto;padding:0 28px;}
+  .hello{margin:34px 0 30px;}
+  .hello .smcp{display:block;margin-bottom:10px;}
+  .hello h1{font-size:34px;line-height:1.05;letter-spacing:-.01em;}
+  .band{padding:22px 0;border-top:1px solid var(--hair);}
+  .band .smcp{display:block;margin-bottom:12px;}
+  .need{font-size:19px;line-height:1.45;}
+  .need b{font-weight:500;}
+  .aging{font-size:19px;line-height:1.45;color:var(--soft);}
+  .aging .q{display:inline-flex;gap:14px;margin-top:10px;}
+  .aging .q span{font-size:13px;color:var(--sage);font-weight:600;cursor:pointer;}
+  .aging .q span.gone{color:var(--faint);}
+  .cook{display:flex;align-items:baseline;justify-content:space-between;}
+  .cook .big{font-size:22px;}
+  .cook .arrow{color:var(--sage);font-size:20px;}
+  /* dump bar */
+  .dump{margin:0 16px 14px;border:1px solid var(--hair);border-radius:14px;background:#fff;
+    padding:14px 16px;display:flex;align-items:center;gap:14px;box-shadow:0 1px 0 rgba(0,0,0,.02);}
+  .dump .ph{flex:1;color:var(--faint);font-size:15px;}
+  .dump .ic{color:var(--faint);}
+  .dump .send{width:34px;height:34px;border-radius:50%;background:var(--sage);display:flex;align-items:center;justify-content:center;color:#fff;}
+  svg{display:block;}
+</style>
+</head>
+<body>
+  <nav class="spine">
+    <a class="on" href="#">now</a><a href="list.html">list</a>
+    <a href="kitchen.html">kitchen</a><a href="cook.html">cook</a>
+  </nav>
+
+  <div class="scroll">
+    <div class="hello">
+      <span class="smcp">tuesday morning</span>
+      <h1 class="serif">Quiet kitchen.<br/>A few things worth a glance.</h1>
+    </div>
+
+    <div class="band">
+      <span class="smcp">likely needed soon</span>
+      <div class="need"><b>coffee</b> · <b>dish soap</b> · <b>olive oil</b></div>
+    </div>
+
+    <div class="band">
+      <span class="smcp">getting old</span>
+      <div class="aging">the spinach has been here a while.
+        <span class="q"><span>still good</span><span class="gone">it's gone</span></span>
+      </div>
+    </div>
+
+    <div class="band">
+      <span class="smcp">tonight</span>
+      <a class="cook" href="cook.html" style="text-decoration:none;color:inherit;">
+        <span class="big serif">3 dinners you can make</span>
+        <span class="arrow">→</span>
+      </a>
+    </div>
+  </div>
+
+  <div class="dump">
+    <svg class="ic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h3l1.5-2h9L18 8h3v11H3z"/><circle cx="12" cy="13" r="3.2"/></svg>
+    <svg class="ic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><line x1="12" y1="18" x2="12" y2="21"/></svg>
+    <span class="ph">tell me what changed…</span>
+    <div class="send"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></div>
+  </div>
+</body>
+</html>

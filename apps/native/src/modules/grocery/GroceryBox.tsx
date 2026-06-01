@@ -51,6 +51,7 @@ import { Stack, Row } from '../../layout';
 import { Text } from '../../ui';
 import { colors } from '../../theme/tokens';
 import { WhenCaption } from '../../lib/WhenCaption';
+import { PatternCards } from '../../patterns/PatternCards';
 import { migrateGrocery } from './migrate';
 import {
   cadence as cadenceRepo,
@@ -59,6 +60,7 @@ import {
 } from './repo';
 import type { PantryItem, ShoppingItem } from './types';
 import { FeedMeView } from './FeedMeView';
+import { GroceryNow } from './GroceryNow';
 import { ageOf, type AgingState } from './aging';
 import { loadShelfLifeTable, lookupDays } from './shelfLifeCache';
 
@@ -71,7 +73,7 @@ const SMCP_STYLE: CSSProperties = {
 
 const POLL_MS = 6000;
 
-type Mode = 'shop' | 'pantry' | 'feed-me';
+type Mode = 'now' | 'shop' | 'pantry' | 'feed-me';
 
 // ─── component ────────────────────────────────────────────────────────────
 
@@ -90,7 +92,9 @@ export function GroceryBox(): JSX.Element {
   // tab you were on (e.g. feed-me) instead of snapping back to pantry.
   const [mode, setModeState] = useState<Mode>(() => {
     const saved = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('grocery:mode') : null;
-    return saved === 'shop' || saved === 'pantry' || saved === 'feed-me' ? saved : 'pantry';
+    return saved === 'now' || saved === 'shop' || saved === 'pantry' || saved === 'feed-me'
+      ? saved
+      : 'now';
   });
   const setMode = useCallback((m: Mode) => {
     try {
@@ -302,25 +306,44 @@ export function GroceryBox(): JSX.Element {
 
   return (
     <Stack gap={56}>
-      {/* the kicker + serif title — the box hero */}
-      <Stack gap={12}>
-        <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
-          box · grocery
-        </Text>
-        <Text scale="display">Grocery</Text>
-        <Text scale="body" color={colors.inkSoft} style={{ maxWidth: 460 }}>
-          a list you talk to, a pantry that watches what you have.
-        </Text>
-      </Stack>
+      {/* the kicker + serif title — the box hero. Suppressed on the Now
+          surface, which carries its own clean heading (redesign parity). */}
+      {mode !== 'now' && (
+        <Stack gap={12}>
+          <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
+            box · grocery
+          </Text>
+          <Text scale="display">Grocery</Text>
+          <Text scale="body" color={colors.inkSoft} style={{ maxWidth: 460 }}>
+            a list you talk to, a pantry that watches what you have.
+          </Text>
+        </Stack>
+      )}
 
       {/* the near-zero-chrome mode switch — three calm text segments,
           active one underlined sage. Ports v2's ModeSwitch grammar. */}
       <ModeSwitch mode={mode} onChange={setMode} />
 
+      {/* Layer-2 noticings — soft cards from the grocery watcher (restock
+          drift, predicted run-outs, low-flag clustering). Renders nothing
+          when there are no live pattern cards, so this top-of-content slot
+          is safe across every mode (now · shop · pantry · feed me). */}
+      <PatternCards module="grocery" />
+
       {!ready ? (
         <Text scale="caption" color={colors.inkFaint}>
           loading…
         </Text>
+      ) : mode === 'now' ? (
+        <GroceryNow
+          pantryItems={pantryItems}
+          predictedOut={predictedOutItems}
+          shopNames={shopNames}
+          shelfTick={shelfTableTick}
+          onGoCook={() => setMode('feed-me')}
+          onStillGood={(id) => void handleTouchPantry(id)}
+          onGone={(id) => void handleArchivePantry(id)}
+        />
       ) : mode === 'shop' ? (
         <ShopList
           items={shoppingItems}
@@ -358,6 +381,7 @@ export function GroceryBox(): JSX.Element {
 // ─── mode switch ──────────────────────────────────────────────────────────
 
 const MODE_LABELS: Record<Mode, string> = {
+  now: 'now',
   shop: 'shop',
   pantry: 'pantry',
   'feed-me': 'feed me',
@@ -365,7 +389,7 @@ const MODE_LABELS: Record<Mode, string> = {
 // Render order — `pantry` is the default voice (where the user lives),
 // `shop` is on the left as the entry point when adding, `feed me` closes
 // the row on the right as the action-oriented destination.
-const MODE_ORDER: ReadonlyArray<Mode> = ['shop', 'pantry', 'feed-me'];
+const MODE_ORDER: ReadonlyArray<Mode> = ['now', 'shop', 'pantry', 'feed-me'];
 
 function ModeSwitch({
   mode,
