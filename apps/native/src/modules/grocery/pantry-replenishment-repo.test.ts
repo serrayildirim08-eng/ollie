@@ -222,6 +222,51 @@ describe('pantry.listPredictedOut', () => {
   });
 });
 
+describe('pantry.refreshPrediction · the dead-wire fix', () => {
+  // Pins the wire the audit (FEATURE_AUDIT_2026-05-31) found severed:
+  // predictOutAt had zero callers, so predicted_out_at_ms was never written.
+  // refreshPrediction (called from the pantry_add handler) is the wire.
+  // NOTE: this suite does NOT mock shelfLifeCache, so lookupDays() returns
+  // null (table never loaded) — cadence from the purchase log is the only
+  // signal, which is exactly what we want to prove the cadence path works.
+
+  it('writes predicted_out_at_ms from observed cadence after a 2nd add', async () => {
+    const t0 = 1_700_000_000_000;
+    // First purchase — single sample → low-data → no cadence yet.
+    const first = await pantry.add({ name: 'milk', nowMs: t0 });
+    const p0 = await pantry.refreshPrediction(first.id);
+    expect(p0).toBeNull(); // only one purchase logged, no shelf life
+
+    // Second purchase 14 days later — now sampleSize=2, median interval 14d.
+    const t1 = t0 + 14 * DAY_MS;
+    const second = await pantry.add({ name: 'milk', nowMs: t1 });
+    expect(second.id).toBe(first.id); // upsert, same row
+    // add() cleared the prediction; refresh recomputes from cadence.
+    const predicted = await pantry.refreshPrediction(second.id);
+    expect(predicted).toBe(t1 + 14 * DAY_MS); // last purchase + median cadence
+
+    // And it actually persisted to the column the UI / push scanner read.
+    const live = await pantry.list();
+    const stored = live.find((r) => r.id === first.id);
+    expect(stored?.predictedOutAtMs).toBe(t1 + 14 * DAY_MS);
+    expect(stored?.pushedAtMs).toBeNull(); // setPredictedOut reset the gate
+  });
+
+  it('leaves prediction null when there is no clean cadence or shelf life', async () => {
+    // Single purchase, unknown canonical (shelf-life table not loaded) →
+    // predictOutAt returns null → we must NOT fabricate a date.
+    const row = await pantry.add({ name: 'some obscure item', nowMs: 1_700_000_000_000 });
+    const predicted = await pantry.refreshPrediction(row.id);
+    expect(predicted).toBeNull();
+    const live = await pantry.list();
+    expect(live.find((r) => r.id === row.id)?.predictedOutAtMs).toBeNull();
+  });
+
+  it('returns null for an unknown id (deleted/used row)', async () => {
+    expect(await pantry.refreshPrediction('no-such-id')).toBeNull();
+  });
+});
+
 describe('pantry.list / listActive · returns new columns', () => {
   it('all three new fields are populated correctly', async () => {
     const row = await pantry.add({ name: 'tampons' });

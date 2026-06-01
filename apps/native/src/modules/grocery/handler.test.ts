@@ -18,6 +18,7 @@ vi.mock('./repo', () => ({
     use: vi.fn().mockResolvedValue(undefined),
     flagLow: vi.fn().mockResolvedValue(undefined),
     remove: vi.fn().mockResolvedValue(undefined),
+    refreshPrediction: vi.fn().mockResolvedValue(null),
   },
   shopping: {
     add: vi.fn().mockResolvedValue({ id: 'shop-id', name: 'pasta' }),
