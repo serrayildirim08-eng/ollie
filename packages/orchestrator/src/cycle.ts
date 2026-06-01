@@ -29,6 +29,15 @@
  *   cycle:ovulation_imminent     1 day before predicted ovulation (opt-in)
  *   cycle:pill_missed            next day after a missed pill log
  *
+ * Pregnancy pause (NOT pregnancy tracking):
+ *   The bridge writes `cycle.pregnant` (boolean) + `cycle.pregnancyEndTs`
+ *   (ms of the most recent pregnancy_end, or null). While `cycle.pregnant`
+ *   is true the watcher goes DORMANT — prediction returns null, period /
+ *   late / missed-period flags are cleared, and NO prediction/pill events
+ *   fire. When it resolves, `pregnancyEndTs` fences off the pre-pregnancy
+ *   period starts so the first period after the end restarts the cycle as a
+ *   fresh start rather than reading as one ~9-month "late" cycle.
+ *
  * Push subscribers (APNs):
  *   The 6 cycle prediction events above wire to scheduleNotification
  *   when injected. Omit the callback in tests / desktop to no-op.
@@ -74,8 +83,14 @@ export function createCycleOrchestrator(
     cycles?: CycleRecord[],
     stats?: ReturnType<typeof cycle.deriveCycleStats>,
     items?: CycleItem[],
+    pregnantArg?: boolean,
   ): void {
     const now = getNow();
+    // Pregnancy pause: when this runs off the 60s tick / lastEdited subscriber
+    // (no arg passed) read the flag from the store so the dormant state holds
+    // between full recomputes.
+    const pregnant =
+      pregnantArg ?? (store.get<boolean>('cycle', 'pregnant', false) === true);
     const lastEdited = store.get<Record<string, number>>('cycle', 'lastEditedByCycle', {}) ?? {};
     const resolvedItems = items ?? store.get<CycleItem[]>('cycle', 'items', []);
     const symptomEvents = resolvedItems.filter(
@@ -87,10 +102,13 @@ export function createCycleOrchestrator(
       mean_bleed: null, irregular_flag: false, last_period_start: null,
     });
 
-    const phaseName = cycle.computePhaseForDate(cs, now);
-    const flags = cycle.detectHealthFlags(cs, symptomEvents, now, lastEdited);
+    const phaseName = pregnant ? 'unknown' : cycle.computePhaseForDate(cs, now);
+    // Dormant: clear the period/late/missed health flags while paused.
+    const flags = pregnant ? [] : cycle.detectHealthFlags(cs, symptomEvents, now, lastEdited);
+    // No "currentDay" cycle counter while paused — the ring/day number should
+    // not keep ticking through a pregnancy.
     const currentDay =
-      st && st.last_period_start != null
+      !pregnant && st && st.last_period_start != null
         ? Math.floor((now - st.last_period_start) / DAY_MS) + 1
         : null;
 
@@ -236,23 +254,44 @@ export function createCycleOrchestrator(
 
   // ── full recompute ────────────────────────────────────────────────────────
   function recomputeCycle(): void {
-    const items = store.get<CycleItem[]>('cycle', 'items', []);
+    const rawItems = store.get<CycleItem[]>('cycle', 'items', []);
+    const pregnant = store.get<boolean>('cycle', 'pregnant', false) === true;
+    const pregnancyEndTs = store.get<number | null>('cycle', 'pregnancyEndTs', null);
+
+    // Fresh-start fence: once a pregnancy has ended, the period starts that
+    // predate the end belong to a prior reproductive epoch. Drop them so the
+    // FIRST period after the end restarts the cycle rather than pairing with a
+    // pre-pregnancy start into one absurd ~9-month "late" cycle. Non-start
+    // items (symptoms, pills) are kept regardless — only the prediction/
+    // boundary spine is fenced.
+    const items =
+      typeof pregnancyEndTs === 'number'
+        ? rawItems.filter(
+            (i) => !(i && i.action === 'started' && typeof i.ts === 'number' && i.ts < pregnancyEndTs),
+          )
+        : rawItems;
+
     const symptomEvents = items.filter(
       (i) => i && (i.action === 'symptom' || i.action === 'log'),
     );
     const prevCycles = store.get<CycleRecord[]>('cycle', 'cycles', []);
 
+    // While pregnant the period_logged event is irrelevant; still advance the
+    // high-water mark so it doesn't fire retroactively on resume. But suppress
+    // the emit itself.
     const prevHighTs = store.get<number>('cycle', '_periodLoggedHighTs', 0) ?? 0;
     let highTs = prevHighTs;
     for (const it of items) {
       if (!it || it.action !== 'started' || typeof it.ts !== 'number') continue;
       if (it.ts <= prevHighTs) continue;
-      try {
-        events.emit('cycle:period_logged', {
-          ts: it.ts,
-          source: (it as { source?: 'user' | 'braindump' | 'import' }).source ?? 'user',
-        });
-      } catch { /* non-fatal */ }
+      if (!pregnant) {
+        try {
+          events.emit('cycle:period_logged', {
+            ts: it.ts,
+            source: (it as { source?: 'user' | 'braindump' | 'import' }).source ?? 'user',
+          });
+        } catch { /* non-fatal */ }
+      }
       if (it.ts > highTs) highTs = it.ts;
     }
     if (highTs > prevHighTs) {
@@ -260,14 +299,24 @@ export function createCycleOrchestrator(
     }
 
     const cycles = cycle.detectBoundaries(items);
-    const prediction = cycle.predictNextPeriod(cycles);
+
+    // Pregnancy pause: cycle is dormant. Prediction is the empty cold-start
+    // shape (nextTs null), period/late/missed health flags are cleared, and
+    // no prediction/pill events fire. Symptom insights/correlations + stats
+    // stay computed (harmless, non-period-predicting) so the surface keeps any
+    // historical context.
+    const prediction = pregnant
+      ? cycle.predictNextPeriod([])
+      : cycle.predictNextPeriod(cycles);
     const insights = cycle.findCorrelations(symptomEvents, cycles);
     const lastEdited = store.get<Record<string, number>>('cycle', 'lastEditedByCycle', {}) ?? {};
-    const healthFlags = cycle.detectHealthFlags(cycles, symptomEvents, getNow(), lastEdited);
+    const healthFlags = pregnant
+      ? []
+      : cycle.detectHealthFlags(cycles, symptomEvents, getNow(), lastEdited);
 
     const stats = cycle.deriveCycleStats(cycles);
-    const adherence = cycle.detectAdherenceIssue(cycles);
-    const fertileWin = cycle.fertileWindow(cycles);
+    const adherence = pregnant ? { hasIssue: false } : cycle.detectAdherenceIssue(cycles);
+    const fertileWin = pregnant ? null : cycle.fertileWindow(cycles);
     const correlations = CORRELATION_TAGS
       .map((tag) => {
         const r = cycle.correlateSymptom(cycles, symptomEvents, tag);
@@ -286,10 +335,12 @@ export function createCycleOrchestrator(
     store.set('cycle', 'correlations', correlations);
     store.set('cycle', 'lastRecomputeAt', getNow());
 
-    recomputeCycleTime(cycles, stats, items);
+    recomputeCycleTime(cycles, stats, items, pregnant);
 
-    try { emitPredictionEvents(prediction, items); } catch { /* non-fatal */ }
-    try { emitPillMissed(items); } catch { /* non-fatal */ }
+    if (!pregnant) {
+      try { emitPredictionEvents(prediction, items); } catch { /* non-fatal */ }
+      try { emitPillMissed(items); } catch { /* non-fatal */ }
+    }
 
     if (cycles.length > prevCycles.length) {
       store.set('cycle', 'cycleCount', cycles.length);

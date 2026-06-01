@@ -9,6 +9,10 @@
  * goes in a JSON `data` column. Cheap to add new event kinds later without a
  * migration — the `bleeding` kind (per-day flow-intensity tag) is purely
  * additive: a new `kind` value + `{ intensity }` in `data`, no schema change.
+ * The `pregnancy_start` / `pregnancy_end` pause markers are likewise additive:
+ * two more bare `kind` values, no new columns, no pregnancy fields. The table
+ * keeps the implicit `rowid` (no WITHOUT ROWID) so same-millisecond markers
+ * resolve in insert order for the isPregnant() lookup.
  */
 
 import { sql } from '../../storage';

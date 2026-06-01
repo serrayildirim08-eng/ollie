@@ -89,10 +89,11 @@ export function CycleBox(): JSX.Element {
   const [history, setHistory] = useState<CycleEvent[]>([]);
   const [periodCadence, setPeriodCadence] = useState<CadenceEstimate | null>(null);
   const [todayBleeding, setTodayBleeding] = useState<BleedingIntensity | null>(null);
+  const [pregnant, setPregnant] = useState(false);
   const [ready, setReady] = useState(false);
 
   const refresh = useCallback(async () => {
-    const [cur, sym, pil, starts, ends, cad, bleeding] = await Promise.all([
+    const [cur, sym, pil, starts, ends, cad, bleeding, preg] = await Promise.all([
       cycleRepo.current(),
       cycleRepo.list('symptom', 10),
       cycleRepo.list('pill', 10),
@@ -100,12 +101,14 @@ export function CycleBox(): JSX.Element {
       cycleRepo.list('period_end', 6),
       cycleCadence.getPeriodCadence(),
       cycleRepo.bleedingForDay(),
+      cycleRepo.isPregnant(),
     ]);
     setCurrent(cur);
     setSymptoms(sym);
     setPills(pil);
     setPeriodCadence(cad);
     setTodayBleeding(bleeding);
+    setPregnant(preg);
     // Merge starts + ends, sort desc, keep top 6 — gives a chronological
     // view of "what landed lately on the period timeline".
     const merged = [...starts, ...ends]
@@ -166,6 +169,16 @@ export function CycleBox(): JSX.Element {
     [todayBleeding, refresh],
   );
 
+  const handleSetPregnant = useCallback(async () => {
+    await cycleRepo.setPregnant();
+    await refresh();
+  }, [refresh]);
+
+  const handleEndPregnancy = useCallback(async () => {
+    await cycleRepo.endPregnancy();
+    await refresh();
+  }, [refresh]);
+
   const isEmpty =
     ready &&
     current === null &&
@@ -202,6 +215,8 @@ export function CycleBox(): JSX.Element {
         <Text scale="caption" color={colors.inkFaint}>
           loading…
         </Text>
+      ) : pregnant ? (
+        <PausedView onResume={() => void handleEndPregnancy()} />
       ) : isEmpty ? (
         <Stack gap={32} align="center">
           <CycleRing day={1} phase="still learning" length={RING_LENGTH} bleeding={false} />
@@ -279,6 +294,9 @@ export function CycleBox(): JSX.Element {
               />
             )}
           />
+
+          {/* quiet pause control — tucked at the very bottom, never loud. */}
+          <PauseControl onPause={() => void handleSetPregnant()} />
         </Stack>
       )}
     </Stack>
@@ -651,6 +669,70 @@ function HistoryRow({
       </Row>
       <WhenCaption ts={event.occurredAt} />
     </Stack>
+  );
+}
+
+// ─── pregnancy pause ───────────────────────────────────────────────────────
+//
+// NOT pregnancy tracking — no due date, no trimester, no weight, nothing.
+// Just a pause + resume. The paused view is deliberately quiet: a plain note
+// that tracking is on hold and will resume when this ends, plus one neutral
+// "mark this as ended" link. No clinical tone, no alarm, no celebration — a
+// miscarriage or termination must read exactly as neutrally as a birth, so
+// the only word is "ended".
+
+function PausedView({ onResume }: { onResume: () => void }): JSX.Element {
+  return (
+    <Stack gap={28}>
+      <Stack gap={12}>
+        <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
+          paused
+        </Text>
+        <span style={COLD_NOTE_STYLE}>
+          <b style={{ fontWeight: 600 }}>cycle paused.</b>{' '}
+          <span style={{ color: colors.inkFaint }}>
+            tracking will resume when this ends. nothing to do here in the
+            meantime.
+          </span>
+        </span>
+      </Stack>
+      <QuietLink label="mark this as ended" onClick={onResume} />
+    </Stack>
+  );
+}
+
+function PauseControl({ onPause }: { onPause: () => void }): JSX.Element {
+  return (
+    <Stack gap={8}>
+      <QuietLink label="pause cycle — i'm pregnant" onClick={onPause} />
+    </Stack>
+  );
+}
+
+/**
+ * A single calm text link — small-caps, ink-faint, no fill. Used for the
+ * pregnancy pause/resume so neither reads as a loud button.
+ */
+function QuietLink({ label, onClick }: { label: string; onClick: () => void }): JSX.Element {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        alignSelf: 'flex-start',
+        background: 'none',
+        border: 'none',
+        padding: '4px 0',
+        color: colors.inkFaint,
+        cursor: 'pointer',
+        fontFamily: fonts.sans,
+        fontVariantCaps: 'all-small-caps',
+        letterSpacing: '0.08em',
+        fontSize: 13,
+      }}
+    >
+      {label}
+    </button>
   );
 }
 

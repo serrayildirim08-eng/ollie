@@ -199,10 +199,70 @@ export const cycleRepo = {
     return { startedAt, daysSinceStart, bleeding };
   },
 
+  // ─── pregnancy pause ──────────────────────────────────────────────────────
+  //
+  // Modelled as two additive event kinds in the same stream — no separate
+  // table, no pregnancy fields. `setPregnant` opens a pause; `endPregnancy`
+  // closes it (resume); `isPregnant` derives "currently paused" by asking
+  // whether the most-recent pregnancy marker at-or-before `asOf` is a start.
+
+  /** Declare a pregnancy — pauses the cycle. Defaults to now. */
+  async setPregnant(at: number = Date.now()): Promise<CycleEvent> {
+    return insertAt('pregnancy_start', null, at);
+  },
+
+  /**
+   * Mark the pregnancy ended — by ANY path (birth / miscarriage /
+   * termination). This is the resume trigger; the next period after it
+   * restarts the cycle. Defaults to now.
+   */
+  async endPregnancy(at: number = Date.now()): Promise<CycleEvent> {
+    return insertAt('pregnancy_end', null, at);
+  },
+
+  /**
+   * Currently pregnant as of `asOf` (default now)? True iff the most recent
+   * pregnancy marker at-or-before `asOf` is a `pregnancy_start` (i.e. it has
+   * no later `pregnancy_end`). Ordered by occurred_at then rowid so two
+   * markers stamped in the same millisecond resolve in insert order.
+   */
+  async isPregnant(asOf: number = Date.now()): Promise<boolean> {
+    const rows = await sql.select<CycleEventRow>(
+      `SELECT id, kind, data, occurred_at FROM cycle_events
+       WHERE (kind = 'pregnancy_start' OR kind = 'pregnancy_end')
+         AND occurred_at <= ?
+       ORDER BY occurred_at DESC, rowid DESC LIMIT 1`,
+      [asOf],
+    );
+    return rows.length > 0 && rows[0]!.kind === 'pregnancy_start';
+  },
+
   async remove(id: string): Promise<void> {
     await sql.execute(`DELETE FROM cycle_events WHERE id = ?`, [id]);
   },
 };
+
+/** Insert with an explicit occurredAt (pregnancy markers default to now but
+ *  stay overridable for tests + back-dated capture). */
+async function insertAt(
+  kind: CycleEventKind,
+  data: Record<string, unknown> | null,
+  at: number,
+): Promise<CycleEvent> {
+  const id = newId();
+  const encoded = data ? JSON.stringify(data) : null;
+  await sql.execute(
+    `INSERT INTO cycle_events (id, kind, data, occurred_at) VALUES (?, ?, ?, ?)`,
+    [id, kind, encoded, at],
+  );
+  return {
+    id,
+    kind,
+    symptom: (data?.symptom as string | undefined) ?? null,
+    intensity: (data?.intensity as BleedingIntensity | undefined) ?? null,
+    occurredAt: at,
+  };
+}
 
 // ─── cadence ──────────────────────────────────────────────────────────────
 //

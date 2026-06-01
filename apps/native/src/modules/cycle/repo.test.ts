@@ -76,3 +76,39 @@ describe('cycle repo · bleeding intensity', () => {
     expect(list).toHaveLength(2);
   });
 });
+
+describe('cycle repo · pregnancy pause', () => {
+  const DAY = 24 * 60 * 60 * 1000;
+
+  it('round-trips isPregnant through setPregnant / endPregnancy', async () => {
+    // not pregnant by default
+    expect(await cycleRepo.isPregnant()).toBe(false);
+
+    // declare → pregnant
+    const start = await cycleRepo.setPregnant();
+    expect(start.kind).toBe('pregnancy_start');
+    expect(await cycleRepo.isPregnant()).toBe(true);
+
+    // end (any path) → resumed
+    const end = await cycleRepo.endPregnancy();
+    expect(end.kind).toBe('pregnancy_end');
+    expect(await cycleRepo.isPregnant()).toBe(false);
+
+    // a second pregnancy pauses again
+    await cycleRepo.setPregnant();
+    expect(await cycleRepo.isPregnant()).toBe(true);
+  });
+
+  it('isPregnant(asOf) reflects state at a past instant, not just now', async () => {
+    const now = Date.now();
+    await cycleRepo.setPregnant(now - 200 * DAY); // pregnant 200d ago
+    await cycleRepo.endPregnancy(now - 5 * DAY); // ended 5d ago
+
+    // mid-pregnancy: pregnant
+    expect(await cycleRepo.isPregnant(now - 100 * DAY)).toBe(true);
+    // before it started: not pregnant
+    expect(await cycleRepo.isPregnant(now - 300 * DAY)).toBe(false);
+    // after it ended: not pregnant
+    expect(await cycleRepo.isPregnant(now)).toBe(false);
+  });
+});

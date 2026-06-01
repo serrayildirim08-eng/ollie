@@ -36,6 +36,21 @@
  *                             flags' 72h "recently edited" suppression is
  *                             simply never triggered (fail-open, the same as
  *                             the orchestrator's own default). See gap note.
+ *   cycle.pregnant          — boolean. True while a pregnancy_start has no
+ *                             later pregnancy_end (pregnancy PAUSE — not
+ *                             tracking). The orchestrator reads this and goes
+ *                             dormant: no period prediction, no period/late/
+ *                             missed flags. NOTE: pregnancy_start/_end are NOT
+ *                             mapped into cycle.items (the @ollie/logic
+ *                             CycleItem shape has no pregnancy action) — they
+ *                             ride only on these two derived keys.
+ *   cycle.pregnancyEndTs    — ms of the most recent pregnancy_end, or null.
+ *                             The orchestrator uses it as a fresh-start fence:
+ *                             period starts before it belong to a prior
+ *                             reproductive epoch and are dropped from the
+ *                             prediction window, so the first period AFTER a
+ *                             pregnancy ends restarts the cycle instead of
+ *                             reading as one absurd ~9-month "late" cycle.
  *
  * (cycle.prediction / phaseName / stats / flags / correlations / insights /
  *  adherence / fertileWindow / healthFlags / currentDay / cycleCount + cycle._*
@@ -106,8 +121,34 @@ export async function syncToStore(store: Store): Promise<void> {
     .filter((i): i is CycleItemExt => i !== null)
     .sort((a, b) => a.ts - b.ts);
 
-  store.set('cycle', 'items', items);
+  // ── pregnancy pause ──────────────────────────────────────────────────────
+  // Derive from the raw rows (pregnancy markers are NOT in `items`). Walk the
+  // pregnancy markers in time order: the state after the last one is the
+  // current state. `pregnancyEndTs` is the most recent end (fresh-start fence).
+  //
+  // ORDER MATTERS: set the pregnant keys BEFORE `cycle.items`. store.set is
+  // synchronous and the orchestrator recomputes on the `cycle.items` change —
+  // so the pregnant flag must already be current when that fires.
+  let pregnant = false;
+  let pregnancyEndTs: number | null = null;
+  const markers = rows
+    .filter((r) => r.kind === 'pregnancy_start' || r.kind === 'pregnancy_end')
+    .sort((a, b) => a.occurredAt - b.occurredAt);
+  for (const m of markers) {
+    if (m.kind === 'pregnancy_start') {
+      pregnant = true;
+    } else {
+      pregnant = false;
+      pregnancyEndTs = m.occurredAt;
+    }
+  }
+  store.set('cycle', 'pregnant', pregnant);
+  store.set('cycle', 'pregnancyEndTs', pregnancyEndTs);
+
   store.set('cycle', 'cycles', detectBoundaries(items));
   // No per-cycle edit-recency in SQLite — fail-open, same as the watcher default.
   store.set('cycle', 'lastEditedByCycle', {});
+  // Set last so the orchestrator's items-subscriber recompute sees the
+  // already-current pregnant flag + fence above.
+  store.set('cycle', 'items', items);
 }

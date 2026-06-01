@@ -215,7 +215,13 @@ export type CycleAction =
   | { module: 'cycle'; action: 'log_period_start' }
   | { module: 'cycle'; action: 'log_period_end' }
   | { module: 'cycle'; action: 'log_symptom'; symptom: string }
-  | { module: 'cycle'; action: 'pill_logged' };
+  | { module: 'cycle'; action: 'pill_logged' }
+  // Pregnancy pause — NOT pregnancy tracking. `set_pregnant` puts the cycle
+  // dormant (prediction + period/late/missed flags stop); `end_pregnancy`
+  // resumes it. One end concept for birth / miscarriage / termination — no
+  // kind, no due date, no fields.
+  | { module: 'cycle'; action: 'set_pregnant' }
+  | { module: 'cycle'; action: 'end_pregnancy' };
 
 // ── FINANCE ──────────────────────────────────────────────────────────
 

@@ -44,7 +44,7 @@ Modules and their action vocabularies:
 - work: log_focus_session | create_task | log_deadline | log_meeting | distraction_journal | start_timer
 - admin: create_task | create_phone_task | schedule_appointment | log_paperwork | recurring_decision | log_renewal
 - pets: log_care | log_observation | log_vet | log_feed | log_supplement
-- cycle: log_period_start | log_period_end | log_symptom | pill_logged
+- cycle: log_period_start | log_period_end | log_symptom | pill_logged | set_pregnant | end_pregnancy
 - finance: log_transaction | log_income | log_refund | spending_reflection | pending_decision | add_bill | savings_note | subscription_log
 - sleep: log_sleep | wind_down_note | dream_log | log_insomnia
 - body: log_symptom | log_water | log_supplement | log_episode | log_posture | log_hunger | log_movement
@@ -163,6 +163,16 @@ NOTE on petName: ALWAYS the proper noun / actual pet name (Tontin, Olivia, Pinpo
   Ex: "cramps bad today" → { symptom: "cramps" } ; "kramp girdim" → { symptom: "cramps" }
 - pill_logged: { } — no fields
   Ex: "took my pill" → { }
+- set_pregnant: { } — no fields. The user is declaring a pregnancy. This PAUSES the cycle (period prediction + late/missed nudges stop). NOT pregnancy tracking — there is no due date, no trimester, no fields.
+  Ex (EN): "i'm pregnant" → { } ; "i am pregnant" → { } ; "just found out i'm pregnant" → { } ; "we're expecting" → { }
+  Ex (ES): "estoy embarazada" → { } ; "estoy embarazada de nuevo" → { }
+  Ex (TR): "hamileyim" → { } ; "hamile kaldım" → { }
+- end_pregnancy: { } — no fields. The pregnancy ENDED by ANY path (birth, miscarriage, termination). This RESUMES the cycle. ONE neutral action for every kind of ending — never branch on which; do not ask the user to specify. Treat birth, loss, and termination identically.
+  Ex — birth (EN): "i had the baby" → { } ; "gave birth" → { } ; "baby is here" → { } ; "i delivered" → { }
+  Ex — loss (EN): "i lost the pregnancy" → { } ; "i had a miscarriage" → { } ; "miscarriage" → { } ; "i'm not pregnant anymore" → { }
+  Ex — termination / generic end (EN): "the pregnancy ended" → { } ; "pregnancy is over" → { } ; "i had an abortion" → { } ; "i terminated the pregnancy" → { }
+  Ex (ES): "tuve al bebé" → { } ; "di a luz" → { } ; "perdí el embarazo" → { } ; "tuve un aborto espontáneo" → { } ; "el embarazo terminó" → { } ; "ya no estoy embarazada" → { }
+  Ex (TR): "bebek doğdu" → { } ; "doğum yaptım" → { } ; "bebeğim oldu" → { } ; "düşük yaptım" → { } ; "hamileliğim sona erdi" → { } ; "artık hamile değilim" → { }
 
 ── FINANCE ──
 - log_transaction: { amount?: number, currency?: string, merchant?: string, renewal_for?: "passport"|"license"|"visa"|"lease"|"insurance"|"id"|"work_permit"|"residency_permit" }
