@@ -15,6 +15,8 @@
 import { computeCadence, type CadenceEstimate } from '@ollie/cadence';
 import { sql } from '../../storage';
 import { isCriticalReminderLocal } from './criticalReminder';
+import { predictOutAt } from './predict';
+import { lookupDays } from './shelfLifeCache';
 import {
   normaliseName,
   normaliseUnit,
@@ -415,6 +417,61 @@ export const pantry = {
       [now],
     );
     return rows.map(rowToPantryItem);
+  },
+
+  /**
+   * Recompute + persist `predicted_out_at_ms` for a single pantry row from
+   * its replenishment signals. This is the wire that makes the Shop
+   * "≈ likely needed" section + the out-of-stock push populate — call it
+   * after a purchase is logged (pantry.add) or a use is recorded so the
+   * prediction tracks the latest "out" baseline.
+   *
+   * Signal priority (delegated to predictOutAt, locked 2026-05-30):
+   *   1. observed cadence — median interval from grocery_purchase_log
+   *      (sampleSize >= 2 → confidence !== 'low-data')
+   *   2. static shelf life — lookupDays() from the /shelf-life cache
+   *   3. null — neither signal available; the row carries no prediction.
+   *
+   * We never fabricate: when cadence is low-data AND the shelf-life table
+   * has no entry for this canonical, predictOutAt returns null and we clear
+   * the column. `lastPurchaseMs` is the row's `added_at` (the upsert refreshes
+   * it on every restock, so it is the true "last bought" anchor).
+   *
+   * `nowMs`/cadence are derived from persisted state, not the wall clock, so
+   * this is deterministic for a given DB; tests drive it through pantry.add.
+   */
+  async refreshPrediction(id: string): Promise<number | null> {
+    const rows = await sql.select<PantryRow>(
+      `SELECT id, name, added_at FROM grocery_pantry WHERE id = ? LIMIT 1`,
+      [id],
+    );
+    if (rows.length === 0) return null;
+    const row = rows[0]!;
+
+    // Observed cadence from the purchase log for this canonical. Only a
+    // non-low-data estimate yields a usable cadence interval; below 2
+    // samples the median is 0 and we fall through to shelf life.
+    const estimate = await cadence.getCadenceFor(row.name);
+    const cadenceDays =
+      estimate.confidence !== 'low-data' && estimate.medianIntervalMs > 0
+        ? estimate.medianIntervalMs / (24 * 60 * 60 * 1000)
+        : null;
+
+    // Static shelf life from the loaded reference table (null when the
+    // table hasn't loaded yet OR the canonical is unknown — both correct
+    // "no static signal" states).
+    const shelfLifeDays = lookupDays(row.name);
+
+    const predicted = predictOutAt({
+      lastPurchaseMs: row.added_at,
+      cadenceDays,
+      shelfLifeDays,
+    });
+
+    // Persist (null clears) — setPredictedOut also resets pushed_at_ms so
+    // the push gate gets a fresh shot for the new prediction window.
+    await pantry.setPredictedOut(id, predicted);
+    return predicted;
   },
 };
 

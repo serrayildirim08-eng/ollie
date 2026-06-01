@@ -26,6 +26,18 @@ export const groceryHandler: ModuleHandler<'grocery'> = {
           unit: (p as { unit?: string | null }).unit ?? null,
         });
 
+        // Replenishment wire: recompute the predicted out-date from this
+        // item's cadence (purchase log) / shelf life and persist it. This is
+        // what lights up the Shop "≈ likely needed" section + the out-of-stock
+        // push — the prediction is null (cleared) when there's no clean signal,
+        // so we never fabricate a date. Best-effort: a failure here must not
+        // block the add from acknowledging.
+        try {
+          await pantry.refreshPrediction(item.id);
+        } catch (err) {
+          console.error('[grocery] refreshPrediction failed', err);
+        }
+
         // Downstream multi-route: when the user said "bought milk for $5"
         // the router classifies as grocery.pantry_add with `price` +
         // `currency` on the payload. Mirror that to finance so the spend

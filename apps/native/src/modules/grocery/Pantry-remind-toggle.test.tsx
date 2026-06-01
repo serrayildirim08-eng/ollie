@@ -58,6 +58,12 @@ vi.mock('./FeedMeView', () => ({
   FeedMeView: () => React.createElement('div', { 'data-testid': 'feed-me-stub' }),
 }));
 
+// PatternCards reaches into the app store (which imports every module);
+// stub it so this grocery-only harness doesn't drag that graph in.
+vi.mock('../../patterns/PatternCards', () => ({
+  PatternCards: () => null,
+}));
+
 // ── shelf-life table — empty cache, never resolves, doesn't matter ─────────
 vi.mock('./shelfLifeCache', () => ({
   loadShelfLifeTable: () => new Promise(() => {}),
@@ -140,9 +146,12 @@ beforeEach(() => {
     .mockReset()
     .mockResolvedValue({ confidence: 'low-data', lastTs: null });
 
-  // Pantry tab is the default; sessionStorage clean so we land there.
+  // The Box now defaults to the 'now' surface (clean-slate redesign,
+  // 2026-05-31), which doesn't render the pantry rows. These tests are about
+  // the per-row remind/silent toggle, which lives on the 'pantry' tab — so we
+  // seed sessionStorage to land GroceryBox directly on the pantry surface.
   try {
-    sessionStorage.removeItem('grocery:mode');
+    sessionStorage.setItem('grocery:mode', 'pantry');
   } catch {
     /* ok */
   }

@@ -49,6 +49,12 @@ vi.mock('./FeedMeView', () => ({
   FeedMeView: () => React.createElement('div', { 'data-testid': 'feed-me-stub' }),
 }));
 
+// PatternCards reaches into the app store (which imports every module);
+// stub it so this grocery-only harness doesn't drag that graph in.
+vi.mock('../../patterns/PatternCards', () => ({
+  PatternCards: () => null,
+}));
+
 vi.mock('./shelfLifeCache', () => ({
   loadShelfLifeTable: () => new Promise(() => {}),
   lookupDays: () => null,
