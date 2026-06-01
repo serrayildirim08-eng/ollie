@@ -31,6 +31,7 @@ import {
 } from '@ollie/store';
 import {
   createOrchestrator,
+  initPatternDetectedSubscriber,
   pickCopyVariant,
   DEFAULT_CADENCE_COPY,
   type CadenceTrackedEntry,
@@ -39,6 +40,7 @@ import {
 import type { NotificationSpec } from '@ollie/notifications';
 import { isOverdue } from '@ollie/cadence';
 import { scheduleSystemNotification } from './notify/systemNotify';
+import { runAllSyncs } from './bridge';
 import { enumerateCadences as enumerateGrocery } from './modules/grocery';
 import { enumerateCadences as enumerateBody } from './modules/body';
 import { enumerateCadences as enumerateHabits } from './modules/habits';
@@ -115,12 +117,41 @@ export const orchestrator = createOrchestrator(store, {
 });
 orchestrator.init();
 
+/**
+ * The great rewiring (audit 2026-05-31): the native app captures into
+ * SQLite, but every Layer-2 watcher inside `createOrchestrator` reads the
+ * @ollie/store keys. `runAllSyncs` mirrors SQLite → those store keys via the
+ * per-module bridges. Run it once on boot so the first watcher tick sees live
+ * data, and again after each dump dispatch (see modules/dispatch.ts).
+ *
+ * Fire-and-forget on boot: the bridges are I/O-light and individually
+ * try/caught inside runAllSyncs, so a rejection here can't crash boot. We do
+ * NOT await — boot must not block on the mirror.
+ */
+void runAllSyncs(store).catch((err) => {
+  // eslint-disable-next-line no-console
+  console.error('[bridge] boot sync failed (non-fatal):', err);
+});
+
+/**
+ * Mount the pattern→APNs push subscriber. This is the ONLY consumer of the
+ * `pattern:detected` event (emitted by the daily body-correlation pass armed
+ * inside createOrchestrator). The audit flagged it unmounted on native — so
+ * even when a correlation fired, no push went out. Wired through the same
+ * Tauri system-notification adapter as the orchestrator. Returns an
+ * unsubscribe fn; torn down on app quit alongside the orchestrator.
+ */
+const patternPushUnsub = initPatternDetectedSubscriber({
+  scheduleNotification,
+});
+
 if (typeof window !== 'undefined') {
   // Tauri windows fire `beforeunload` on app quit / dev-server reload —
   // this lets the scanner cancel its boot timer / interval / visibility
   // listener cleanly so HMR doesn't accrete duplicate timers.
   window.addEventListener('beforeunload', () => {
     orchestrator.teardown();
+    patternPushUnsub();
   });
 }
 

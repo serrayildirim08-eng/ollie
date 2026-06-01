@@ -30,6 +30,7 @@ import { Stack, Row } from '../../layout';
 import { Text } from '../../ui';
 import { colors, fonts } from '../../theme/tokens';
 import { WhenCaption } from '../../lib/WhenCaption';
+import { PatternCards } from '../../patterns/PatternCards';
 import { migrateSleep } from './migrate';
 import { cadence as cadenceRepo, sleepRepo } from './repo';
 import type { SleepEvent } from './types';
@@ -143,6 +144,10 @@ export function SleepBox(): JSX.Element {
         <Stack gap={56}>
           {/* HERO — the v2 sleep face's signature: one focus, big serif figure */}
           <HeroSection latest={latest} weekBars={weekBars} logCadence={logCadence} />
+
+          {/* Layer-2 noticings — soft cards from the sleep watcher (bedtime
+              drift, revenge bedtime, caffeine×onset, weekday/weekend gap). */}
+          <PatternCards module="sleep" />
 
           {/* recent week as a list — keeps the data behind the bars readable */}
           <ListSection

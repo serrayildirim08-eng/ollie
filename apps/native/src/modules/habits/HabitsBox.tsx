@@ -23,6 +23,7 @@ import { useCallback, useEffect, useState, type CSSProperties } from 'react';
 import { Stack, Row } from '../../layout';
 import { Text } from '../../ui';
 import { colors } from '../../theme/tokens';
+import { PatternCards } from '../../patterns/PatternCards';
 import { migrateHabits } from './migrate';
 import { registry, completions, events } from './repo';
 import type { Habit, HabitEvent, IdentityData } from './types';
@@ -220,6 +221,10 @@ export function HabitsBox(): JSX.Element {
               </Stack>
             )}
           </Section>
+
+          {/* Layer-2 noticings — habit detectors, surfaced softly. Renders
+              nothing when there are no patterns. */}
+          <PatternCards module="habits" />
         </Stack>
       )}
     </Stack>

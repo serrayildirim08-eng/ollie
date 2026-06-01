@@ -4,14 +4,10 @@
  * Thin typed wrapper over SQLite. All habit SQL lives here; the handler and
  * UI never touch sql.* directly.
  *
- * Streak rules (Decision):
- *   - A streak is the count of consecutive LOCAL days, ending today, on
- *     which the habit was completed at least once.
- *   - One-day grace: if today has no completion but yesterday does, the
- *     streak still reads as the run ending yesterday (no break yet).
- *     This matches ADHD habit-formation research framing — single misses
- *     are noise, not a reset.
- *   - Any gap of ≥2 missed days zeroes the streak going forward.
+ * No streaks, ever (mandate: feedback-ollie-no-streaks). This repo records
+ * completions with timestamps and nothing more — no consecutive-day run, no
+ * "streak broke" event. Cadence ("usually every 3 days") is the only rhythm
+ * signal, and it never frames a miss as failure.
  */
 
 import { computeCadence, type CadenceEstimate } from '@ollie/cadence';
@@ -24,6 +20,7 @@ import {
   type HabitEventKind,
   type HabitRow,
 } from './types';
+// NOTE: no streak math imported/defined — see the no-streaks note above.
 
 // SQL row shapes — `[col: string]: unknown` satisfies the ShimRow constraint
 // on sql.select<T> while still letting the typed columns drive autocomplete.
@@ -149,16 +146,9 @@ export const completions = {
   },
 };
 
-// ─── events (streak breaks + identity statements) ─────────────────────────
+// ─── events (identity statements) ─────────────────────────────────────────
 
 export const events = {
-  async logStreakBreak(input: { habitName: string; reason?: string }): Promise<HabitEvent> {
-    return insertEvent('streak_break', {
-      habitName: normaliseHabitName(input.habitName),
-      reason: input.reason,
-    });
-  },
-
   async logIdentity(text: string): Promise<HabitEvent> {
     return insertEvent('identity', { text: text.trim() });
   },
@@ -201,8 +191,8 @@ async function insertEvent(
 // ─── UI-shaped composite query ────────────────────────────────────────────
 
 /**
- * Returns one row per registered habit, with streak + today's status
- * pre-computed. The screen renders this list directly.
+ * Returns one row per registered habit, with today's status pre-computed.
+ * The screen renders this list directly. No streak — see the no-streaks note.
  */
 export async function listHabitRows(): Promise<HabitRow[]> {
   const habits = await registry.list();
@@ -211,7 +201,6 @@ export async function listHabitRows(): Promise<HabitRow[]> {
     const comps = await completions.listForHabit(habit.id);
     out.push({
       habit,
-      streak: computeStreak(comps.map((c) => c.completedAt)),
       completedToday: comps.length > 0 && isToday(comps[0]!.completedAt),
       lastCompletedAt: comps[0]?.completedAt ?? null,
     });
@@ -219,37 +208,7 @@ export async function listHabitRows(): Promise<HabitRow[]> {
   return out;
 }
 
-// ─── streak math ──────────────────────────────────────────────────────────
-
-/**
- * Streak = count of consecutive local days, ending today or yesterday
- * (one-day grace), on which at least one completion exists.
- *
- * `completedAtMs` MUST be sorted newest-first; we walk back day-by-day
- * and stop on the first ≥2-day gap.
- */
-export function computeStreak(completedAtMs: number[]): number {
-  if (completedAtMs.length === 0) return 0;
-
-  // Bucket completions into a set of local-day ordinals (days since epoch).
-  const days = new Set<number>();
-  for (const ms of completedAtMs) days.add(localDayOrdinal(ms));
-
-  const today = localDayOrdinal(Date.now());
-
-  // Find anchor: today if completed today, else yesterday (grace), else 0.
-  let cursor: number;
-  if (days.has(today)) cursor = today;
-  else if (days.has(today - 1)) cursor = today - 1;
-  else return 0;
-
-  let streak = 0;
-  while (days.has(cursor)) {
-    streak += 1;
-    cursor -= 1;
-  }
-  return streak;
-}
+// ─── local-day helpers ──────────────────────────────────────────────────────
 
 function startOfLocalDay(ms: number): number {
   const d = new Date(ms);
@@ -257,14 +216,8 @@ function startOfLocalDay(ms: number): number {
   return d.getTime();
 }
 
-function localDayOrdinal(ms: number): number {
-  // Number of whole local days since epoch — stable per local day, robust
-  // across DST shifts (we use the day's midnight, not raw division).
-  return Math.floor(startOfLocalDay(ms) / (24 * 60 * 60 * 1000));
-}
-
 function isToday(ms: number): boolean {
-  return localDayOrdinal(ms) === localDayOrdinal(Date.now());
+  return startOfLocalDay(ms) === startOfLocalDay(Date.now());
 }
 
 // ─── row mappers ──────────────────────────────────────────────────────────

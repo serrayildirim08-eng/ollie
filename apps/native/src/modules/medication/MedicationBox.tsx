@@ -37,6 +37,7 @@ import {
   letterSpacings,
 } from '../../theme/tokens';
 import { formatRelativeTime } from '../../lib/formatRelativeTime';
+import { PatternCards } from '../../patterns/PatternCards';
 import { migrateMedication } from './migrate';
 import {
   cadence as cadenceRepo,
@@ -189,6 +190,9 @@ export function MedicationBox(): JSX.Element {
             dosesMissed={state.todayMissed.length}
             cold={isCold}
           />
+
+          {/* Layer-2 noticings — fed by the SQLite→store bridge + medication watcher. */}
+          <PatternCards module="medication" />
 
           <NotebookList
             meds={state.meds}

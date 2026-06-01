@@ -36,6 +36,7 @@ import { Stack, Row } from '../../layout';
 import { Text, Button } from '../../ui';
 import { colors, fonts, fontWeights, zIndex } from '../../theme/tokens';
 import { WhenCaption } from '../../lib/WhenCaption';
+import { PatternCards } from '../../patterns/PatternCards';
 import { migrateGoals } from './migrate';
 import {
   cadence as cadenceRepo,
@@ -204,6 +205,10 @@ export function GoalsBox(): JSX.Element {
           ) : (
             <ColdHero showExample={nothingYet} />
           )}
+
+          {/* Layer-2 noticings — goal detectors (low-mood, obstacle echo,
+              floating goal, …), surfaced softly. Renders nothing when empty. */}
+          <PatternCards module="goals" />
 
           {/* active goals — registry rows, each with its latest progress note */}
           <ListSection

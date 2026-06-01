@@ -3,8 +3,8 @@
  *
  * Maps every HabitsAction the router emits to a real repository call.
  * Habits auto-register on first `complete` — there's no separate "create
- * habit" path. The streak-break and identity events are persisted as
- * append-only journal entries that the box surface renders.
+ * habit" path. Identity events are persisted as append-only journal entries
+ * that the box surface renders. (No streak actions — see no-streaks mandate.)
  */
 
 import type { HabitsAction, ModuleHandler, HandlerResult } from '../../router/schema';
@@ -17,8 +17,8 @@ export const habitsHandler: ModuleHandler<'habits'> = {
     await migrateHabits();
     const p = fragment.payload as HabitsAction;
 
-    // Undo factory for the streak_break + identity rows (habits_events).
-    // Completions live in their own table and undo through completions.remove.
+    // Undo factory for identity rows (habits_events). Completions live in
+    // their own table and undo through completions.remove.
     const undoEvent = (id: string) => () => events.remove(id);
 
     switch (p.action) {
@@ -33,19 +33,6 @@ export const habitsHandler: ModuleHandler<'habits'> = {
           note: `marked ${habit.name} as done`,
           deepLink: '/box/habits',
           undo: () => completions.remove(comp.id),
-        };
-      }
-
-      case 'streak_break_note': {
-        const ev = await events.logStreakBreak({
-          habitName: p.habitName,
-          reason: p.reason,
-        });
-        return {
-          ok: true,
-          note: `noted a break in ${p.habitName}`,
-          deepLink: '/box/habits',
-          undo: undoEvent(ev.id),
         };
       }
 

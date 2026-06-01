@@ -33,6 +33,7 @@ import { Stack, Row } from '../../layout';
 import { Text } from '../../ui';
 import { colors } from '../../theme/tokens';
 import { WhenCaption } from '../../lib/WhenCaption';
+import { PatternCards } from '../../patterns/PatternCards';
 import { migrateWork } from './migrate';
 import {
   cadence as cadenceRepo,
@@ -283,6 +284,11 @@ export function WorkBox(): JSX.Element {
             </Stack>
           )}
           </div>
+
+          {/* Layer-2 noticings — the work watcher's computed patterns
+              (deep-focus hours, pacing breach, meeting cliff, …) surface here
+              once focus_log has enough signal. Renders nothing when empty. */}
+          <PatternCards module="work" />
         </div>
       </div>
 

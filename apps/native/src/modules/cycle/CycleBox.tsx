@@ -37,6 +37,7 @@ import { Stack, Row } from '../../layout';
 import { Text } from '../../ui';
 import { colors, fonts } from '../../theme/tokens';
 import { WhenCaption } from '../../lib/WhenCaption';
+import { PatternCards } from '../../patterns/PatternCards';
 import { migrateCycle } from './migrate';
 import { cycleCadence, cycleRepo } from './repo';
 import type { CurrentCycle, CycleEvent } from './types';
@@ -202,6 +203,9 @@ export function CycleBox(): JSX.Element {
             <NowLine current={current} />
             <CadenceHint estimate={periodCadence} />
           </Stack>
+
+          {/* Layer-2 noticings — fed by the SQLite→store bridge + cycle watcher. */}
+          <PatternCards module="cycle" />
 
           <ListSection
             label="recent symptoms"
