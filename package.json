@@ -28,5 +28,13 @@
   "packageManager": "pnpm@11.0.9",
   "engines": {
     "node": ">=20"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@clerk/shared",
+      "esbuild",
+      "sharp",
+      "workerd"
+    ]
   }
 }
