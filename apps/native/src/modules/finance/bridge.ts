@@ -81,6 +81,7 @@ export async function syncToStore(store: Store): Promise<void> {
         amount: t.amount,
         currency: t.currency ?? 'USD',
         merchant: t.merchant,
+        category: t.category,
         direction: 'out',
         kind: 'spend',
       }, t.occurredAt),

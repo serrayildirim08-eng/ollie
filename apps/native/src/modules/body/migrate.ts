@@ -24,6 +24,16 @@ const MIGRATIONS = [
   // Index for the common UI query (most recent first + today filters).
   `CREATE INDEX IF NOT EXISTS idx_body_events_logged_at
     ON body_events(logged_at DESC)`,
+
+  // body_profile — a single pinned row (id='me') holding the one-time
+  // profile facts the body module needs. Today that's just `age` (years),
+  // used to compute the daily water target. Nullable + additive: the app
+  // works fine with no row at all (target falls back to the adult baseline).
+  `CREATE TABLE IF NOT EXISTS body_profile (
+    id          TEXT PRIMARY KEY,
+    age         INTEGER,
+    updated_at  INTEGER NOT NULL
+  )`,
 ];
 
 let migrationPromise: Promise<void> | null = null;

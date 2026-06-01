@@ -11,11 +11,21 @@
  * user does and WHEN, never how many days in a row.
  */
 
+/**
+ * The environmental cue window a habit is anchored to. 'morning' / 'evening'
+ * are real cues (the externalization-gap detector counts these as "cued");
+ * 'anytime' is the calm default and reads as no specific cue.
+ */
+export type HabitCue = 'morning' | 'anytime' | 'evening';
+
+export const HABIT_CUES: readonly HabitCue[] = ['morning', 'anytime', 'evening'];
+
 /** A habit the user has performed at least once. */
 export interface Habit {
   id: string;
   name: string;       // normalised lowercase
   createdAt: number;  // ms since epoch
+  cue: HabitCue;      // environmental trigger window; defaults to 'anytime'
 }
 
 /** A single completion of a habit on a specific moment. */

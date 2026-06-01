@@ -16,6 +16,7 @@ import { computeCadence, type CadenceEstimate } from '@ollie/cadence';
 import { sql } from '../../storage';
 import {
   normaliseSymptom,
+  type BleedingIntensity,
   type CurrentCycle,
   type CycleEvent,
   type CycleEventKind,
@@ -44,18 +45,25 @@ function newId(): string {
 
 function rowToEvent(r: CycleEventRow): CycleEvent {
   let symptom: string | null = null;
+  let intensity: BleedingIntensity | null = null;
   if (r.data) {
     try {
-      const parsed = JSON.parse(r.data) as { symptom?: string };
+      const parsed = JSON.parse(r.data) as {
+        symptom?: string;
+        intensity?: BleedingIntensity;
+      };
       symptom = parsed.symptom ?? null;
+      intensity = parsed.intensity ?? null;
     } catch {
       symptom = null;
+      intensity = null;
     }
   }
   return {
     id: r.id,
     kind: r.kind as CycleEventKind,
     symptom,
+    intensity,
     occurredAt: r.occurred_at,
   };
 }
@@ -75,8 +83,15 @@ async function insert(
     id,
     kind,
     symptom: (data?.symptom as string | undefined) ?? null,
+    intensity: (data?.intensity as BleedingIntensity | undefined) ?? null,
     occurredAt: now,
   };
+}
+
+function startOfLocalDay(ms: number): number {
+  const d = new Date(ms);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
 }
 
 export const cycleRepo = {
@@ -94,6 +109,45 @@ export const cycleRepo = {
 
   async logPill(): Promise<CycleEvent> {
     return insert('pill', null);
+  },
+
+  /**
+   * Set the bleeding-intensity tag for a given local day (defaults to today).
+   * One tag per day: any existing `bleeding` row inside that local day is
+   * cleared first, so re-tapping a chip replaces rather than stacks. Returns
+   * the freshly-written event.
+   */
+  async setBleeding(
+    intensity: BleedingIntensity,
+    at: number = Date.now(),
+  ): Promise<CycleEvent> {
+    const dayStart = startOfLocalDay(at);
+    const dayEnd = dayStart + 24 * 60 * 60 * 1000;
+    await sql.execute(
+      `DELETE FROM cycle_events
+       WHERE kind = 'bleeding' AND occurred_at >= ? AND occurred_at < ?`,
+      [dayStart, dayEnd],
+    );
+    const id = newId();
+    await sql.execute(
+      `INSERT INTO cycle_events (id, kind, data, occurred_at) VALUES (?, 'bleeding', ?, ?)`,
+      [id, JSON.stringify({ intensity }), at],
+    );
+    return { id, kind: 'bleeding', symptom: null, intensity, occurredAt: at };
+  },
+
+  /** The bleeding-intensity tag logged for a local day, or null. */
+  async bleedingForDay(at: number = Date.now()): Promise<BleedingIntensity | null> {
+    const dayStart = startOfLocalDay(at);
+    const dayEnd = dayStart + 24 * 60 * 60 * 1000;
+    const rows = await sql.select<CycleEventRow>(
+      `SELECT id, kind, data, occurred_at FROM cycle_events
+       WHERE kind = 'bleeding' AND occurred_at >= ? AND occurred_at < ?
+       ORDER BY occurred_at DESC LIMIT 1`,
+      [dayStart, dayEnd],
+    );
+    if (rows.length === 0) return null;
+    return rowToEvent(rows[0]!).intensity;
   },
 
   async list(kind?: CycleEventKind, limit = 50): Promise<CycleEvent[]> {

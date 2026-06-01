@@ -48,6 +48,7 @@ import {
   type RecurringSuggestion,
 } from './recurring';
 import {
+  FINANCE_CATEGORIES,
   normaliseMerchant,
   type FinanceBill,
   type FinanceSubscription,
@@ -203,6 +204,17 @@ export function FinanceBox(): JSX.Element {
     },
     [refresh],
   );
+  const handleLogTx = useCallback(
+    async (input: {
+      amount: number | null;
+      merchant: string | null;
+      category: string | null;
+    }) => {
+      await txRepo.add(input);
+      await refresh();
+    },
+    [refresh],
+  );
   const handleRemoveBill = useCallback(
     async (id: string) => {
       await billsRepo.remove(id);
@@ -315,6 +327,9 @@ export function FinanceBox(): JSX.Element {
             recurringDetected={recurringByLeadCurrency}
           />
 
+          {/* TAP-TO-LOG — a quiet spend form so capture isn't dump-only. */}
+          <LogSpendForm onLog={(i) => void handleLogTx(i)} />
+
           {/* AREA CARDS — expandable in-place */}
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             <AreaCard
@@ -404,6 +419,223 @@ export function FinanceBox(): JSX.Element {
     </Stack>
   );
 }
+
+// ── tap-to-log spend form ───────────────────────────────────────────────────
+
+/**
+ * LogSpendForm — a calm tap-to-log capture row so adding a spend isn't
+ * brain-dump-only. Three fields: amount (DM Mono, numeric), merchant (where),
+ * and a category picker (the preset chips + a freeform "other" path). No
+ * budget bars, no remaining-balance, no shame — just "what did you spend".
+ *
+ * Starts collapsed as a single quiet "log a spend" affordance so it doesn't
+ * compete with the hero; expands in place on tap. On submit it calls onLog
+ * (which writes through the repo and mirrors into finance.records, carrying
+ * the category the watchers need), then resets + collapses.
+ *
+ * The category is what unblocks the hyperfocus-burst + duplicate-by-category
+ * watchers: every tap-logged spend can now carry one.
+ */
+function LogSpendForm({
+  onLog,
+}: {
+  onLog: (input: {
+    amount: number | null;
+    merchant: string | null;
+    category: string | null;
+  }) => void;
+}): JSX.Element {
+  const [open, setOpen] = useState(false);
+  const [amount, setAmount] = useState('');
+  const [merchant, setMerchant] = useState('');
+  const [category, setCategory] = useState<string | null>(null);
+
+  const reset = useCallback(() => {
+    setAmount('');
+    setMerchant('');
+    setCategory(null);
+  }, []);
+
+  const parsedAmount = useMemo(() => {
+    const cleaned = amount.replace(/[^0-9.]/g, '').trim();
+    if (!cleaned) return null;
+    const n = Number.parseFloat(cleaned);
+    return Number.isFinite(n) ? n : null;
+  }, [amount]);
+
+  // Something to log = at least one of amount / merchant / category is set.
+  const canLog = parsedAmount != null || merchant.trim().length > 0 || category != null;
+
+  const submit = useCallback(() => {
+    if (!canLog) return;
+    onLog({
+      amount: parsedAmount,
+      merchant: merchant.trim() || null,
+      category,
+    });
+    reset();
+    setOpen(false);
+  }, [canLog, onLog, parsedAmount, merchant, category, reset]);
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        style={{
+          alignSelf: 'flex-start',
+          background: 'none',
+          border: 'none',
+          padding: '4px 2px',
+          cursor: 'pointer',
+          color: colors.ink,
+          fontFamily: fonts.sans,
+          fontSize: 12,
+          fontWeight: 600,
+          letterSpacing: '0.08em',
+          fontVariantCaps: 'all-small-caps',
+          WebkitTapHighlightColor: 'transparent',
+        }}
+      >
+        + log a spend
+      </button>
+    );
+  }
+
+  return (
+    <Stack gap={16}>
+      {/* amount + merchant row */}
+      <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end' }}>
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 6, width: 120 }}>
+          <span style={FIELD_LABEL_STYLE}>amount</span>
+          <input
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            inputMode="decimal"
+            placeholder="0.00"
+            aria-label="amount"
+            style={{ ...FIELD_INPUT_STYLE, fontFamily: fonts.mono, fontVariantNumeric: 'tabular-nums' }}
+          />
+        </label>
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1, minWidth: 0 }}>
+          <span style={FIELD_LABEL_STYLE}>where</span>
+          <input
+            value={merchant}
+            onChange={(e) => setMerchant(e.target.value)}
+            placeholder="sephora, the gym…"
+            aria-label="merchant"
+            style={FIELD_INPUT_STYLE}
+          />
+        </label>
+      </div>
+
+      {/* category picker — preset chips, tap to (de)select */}
+      <Stack gap={8}>
+        <span style={FIELD_LABEL_STYLE}>category</span>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {FINANCE_CATEGORIES.map((c) => {
+            const active = category === c;
+            return (
+              <button
+                key={c}
+                type="button"
+                aria-pressed={active}
+                onClick={() => setCategory(active ? null : c)}
+                style={{
+                  background: active ? colors.ink : 'transparent',
+                  color: active ? colors.cream : colors.inkFaint,
+                  border: `1px solid ${active ? colors.ink : colors.hairline}`,
+                  borderRadius: 999,
+                  padding: '6px 12px',
+                  cursor: 'pointer',
+                  fontFamily: fonts.sans,
+                  fontSize: 12,
+                  fontWeight: 500,
+                  letterSpacing: '0.04em',
+                  fontVariantCaps: 'all-small-caps',
+                  WebkitTapHighlightColor: 'transparent',
+                  transition: 'background 140ms ease-out, color 140ms ease-out',
+                }}
+              >
+                {c}
+              </button>
+            );
+          })}
+        </div>
+      </Stack>
+
+      {/* actions */}
+      <Row gap={8} align="center">
+        <button
+          type="button"
+          onClick={submit}
+          disabled={!canLog}
+          style={{
+            background: canLog ? colors.ink : 'transparent',
+            color: canLog ? colors.cream : colors.inkGhost,
+            border: `1px solid ${canLog ? colors.ink : colors.hairline}`,
+            borderRadius: 8,
+            padding: '8px 18px',
+            cursor: canLog ? 'pointer' : 'default',
+            fontFamily: fonts.sans,
+            fontSize: 12,
+            fontWeight: 600,
+            letterSpacing: '0.08em',
+            fontVariantCaps: 'all-small-caps',
+            WebkitTapHighlightColor: 'transparent',
+          }}
+        >
+          log it
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            reset();
+            setOpen(false);
+          }}
+          style={{
+            background: 'none',
+            border: 'none',
+            padding: '8px 8px',
+            cursor: 'pointer',
+            color: colors.inkFaint,
+            fontFamily: fonts.sans,
+            fontSize: 12,
+            fontWeight: 500,
+            letterSpacing: '0.08em',
+            fontVariantCaps: 'all-small-caps',
+            WebkitTapHighlightColor: 'transparent',
+          }}
+        >
+          cancel
+        </button>
+      </Row>
+    </Stack>
+  );
+}
+
+const FIELD_LABEL_STYLE: CSSProperties = {
+  fontFamily: fonts.sans,
+  fontSize: 11,
+  fontWeight: 600,
+  letterSpacing: '0.08em',
+  color: colors.inkFaint,
+  fontVariantCaps: 'all-small-caps',
+};
+
+const FIELD_INPUT_STYLE: CSSProperties = {
+  boxSizing: 'border-box',
+  width: '100%',
+  background: 'transparent',
+  border: 'none',
+  borderBottom: `1px solid ${colors.hairline}`,
+  padding: '6px 2px',
+  fontFamily: fonts.sans,
+  fontSize: 15,
+  fontWeight: 500,
+  color: colors.ink,
+  outline: 'none',
+};
 
 // ── hero ──────────────────────────────────────────────────────────────────
 
@@ -765,7 +997,12 @@ function TxDetailRow({
   return (
     <Stack gap={2}>
       <Row gap={12} align="baseline" justify="space-between">
-        <span style={DETAIL_K_STYLE}>{item.merchant ?? '—'}</span>
+        <span style={DETAIL_K_STYLE}>
+          {item.merchant ?? '—'}
+          {item.category ? (
+            <span style={{ color: colors.inkGhost, marginLeft: 6 }}>· {item.category}</span>
+          ) : null}
+        </span>
         <Row gap={8} align="baseline">
           <span style={{ ...DETAIL_V_STYLE, color: muted ? UMBER : colors.ink }}>
             {formatAmount(item.amount, item.currency)}

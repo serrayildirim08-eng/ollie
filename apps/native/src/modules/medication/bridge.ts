@@ -10,9 +10,9 @@
  *   medication.items — one MedicationItem per registry row:
  *       id          ← registry id
  *       name        ← registry name (already normalised)
- *       kind        ← 'prescription' (DEFAULT — see schema gap; kind is a
- *                     type field only, no detector branches on it)
- *       schedule    ← []  (SCHEMA GAP — native captures no structured times)
+ *       kind        ← registry kind ('prescription' | 'vitamin' | …),
+ *                     set in the Box's inline editor
+ *       schedule    ← registry schedule (["09:00", "21:00"] …), parsed JSON
  *       taken[]     ← every `dose` event for that med, as { date, time, ts }
  *       created_at  ← registry createdAt
  *       dose        ← the most recent logged free-text dose ("20mg"), if any
@@ -20,17 +20,15 @@
  * (medication.adherence / dueSlots / lastRecomputeAt are OUTPUT keys the
  *  watcher writes — never written here.)
  *
- * SCHEMA GAP (audit, confirmed): native medication is name + free-text-dose
- * only. There is NO structured `schedule` (daily HH:mm slots) and NO `kind`
- * captured. Consequences for the watcher, fed honestly (NOT fabricated):
- *   - schedule = []  ⇒  dueSlotsToday() returns []  ⇒  NO overdue_detected
- *     event, NO "remaining doses today".
- *   - schedule = []  ⇒  adherenceReport() returns null  ⇒  NO adherence_drift
- *     event, NO adherence ratio.
- * So the medication orchestrator RECOMPUTES over real items (and the Box's
- * dose log + last-dose surface are live), but its two notification detectors
- * stay dark until structured schedule/kind capture is built in the repo —
- * that is a separate schema task, deliberately not faked here.
+ * STRUCTURED CAPTURE (built 2026-06-01): the registry now stores `kind` and a
+ * `schedule` of daily "HH:MM" slots (set in MedicationBox's inline editor).
+ * Once a med has a non-empty schedule the watcher's path lights up:
+ *   - schedule non-empty  ⇒  dueSlotsToday() returns slots  ⇒  "remaining
+ *     doses today" + overdue_detected push.
+ *   - schedule non-empty + 14d observed  ⇒  adherenceReport() returns a ratio
+ *     ⇒  adherence_drift detection.
+ * Meds with an empty schedule stay manual-log-only (no slots, no adherence) —
+ * the watcher handles that honestly per the @ollie/logic contract.
  *
  * Edit ONLY this file.
  */
@@ -76,8 +74,8 @@ export async function syncToStore(store: Store): Promise<void> {
     return {
       id: med.id,
       name: med.name,
-      kind: 'prescription', // schema gap: no kind captured; inert default
-      schedule: [], // schema gap: no structured times captured
+      kind: med.kind, // structured capture: set in the Box's inline editor
+      schedule: med.schedule, // structured "HH:MM" daily slots, may be empty
       taken,
       created_at: med.createdAt,
       ...(latestDose ? { dose: latestDose } : {}),

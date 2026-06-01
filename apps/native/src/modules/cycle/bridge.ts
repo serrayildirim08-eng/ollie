@@ -13,6 +13,12 @@
  *                               period_end   → action 'ended'
  *                               symptom      → action 'symptom', text=label
  *                               pill         → action 'pill'
+ *                               bleeding     → action 'symptom',
+ *                                              text='bleeding: <intensity>',
+ *                                              + extended `intensity` field
+ *                             so existing symptom-clustering buckets the flow
+ *                             tag today, and a future flow-clustering detector
+ *                             can read the structured `intensity` directly.
  *                             Sorted ascending by ts (boundary detection +
  *                             the watcher's lastStartTs scan both assume order
  *                             but stay correct regardless; ascending is the
@@ -37,8 +43,13 @@
  *
  * GAPS (out of scope — noted, not built):
  *   - lastEditedByCycle is always `{}` (no edit-recency column in SQLite).
- *   - cycle.items carries no bleeding-intensity (9-tag) data — symptoms are
- *     free-text only, so flow-intensity clustering can't run.
+ *   - bleeding-intensity flow-clustering has NO logic consumer yet: the
+ *     @ollie/logic CycleItem shape carries only `text`, so we feed the tag two
+ *     ways — (1) as a normal `symptom` item ('bleeding: heavy') the existing
+ *     symptom-clustering already buckets, and (2) as an extended `intensity`
+ *     field on the item, persisted so a future flow-clustering detector can
+ *     read structured flow directly without a re-capture. The structured field
+ *     is inert until such a detector exists.
  *   - cycle SQLite is plaintext (encryption gap) — not this bridge's concern;
  *     it would be fixed in repo.ts, not here.
  *
@@ -50,8 +61,15 @@ import { detectBoundaries, type CycleItem } from '@ollie/logic/cycle';
 import { cycleRepo } from './repo';
 import type { CycleEvent } from './types';
 
+/**
+ * CycleItem plus the extended bleeding-intensity tag. The logic layer ignores
+ * the extra field today (no consumer yet); it round-trips through the store so
+ * a future flow-clustering detector can read it.
+ */
+type CycleItemExt = CycleItem & { intensity?: string };
+
 /** Map one SQLite cycle_events row to the logic-layer CycleItem shape. */
-function toItem(ev: CycleEvent): CycleItem | null {
+function toItem(ev: CycleEvent): CycleItemExt | null {
   switch (ev.kind) {
     case 'period_start':
       return { ts: ev.occurredAt, action: 'started' };
@@ -61,6 +79,17 @@ function toItem(ev: CycleEvent): CycleItem | null {
       return { ts: ev.occurredAt, action: 'symptom', text: ev.symptom ?? undefined };
     case 'pill':
       return { ts: ev.occurredAt, action: 'pill' };
+    case 'bleeding':
+      // Fed as a symptom so existing symptom-clustering buckets the flow tag;
+      // the structured `intensity` rides along for a future flow detector.
+      return ev.intensity
+        ? {
+            ts: ev.occurredAt,
+            action: 'symptom',
+            text: `bleeding: ${ev.intensity}`,
+            intensity: ev.intensity,
+          }
+        : null;
     default:
       return null;
   }
@@ -72,9 +101,9 @@ export async function syncToStore(store: Store): Promise<void> {
   // and correlate symptoms, so we read generously here.
   const rows = await cycleRepo.list(undefined, 5000);
 
-  const items: CycleItem[] = rows
+  const items: CycleItemExt[] = rows
     .map(toItem)
-    .filter((i): i is CycleItem => i !== null)
+    .filter((i): i is CycleItemExt => i !== null)
     .sort((a, b) => a.ts - b.ts);
 
   store.set('cycle', 'items', items);

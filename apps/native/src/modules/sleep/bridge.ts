@@ -32,7 +32,7 @@
 
 import type { Store } from '@ollie/store';
 import { sleepRepo } from './repo';
-import { hoursBetween, type SleepEvent } from './types';
+import { feelToQuality, hoursBetween, type SleepEvent } from './types';
 import { migrateSleep } from './migrate';
 
 /** SleepRecord shape the watcher consumes (subset of @ollie/logic/sleep). */
@@ -99,8 +99,13 @@ function tstMinFor(data: { bedtime: string | null; wake: string | null; hoursSle
 /** Map one kind='sleep' SQLite event → a watcher-shaped SleepRecord. */
 function toSleepRecord(ev: Extract<SleepEvent, { kind: 'sleep' }>): MirroredSleepRecord {
   const tst = tstMinFor(ev.data);
-  // time_in_bed is unknown from the native capture (no onset/wakings fields),
-  // so efficiency-dependent detectors (sleep_onset_gap) stay quiet — see GAP.
+  // The feel tag (rested · wired · foggy · wrecked) rides into the
+  // SleepRecord's `quality_text` field — the watcher's named-quality slot.
+  // When the user tapped a feel but never set a numeric quality, derive a
+  // coarse 1–5 from the feel so the quality-numeric detectors keep working;
+  // an explicit numeric quality always wins.
+  const feel = ev.data.feel;
+  const quality = ev.data.quality ?? feelToQuality(feel);
   return {
     id: ev.id,
     night_of: nightOfFromTs(ev.occurredAt),
@@ -112,10 +117,10 @@ function toSleepRecord(ev: Extract<SleepEvent, { kind: 'sleep' }>): MirroredSlee
     tst_min: tst,
     time_in_bed_min: null,
     efficiency: null,
-    quality: ev.data.quality,
-    quality_text: null,
+    quality,
+    quality_text: feel,
     notes: null,
-    tokens: [],
+    tokens: feel ? [feel] : [],
     is_skipped: false,
     is_partial: tst == null,
     is_disputed: false,

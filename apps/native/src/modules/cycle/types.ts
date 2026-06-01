@@ -9,15 +9,54 @@
  * "fertility window", no risk scoring, no warnings.
  */
 
-export type CycleEventKind = 'period_start' | 'period_end' | 'symptom' | 'pill';
+export type CycleEventKind =
+  | 'period_start'
+  | 'period_end'
+  | 'symptom'
+  | 'pill'
+  | 'bleeding';
 
-/** One logged event. Symptom text lives in `data` as JSON to keep the
- *  table single-shape; future kinds can add structured detail there too. */
+/**
+ * Bleeding-intensity tags — the brief's 9 editorial flow descriptors. These
+ * are deliberately descriptive, never clinical-alarming. Ordered loosely
+ * light→heavy with the colour/character tags after; a future flow-clustering
+ * detector can map these to a numeric weight if it ever needs to.
+ *
+ * brief 7: spotting · light · medium · heavy · clots · brown · pink
+ * + 2 mapped sensibly: flooding (beyond heavy) · none (a tracked dry day).
+ */
+export type BleedingIntensity =
+  | 'spotting'
+  | 'light'
+  | 'medium'
+  | 'heavy'
+  | 'flooding'
+  | 'clots'
+  | 'brown'
+  | 'pink'
+  | 'none';
+
+export const BLEEDING_INTENSITIES: readonly BleedingIntensity[] = [
+  'spotting',
+  'light',
+  'medium',
+  'heavy',
+  'flooding',
+  'clots',
+  'brown',
+  'pink',
+  'none',
+];
+
+/** One logged event. Symptom text + bleeding intensity live in `data` as
+ *  JSON to keep the table single-shape; future kinds add detail there too. */
 export interface CycleEvent {
   id: string;
   kind: CycleEventKind;
   /** Free-form symptom label for `symptom` events; null otherwise. */
   symptom: string | null;
+  /** Bleeding-intensity tag for `bleeding` events; null otherwise. */
+  intensity: BleedingIntensity | null;
   occurredAt: number; // ms since epoch
 }
 

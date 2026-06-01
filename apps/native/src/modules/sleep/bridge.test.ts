@@ -40,11 +40,19 @@ const FIXED_NOW = new Date('2026-05-13T12:00:00').getTime();
  * Weekend nights (Fri/Sat) sleep 8h; weekdays sleep 5h — a clear gap so
  * detectWeekendRecoveryIllusion fires (gap 180min ≥ 90, wdMean 300 < 390).
  */
+type SleepFeel = 'rested' | 'wired' | 'foggy' | 'wrecked';
+
 function makeSleepEvents(): Array<{
   id: string;
   kind: 'sleep';
   occurredAt: number;
-  data: { bedtime: string | null; wake: string | null; quality: 1 | 2 | 3 | 4 | 5 | null; hoursSlept: number | null };
+  data: {
+    bedtime: string | null;
+    wake: string | null;
+    quality: 1 | 2 | 3 | 4 | 5 | null;
+    hoursSlept: number | null;
+    feel: SleepFeel | null;
+  };
 }> {
   const out = [];
   for (let d = 28; d >= 1; d--) {
@@ -61,6 +69,8 @@ function makeSleepEvents(): Array<{
         wake: isWeekend ? '07:00' : '04:00',
         quality: 3 as const,
         hoursSlept: hours,
+        // weekends rested, weekdays wrecked — a feel tag on every night.
+        feel: (isWeekend ? 'rested' : 'wrecked') as SleepFeel,
       },
     });
   }
@@ -96,6 +106,46 @@ describe('sleep bridge → orchestrator (great rewiring)', () => {
     expect(records[0].night_of < records[27].night_of).toBe(true);
     expect(records.some((r) => r.tst_min === 300)).toBe(true); // weekday 5h
     expect(records.some((r) => r.tst_min === 480)).toBe(true); // weekend 8h
+  });
+
+  it('carries the feel tag into sleep.records (quality_text) + maps feel→quality fallback', async () => {
+    await syncToStore(store);
+    const records = store.get<
+      Array<{ night_of: string; quality_text: string | null; quality: number | null; tokens: string[] }>
+    >('sleep', 'records', []);
+    // every mirrored night carries its feel tag in quality_text + tokens
+    expect(records.every((r) => r.quality_text === 'rested' || r.quality_text === 'wrecked')).toBe(true);
+    expect(records.some((r) => r.tokens.includes('rested'))).toBe(true);
+    expect(records.some((r) => r.tokens.includes('wrecked'))).toBe(true);
+
+    // explicit numeric quality (3) wins over the feel-derived fallback
+    expect(records.every((r) => r.quality === 3)).toBe(true);
+  });
+
+  it('maps feel→quality when no numeric quality was set', async () => {
+    // A single night with only a feel tag (quality null) → derived quality.
+    mockListByKind.mockImplementation(async (kind: string) => {
+      if (kind === 'sleep') {
+        return [
+          {
+            id: 's_feelonly',
+            kind: 'sleep' as const,
+            occurredAt: FIXED_NOW - DAY_MS,
+            data: { bedtime: null, wake: null, quality: null, hoursSlept: 7, feel: 'wrecked' as SleepFeel },
+          },
+        ] as never;
+      }
+      return [] as never;
+    });
+    await syncToStore(store);
+    const records = store.get<Array<{ quality: number | null; quality_text: string | null }>>(
+      'sleep',
+      'records',
+      [],
+    );
+    expect(records.length).toBe(1);
+    expect(records[0].quality_text).toBe('wrecked');
+    expect(records[0].quality).toBe(1); // wrecked → 1
   });
 
   it('the weekday/weekend-gap watcher fires once records are mirrored', async () => {
