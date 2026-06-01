@@ -37,6 +37,14 @@ export interface PatternCardsProps {
   max?: number;
 }
 
+/**
+ * Modules whose patterns are ADHD-behaviour noticings — these may carry a
+ * research citation. Practical domains (grocery, finance, pets, cycle, sleep)
+ * are deliberately excluded: a spoilage/spend nudge citing a neuropsych paper
+ * is irrelevant clutter.
+ */
+const CITATION_MODULES = new Set(['work', 'goals', 'habits', 'body']);
+
 /** Pull the displayable sentence out of a tolerant detector card. */
 function cardCopy(card: PatternCard): string {
   return (card.copy ?? card.body ?? card.message ?? '').toString().trim();
@@ -74,7 +82,12 @@ export function PatternCards({ module, max = 4 }: PatternCardsProps): JSX.Elemen
   return (
     <Stack gap={space[2]} style={{ marginTop: space[6] }}>
       {visible.map(({ card, key }) => {
-        const source = cardSource(card);
+        // Citations belong to ADHD-behaviour noticings (work / goals / habits /
+        // body), where a research trace is meaningful. Practical-domain cards
+        // (grocery, finance, pets…) are common-sense noticings — a "chicken
+        // turns soon" nudge citing a neuropsych paper reads as nonsense, so we
+        // never show a source trace for them.
+        const source = CITATION_MODULES.has(module) ? cardSource(card) : null;
         return (
           <div
             key={key}
