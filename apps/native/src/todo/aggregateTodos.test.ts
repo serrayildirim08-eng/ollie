@@ -18,12 +18,15 @@ import {
   normalizeAdminRenewal,
   normalizeAdminTask,
   normalizeGroceryShopping,
+  normalizeRecurringDecision,
+  normalizePendingDecision,
   normalizeWorkTask,
   sortTodos,
   type TodoItem,
 } from './aggregateTodos';
-import type { AdminRenewal, AdminTask } from '../modules/admin/types';
+import type { AdminRenewal, AdminTask, RecurringDecisionRow } from '../modules/admin/types';
 import type { ShoppingItem } from '../modules/grocery/types';
+import type { PendingDecisionRow } from '../modules/finance/repo';
 import type { WorkTask } from '../modules/work/types';
 
 // ─── helpers ──────────────────────────────────────────────────────────────
@@ -192,6 +195,7 @@ describe('aggregateTodos · sort', () => {
         date: '2026-07-01',
         createdAt: TS('2026-05-01'),
         rowId: 'a',
+        kind: 'task',
       },
       {
         id: 'b',
@@ -201,6 +205,7 @@ describe('aggregateTodos · sort', () => {
         date: '2026-06-01',
         createdAt: TS('2026-05-02'),
         rowId: 'b',
+        kind: 'task',
       },
     ];
     const sorted = sortTodos(items);
@@ -216,6 +221,7 @@ describe('aggregateTodos · sort', () => {
         text: 'older',
         createdAt: TS('2026-05-01'),
         rowId: 'older',
+        kind: 'task',
       },
       {
         id: 'newer',
@@ -224,6 +230,7 @@ describe('aggregateTodos · sort', () => {
         text: 'newer',
         createdAt: TS('2026-05-10'),
         rowId: 'newer',
+        kind: 'task',
       },
       {
         id: 'dated',
@@ -233,6 +240,7 @@ describe('aggregateTodos · sort', () => {
         date: '2026-06-01',
         createdAt: TS('2026-05-05'),
         rowId: 'dated',
+        kind: 'task',
       },
     ];
     const sorted = sortTodos(items);
@@ -249,6 +257,7 @@ describe('aggregateTodos · sort', () => {
         date: '2026-06-01',
         createdAt: TS('2026-05-01'),
         rowId: 'first',
+        kind: 'task',
       },
       {
         id: 'last-logged',
@@ -258,6 +267,7 @@ describe('aggregateTodos · sort', () => {
         date: '2026-06-01',
         createdAt: TS('2026-05-20'),
         rowId: 'last',
+        kind: 'task',
       },
     ];
     const sorted = sortTodos(items);
@@ -287,6 +297,7 @@ describe('aggregateTodos · cross-module', () => {
             dueDate: '2026-06-15',
           }),
         ],
+        decisions: [],
       },
       work: {
         tasks: [
@@ -301,6 +312,7 @@ describe('aggregateTodos · cross-module', () => {
       grocery: {
         shopping: [shoppingItem({ id: 'g1', name: 'olive oil' })],
       },
+      finance: { pendingDecisions: [] },
     });
 
     expect(result.map((i) => i.text)).toEqual([
@@ -319,9 +331,11 @@ describe('aggregateTodos · cross-module', () => {
           adminTask({ id: 't', kind: 'task', text: 'pay rent' }),
         ],
         renewals: [],
+        decisions: [],
       },
       work: { tasks: [] },
       grocery: { shopping: [] },
+      finance: { pendingDecisions: [] },
     });
     expect(result.map((i) => i.text)).toEqual(['pay rent']);
   });
@@ -376,6 +390,7 @@ describe('bucketTodos', () => {
       date,
       createdAt: TS('2026-05-01'),
       rowId: id,
+      kind: 'task',
     };
   }
   function mkUndated(id: string): TodoItem {
@@ -386,6 +401,7 @@ describe('bucketTodos', () => {
       text: id,
       createdAt: TS('2026-05-01'),
       rowId: id,
+      kind: 'task',
     };
   }
 });
@@ -492,6 +508,7 @@ describe('grocery safety-net filter', () => {
           adminTask({ id: 't-real', kind: 'task', text: 'pay rent' }),
         ],
         renewals: [],
+        decisions: [],
       },
       work: {
         tasks: [
@@ -500,6 +517,7 @@ describe('grocery safety-net filter', () => {
         ],
       },
       grocery: { shopping: [] },
+      finance: { pendingDecisions: [] },
     });
 
     const texts = result.map((i) => i.text);
@@ -507,6 +525,132 @@ describe('grocery safety-net filter', () => {
     expect(texts).not.toContain('oil');
     expect(texts).toContain('pay rent');
     expect(texts).toContain('send invoice');
+  });
+});
+
+// ─── decision normalization ───────────────────────────────────────────────
+
+function recurringDecision(
+  over: Partial<RecurringDecisionRow> & { id: string },
+): RecurringDecisionRow {
+  return {
+    id: over.id,
+    what: over.what ?? 'chatgpt subscription',
+    decision: over.decision ?? null,
+    snoozeUntilMs: over.snoozeUntilMs ?? null,
+    createdAt: over.createdAt ?? TS('2026-05-31'),
+  };
+}
+
+function pendingDecision(
+  over: Partial<PendingDecisionRow> & { id: string },
+): PendingDecisionRow {
+  return {
+    id: over.id,
+    what: over.what ?? 'moving quote 2400',
+    decision: over.decision ?? null,
+    snoozeUntilMs: over.snoozeUntilMs ?? null,
+    createdAt: over.createdAt ?? TS('2026-05-31'),
+    amount: over.amount ?? null,
+    currency: over.currency ?? null,
+    deadline: over.deadline ?? null,
+    decidedAtMs: over.decidedAtMs ?? null,
+  };
+}
+
+describe('aggregateTodos · decision normalization', () => {
+  it('recurring_decision → text = "decide: <what>", kind = "decision", source = "admin_decision"', () => {
+    const item = normalizeRecurringDecision(
+      recurringDecision({ id: 'd1', what: 'chatgpt subscription' }),
+    );
+    expect(item.text).toBe('decide: chatgpt subscription');
+    expect(item.kind).toBe('decision');
+    expect(item.source).toBe('admin_decision');
+    expect(item.action).toBe('recurring_decision');
+    expect(item.id).toBe('admin_decision:d1');
+  });
+
+  it('pending_decision → text = "decide: <what>", kind = "decision", source = "finance_decision"', () => {
+    const item = normalizePendingDecision(
+      pendingDecision({ id: 'p1', what: 'moving quote 2400' }),
+    );
+    expect(item.text).toBe('decide: moving quote 2400');
+    expect(item.kind).toBe('decision');
+    expect(item.source).toBe('finance_decision');
+    expect(item.action).toBe('pending_decision');
+    expect(item.id).toBe('finance_decision:p1');
+  });
+
+  it('recurring_decision rows surface in the aggregate', () => {
+    const result = aggregateTodos({
+      admin: {
+        tasks: [],
+        renewals: [],
+        decisions: [
+          recurringDecision({ id: 'd1', what: 'netflix subscription' }),
+        ],
+      },
+      work: { tasks: [] },
+      grocery: { shopping: [] },
+      finance: { pendingDecisions: [] },
+    });
+    expect(result).toHaveLength(1);
+    expect(result[0]!.text).toBe('decide: netflix subscription');
+    expect(result[0]!.kind).toBe('decision');
+  });
+
+  it('pending_decision rows surface in the aggregate', () => {
+    const result = aggregateTodos({
+      admin: { tasks: [], renewals: [], decisions: [] },
+      work: { tasks: [] },
+      grocery: { shopping: [] },
+      finance: {
+        pendingDecisions: [
+          pendingDecision({ id: 'p1', what: 'solar panels quote' }),
+        ],
+      },
+    });
+    expect(result).toHaveLength(1);
+    expect(result[0]!.text).toBe('decide: solar panels quote');
+    expect(result[0]!.kind).toBe('decision');
+    expect(result[0]!.source).toBe('finance_decision');
+  });
+
+  it('decisions land in the noDate bucket', () => {
+    const items = aggregateTodos({
+      admin: {
+        tasks: [],
+        renewals: [],
+        decisions: [recurringDecision({ id: 'd1', what: 'chatgpt' })],
+      },
+      work: { tasks: [] },
+      grocery: { shopping: [] },
+      finance: { pendingDecisions: [] },
+    });
+    const buckets = bucketTodos(items, '2026-05-31');
+    expect(buckets[0]!.id).toBe('noDate');
+    expect(buckets[0]!.items[0]!.kind).toBe('decision');
+  });
+
+  it('decisions sort alongside other todos by createdAt desc (undated)', () => {
+    const result = aggregateTodos({
+      admin: {
+        tasks: [
+          adminTask({ id: 't1', kind: 'task', text: 'pay rent', createdAt: TS('2026-05-20') }),
+        ],
+        renewals: [],
+        decisions: [
+          recurringDecision({ id: 'd1', what: 'netflix', createdAt: TS('2026-05-25') }),
+        ],
+      },
+      work: { tasks: [] },
+      grocery: { shopping: [] },
+      finance: { pendingDecisions: [] },
+    });
+    // decision is newer → comes first in the undated bucket
+    expect(result[0]!.kind).toBe('decision');
+    expect(result[0]!.text).toBe('decide: netflix');
+    expect(result[1]!.text).toBe('pay rent');
   });
 });
 

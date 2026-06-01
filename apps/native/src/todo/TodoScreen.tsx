@@ -34,9 +34,15 @@ import { Text } from '../ui';
 import { colors, durations, easings } from '../theme/tokens';
 import {
   migrateAdmin,
+  recurringDecisions as adminDecisionsRepo,
   renewals as adminRenewalsRepo,
   tasks as adminTasksRepo,
 } from '../modules/admin';
+import {
+  migrateFinance,
+  pending as financePendingRepo,
+  subscriptions as financeSubscriptionsRepo,
+} from '../modules/finance';
 import {
   migrateGrocery,
   shopping as groceryShoppingRepo,
@@ -68,6 +74,9 @@ const FADE_OUT_MS = 200;
 //
 // Each module exposes its own markComplete-style call. We dispatch by
 // source so the screen stays one component and the modules stay isolated.
+//
+// Decision rows don't use markComplete — they use the decision handlers
+// below. The source guards here only fire for 'task' kind rows.
 
 async function markComplete(item: TodoItem): Promise<void> {
   if (item.source === 'admin') {
@@ -86,6 +95,57 @@ async function markComplete(item: TodoItem): Promise<void> {
   await groceryShoppingRepo.markPurchased(item.rowId);
 }
 
+// ─── decision routing ─────────────────────────────────────────────────────
+//
+// "cancel", "keep", "decide later" button actions for DECISION variant rows.
+//
+// Name fuzzy match for cancel → subscription cross-link:
+//   "chatgpt subscription" → extract first word before " subscription" → "chatgpt"
+//   "netflix monthly"      → first significant word                    → "netflix"
+//   Strategy: take all words from `what`, filter out known suffixes
+//   (subscription, monthly, yearly, plan, service), use the first
+//   remaining word as the lookup key. Falls back to full `what` if nothing
+//   matches. Case-insensitive LIKE query in the repo handles partial match.
+
+const SUBSCRIPTION_SUFFIX_WORDS = new Set([
+  'subscription', 'subscriptions', 'monthly', 'yearly', 'annual', 'weekly',
+  'plan', 'service', 'membership', 'account',
+]);
+
+function extractSubscriptionKey(what: string): string {
+  const words = what.toLowerCase().trim().split(/\s+/);
+  const meaningful = words.filter((w) => !SUBSCRIPTION_SUFFIX_WORDS.has(w));
+  return meaningful[0] ?? what.toLowerCase().trim();
+}
+
+async function applyDecision(
+  item: TodoItem,
+  decision: 'cancel' | 'keep' | 'later',
+  nowMs: number,
+): Promise<void> {
+  if (item.source === 'admin_decision') {
+    await adminDecisionsRepo.decide(item.rowId, decision, nowMs);
+    if (decision === 'cancel') {
+      // Cross-link: mark the matching subscription_log row as canceled.
+      // Extract the subscription name key from the decision's `what`.
+      // item.text is "decide: <what>" — strip the prefix to recover `what`.
+      const rawWhat = item.text.replace(/^decide:\s*/i, '');
+      const subKey = extractSubscriptionKey(rawWhat);
+      await financeSubscriptionsRepo.markCanceled(subKey, nowMs);
+    }
+    return;
+  }
+  // source === 'finance_decision'
+  if (decision === 'cancel') {
+    // finance.pending_decision "cancel" maps to 'skip' on the pending repo.
+    await financePendingRepo.decide(item.rowId, 'skip', nowMs);
+  } else if (decision === 'keep') {
+    await financePendingRepo.decide(item.rowId, 'proceed', nowMs);
+  } else {
+    await financePendingRepo.decide(item.rowId, 'later', nowMs);
+  }
+}
+
 // ─── screen ───────────────────────────────────────────────────────────────
 
 export function TodoScreen(): JSX.Element {
@@ -96,18 +156,22 @@ export function TodoScreen(): JSX.Element {
   const [fadingIds, setFadingIds] = useState<readonly string[]>([]);
 
   const refresh = useCallback(async () => {
+    const now = Date.now();
     const today = isoToday();
-    const [adminTasks, adminRenewals, workTasks, groceryShopping] =
+    const [adminTasks, adminRenewals, adminDecisions, workTasks, groceryShopping, finPending] =
       await Promise.all([
         adminTasksRepo.listOpen(),
         adminRenewalsRepo.listOpen(today),
+        adminDecisionsRepo.listOpen(now),
         workTasksRepo.listOpen(today),
         groceryShoppingRepo.listOpen(),
+        financePendingRepo.listOpen(now),
       ]);
     const merged = aggregateTodos({
-      admin: { tasks: adminTasks, renewals: adminRenewals },
+      admin: { tasks: adminTasks, renewals: adminRenewals, decisions: adminDecisions },
       work: { tasks: workTasks },
       grocery: { shopping: groceryShopping },
+      finance: { pendingDecisions: finPending },
     });
     setItems(merged);
   }, []);
@@ -117,7 +181,7 @@ export function TodoScreen(): JSX.Element {
     (async () => {
       // Migrations are idempotent + lazy-singleton; cheap to call in
       // parallel from the screen even if the module box already triggered.
-      await Promise.all([migrateAdmin(), migrateWork(), migrateGrocery()]);
+      await Promise.all([migrateAdmin(), migrateFinance(), migrateWork(), migrateGrocery()]);
       if (cancelled) return;
       await refresh();
       if (cancelled) return;
@@ -165,6 +229,25 @@ export function TodoScreen(): JSX.Element {
     [],
   );
 
+  const handleDecide = useCallback(
+    async (item: TodoItem, decision: 'cancel' | 'keep' | 'later') => {
+      const nowMs = Date.now();
+      // Optimistic fade — same pattern as handleComplete.
+      setFadingIds((prev) => [...prev, item.id]);
+      try {
+        await applyDecision(item, decision, nowMs);
+      } catch {
+        setFadingIds((prev) => prev.filter((id) => id !== item.id));
+        return;
+      }
+      window.setTimeout(() => {
+        setItems((prev) => prev.filter((row) => row.id !== item.id));
+        setFadingIds((prev) => prev.filter((id) => id !== item.id));
+      }, FADE_OUT_MS);
+    },
+    [],
+  );
+
   const today = useMemo(() => isoToday(), []);
   // "just shit to do today": overdue + due-today + undated loose to-dos.
   // Future-dated commitments (this week / later) are intentionally hidden —
@@ -203,13 +286,23 @@ export function TodoScreen(): JSX.Element {
       ) : (
         <Stack gap={0} as="ul" style={LIST_RESET} data-testid="bucket-today">
           {todayList.map((item, i) => (
-            <TodoRow
-              key={item.id}
-              item={item}
-              first={i === 0}
-              fading={fadingIds.includes(item.id)}
-              onComplete={handleComplete}
-            />
+            item.kind === 'decision' ? (
+              <DecisionRow
+                key={item.id}
+                item={item}
+                first={i === 0}
+                fading={fadingIds.includes(item.id)}
+                onDecide={handleDecide}
+              />
+            ) : (
+              <TodoRow
+                key={item.id}
+                item={item}
+                first={i === 0}
+                fading={fadingIds.includes(item.id)}
+                onComplete={handleComplete}
+              />
+            )
           ))}
         </Stack>
       )}
@@ -321,7 +414,118 @@ function sourceLabel(source: TodoSource): string {
   // Lowercase, matches DNA "no shouting" tone.
   if (source === 'admin') return 'admin';
   if (source === 'work') return 'work';
+  if (source === 'admin_decision') return 'decide';
+  if (source === 'finance_decision') return 'finance';
   return 'grocery';
+}
+
+// ─── decision row ─────────────────────────────────────────────────────────
+//
+// DECISION variant: same hairline bullet + body text as a standard row,
+// plus 3 smcp buttons below the text — cancel (sage) / keep (ink) /
+// decide later (inkSoft). One click = decision, optimistic slide-out.
+// No icons, no confirmation modal, no toast.
+
+interface DecisionRowProps {
+  readonly item: TodoItem;
+  readonly first: boolean;
+  readonly fading: boolean;
+  readonly onDecide: (item: TodoItem, decision: 'cancel' | 'keep' | 'later') => void | Promise<void>;
+}
+
+const DECISION_BTN_STYLE: CSSProperties = {
+  ...SMCP_STYLE,
+  fontSize: 11,
+  background: 'none',
+  border: 'none',
+  padding: 0,
+  cursor: 'pointer',
+  outline: 'none',
+  fontFamily: 'inherit',
+};
+
+function DecisionRow({ item, first, fading, onDecide }: DecisionRowProps): JSX.Element {
+  const handleCancel = useCallback(() => { void onDecide(item, 'cancel'); }, [item, onDecide]);
+  const handleKeep = useCallback(() => { void onDecide(item, 'keep'); }, [item, onDecide]);
+  const handleLater = useCallback(() => { void onDecide(item, 'later'); }, [item, onDecide]);
+
+  return (
+    <li
+      style={{
+        ...LIST_ITEM_RESET,
+        borderTop: first ? `1px solid ${colors.hairline}` : 'none',
+        borderBottom: `1px solid ${colors.hairline}`,
+        opacity: fading ? 0 : 1,
+        transition: `opacity ${FADE_OUT_MS}ms ${easings.calmOut}`,
+      }}
+      data-testid={`todo-row-${item.id}`}
+    >
+      <div style={{ padding: `${ROW_PAD_Y}px 0` }}>
+        <Row gap={16} align="baseline" justify="space-between">
+          <Row gap={14} align="baseline" style={{ minWidth: 0, flex: 1 }}>
+            <span
+              aria-hidden="true"
+              style={{
+                width: BULLET_SIZE,
+                height: BULLET_SIZE,
+                background: colors.ink,
+                display: 'inline-block',
+                marginTop: 8,
+                flexShrink: 0,
+              }}
+            />
+            <Text
+              scale="body"
+              style={{ color: colors.ink, wordBreak: 'break-word' }}
+            >
+              {item.text}
+            </Text>
+          </Row>
+          <Text
+            scale="caption"
+            color={colors.inkFaint}
+            style={SMCP_STYLE}
+          >
+            {sourceLabel(item.source)}
+          </Text>
+        </Row>
+        <Row
+          gap={16}
+          align="baseline"
+          style={{ paddingLeft: BULLET_SIZE + 14, paddingTop: 8 }}
+          data-testid={`decision-actions-${item.id}`}
+        >
+          <button
+            type="button"
+            aria-label={`cancel: ${item.text}`}
+            style={{ ...DECISION_BTN_STYLE, color: colors.sage }}
+            onClick={handleCancel}
+            data-testid={`decision-cancel-${item.id}`}
+          >
+            cancel
+          </button>
+          <button
+            type="button"
+            aria-label={`keep: ${item.text}`}
+            style={{ ...DECISION_BTN_STYLE, color: colors.ink }}
+            onClick={handleKeep}
+            data-testid={`decision-keep-${item.id}`}
+          >
+            keep
+          </button>
+          <button
+            type="button"
+            aria-label={`decide later: ${item.text}`}
+            style={{ ...DECISION_BTN_STYLE, color: colors.inkSoft }}
+            onClick={handleLater}
+            data-testid={`decision-later-${item.id}`}
+          >
+            decide later
+          </button>
+        </Row>
+      </div>
+    </li>
+  );
 }
 
 // ─── style atoms shared by list nodes ─────────────────────────────────────

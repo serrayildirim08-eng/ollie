@@ -37,10 +37,15 @@ vi.mock('../modules/admin', () => {
     listOpen: vi.fn().mockResolvedValue([]),
     markComplete: vi.fn().mockResolvedValue(undefined),
   };
+  const recurringDecisions = {
+    listOpen: vi.fn().mockResolvedValue([]),
+    decide: vi.fn().mockResolvedValue(undefined),
+  };
   return {
     migrateAdmin: vi.fn().mockResolvedValue(undefined),
     tasks,
     renewals,
+    recurringDecisions,
   };
 });
 
@@ -91,12 +96,27 @@ vi.mock('../theme/tokens', () => ({
     paper: '#F4F1E8',
     cream: '#FAFAF7',
   },
+  fonts: { sans: 'sans-serif', serif: 'serif', mono: 'monospace' },
+  fontWeights: { normal: 400, medium: 500, bold: 700 },
+  zIndex: { modal: 100 },
   durations: { tap: '120ms', fade: '200ms' },
   easings: { calmOut: 'cubic-bezier(0.18,0,0.22,1)' },
 }));
 
+// Mock the finance module to avoid FinanceBox pulling in real token deps.
+vi.mock('../modules/finance', () => ({
+  migrateFinance: vi.fn().mockResolvedValue(undefined),
+  pending: {
+    listOpen: vi.fn().mockResolvedValue([]),
+  },
+  subscriptions: {
+    markCanceled: vi.fn().mockResolvedValue(undefined),
+  },
+}));
+
 import { TodoScreen } from './TodoScreen';
 import * as adminMod from '../modules/admin';
+import * as financeMod from '../modules/finance';
 import * as workMod from '../modules/work';
 import * as groceryMod from '../modules/grocery';
 
@@ -106,6 +126,8 @@ const mockAdminTasksListOpen = adminMod.tasks.listOpen as ReturnType<typeof vi.f
 const mockAdminTasksMarkComplete = adminMod.tasks.markComplete as ReturnType<typeof vi.fn>;
 const mockAdminRenewalsListOpen = adminMod.renewals.listOpen as ReturnType<typeof vi.fn>;
 const mockAdminRenewalsMarkComplete = adminMod.renewals.markComplete as ReturnType<typeof vi.fn>;
+const mockAdminDecisionsListOpen = adminMod.recurringDecisions.listOpen as ReturnType<typeof vi.fn>;
+const mockFinancePendingListOpen = financeMod.pending.listOpen as ReturnType<typeof vi.fn>;
 const mockWorkListOpen = workMod.tasks.listOpen as ReturnType<typeof vi.fn>;
 const mockWorkMarkComplete = workMod.tasks.markComplete as ReturnType<typeof vi.fn>;
 const mockGroceryListOpen = groceryMod.shopping.listOpen as ReturnType<typeof vi.fn>;
@@ -120,6 +142,8 @@ beforeEach(() => {
   mockAdminTasksMarkComplete.mockReset().mockResolvedValue(undefined);
   mockAdminRenewalsListOpen.mockReset().mockResolvedValue([]);
   mockAdminRenewalsMarkComplete.mockReset().mockResolvedValue(undefined);
+  mockAdminDecisionsListOpen.mockReset().mockResolvedValue([]);
+  mockFinancePendingListOpen.mockReset().mockResolvedValue([]);
   mockWorkListOpen.mockReset().mockResolvedValue([]);
   mockWorkMarkComplete.mockReset().mockResolvedValue(undefined);
   mockGroceryListOpen.mockReset().mockResolvedValue([]);

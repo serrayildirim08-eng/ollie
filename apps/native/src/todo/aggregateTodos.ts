@@ -27,8 +27,9 @@
  *     orthogonal and intentionally not aggregated here.
  */
 
-import type { AdminRenewal, AdminTask } from '../modules/admin/types';
+import type { AdminRenewal, AdminTask, RecurringDecisionRow } from '../modules/admin/types';
 import type { ShoppingItem } from '../modules/grocery/types';
+import type { PendingDecisionRow } from '../modules/finance/repo';
 import type { WorkTask } from '../modules/work/types';
 
 // ─── grocery safety-net filter ───────────────────────────────────────────────
@@ -104,7 +105,7 @@ export function getGroceryLeakCount(
 
 // ─── normalized shape ─────────────────────────────────────────────────────
 
-export type TodoSource = 'admin' | 'work' | 'grocery';
+export type TodoSource = 'admin' | 'work' | 'grocery' | 'admin_decision' | 'finance_decision';
 
 /**
  * The single UI-facing shape. The screen renders one bullet per item;
@@ -116,6 +117,9 @@ export type TodoSource = 'admin' | 'work' | 'grocery';
  *   screen also prints it as a quiet caption.
  * - `createdAt` is the row's original creation time (ms since epoch),
  *   used as the tiebreaker for un-dated items.
+ * - `kind` discriminates the row variant for the renderer:
+ *     'task'     → normal bullet, click-to-complete
+ *     'decision' → DECISION variant with cancel / keep / decide-later buttons
  */
 export interface TodoItem {
   readonly id: string;
@@ -125,16 +129,19 @@ export interface TodoItem {
   readonly date?: string;
   readonly createdAt: number;
   readonly rowId: string;
+  readonly kind: 'task' | 'decision';
 }
 
-/** The seven brain-dump actions that surface as to-do bullets. */
+/** The nine brain-dump actions that surface as to-do bullets. */
 export type TodoAction =
   | 'create_task'
   | 'create_phone_task'
   | 'schedule_appointment'
   | 'log_renewal'
   | 'log_deadline'
-  | 'shopping_list_add';
+  | 'shopping_list_add'
+  | 'recurring_decision'
+  | 'pending_decision';
 
 // ─── normalizers · one per (module, action) pair ──────────────────────────
 //
@@ -157,6 +164,7 @@ export function normalizeAdminTask(row: AdminTask): TodoItem | null {
       text: row.text,
       createdAt: row.createdAt,
       rowId: row.id,
+      kind: 'task',
     };
   }
   if (row.kind === 'phone') {
@@ -175,6 +183,7 @@ export function normalizeAdminTask(row: AdminTask): TodoItem | null {
       text,
       createdAt: row.createdAt,
       rowId: row.id,
+      kind: 'task',
     };
   }
   if (row.kind === 'appointment') {
@@ -189,10 +198,13 @@ export function normalizeAdminTask(row: AdminTask): TodoItem | null {
       date,
       createdAt: row.createdAt,
       rowId: row.id,
+      kind: 'task',
     };
   }
   // paperwork / decision are NOT to-do bullets per the brief — they're
   // background admin debris with no "act on it" semantics.
+  // (admin.recurring_decision rows come through recurringDecisions.listOpen,
+  //  not via admin_tasks — they use a separate normalizer below.)
   return null;
 }
 
@@ -208,6 +220,44 @@ export function normalizeAdminRenewal(row: AdminRenewal): TodoItem {
     date: row.dueDate ?? undefined,
     createdAt: row.addedAt,
     rowId: row.id,
+    kind: 'task',
+  };
+}
+
+/**
+ * admin.recurring_decision → "decide: <what>"
+ *
+ * Surfaces as a DECISION variant row with cancel / keep / decide later
+ * buttons. Source is 'admin_decision' so the renderer knows which repo
+ * helpers to call back.
+ */
+export function normalizeRecurringDecision(row: RecurringDecisionRow): TodoItem {
+  return {
+    id: `admin_decision:${row.id}`,
+    source: 'admin_decision',
+    action: 'recurring_decision',
+    text: `decide: ${row.what}`,
+    createdAt: row.createdAt,
+    rowId: row.id,
+    kind: 'decision',
+  };
+}
+
+/**
+ * finance.pending_decision → "decide: <what>"
+ *
+ * Same DECISION variant. Source 'finance_decision' so cancel routes to
+ * pending.decide(id, 'skip') instead of recurringDecisions.decide(id, 'cancel').
+ */
+export function normalizePendingDecision(row: PendingDecisionRow): TodoItem {
+  return {
+    id: `finance_decision:${row.id}`,
+    source: 'finance_decision',
+    action: 'pending_decision',
+    text: `decide: ${row.what}`,
+    createdAt: row.createdAt,
+    rowId: row.id,
+    kind: 'decision',
   };
 }
 
@@ -226,6 +276,7 @@ export function normalizeWorkTask(row: WorkTask): TodoItem | null {
       date: row.dueDate ?? undefined,
       createdAt: row.createdAt,
       rowId: row.id,
+      kind: 'task',
     };
   }
   // Safety-net: drop single grocery nouns mis-classified as work.create_task.
@@ -237,6 +288,7 @@ export function normalizeWorkTask(row: WorkTask): TodoItem | null {
     text: row.text,
     createdAt: row.createdAt,
     rowId: row.id,
+    kind: 'task',
   };
 }
 
@@ -250,6 +302,7 @@ export function normalizeGroceryShopping(row: ShoppingItem): TodoItem {
     text: row.name,
     createdAt: row.addedAt,
     rowId: row.id,
+    kind: 'task',
   };
 }
 
@@ -259,9 +312,11 @@ export interface AggregateInput {
   readonly admin: {
     readonly tasks: readonly AdminTask[];
     readonly renewals: readonly AdminRenewal[];
+    readonly decisions: readonly RecurringDecisionRow[];
   };
   readonly work: { readonly tasks: readonly WorkTask[] };
   readonly grocery: { readonly shopping: readonly ShoppingItem[] };
+  readonly finance: { readonly pendingDecisions: readonly PendingDecisionRow[] };
 }
 
 /**
@@ -283,12 +338,18 @@ export function aggregateTodos(input: AggregateInput): TodoItem[] {
   for (const row of input.admin.renewals) {
     items.push(normalizeAdminRenewal(row));
   }
+  for (const row of input.admin.decisions) {
+    items.push(normalizeRecurringDecision(row));
+  }
   for (const row of input.work.tasks) {
     const item = normalizeWorkTask(row);
     if (item) items.push(item);
   }
   for (const row of input.grocery.shopping) {
     items.push(normalizeGroceryShopping(row));
+  }
+  for (const row of input.finance.pendingDecisions) {
+    items.push(normalizePendingDecision(row));
   }
 
   return sortTodos(items);
