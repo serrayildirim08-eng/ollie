@@ -2,9 +2,10 @@ name: deploy workers
 
 on:
   push:
-    branches: [main]
+    branches: [main, rewrite/native-foundation]
     paths:
       - 'workers/**'
+  workflow_dispatch:
 
 jobs:
   deploy-ai-proxy:
