@@ -15,6 +15,7 @@ import { sql } from '../../storage';
 import {
   normaliseHabitName,
   type Habit,
+  type HabitCue,
   type HabitCompletion,
   type HabitEvent,
   type HabitEventKind,
@@ -28,6 +29,7 @@ interface HabitRegistryRow {
   id: string;
   name: string;
   created_at: number;
+  cue: string;
   [col: string]: unknown;
 }
 
@@ -57,7 +59,7 @@ function newId(): string {
 export const registry = {
   async list(): Promise<Habit[]> {
     const rows = await sql.select<HabitRegistryRow>(
-      `SELECT id, name, created_at
+      `SELECT id, name, created_at, cue
        FROM habits_registry
        ORDER BY created_at DESC`,
     );
@@ -68,27 +70,37 @@ export const registry = {
   async findByName(name: string): Promise<Habit | null> {
     const n = normaliseHabitName(name);
     const rows = await sql.select<HabitRegistryRow>(
-      `SELECT id, name, created_at FROM habits_registry WHERE name = ? LIMIT 1`,
+      `SELECT id, name, created_at, cue FROM habits_registry WHERE name = ? LIMIT 1`,
       [n],
     );
     if (rows.length === 0) return null;
     return rowToHabit(rows[0]!);
   },
 
-  /** Insert-if-missing. Returns the row (existing or just created). */
-  async ensure(name: string): Promise<Habit> {
+  /**
+   * Insert-if-missing. Returns the row (existing or just created).
+   * `cue` is only applied on insert; an already-registered habit keeps its
+   * stored cue (use `setCue` to change it).
+   */
+  async ensure(name: string, cue: HabitCue = 'anytime'): Promise<Habit> {
     const existing = await registry.findByName(name);
     if (existing) return existing;
     const habit: Habit = {
       id: newId(),
       name: normaliseHabitName(name),
       createdAt: Date.now(),
+      cue,
     };
     await sql.execute(
-      `INSERT INTO habits_registry (id, name, created_at) VALUES (?, ?, ?)`,
-      [habit.id, habit.name, habit.createdAt],
+      `INSERT INTO habits_registry (id, name, created_at, cue) VALUES (?, ?, ?, ?)`,
+      [habit.id, habit.name, habit.createdAt, habit.cue],
     );
     return habit;
+  },
+
+  /** Update a habit's environmental cue window. */
+  async setCue(id: string, cue: HabitCue): Promise<void> {
+    await sql.execute(`UPDATE habits_registry SET cue = ? WHERE id = ?`, [cue, id]);
   },
 
   async remove(id: string): Promise<void> {
@@ -223,7 +235,9 @@ function isToday(ms: number): boolean {
 // ─── row mappers ──────────────────────────────────────────────────────────
 
 function rowToHabit(r: HabitRegistryRow): Habit {
-  return { id: r.id, name: r.name, createdAt: r.created_at };
+  const cue: HabitCue =
+    r.cue === 'morning' || r.cue === 'evening' ? r.cue : 'anytime';
+  return { id: r.id, name: r.name, createdAt: r.created_at, cue };
 }
 
 function rowToCompletion(r: HabitCompletionRow): HabitCompletion {

@@ -143,6 +143,51 @@ export const events = {
   },
 };
 
+// ─── profile ────────────────────────────────────────────────────────────────
+//
+// A single pinned row (`body_profile` id='me') holding one-time profile
+// facts. Today that's just `age` (years), used to size the daily water
+// target. Nullable throughout — the app works with no row at all.
+
+interface BodyProfileRow {
+  id: string;
+  age: number | null;
+  updated_at: number;
+  [col: string]: unknown;
+}
+
+const PROFILE_ID = 'me';
+
+export const profile = {
+  /** The stored age in years, or null when never set. */
+  async getAge(): Promise<number | null> {
+    const rows = await sql.select<BodyProfileRow>(
+      `SELECT id, age, updated_at FROM body_profile WHERE id = ? LIMIT 1`,
+      [PROFILE_ID],
+    );
+    if (rows.length === 0) return null;
+    const a = rows[0]!.age;
+    return typeof a === 'number' && Number.isFinite(a) ? a : null;
+  },
+
+  /**
+   * Set (or clear, with null) the user's age. Upserts the single profile
+   * row so repeated edits never accumulate rows.
+   */
+  async setAge(age: number | null): Promise<void> {
+    const clean =
+      typeof age === 'number' && Number.isFinite(age) && age > 0
+        ? Math.round(age)
+        : null;
+    await sql.execute(
+      `INSERT INTO body_profile (id, age, updated_at)
+       VALUES (?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET age = excluded.age, updated_at = excluded.updated_at`,
+      [PROFILE_ID, clean, Date.now()],
+    );
+  },
+};
+
 // ─── cadence ──────────────────────────────────────────────────────────────
 //
 // Body events are append-only with `logged_at` timestamps, so cadence

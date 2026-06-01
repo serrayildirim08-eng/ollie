@@ -23,10 +23,11 @@ const T1 = 28 * DAY;
 vi.mock('./repo', () => ({
   cycleRepo: {
     list: vi.fn().mockResolvedValue([
-      { id: 'a', kind: 'period_start', symptom: null, occurredAt: 0 },
-      { id: 'b', kind: 'symptom', symptom: 'cramps', occurredAt: 86_400_000 },
-      { id: 'c', kind: 'period_start', symptom: null, occurredAt: 2_419_200_000 },
-      { id: 'd', kind: 'pill', symptom: null, occurredAt: 2_419_200_000 },
+      { id: 'a', kind: 'period_start', symptom: null, intensity: null, occurredAt: 0 },
+      { id: 'b', kind: 'symptom', symptom: 'cramps', intensity: null, occurredAt: 86_400_000 },
+      { id: 'e', kind: 'bleeding', symptom: null, intensity: 'heavy', occurredAt: 86_400_000 },
+      { id: 'c', kind: 'period_start', symptom: null, intensity: null, occurredAt: 2_419_200_000 },
+      { id: 'd', kind: 'pill', symptom: null, intensity: null, occurredAt: 2_419_200_000 },
     ]),
   },
 }));
@@ -44,12 +45,15 @@ describe('cycle bridge → watcher', () => {
     vi.useRealTimers();
   });
 
-  it('mirrors cycle_events → cycle.items in the logic shape', async () => {
+  it('mirrors cycle_events → cycle.items in the logic shape (incl. bleeding intensity)', async () => {
     await syncToStore(store);
     const items = store.get('cycle', 'items', [] as unknown[]);
     expect(items).toEqual([
       { ts: T0, action: 'started' },
       { ts: T0 + DAY, action: 'symptom', text: 'cramps' },
+      // bleeding → symptom item the existing clustering buckets, plus the
+      // structured `intensity` for a future flow-clustering detector.
+      { ts: T0 + DAY, action: 'symptom', text: 'bleeding: heavy', intensity: 'heavy' },
       { ts: T1, action: 'started' },
       { ts: T1, action: 'pill' },
     ]);

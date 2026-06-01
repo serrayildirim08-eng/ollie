@@ -34,6 +34,7 @@ vi.mock('../../storage', () => ({
 }));
 
 import { createStore, createMemoryAdapter } from '@ollie/store';
+import { detectExternalizationGap, type Habit as LogicHabit } from '@ollie/logic/habits';
 import { migrateHabits } from './migrate';
 import { registry, completions } from './repo';
 import { syncToStore } from './bridge';
@@ -42,9 +43,10 @@ const FIXED_NOW = new Date('2026-05-31T12:00:00Z').getTime();
 
 beforeEach(async () => {
   await migrateHabits();
-  mockDb.exec('DELETE FROM habits_registry');
+  // completions FK → registry, so clear children before parents.
   mockDb.exec('DELETE FROM habits_completions');
   mockDb.exec('DELETE FROM habits_events');
+  mockDb.exec('DELETE FROM habits_registry');
 });
 
 afterEach(() => {
@@ -87,5 +89,53 @@ describe('habits bridge → orchestrator', () => {
     expect(orch._emittedCompletionCount()).toBe(1);
 
     orch.teardown();
+  });
+
+  it('cue captured in SQLite persists, round-trips through the bridge, and lets the externalization-gap detector differentiate cued vs uncued', async () => {
+    const DAY = 24 * 60 * 60 * 1000;
+
+    // Two cued (morning) habits completed every day for 14 days; two uncued
+    // (anytime → no cue) habits completed only twice. The detector should see
+    // a clear gap: cued rate ≫ uncued rate.
+    const cuedA = await registry.ensure('stretch', 'morning');
+    const cuedB = await registry.ensure('vitamins', 'evening');
+    const uncuedA = await registry.ensure('read', 'anytime');
+    const uncuedB = await registry.ensure('journal'); // default 'anytime'
+
+    // cue persisted on the registry row, including the calm default.
+    expect((await registry.findByName('stretch'))!.cue).toBe('morning');
+    expect((await registry.findByName('vitamins'))!.cue).toBe('evening');
+    expect((await registry.findByName('read'))!.cue).toBe('anytime');
+    expect((await registry.findByName('journal'))!.cue).toBe('anytime');
+
+    for (let d = 0; d < 14; d++) {
+      const at = FIXED_NOW - d * DAY;
+      await completions.add(cuedA.id, at);
+      await completions.add(cuedB.id, at);
+    }
+    await completions.add(uncuedA.id, FIXED_NOW - 1 * DAY);
+    await completions.add(uncuedB.id, FIXED_NOW - 2 * DAY);
+
+    // ── bridge: mirror SQLite → store; 'anytime' must map to no cue ──
+    const store = createStore(createMemoryAdapter());
+    await syncToStore(store);
+
+    const roster = store.get<LogicHabit[]>('shared', 'habits_v2', []) ?? [];
+    const byName = (n: string) => roster.find((h) => h.name === n)!;
+    expect(byName('stretch').cue).toBe('morning');
+    expect(byName('vitamins').cue).toBe('evening');
+    expect(byName('read').cue).toBeUndefined(); // 'anytime' → uncued
+    expect(byName('journal').cue).toBeUndefined();
+
+    // ── detector: reads h.cue, differentiates the two cohorts ──
+    const result = detectExternalizationGap(
+      { habits: roster, now: FIXED_NOW },
+      { now: FIXED_NOW },
+    );
+    expect(result).not.toBeNull();
+    expect(result!.pattern).toBe('externalization-gap');
+    expect(result!.cued_count).toBe(2);
+    expect(result!.uncued_count).toBe(2);
+    expect(result!.gap_percent as number).toBeGreaterThan(0);
   });
 });

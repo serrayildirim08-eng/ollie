@@ -28,6 +28,13 @@ export interface FinanceTransaction {
   amount: number | null;
   currency: string | null;  // ISO 4217 if known; null when the user said "$" with no symbol
   merchant: string | null;
+  /**
+   * Soft spending category — one of FINANCE_CATEGORIES or any freeform
+   * label the user typed. Null when no category was captured (brain-dump
+   * spends rarely name one). Feeds the category-keyed Layer-2 watchers
+   * (hyperfocus burst, duplicate-by-category) via the bridge → finance.records.
+   */
+  category: string | null;
   occurredAt: number;       // ms since epoch
 }
 
@@ -154,6 +161,36 @@ export function normaliseMerchant(raw: string | undefined | null): string | null
 /** Normalise a subscription name: trimmed lowercase, single spaces. */
 export function normaliseSubscriptionName(raw: string): string {
   return raw.toLowerCase().trim().replace(/\s+/g, ' ');
+}
+
+/**
+ * Preset spending categories offered in the tap-to-log picker. The user can
+ * still type a freeform label, so this is a convenience list, NOT a closed
+ * enum — `normaliseCategory` accepts anything. Kept lowercase to match how
+ * the category-keyed watchers group (patterns.ts lowercases on read).
+ */
+export const FINANCE_CATEGORIES = [
+  'groceries',
+  'dining',
+  'transport',
+  'health',
+  'shopping',
+  'subscriptions',
+  'other',
+] as const;
+
+export type FinanceCategory = (typeof FINANCE_CATEGORIES)[number];
+
+/**
+ * Normalise a category label: trimmed lowercase, single spaces. Accepts any
+ * freeform string (not just FINANCE_CATEGORIES); returns null for empty/blank
+ * so the column stays honestly nullable. No "other" coercion — an unset
+ * category and an explicit "other" are different signals to the watchers.
+ */
+export function normaliseCategory(raw: string | undefined | null): string | null {
+  if (!raw) return null;
+  const cleaned = raw.toLowerCase().trim().replace(/\s+/g, ' ');
+  return cleaned.length === 0 ? null : cleaned;
 }
 
 const KNOWN_SENTIMENTS: ReflectionSentiment[] = ['concerned', 'satisfied', 'neutral'];

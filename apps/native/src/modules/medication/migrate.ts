@@ -13,12 +13,24 @@
 
 import { sql } from '../../storage';
 
+interface PragmaColumnRow {
+  name: string;
+  [col: string]: unknown;
+}
+
 const MIGRATIONS = [
   // Registry — one row per medication, keyed on normalised name.
+  // `kind` + `schedule` added 2026-06-01 (structured-capture build):
+  //   kind     — 'prescription' | 'vitamin' | 'supplement' | 'otc'
+  //   schedule — JSON array of "HH:MM" 24h-local strings, e.g. ["09:00"]
+  // Fresh databases get the columns here; pre-existing rows are backfilled
+  // via the PRAGMA table_info guard below.
   `CREATE TABLE IF NOT EXISTS medications_registry (
     id          TEXT PRIMARY KEY,
     name        TEXT NOT NULL UNIQUE,
-    created_at  INTEGER NOT NULL
+    created_at  INTEGER NOT NULL,
+    kind        TEXT NOT NULL DEFAULT 'prescription',
+    schedule    TEXT NOT NULL DEFAULT '[]'
   )`,
 
   // Events — every dose / missed / side-effect lands here.
@@ -47,6 +59,25 @@ export function migrateMedication(): Promise<void> {
     migrationPromise = (async () => {
       for (const stmt of MIGRATIONS) {
         await sql.execute(stmt);
+      }
+      // Backfill kind + schedule for databases created before the
+      // 2026-06-01 structured-capture schema. SQLite has no
+      // "ADD COLUMN IF NOT EXISTS" so we probe table_info first. Both
+      // columns are additive with safe defaults — existing rows keep
+      // their data and gain kind='prescription', schedule='[]'.
+      const cols = await sql.select<PragmaColumnRow>(
+        `PRAGMA table_info(medications_registry)`,
+      );
+      const have = new Set(cols.map((c) => c.name));
+      if (!have.has('kind')) {
+        await sql.execute(
+          `ALTER TABLE medications_registry ADD COLUMN kind TEXT NOT NULL DEFAULT 'prescription'`,
+        );
+      }
+      if (!have.has('schedule')) {
+        await sql.execute(
+          `ALTER TABLE medications_registry ADD COLUMN schedule TEXT NOT NULL DEFAULT '[]'`,
+        );
       }
     })();
   }

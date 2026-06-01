@@ -44,7 +44,13 @@ import {
   events as eventsRepo,
   medications as medsRepo,
 } from './repo';
-import type { Medication, MedicationEventWithName } from './types';
+import {
+  MEDICATION_KINDS,
+  normaliseTime,
+  type Medication,
+  type MedicationEventWithName,
+  type MedicationKind,
+} from './types';
 
 const SMCP_STYLE: React.CSSProperties = {
   fontVariantCaps: 'all-small-caps',
@@ -146,6 +152,14 @@ export function MedicationBox(): JSX.Element {
     [refresh],
   );
 
+  const handleSaveProfile = useCallback(
+    async (id: string, profile: { kind: MedicationKind; schedule: string[] }) => {
+      await medsRepo.updateProfile(id, profile);
+      await refresh();
+    },
+    [refresh],
+  );
+
   const handleRemoveEvent = useCallback(
     async (id: string) => {
       await eventsRepo.remove(id);
@@ -198,6 +212,7 @@ export function MedicationBox(): JSX.Element {
             meds={state.meds}
             lastDose={state.lastDose}
             onRemove={(id) => void handleRemoveMed(id)}
+            onSaveProfile={(id, p) => void handleSaveProfile(id, p)}
           />
 
           <ListSection
@@ -498,10 +513,15 @@ function NotebookList({
   meds,
   lastDose,
   onRemove,
+  onSaveProfile,
 }: {
   meds: Medication[];
   lastDose: Record<string, number>;
   onRemove: (id: string) => void;
+  onSaveProfile: (
+    id: string,
+    profile: { kind: MedicationKind; schedule: string[] },
+  ) => void;
 }): JSX.Element {
   return (
     <Stack gap={4}>
@@ -543,6 +563,7 @@ function NotebookList({
               lastDoseAt={lastDose[med.id] ?? null}
               first={i === 0}
               onRemove={() => onRemove(med.id)}
+              onSaveProfile={(p) => onSaveProfile(med.id, p)}
             />
           ))}
         </div>
@@ -556,12 +577,23 @@ function MedListRow({
   lastDoseAt,
   first,
   onRemove,
+  onSaveProfile,
 }: {
   med: Medication;
   lastDoseAt: number | null;
   first: boolean;
   onRemove: () => void;
+  onSaveProfile: (profile: { kind: MedicationKind; schedule: string[] }) => void;
 }): JSX.Element {
+  const [editing, setEditing] = useState(false);
+
+  // A calm one-line summary of the structured profile: kind, then the
+  // schedule slots (or "no schedule" when manual-log-only).
+  const scheduleSummary =
+    med.schedule.length > 0
+      ? med.schedule.map(formatSlot).join(' · ')
+      : 'no schedule';
+
   return (
     <div
       style={{
@@ -569,55 +601,273 @@ function MedListRow({
         borderBottom: first ? 'none' : 'none',
         padding: '16px 2px',
         display: 'flex',
-        alignItems: 'center',
-        gap: 12,
+        flexDirection: 'column',
+        gap: 14,
       }}
     >
-      <span
-        aria-hidden
-        style={{
-          width: 9,
-          height: 9,
-          borderRadius: '50%',
-          background: colors.sageDeep,
-          flexShrink: 0,
-        }}
-      />
-      <div
-        style={{
-          flex: 1,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 3,
-          minWidth: 0,
-        }}
-      >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <span
+          aria-hidden
+          style={{
+            width: 9,
+            height: 9,
+            borderRadius: '50%',
+            background: colors.sageDeep,
+            flexShrink: 0,
+          }}
+        />
         <div
           style={{
-            fontSize: fontSizes.small,
-            color: colors.ink,
-            fontWeight: fontWeights.medium,
-            letterSpacing: '-0.01em',
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 3,
+            minWidth: 0,
           }}
         >
-          {med.name}
+          <div
+            style={{
+              fontSize: fontSizes.small,
+              color: colors.ink,
+              fontWeight: fontWeights.medium,
+              letterSpacing: '-0.01em',
+            }}
+          >
+            {med.name}
+            <span
+              style={{
+                color: colors.inkFaint,
+                fontWeight: fontWeights.regular,
+                marginLeft: 8,
+                ...SMCP_STYLE,
+              }}
+            >
+              {med.kind}
+            </span>
+          </div>
+          <div
+            style={{
+              fontSize: fontSizes.caption,
+              color: colors.inkFaint,
+              fontWeight: fontWeights.medium,
+              letterSpacing: '0.01em',
+            }}
+          >
+            {scheduleSummary}
+            <span style={{ margin: '0 6px' }}>·</span>
+            {lastDoseAt != null
+              ? `last dose ${formatRelative(lastDoseAt)}`
+              : 'no doses logged'}
+          </div>
         </div>
-        <div
+        <button
+          onClick={() => setEditing((v) => !v)}
+          aria-label={editing ? 'close editor' : 'edit schedule'}
           style={{
-            fontSize: fontSizes.caption,
+            background: 'none',
+            border: 'none',
+            padding: '4px 8px',
             color: colors.inkFaint,
-            fontWeight: fontWeights.medium,
-            letterSpacing: '0.01em',
+            cursor: 'pointer',
+            fontVariantCaps: 'all-small-caps',
+            letterSpacing: '0.08em',
+            fontSize: 12,
+            flexShrink: 0,
           }}
         >
-          {lastDoseAt != null
-            ? `last dose ${formatRelative(lastDoseAt)}`
-            : 'no doses logged'}
-        </div>
+          {editing ? 'done' : 'edit'}
+        </button>
+        <RemoveButton onClick={onRemove} />
       </div>
-      <RemoveButton onClick={onRemove} />
+
+      {editing && (
+        <MedProfileEditor
+          med={med}
+          onSave={(profile) => {
+            onSaveProfile(profile);
+            setEditing(false);
+          }}
+        />
+      )}
     </div>
   );
+}
+
+// ─── inline profile editor — kind + schedule ───────────────────────────────
+//
+// Expanded under a med row. Lets the user classify the med (kind chips) and
+// build a daily schedule of HH:MM slots. Calm editorial grammar — sage chips
+// for the active kind, hairline pills for slots, no red, no validation shame
+// (an unparseable time simply doesn't add). Saving persists via the repo;
+// once a schedule has a slot the watcher's "remaining doses" path lights up.
+
+function MedProfileEditor({
+  med,
+  onSave,
+}: {
+  med: Medication;
+  onSave: (profile: { kind: MedicationKind; schedule: string[] }) => void;
+}): JSX.Element {
+  const [kind, setKind] = useState<MedicationKind>(med.kind);
+  const [slots, setSlots] = useState<string[]>(med.schedule);
+  const [draft, setDraft] = useState('');
+
+  const addSlot = useCallback(() => {
+    const t = normaliseTime(draft);
+    if (!t) return; // not a valid HH:MM — quietly ignore, no shame
+    setSlots((prev) => (prev.includes(t) ? prev : [...prev, t].sort()));
+    setDraft('');
+  }, [draft]);
+
+  const removeSlot = useCallback((t: string) => {
+    setSlots((prev) => prev.filter((s) => s !== t));
+  }, []);
+
+  return (
+    <Stack gap={16} style={{ paddingLeft: 21 }}>
+      {/* kind chips */}
+      <Stack gap={8}>
+        <SectionLabel>kind</SectionLabel>
+        <Row gap={8} style={{ flexWrap: 'wrap' }}>
+          {MEDICATION_KINDS.map((k) => {
+            const active = k === kind;
+            return (
+              <button
+                key={k}
+                onClick={() => setKind(k)}
+                style={{
+                  ...SMCP_STYLE,
+                  border: `1px solid ${active ? colors.sageDeep : colors.hairline}`,
+                  background: active ? colors.sageDeep : 'transparent',
+                  color: active ? colors.paper : colors.ink,
+                  borderRadius: 999,
+                  padding: '6px 14px',
+                  fontSize: 12,
+                  fontWeight: fontWeights.medium,
+                  cursor: 'pointer',
+                }}
+              >
+                {k}
+              </button>
+            );
+          })}
+        </Row>
+      </Stack>
+
+      {/* schedule slots */}
+      <Stack gap={8}>
+        <SectionLabel>daily schedule</SectionLabel>
+        {slots.length === 0 ? (
+          <Text scale="caption" color={colors.inkFaint}>
+            no times yet — add one below, or leave empty to log by hand
+          </Text>
+        ) : (
+          <Row gap={8} style={{ flexWrap: 'wrap' }}>
+            {slots.map((t) => (
+              <span
+                key={t}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  border: `1px solid ${colors.hairline}`,
+                  borderRadius: 999,
+                  padding: '5px 6px 5px 12px',
+                  fontSize: fontSizes.caption,
+                  color: colors.ink,
+                  fontWeight: fontWeights.medium,
+                }}
+              >
+                {formatSlot(t)}
+                <button
+                  onClick={() => removeSlot(t)}
+                  aria-label={`remove ${t}`}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    padding: '0 4px',
+                    color: colors.inkFaint,
+                    cursor: 'pointer',
+                    fontSize: 14,
+                    lineHeight: 1,
+                  }}
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+          </Row>
+        )}
+
+        <Row gap={8} align="center">
+          <input
+            type="time"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') addSlot();
+            }}
+            aria-label="add a time"
+            style={{
+              border: `1px solid ${colors.hairline}`,
+              borderRadius: 8,
+              padding: '7px 10px',
+              fontSize: fontSizes.small,
+              color: colors.ink,
+              background: colors.paper,
+              fontFamily: 'inherit',
+            }}
+          />
+          <button
+            onClick={addSlot}
+            style={{
+              ...SMCP_STYLE,
+              border: `1px solid ${colors.hairline}`,
+              background: 'transparent',
+              color: colors.ink,
+              borderRadius: 8,
+              padding: '7px 14px',
+              fontSize: 12,
+              fontWeight: fontWeights.medium,
+              cursor: 'pointer',
+            }}
+          >
+            add time
+          </button>
+        </Row>
+      </Stack>
+
+      <Row gap={12} align="center">
+        <button
+          onClick={() => onSave({ kind, schedule: slots })}
+          style={{
+            ...SMCP_STYLE,
+            border: 'none',
+            background: colors.ink,
+            color: colors.paper,
+            borderRadius: 8,
+            padding: '9px 18px',
+            fontSize: 12,
+            fontWeight: fontWeights.medium,
+            cursor: 'pointer',
+            letterSpacing: '0.08em',
+          }}
+        >
+          save
+        </button>
+      </Row>
+    </Stack>
+  );
+}
+
+/** "09:00" → "9:00am" — the same calm clock grammar as the rest of the box. */
+function formatSlot(hhmm: string): string {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm);
+  if (!m) return hhmm;
+  const h = Number(m[1]);
+  const hh = ((h + 11) % 12) + 1;
+  const ampm = h < 12 ? 'am' : 'pm';
+  return `${hh}:${m[2]}${ampm}`;
 }
 
 // ─── recent-events sections ──────────────────────────────────────────────

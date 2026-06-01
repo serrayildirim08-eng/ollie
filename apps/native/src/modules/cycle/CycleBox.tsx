@@ -40,7 +40,12 @@ import { WhenCaption } from '../../lib/WhenCaption';
 import { PatternCards } from '../../patterns/PatternCards';
 import { migrateCycle } from './migrate';
 import { cycleCadence, cycleRepo } from './repo';
-import type { CurrentCycle, CycleEvent } from './types';
+import {
+  BLEEDING_INTENSITIES,
+  type BleedingIntensity,
+  type CurrentCycle,
+  type CycleEvent,
+} from './types';
 
 // ── visual constants ──────────────────────────────────────────────────────
 
@@ -83,21 +88,24 @@ export function CycleBox(): JSX.Element {
   const [pills, setPills] = useState<CycleEvent[]>([]);
   const [history, setHistory] = useState<CycleEvent[]>([]);
   const [periodCadence, setPeriodCadence] = useState<CadenceEstimate | null>(null);
+  const [todayBleeding, setTodayBleeding] = useState<BleedingIntensity | null>(null);
   const [ready, setReady] = useState(false);
 
   const refresh = useCallback(async () => {
-    const [cur, sym, pil, starts, ends, cad] = await Promise.all([
+    const [cur, sym, pil, starts, ends, cad, bleeding] = await Promise.all([
       cycleRepo.current(),
       cycleRepo.list('symptom', 10),
       cycleRepo.list('pill', 10),
       cycleRepo.list('period_start', 6),
       cycleRepo.list('period_end', 6),
       cycleCadence.getPeriodCadence(),
+      cycleRepo.bleedingForDay(),
     ]);
     setCurrent(cur);
     setSymptoms(sym);
     setPills(pil);
     setPeriodCadence(cad);
+    setTodayBleeding(bleeding);
     // Merge starts + ends, sort desc, keep top 6 — gives a chronological
     // view of "what landed lately on the period timeline".
     const merged = [...starts, ...ends]
@@ -140,6 +148,22 @@ export function CycleBox(): JSX.Element {
       await refresh();
     },
     [refresh],
+  );
+
+  const handleSetBleeding = useCallback(
+    async (intensity: BleedingIntensity) => {
+      // re-tapping the active tag clears today's flow; setBleeding upserts so
+      // there's only ever one tag per day.
+      if (todayBleeding === intensity) {
+        const dayEvents = await cycleRepo.list('bleeding', 50);
+        const today = dayEvents.find((e) => isSameLocalDay(e.occurredAt, Date.now()));
+        if (today) await cycleRepo.remove(today.id);
+      } else {
+        await cycleRepo.setBleeding(intensity);
+      }
+      await refresh();
+    },
+    [todayBleeding, refresh],
   );
 
   const isEmpty =
@@ -202,6 +226,14 @@ export function CycleBox(): JSX.Element {
             />
             <NowLine current={current} />
             <CadenceHint estimate={periodCadence} />
+          </Stack>
+
+          {/* bleeding intensity — a quiet chip row for today's flow. */}
+          <Stack gap={16}>
+            <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
+              today&rsquo;s flow
+            </Text>
+            <BleedingChips selected={todayBleeding} onSelect={handleSetBleeding} />
           </Stack>
 
           {/* Layer-2 noticings — fed by the SQLite→store bridge + cycle watcher. */}
@@ -420,6 +452,72 @@ function CycleRing({
           {phase}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─── bleeding intensity ────────────────────────────────────────────────────
+
+function isSameLocalDay(a: number, b: number): boolean {
+  const da = new Date(a);
+  const db = new Date(b);
+  return (
+    da.getFullYear() === db.getFullYear() &&
+    da.getMonth() === db.getMonth() &&
+    da.getDate() === db.getDate()
+  );
+}
+
+/**
+ * The 9 editorial bleeding-intensity tags as a calm wrapping chip row. The
+ * selected chip carries the umber bleeding ink (filled, soft); the rest are
+ * quiet outlines. Tapping a chip sets today's flow; tapping the active one
+ * again clears it. No alarm colour, no scoring.
+ */
+function BleedingChips({
+  selected,
+  onSelect,
+}: {
+  selected: BleedingIntensity | null;
+  onSelect: (intensity: BleedingIntensity) => void;
+}): JSX.Element {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: 8,
+      }}
+      role="group"
+      aria-label="bleeding intensity"
+    >
+      {BLEEDING_INTENSITIES.map((tag) => {
+        const active = selected === tag;
+        return (
+          <button
+            key={tag}
+            type="button"
+            aria-pressed={active}
+            aria-label={`flow: ${tag}`}
+            onClick={() => onSelect(tag)}
+            style={{
+              background: active ? UMBER : 'transparent',
+              border: `1px solid ${active ? UMBER : colors.hairline}`,
+              borderRadius: 999,
+              padding: '6px 14px',
+              color: active ? colors.cream : colors.inkSoft,
+              cursor: 'pointer',
+              fontFamily: fonts.sans,
+              fontSize: 13,
+              letterSpacing: '0.02em',
+              lineHeight: 1.2,
+              transition: 'background 120ms ease, color 120ms ease',
+            }}
+          >
+            {tag}
+          </button>
+        );
+      })}
     </div>
   );
 }

@@ -104,6 +104,39 @@ export function getDose(e: BodyEvent): string | null {
   return typeof v === 'string' && v.length > 0 ? v : null;
 }
 
+/**
+ * Adult baseline daily water target, in 250 mL glasses. The familiar
+ * "~8 cups a day" rule of thumb (U.S. National Academies' ~2 L adequate
+ * intake from beverages ≈ 8 cups). Used as the fallback when age is unknown.
+ */
+export const DEFAULT_WATER_TARGET = 8;
+
+/**
+ * Age-based daily water target, in 250 mL glasses.
+ *
+ * Keeps it simple + non-judgmental — a gentle nudge, not a clinical
+ * prescription, and never shame-shaped. Bands (loosely after the NAM adequate
+ * -intake-by-age tables, scaled to 250 mL glasses):
+ *   - children (4–8):     ~5 glasses
+ *   - older children (9–13): ~7 glasses
+ *   - teens + adults (14–55): ~8 glasses (the familiar baseline)
+ *   - 56+:                ~7 glasses (thirst sensation dulls with age; a
+ *                          slightly lower headline target reads as kinder
+ *                          than an unreachable one)
+ *
+ * Returns the adult baseline (8) for any missing / out-of-range age so a
+ * fresh install always has a sensible denominator.
+ */
+export function waterTargetForAge(age: number | null | undefined): number {
+  if (typeof age !== 'number' || !Number.isFinite(age) || age <= 0) {
+    return DEFAULT_WATER_TARGET;
+  }
+  if (age < 9) return 5;
+  if (age < 14) return 7;
+  if (age <= 55) return 8;
+  return 7;
+}
+
 /** Midnight-of-today in local time, ms since epoch. */
 export function startOfTodayMs(now: number = Date.now()): number {
   const d = new Date(now);

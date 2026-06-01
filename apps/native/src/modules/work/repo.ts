@@ -24,6 +24,8 @@ import type {
   WorkEvent,
   WorkEventData,
   WorkEventKind,
+  WorkHandoffNote,
+  WorkScheduledBlock,
   WorkTask,
   WorkTaskKind,
 } from './types';
@@ -46,6 +48,25 @@ interface WorkEventRow {
   kind: string;
   data: string;
   logged_at: number;
+  [col: string]: unknown;
+}
+
+interface WorkScheduledBlockRow {
+  id: string;
+  label: string | null;
+  start_ts: number;
+  duration_min: number | null;
+  cancelled_at: number | null;
+  created_at: number;
+  [col: string]: unknown;
+}
+
+interface WorkHandoffNoteRow {
+  id: string;
+  text: string;
+  project: string | null;
+  resolved_at: number | null;
+  ts: number;
   [col: string]: unknown;
 }
 
@@ -277,6 +298,123 @@ export const events = {
   },
 };
 
+// ─── scheduled blocks ───────────────────────────────────────────────────────
+
+export const scheduledBlocks = {
+  /** Active (non-cancelled) blocks, soonest start first. */
+  async list(): Promise<WorkScheduledBlock[]> {
+    const rows = await sql.select<WorkScheduledBlockRow>(
+      `SELECT id, label, start_ts, duration_min, cancelled_at, created_at
+       FROM work_scheduled_blocks
+       WHERE cancelled_at IS NULL
+       ORDER BY start_ts ASC`,
+    );
+    return rows.map(rowToScheduledBlock);
+  },
+
+  /** Every block including cancelled — the bridge mirrors all of these so the
+   *  cue scan can see + skip cancelled rows by `cancelledAt`. */
+  async listAll(): Promise<WorkScheduledBlock[]> {
+    const rows = await sql.select<WorkScheduledBlockRow>(
+      `SELECT id, label, start_ts, duration_min, cancelled_at, created_at
+       FROM work_scheduled_blocks
+       ORDER BY start_ts ASC`,
+    );
+    return rows.map(rowToScheduledBlock);
+  },
+
+  /** Book a future deep-work block. */
+  async add(input: {
+    label?: string | null;
+    startTs: number;
+    durationMin?: number | null;
+  }): Promise<WorkScheduledBlock> {
+    const id = newId();
+    const now = Date.now();
+    const label = input.label ? normaliseText(input.label) : null;
+    const durationMin = input.durationMin ?? null;
+    await sql.execute(
+      `INSERT INTO work_scheduled_blocks
+         (id, label, start_ts, duration_min, cancelled_at, created_at)
+       VALUES (?, ?, ?, ?, NULL, ?)`,
+      [id, label, input.startTs, durationMin, now],
+    );
+    return {
+      id,
+      label,
+      startTs: input.startTs,
+      durationMin,
+      cancelledAt: null,
+      createdAt: now,
+    };
+  },
+
+  /** Soft-cancel a block (hidden from the list; cue scan skips it). */
+  async cancel(id: string): Promise<void> {
+    await sql.execute(
+      `UPDATE work_scheduled_blocks SET cancelled_at = ? WHERE id = ?`,
+      [Date.now(), id],
+    );
+  },
+
+  async remove(id: string): Promise<void> {
+    await sql.execute(`DELETE FROM work_scheduled_blocks WHERE id = ?`, [id]);
+  },
+};
+
+// ─── handoff notes ──────────────────────────────────────────────────────────
+
+export const handoffs = {
+  /** Open (unresolved) notes, most-recent-first. */
+  async listOpen(): Promise<WorkHandoffNote[]> {
+    const rows = await sql.select<WorkHandoffNoteRow>(
+      `SELECT id, text, project, resolved_at, ts
+       FROM work_handoff_notes
+       WHERE resolved_at IS NULL
+       ORDER BY ts DESC`,
+    );
+    return rows.map(rowToHandoff);
+  },
+
+  /** Every note including resolved, most-recent-first. */
+  async list(): Promise<WorkHandoffNote[]> {
+    const rows = await sql.select<WorkHandoffNoteRow>(
+      `SELECT id, text, project, resolved_at, ts
+       FROM work_handoff_notes
+       ORDER BY ts DESC`,
+    );
+    return rows.map(rowToHandoff);
+  },
+
+  async add(input: {
+    text: string;
+    project?: string | null;
+  }): Promise<WorkHandoffNote> {
+    const id = newId();
+    const ts = Date.now();
+    const text = normaliseText(input.text);
+    const project = input.project ? normaliseText(input.project) : null;
+    await sql.execute(
+      `INSERT INTO work_handoff_notes (id, text, project, resolved_at, ts)
+       VALUES (?, ?, ?, NULL, ?)`,
+      [id, text, project, ts],
+    );
+    return { id, text, project, resolvedAt: null, ts };
+  },
+
+  /** Mark a hand-off resolved — drops it from the open list. */
+  async resolve(id: string): Promise<void> {
+    await sql.execute(
+      `UPDATE work_handoff_notes SET resolved_at = ? WHERE id = ?`,
+      [Date.now(), id],
+    );
+  },
+
+  async remove(id: string): Promise<void> {
+    await sql.execute(`DELETE FROM work_handoff_notes WHERE id = ?`, [id]);
+  },
+};
+
 // ─── helpers ──────────────────────────────────────────────────────────────
 
 async function insertEvent(
@@ -313,6 +451,27 @@ function rowToEvent(r: WorkEventRow): WorkEvent {
     kind,
     data: parseEventData(kind, r.data),
     loggedAt: r.logged_at,
+  };
+}
+
+function rowToScheduledBlock(r: WorkScheduledBlockRow): WorkScheduledBlock {
+  return {
+    id: r.id,
+    label: r.label,
+    startTs: r.start_ts,
+    durationMin: numOrNull(r.duration_min),
+    cancelledAt: numOrNull(r.cancelled_at),
+    createdAt: r.created_at,
+  };
+}
+
+function rowToHandoff(r: WorkHandoffNoteRow): WorkHandoffNote {
+  return {
+    id: r.id,
+    text: r.text,
+    project: r.project,
+    resolvedAt: numOrNull(r.resolved_at),
+    ts: r.ts,
   };
 }
 

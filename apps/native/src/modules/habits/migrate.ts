@@ -14,10 +14,14 @@ import { sql } from '../../storage';
 
 const MIGRATIONS = [
   // Registry — the canonical list of habits the user has ever performed.
+  // `cue` is the environmental trigger window the externalization-gap
+  // detector reads ('morning' | 'anytime' | 'evening'); 'anytime' is the
+  // calm default and reads as "no specific cue".
   `CREATE TABLE IF NOT EXISTS habits_registry (
     id          TEXT PRIMARY KEY,
     name        TEXT NOT NULL UNIQUE,
-    created_at  INTEGER NOT NULL
+    created_at  INTEGER NOT NULL,
+    cue         TEXT NOT NULL DEFAULT 'anytime'
   )`,
 
   // Completions — append-only log of "did this habit at this time".
@@ -45,6 +49,13 @@ const MIGRATIONS = [
     ON habits_events(logged_at DESC)`,
 ];
 
+// Additive column adds for tables that may already exist from an older boot.
+// `ALTER TABLE … ADD COLUMN` throws "duplicate column" once the column is
+// present, so each is wrapped + the error swallowed — idempotent across boots.
+const ADDITIVE_COLUMNS = [
+  `ALTER TABLE habits_registry ADD COLUMN cue TEXT NOT NULL DEFAULT 'anytime'`,
+];
+
 let migrationPromise: Promise<void> | null = null;
 
 export function migrateHabits(): Promise<void> {
@@ -52,6 +63,13 @@ export function migrateHabits(): Promise<void> {
     migrationPromise = (async () => {
       for (const stmt of MIGRATIONS) {
         await sql.execute(stmt);
+      }
+      for (const stmt of ADDITIVE_COLUMNS) {
+        try {
+          await sql.execute(stmt);
+        } catch {
+          // Column already exists (fresh CREATE TABLE above, or a prior boot).
+        }
       }
     })();
   }

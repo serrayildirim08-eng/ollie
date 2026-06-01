@@ -28,8 +28,8 @@
  */
 
 import type { Store } from '@ollie/store';
-import { events as bodyEvents } from './repo';
-import type { BodyEvent } from './types';
+import { events as bodyEvents, profile as bodyProfile } from './repo';
+import { waterTargetForAge, type BodyEvent } from './types';
 import { migrateBody } from './migrate';
 
 /** WaterEntry object form the watcher accepts (also accepts a bare number). */
@@ -129,12 +129,13 @@ export async function syncToStore(store: Store): Promise<void> {
   store.set('body', 'episodes', episodes);
 
   // ── body.water_target ─────────────────────────────────────────────────────
-  // Read-preserve: the UI owns the target. Seed the default 8 only when absent
-  // so the hydration-drop heuristic has a denominator on a fresh install.
-  // (GAP: age-based target is out of scope — left hardcoded at 8.)
-  if (store.get('body', 'water_target', null) == null) {
-    store.set('body', 'water_target', 8);
-  }
+  // Age-based daily target (250 mL glasses), the baseline the hydration-drift
+  // watcher compares against. Computed from the one-time age in body_profile;
+  // falls back to the adult baseline (8) when age was never set. We always
+  // write the computed value so editing age in the Box re-sizes the watcher's
+  // denominator on the next sync.
+  const age = await bodyProfile.getAge();
+  store.set('body', 'water_target', waterTargetForAge(age));
 
   // ── body.posture_settings ─────────────────────────────────────────────────
   // Read-preserve. Posture nudges are opt-in and default OFF — never flip

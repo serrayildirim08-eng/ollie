@@ -26,14 +26,20 @@ vi.mock('./migrate', () => ({
 vi.mock('./repo', () => ({
   events: { list: vi.fn() },
   tasks: { list: vi.fn() },
+  scheduledBlocks: { listAll: vi.fn() },
 }));
 
-import { events as eventsRepo, tasks as tasksRepo } from './repo';
+import {
+  events as eventsRepo,
+  tasks as tasksRepo,
+  scheduledBlocks as scheduledBlocksRepo,
+} from './repo';
 import { syncToStore } from './bridge';
 import type { WorkEvent } from './types';
 
 const mockEventsList = vi.mocked(eventsRepo.list);
 const mockTasksList = vi.mocked(tasksRepo.list);
+const mockBlocksListAll = vi.mocked(scheduledBlocksRepo.listAll);
 
 // A fixed local noon so all three sessions land in the same calendar day.
 const FIXED_NOW = new Date('2026-05-13T12:00:00').getTime();
@@ -64,6 +70,7 @@ describe('work bridge → orchestrator (great rewiring)', () => {
     orch = createWorkOrchestrator(store, { now: () => FIXED_NOW });
     mockEventsList.mockResolvedValue(makeFocusEvents());
     mockTasksList.mockResolvedValue([]);
+    mockBlocksListAll.mockResolvedValue([]);
   });
 
   afterEach(() => {

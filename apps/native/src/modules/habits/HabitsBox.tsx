@@ -26,7 +26,7 @@ import { colors } from '../../theme/tokens';
 import { PatternCards } from '../../patterns/PatternCards';
 import { migrateHabits } from './migrate';
 import { registry, completions, events } from './repo';
-import type { Habit, HabitEvent, IdentityData } from './types';
+import { HABIT_CUES, type Habit, type HabitCue, type HabitEvent, type IdentityData } from './types';
 
 function parseIdentity(raw: string): string {
   try {
@@ -53,6 +53,8 @@ export function HabitsBox(): JSX.Element {
   const [todayCompletions, setTodayCompletions] = useState<Habit[]>([]);
   const [identityEvents, setIdentityEvents] = useState<HabitEvent[]>([]);
   const [ready, setReady] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [newCue, setNewCue] = useState<HabitCue>('anytime');
 
   const refresh = useCallback(async () => {
     const habits = await registry.list();
@@ -93,6 +95,23 @@ export function HabitsBox(): JSX.Element {
   const handleCheck = useCallback(
     async (habitId: string) => {
       await completions.add(habitId);
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const handleCreate = useCallback(async () => {
+    const name = newName.trim();
+    if (!name) return;
+    await registry.ensure(name, newCue);
+    setNewName('');
+    setNewCue('anytime');
+    await refresh();
+  }, [newName, newCue, refresh]);
+
+  const handleSetCue = useCallback(
+    async (habitId: string, cue: HabitCue) => {
+      await registry.setCue(habitId, cue);
       await refresh();
     },
     [refresh],
@@ -149,43 +168,77 @@ export function HabitsBox(): JSX.Element {
           </Section>
 
           <Section label="habits">
+            {/* add a habit — name + the cue window it's anchored to. */}
+            <Stack gap={12} style={{ paddingBottom: 8 }}>
+              <input
+                type="text"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void handleCreate();
+                }}
+                placeholder="a habit you want to keep…"
+                aria-label="new habit name"
+                style={inputStyle}
+              />
+              <Row gap={16} align="baseline" justify="space-between">
+                <CueChooser
+                  value={newCue}
+                  onChange={setNewCue}
+                  ariaPrefix="new habit cue"
+                />
+                <button
+                  type="button"
+                  onClick={() => void handleCreate()}
+                  disabled={newName.trim().length === 0}
+                  style={{
+                    ...buttonStyle,
+                    color: newName.trim() ? colors.ink : colors.inkFaint,
+                  }}
+                  aria-label="add habit"
+                >
+                  add
+                </button>
+              </Row>
+            </Stack>
+
             {rows.length === 0 ? (
               <Text scale="body" color={colors.inkFaint}>
-                no habits yet — try dumping &lsquo;did yoga&rsquo; or
-                &lsquo;meditated&rsquo;.
+                no habits yet — add one above, or dump &lsquo;did yoga&rsquo;.
               </Text>
             ) : (
               <Stack gap={4}>
                 {rows.map((r) => (
-                  <Row
-                    key={r.habit.id}
-                    gap={12}
-                    align="baseline"
-                    justify="space-between"
-                    style={{ padding: '10px 0' }}
-                  >
-                    <Text scale="body">{r.habit.name}</Text>
-                    <Row gap={12} align="baseline">
-                      {!r.doneToday && (
+                  <Stack key={r.habit.id} gap={6} style={{ padding: '10px 0' }}>
+                    <Row gap={12} align="baseline" justify="space-between">
+                      <Text scale="body">{r.habit.name}</Text>
+                      <Row gap={12} align="baseline">
+                        {!r.doneToday && (
+                          <button
+                            type="button"
+                            onClick={() => void handleCheck(r.habit.id)}
+                            style={buttonStyle}
+                            aria-label={`mark ${r.habit.name} done`}
+                          >
+                            mark done
+                          </button>
+                        )}
                         <button
                           type="button"
-                          onClick={() => void handleCheck(r.habit.id)}
+                          onClick={() => void handleRemoveHabit(r.habit.id)}
                           style={buttonStyle}
-                          aria-label={`mark ${r.habit.name} done`}
+                          aria-label={`remove ${r.habit.name}`}
                         >
-                          mark done
+                          remove
                         </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => void handleRemoveHabit(r.habit.id)}
-                        style={buttonStyle}
-                        aria-label={`remove ${r.habit.name}`}
-                      >
-                        remove
-                      </button>
+                      </Row>
                     </Row>
-                  </Row>
+                    <CueChooser
+                      value={r.habit.cue}
+                      onChange={(c) => void handleSetCue(r.habit.id, c)}
+                      ariaPrefix={`${r.habit.name} cue`}
+                    />
+                  </Stack>
                 ))}
               </Stack>
             )}
@@ -231,6 +284,55 @@ export function HabitsBox(): JSX.Element {
   );
 }
 
+/**
+ * Calm 3-segment cue chooser — morning · anytime · evening. The active
+ * segment is sage; the rest are faint. No box, no fill — just a quiet row of
+ * words separated by hairline dots, in keeping with the editorial grammar.
+ */
+function CueChooser({
+  value,
+  onChange,
+  ariaPrefix,
+}: {
+  value: HabitCue;
+  onChange: (cue: HabitCue) => void;
+  ariaPrefix: string;
+}): JSX.Element {
+  return (
+    <div
+      role="radiogroup"
+      aria-label={ariaPrefix}
+      style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}
+    >
+      {HABIT_CUES.map((cue, i) => {
+        const active = cue === value;
+        return (
+          <Row key={cue} gap={10} align="baseline">
+            {i > 0 && (
+              <Text scale="caption" color={colors.inkFaint} aria-hidden>
+                ·
+              </Text>
+            )}
+            <button
+              type="button"
+              role="radio"
+              aria-checked={active}
+              aria-label={`${ariaPrefix}: ${cue}`}
+              onClick={() => onChange(cue)}
+              style={{
+                ...segmentStyle,
+                color: active ? colors.sageDeep : colors.inkFaint,
+              }}
+            >
+              {cue}
+            </button>
+          </Row>
+        );
+      })}
+    </div>
+  );
+}
+
 function Section({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <Stack gap={16}>
@@ -251,4 +353,25 @@ const buttonStyle: CSSProperties = {
   fontVariantCaps: 'all-small-caps',
   letterSpacing: '0.08em',
   fontSize: 12,
+};
+
+const segmentStyle: CSSProperties = {
+  background: 'none',
+  border: 'none',
+  padding: 0,
+  cursor: 'pointer',
+  fontVariantCaps: 'all-small-caps',
+  letterSpacing: '0.08em',
+  fontSize: 12,
+};
+
+const inputStyle: CSSProperties = {
+  background: 'none',
+  border: 'none',
+  borderBottom: `1px solid ${colors.hairline}`,
+  padding: '6px 0',
+  color: colors.ink,
+  fontSize: 16,
+  outline: 'none',
+  width: '100%',
 };

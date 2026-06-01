@@ -24,12 +24,16 @@ vi.mock('./repo', () => ({
   events: {
     list: vi.fn(),
   },
+  profile: {
+    getAge: vi.fn(),
+  },
 }));
 
-import { events as bodyEvents } from './repo';
+import { events as bodyEvents, profile as bodyProfile } from './repo';
 import { syncToStore } from './bridge';
 
 const mockList = vi.mocked(bodyEvents.list);
+const mockGetAge = vi.mocked(bodyProfile.getAge);
 
 const MIN = 60_000;
 const HOUR = 60 * MIN;
@@ -84,6 +88,7 @@ describe('body bridge → orchestrator (great rewiring)', () => {
     store = createStore(createMemoryAdapter());
     orch = createBodyOrchestrator(store, { now: () => FIXED_NOW });
     mockList.mockResolvedValue(makeWaterEvents() as never);
+    mockGetAge.mockResolvedValue(null); // default: age unknown
   });
 
   afterEach(() => {
@@ -98,6 +103,26 @@ describe('body bridge → orchestrator (great rewiring)', () => {
     // oldest-first, each row carries a ts and at least one glass
     expect(water[0].ts < water[9].ts).toBe(true);
     expect(water.every((w) => w.glasses >= 1)).toBe(true);
+  });
+
+  it('computes body.water_target from the stored age', async () => {
+    mockGetAge.mockResolvedValue(60); // 56+ band → 7 glasses
+    await syncToStore(store);
+    expect(store.get<number>('body', 'water_target', 0)).toBe(7);
+
+    mockGetAge.mockResolvedValue(30); // adult band → 8 glasses
+    await syncToStore(store);
+    expect(store.get<number>('body', 'water_target', 0)).toBe(8);
+
+    mockGetAge.mockResolvedValue(7); // child band → 5 glasses
+    await syncToStore(store);
+    expect(store.get<number>('body', 'water_target', 0)).toBe(5);
+  });
+
+  it('falls back to a target of 8 when age is unknown', async () => {
+    mockGetAge.mockResolvedValue(null);
+    await syncToStore(store);
+    expect(store.get<number>('body', 'water_target', 0)).toBe(8);
   });
 
   it('the hydration-drift watcher fires once water rows are mirrored', async () => {

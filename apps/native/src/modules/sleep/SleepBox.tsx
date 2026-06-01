@@ -33,7 +33,7 @@ import { WhenCaption } from '../../lib/WhenCaption';
 import { PatternCards } from '../../patterns/PatternCards';
 import { migrateSleep } from './migrate';
 import { cadence as cadenceRepo, sleepRepo } from './repo';
-import type { SleepEvent } from './types';
+import { SLEEP_FEELS, type SleepEvent, type SleepFeel } from './types';
 
 const SMCP_STYLE: React.CSSProperties = {
   fontVariantCaps: 'all-small-caps',
@@ -113,6 +113,15 @@ export function SleepBox(): JSX.Element {
     [refresh],
   );
 
+  // Tap a feel tag to set it; tap the active one again to clear it.
+  const handleSetFeel = useCallback(
+    async (id: string, feel: SleepFeel | null) => {
+      await sleepRepo.setFeel(id, feel);
+      await refresh();
+    },
+    [refresh],
+  );
+
   const weekBars = useMemo(() => buildWeekBars(recentSleep), [recentSleep]);
 
   const anyData =
@@ -143,7 +152,12 @@ export function SleepBox(): JSX.Element {
       ) : (
         <Stack gap={56}>
           {/* HERO — the v2 sleep face's signature: one focus, big serif figure */}
-          <HeroSection latest={latest} weekBars={weekBars} logCadence={logCadence} />
+          <HeroSection
+            latest={latest}
+            weekBars={weekBars}
+            logCadence={logCadence}
+            onSetFeel={handleSetFeel}
+          />
 
           {/* Layer-2 noticings — soft cards from the sleep watcher (bedtime
               drift, revenge bedtime, caffeine×onset, weekday/weekend gap). */}
@@ -159,6 +173,7 @@ export function SleepBox(): JSX.Element {
                 key={event.id}
                 event={event}
                 onRemove={() => void handleRemove(event.id)}
+                onSetFeel={(feel) => void handleSetFeel(event.id, feel)}
               />
             )}
           />
@@ -222,10 +237,12 @@ function HeroSection({
   latest,
   weekBars,
   logCadence,
+  onSetFeel,
 }: {
   latest: SleepEvent | null;
   weekBars: WeekBarDatum[];
   logCadence: CadenceEstimate | null;
+  onSetFeel: (id: string, feel: SleepFeel | null) => void;
 }): JSX.Element {
   const sleepLatest = latest && latest.kind === 'sleep' ? latest : null;
   const totalMin =
@@ -243,9 +260,65 @@ function HeroSection({
         </Text>
         <Duration min={totalMin} />
         {sleepLatest && <SubLine event={sleepLatest} />}
+        {sleepLatest && (
+          <Stack gap={8} align="center" style={{ marginTop: 4 }}>
+            <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
+              how it felt
+            </Text>
+            <FeelTags
+              selected={sleepLatest.data.feel}
+              onSelect={(feel) => onSetFeel(sleepLatest.id, feel)}
+            />
+          </Stack>
+        )}
         <CadenceHint estimate={logCadence} />
       </Stack>
     </Stack>
+  );
+}
+
+/**
+ * The four "how it felt" tags as calm, tappable pills. Tapping the active
+ * tag again clears it (toggle). Selected = ink fill; unselected = quiet
+ * hairline outline. No judgement copy — just the word.
+ */
+function FeelTags({
+  selected,
+  onSelect,
+}: {
+  selected: SleepFeel | null;
+  onSelect: (feel: SleepFeel | null) => void;
+}): JSX.Element {
+  return (
+    <Row gap={8} align="center" style={{ flexWrap: 'wrap', justifyContent: 'center' }}>
+      {SLEEP_FEELS.map((feel) => {
+        const active = selected === feel;
+        return (
+          <button
+            key={feel}
+            type="button"
+            aria-pressed={active}
+            onClick={() => onSelect(active ? null : feel)}
+            style={{
+              border: `1px solid ${active ? colors.ink : colors.hairline}`,
+              background: active ? colors.ink : 'transparent',
+              color: active ? colors.paper : colors.inkSoft,
+              borderRadius: 999,
+              padding: '5px 14px',
+              cursor: 'pointer',
+              fontFamily: fonts.sans,
+              fontSize: 13,
+              fontVariantCaps: 'all-small-caps',
+              letterSpacing: '0.06em',
+              lineHeight: 1,
+              transition: 'all 160ms cubic-bezier(0.18, 0, 0.22, 1)',
+            }}
+          >
+            {feel}
+          </button>
+        );
+      })}
+    </Row>
   );
 }
 
@@ -348,6 +421,9 @@ function SubLine({
   }
   if (event.data.quality != null) {
     fragments.push(`quality ${event.data.quality}`);
+  }
+  if (event.data.feel) {
+    fragments.push(event.data.feel);
   }
   if (fragments.length === 0) return null;
   return (
@@ -492,17 +568,20 @@ function ListSection<T>({
 function SleepRow({
   event,
   onRemove,
+  onSetFeel,
 }: {
   event: SleepEvent;
   onRemove: () => void;
+  onSetFeel: (feel: SleepFeel | null) => void;
 }): JSX.Element {
   if (event.kind !== 'sleep') return <></>;
   return (
-    <Stack gap={2}>
+    <Stack gap={6}>
       <Row gap={12} align="baseline" justify="space-between">
         <Text scale="body">{formatSleepLine(event)}</Text>
         <RemoveButton onClick={onRemove} />
       </Row>
+      <FeelTags selected={event.data.feel} onSelect={onSetFeel} />
       <WhenCaption ts={event.occurredAt} />
     </Stack>
   );

@@ -30,8 +30,21 @@
  *     session.swap_log, not a top-level distraction key — native distractions
  *     have nowhere to land, so they are intentionally NOT mirrored.
  *   - crash_log / estimation_log / tab_reports / multitask_log / rsd_anchor /
- *     shutdown_log / triage_days / scheduled_blocks: no native capture field
- *     exists yet; those detectors remain starved until a capture UI lands.
+ *     shutdown_log / triage_days: no native capture field exists yet; those
+ *     detectors remain starved until a capture UI lands.
+ *
+ * Now captured + mirrored:
+ *   work.scheduled_blocks    — future booked deep-work blocks (WorkBox capture
+ *                              → work_scheduled_blocks → here). This gives the
+ *                              cue scan real future start times, so the "deep
+ *                              work ahead, ~1h before" reminder finally has
+ *                              data to fire on.
+ *
+ * Capture-only (NOT mirrored — no watcher consumes them):
+ *   work_handoff_notes — "asked Burhan to send the file". Pure capture +
+ *                        display in WorkBox; the work watcher has no hand-off
+ *                        sink, so there is nothing to mirror. Intentionally
+ *                        left out of the store sync.
  *
  * `work.patterns / pomodoro / work._*` are OUTPUT keys — never written here.
  * Edit ONLY this file.
@@ -42,9 +55,14 @@ import type {
   FocusLogEntry,
   FocusDurationMin,
   Meeting,
+  ScheduledFocusBlock,
   WorkTask as LogicWorkTask,
 } from '@ollie/logic/work';
-import { events as eventsRepo, tasks as tasksRepo } from './repo';
+import {
+  events as eventsRepo,
+  scheduledBlocks as scheduledBlocksRepo,
+  tasks as tasksRepo,
+} from './repo';
 import type { WorkEvent } from './types';
 
 /** Focus modes the logic layer recognises; anything else is left as-is. */
@@ -66,9 +84,10 @@ function toFocusMode(min: number | null): FocusDurationMin {
  * correct and idempotent.
  */
 export async function syncToStore(store: Store): Promise<void> {
-  const [allEvents, allTasks] = await Promise.all([
+  const [allEvents, allTasks, allBlocks] = await Promise.all([
     eventsRepo.list(500),
     tasksRepo.list(),
+    scheduledBlocksRepo.listAll(),
   ]);
 
   // ── focus_log (the load-bearing fix) ────────────────────────────────────
@@ -107,9 +126,26 @@ export async function syncToStore(store: Store): Promise<void> {
     completed_at: t.done ? t.createdAt : null,
   }));
 
+  // ── scheduled_blocks (the 1h-before reminder fix) ────────────────────────
+  // Native WorkScheduledBlock (startTs/durationMin/cancelledAt) → logic
+  // ScheduledFocusBlock (start_at/duration_min/cancelled_at). The cue scan
+  // reads work.scheduled_blocks and fires the "deep work ahead" reminder when
+  // a non-cancelled block's start_at falls inside its lead window — so a block
+  // booked ~1h out finally has data to fire on. We mirror ALL blocks (incl.
+  // cancelled) and let the cue scan skip the cancelled ones by cancelled_at.
+  const scheduledBlocks: ScheduledFocusBlock[] = allBlocks.map((b) => ({
+    id: b.id,
+    start_at: b.startTs,
+    duration_min: toFocusMode(b.durationMin),
+    ...(b.label ? { label: b.label } : {}),
+    created_at: b.createdAt,
+    ...(b.cancelledAt != null ? { cancelled_at: b.cancelledAt } : {}),
+  }));
+
   store.set<FocusLogEntry[]>('work', 'focus_log', focusLog);
   store.set<LogicWorkTask[]>('work', 'tasks', tasks);
   store.set<Meeting[]>('work', 'meetings', meetings);
+  store.set<ScheduledFocusBlock[]>('work', 'scheduled_blocks', scheduledBlocks);
   // Leave work.sessions alone: the watcher merges focus_log INTO sessions, so
   // overwriting sessions here would clobber any legacy/seeded session data for
   // no gain. focus_log is the live path.

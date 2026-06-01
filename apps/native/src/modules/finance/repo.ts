@@ -18,6 +18,7 @@ import { computeCadence, type CadenceEstimate } from '@ollie/cadence';
 import { sql } from '../../storage';
 import {
   normaliseCadence,
+  normaliseCategory,
   normaliseCurrency,
   normaliseMerchant,
   normaliseSentiment,
@@ -40,6 +41,7 @@ interface TransactionRow {
   amount: number | null;
   currency: string | null;
   merchant: string | null;
+  category: string | null;
   occurred_at: number;
   [col: string]: unknown;
 }
@@ -75,7 +77,7 @@ function newId(): string {
 export const transactions = {
   async list(): Promise<FinanceTransaction[]> {
     const rows = await sql.select<TransactionRow>(
-      `SELECT id, amount, currency, merchant, occurred_at
+      `SELECT id, amount, currency, merchant, category, occurred_at
        FROM finance_transactions
        ORDER BY occurred_at DESC`,
     );
@@ -87,18 +89,20 @@ export const transactions = {
     amount?: number | null;
     currency?: string | null;
     merchant?: string | null;
+    category?: string | null;
   }): Promise<FinanceTransaction> {
     const amount = input.amount ?? null;
     const currency = normaliseCurrency(input.currency ?? null);
     const merchant = normaliseMerchant(input.merchant ?? null);
+    const category = normaliseCategory(input.category ?? null);
     const now = Date.now();
     const id = newId();
     await sql.execute(
-      `INSERT INTO finance_transactions (id, amount, currency, merchant, occurred_at)
-       VALUES (?, ?, ?, ?, ?)`,
-      [id, amount, currency, merchant, now],
+      `INSERT INTO finance_transactions (id, amount, currency, merchant, category, occurred_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [id, amount, currency, merchant, category, now],
     );
-    return { id, amount, currency, merchant, occurredAt: now };
+    return { id, amount, currency, merchant, category, occurredAt: now };
   },
 
   async remove(id: string): Promise<void> {
@@ -631,6 +635,7 @@ function rowToTransaction(r: TransactionRow): FinanceTransaction {
     // cleanly with newer ISO-coded rows ("USD") in the "this month" total.
     currency: normaliseCurrency(r.currency),
     merchant: r.merchant,
+    category: r.category ?? null,
     occurredAt: r.occurred_at,
   };
 }

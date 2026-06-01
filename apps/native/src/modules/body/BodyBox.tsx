@@ -32,7 +32,7 @@ import { colors, fontSizes, fontWeights, letterSpacings } from '../../theme/toke
 import { WhenCaption } from '../../lib/WhenCaption';
 import { PatternCards } from '../../patterns/PatternCards';
 import { migrateBody } from './migrate';
-import { cadence as cadenceRepo, events as eventsRepo } from './repo';
+import { cadence as cadenceRepo, events as eventsRepo, profile as profileRepo } from './repo';
 import {
   DEFAULT_GLASS_ML,
   getAmountMl,
@@ -44,6 +44,7 @@ import {
   normaliseLabel,
   sectionForKind,
   startOfTodayMs,
+  waterTargetForAge,
   type BodyEvent,
   type BodySection,
 } from './types';
@@ -55,27 +56,27 @@ const SMCP_STYLE: React.CSSProperties = {
 
 const POLL_MS = 6000;
 
-/** Editorial glass-a-day target. Matches the web v2 default. */
-const GLASS_TARGET = 8;
-
 export function BodyBox(): JSX.Element {
   const [items, setItems] = useState<BodyEvent[]>([]);
   const [waterTotalMl, setWaterTotalMl] = useState<number>(0);
   const [lastMovement, setLastMovement] = useState<BodyEvent | null>(null);
+  const [age, setAge] = useState<number | null>(null);
   const [movementCadenceByActivity, setMovementCadenceByActivity] = useState<
     Map<string, CadenceEstimate>
   >(() => new Map());
   const [ready, setReady] = useState(false);
 
   const refresh = useCallback(async () => {
-    const [list, water, movement] = await Promise.all([
+    const [list, water, movement, storedAge] = await Promise.all([
       eventsRepo.list(),
       eventsRepo.waterTotalToday(),
       eventsRepo.lastMovement(),
+      profileRepo.getAge(),
     ]);
     setItems(list);
     setWaterTotalMl(water);
     setLastMovement(movement);
+    setAge(storedAge);
 
     // One cadence per distinct movement activity. We fan-out off the
     // already-fetched event list so we don't ping the DB twice.
@@ -129,6 +130,16 @@ export function BodyBox(): JSX.Element {
     [refresh],
   );
 
+  const handleSaveAge = useCallback(
+    async (years: number | null) => {
+      await profileRepo.setAge(years);
+      await refresh();
+    },
+    [refresh],
+  );
+
+  // Daily glass target, sized by the one-time age (falls back to 8 when unset).
+  const glassTarget = waterTargetForAge(age);
   const grouped = groupBySection(items);
   const todayStart = startOfTodayMs();
   const todaysWater = grouped.water.filter((e) => e.loggedAt >= todayStart);
@@ -157,7 +168,7 @@ export function BodyBox(): JSX.Element {
         <Stack gap={48}>
           <WaterHero
             count={glassCount}
-            target={GLASS_TARGET}
+            target={glassTarget}
             cold={isEmpty}
             onAddGlass={() =>
               void (async () => {
@@ -166,6 +177,8 @@ export function BodyBox(): JSX.Element {
               })()
             }
           />
+
+          <AgeField age={age} onSave={(years) => void handleSaveAge(years)} />
 
           {lastMovement && (
             <Row gap={12} align="baseline" justify="space-between">
@@ -330,6 +343,113 @@ function WaterHero({
         </Row>
       )}
     </Stack>
+  );
+}
+
+// ─── age field · one-time profile input that sizes the water target ──────
+//
+// Calm, low-stakes: when age is unknown it's a single quiet "set age" link;
+// when set it reads "age 34 · target 8 glasses" with an edit affordance.
+// No shame, no required-field gate — the target falls back to 8 without it.
+
+function AgeField({
+  age,
+  onSave,
+}: {
+  age: number | null;
+  onSave: (years: number | null) => void;
+}): JSX.Element {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+  const inputId = useId();
+
+  const begin = () => {
+    setDraft(age != null ? String(age) : '');
+    setEditing(true);
+  };
+
+  const commit = () => {
+    const parsed = Number.parseInt(draft, 10);
+    const next = Number.isFinite(parsed) && parsed > 0 && parsed < 130 ? parsed : null;
+    onSave(next);
+    setEditing(false);
+  };
+
+  if (editing) {
+    return (
+      <Row gap={10} align="center" justify="center">
+        <label htmlFor={inputId} style={{ ...SMCP_STYLE, fontSize: 12, color: colors.inkFaint }}>
+          age
+        </label>
+        <input
+          id={inputId}
+          type="number"
+          inputMode="numeric"
+          min={1}
+          max={129}
+          value={draft}
+          autoFocus
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') commit();
+            if (e.key === 'Escape') setEditing(false);
+          }}
+          style={{
+            width: 64,
+            border: `1px solid ${colors.hairline}`,
+            borderRadius: 8,
+            padding: '6px 10px',
+            fontSize: 15,
+            color: colors.ink,
+            background: colors.paper,
+            fontFamily: 'var(--ollie-font-sans)',
+          }}
+        />
+        <AgeTextButton label="save" onClick={commit} strong />
+        <AgeTextButton label="cancel" onClick={() => setEditing(false)} />
+      </Row>
+    );
+  }
+
+  return (
+    <Row gap={10} align="baseline" justify="center">
+      <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
+        {age != null
+          ? `age ${age} · target ${waterTargetForAge(age)} glasses`
+          : 'target 8 glasses — set your age to tune it'}
+      </Text>
+      <AgeTextButton label={age != null ? 'edit' : 'set age'} onClick={begin} />
+    </Row>
+  );
+}
+
+function AgeTextButton({
+  label,
+  onClick,
+  strong = false,
+}: {
+  label: string;
+  onClick: () => void;
+  strong?: boolean;
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        background: 'none',
+        border: 'none',
+        padding: '2px 4px',
+        cursor: 'pointer',
+        color: strong ? colors.ink : colors.inkFaint,
+        fontVariantCaps: 'all-small-caps',
+        letterSpacing: '0.08em',
+        fontSize: 12,
+        fontFamily: 'var(--ollie-font-sans)',
+      }}
+    >
+      {label}
+    </button>
   );
 }
 

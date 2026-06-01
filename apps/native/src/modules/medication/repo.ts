@@ -18,11 +18,14 @@
 import { computeCadence, type CadenceEstimate } from '@ollie/cadence';
 import { sql } from '../../storage';
 import {
+  coerceKind,
   normaliseName,
+  parseSchedule,
   type EventKind,
   type Medication,
   type MedicationEvent,
   type MedicationEventWithName,
+  type MedicationKind,
 } from './types';
 
 // Index signature satisfies the sql<T extends ShimRow>() constraint; the
@@ -31,6 +34,8 @@ interface RegistryRow {
   id: string;
   name: string;
   created_at: number;
+  kind: string;
+  schedule: string;
   [col: string]: unknown;
 }
 
@@ -58,7 +63,7 @@ function newId(): string {
 export const medications = {
   async list(): Promise<Medication[]> {
     const rows = await sql.select<RegistryRow>(
-      `SELECT id, name, created_at
+      `SELECT id, name, created_at, kind, schedule
        FROM medications_registry
        ORDER BY created_at DESC`,
     );
@@ -71,7 +76,7 @@ export const medications = {
   async findByName(name: string): Promise<Medication | null> {
     const n = normaliseName(name);
     const rows = await sql.select<RegistryRow>(
-      `SELECT id, name, created_at
+      `SELECT id, name, created_at, kind, schedule
        FROM medications_registry WHERE name = ? LIMIT 1`,
       [n],
     );
@@ -91,11 +96,27 @@ export const medications = {
     const now = Date.now();
     const id = newId();
     await sql.execute(
-      `INSERT INTO medications_registry (id, name, created_at)
-       VALUES (?, ?, ?)`,
+      `INSERT INTO medications_registry (id, name, created_at, kind, schedule)
+       VALUES (?, ?, ?, 'prescription', '[]')`,
       [id, n, now],
     );
-    return { id, name: n, createdAt: now };
+    return { id, name: n, createdAt: now, kind: 'prescription', schedule: [] };
+  },
+
+  /**
+   * Persist a medication's structured profile — its kind and daily
+   * schedule. Called from the Box's inline editor. `schedule` is
+   * normalised + stored as a JSON array of "HH:MM" strings; once it's
+   * non-empty the watcher's dueSlots/adherence path lights up.
+   */
+  async updateProfile(
+    id: string,
+    profile: { kind: MedicationKind; schedule: string[] },
+  ): Promise<void> {
+    await sql.execute(
+      `UPDATE medications_registry SET kind = ?, schedule = ? WHERE id = ?`,
+      [profile.kind, JSON.stringify(profile.schedule), id],
+    );
   },
 
   async remove(id: string): Promise<void> {
@@ -205,7 +226,13 @@ async function writeEvent(
 }
 
 function rowToMedication(r: RegistryRow): Medication {
-  return { id: r.id, name: r.name, createdAt: r.created_at };
+  return {
+    id: r.id,
+    name: r.name,
+    createdAt: r.created_at,
+    kind: coerceKind(r.kind),
+    schedule: parseSchedule(r.schedule),
+  };
 }
 
 function rowToEvent(r: EventRow): MedicationEvent {

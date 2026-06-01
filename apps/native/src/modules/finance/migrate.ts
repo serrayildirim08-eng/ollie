@@ -33,11 +33,16 @@ interface PragmaColumnRow {
 
 const CREATE_STATEMENTS = [
   // finance_transactions — individual spend events.
+  // `category` (2026-06-01) is a soft label (groceries/dining/transport/…
+  // or freeform); nullable so brain-dump spends that never named one stay
+  // valid. It unblocks the category-keyed watchers (hyperfocus burst,
+  // duplicate-by-category) that read FinanceRecord.category via the bridge.
   `CREATE TABLE IF NOT EXISTS finance_transactions (
     id           TEXT PRIMARY KEY,
     amount       REAL,
     currency     TEXT,
     merchant     TEXT,
+    category     TEXT,
     occurred_at  INTEGER NOT NULL
   )`,
 
@@ -187,6 +192,16 @@ export function migrateFinance(): Promise<void> {
         await sql.execute(
           `ALTER TABLE finance_pending_decisions ADD COLUMN decided_at_ms INTEGER`,
         );
+      }
+      // 2026-06-01 — backfill `category` on finance_transactions for databases
+      // created before the tap-to-log category picker existed. Additive +
+      // nullable; legacy rows simply read null and skip the category watchers.
+      const txCols = await sql.select<PragmaColumnRow>(
+        `PRAGMA table_info(finance_transactions)`,
+      );
+      const haveTx = new Set(txCols.map((c) => c.name));
+      if (!haveTx.has('category')) {
+        await sql.execute(`ALTER TABLE finance_transactions ADD COLUMN category TEXT`);
       }
     })();
   }

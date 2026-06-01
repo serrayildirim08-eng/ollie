@@ -14,10 +14,12 @@
 import { computeCadence, type CadenceEstimate } from '@ollie/cadence';
 import { sql } from '../../storage';
 import {
+  asSleepFeel,
   hoursBetween,
   type DreamData,
   type InsomniaData,
   type SleepEvent,
+  type SleepFeel,
   type SleepKind,
   type SleepLogData,
   type WindDownData,
@@ -53,6 +55,7 @@ export const sleepRepo = {
     wake?: string | null;
     quality?: 1 | 2 | 3 | 4 | 5 | null;
     hours?: number | null;
+    feel?: SleepFeel | null;
     occurredAt?: number;
   }): Promise<SleepEvent> {
     const id = newId();
@@ -63,9 +66,32 @@ export const sleepRepo = {
       wake: input.wake ?? null,
       quality: input.quality ?? null,
       hoursSlept: computedHours ?? input.hours ?? null,
+      feel: input.feel ?? null,
     };
     await insertRow(id, 'sleep', data, occurredAt);
     return { id, kind: 'sleep', occurredAt, data };
+  },
+
+  /**
+   * Set (or clear) the "how it felt" tag on an existing 'sleep' row. Reads
+   * the row, patches `data.feel`, writes it back — keeps the JSON-blob shape
+   * intact so every other field survives. No-op when the row isn't a 'sleep'
+   * kind. Returns the updated event, or null when the id doesn't exist.
+   */
+  async setFeel(id: string, feel: SleepFeel | null): Promise<SleepEvent | null> {
+    const rows = await sql.select<SleepEventRow>(
+      `SELECT id, kind, data, occurred_at FROM sleep_events WHERE id = ? LIMIT 1`,
+      [id],
+    );
+    if (rows.length === 0) return null;
+    const ev = parseRow(rows[0]!);
+    if (ev.kind !== 'sleep') return ev;
+    const next: SleepLogData = { ...ev.data, feel };
+    await sql.execute(`UPDATE sleep_events SET data = ? WHERE id = ?`, [
+      JSON.stringify(next),
+      id,
+    ]);
+    return { id: ev.id, kind: 'sleep', occurredAt: ev.occurredAt, data: next };
   },
 
   async addWindDown(input: { note: string; occurredAt?: number }): Promise<SleepEvent> {
@@ -197,6 +223,7 @@ function parseRow(r: SleepEventRow): SleepEvent {
           wake: d.wake ?? null,
           quality: (d.quality ?? null) as SleepLogData['quality'],
           hoursSlept: d.hoursSlept ?? null,
+          feel: asSleepFeel(d.feel),
         },
       };
     }

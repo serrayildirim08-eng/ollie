@@ -20,13 +20,13 @@
  *
  * (habits.patterns / habits._* are OUTPUT — do NOT touch.)
  *
- * BUILD GAP (flagged, not fixable here): the externalization-gap detector
- * reads each habit's `cue` (the environmental trigger — "after I pour coffee").
- * Native never captures a cue (habits auto-register on first completion with a
- * name only — see habits/types.ts). We therefore emit `cue: undefined`; that
- * one detector stays starved until a cue-capture flow is built. Every other
- * habits detector (completion-rate, luteal collapse, sleep coupling, keystone
- * anchor, hyperfocus spillover, …) gets live data.
+ * CUE CAPTURE (wired): the externalization-gap detector counts a habit as
+ * "cued" when `h.cue` is a non-empty string. Native now captures a cue window
+ * per habit ('morning' | 'anytime' | 'evening' — see habits/types.ts). We
+ * carry 'morning'/'evening' through as the real cue; 'anytime' (the calm
+ * default = no specific environmental trigger) is mapped to `undefined` so the
+ * detector reads it as uncued. The detector can now differentiate cued vs
+ * uncued habits off live capture.
  *
  * Edit ONLY this file.
  */
@@ -73,8 +73,10 @@ export async function syncToStore(store: Store): Promise<void> {
       id: habit.id,
       name: habit.name,
       created_at: habit.createdAt,
-      // cue is never captured natively — see BUILD GAP note above.
-      cue: undefined,
+      // 'anytime' = no specific environmental cue → undefined (uncued).
+      // 'morning'/'evening' carry through as the real cue (the detector
+      // treats any non-empty string as cued).
+      cue: habit.cue === 'anytime' ? undefined : habit.cue,
       completions: ordered.map((c) => ({ ts: c.completedAt, habit_id: habit.id })),
     });
 

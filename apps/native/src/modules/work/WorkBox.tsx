@@ -30,7 +30,7 @@ import {
   type CadenceEstimate,
 } from '@ollie/cadence';
 import { Stack, Row } from '../../layout';
-import { Text } from '../../ui';
+import { Text, Input, Button } from '../../ui';
 import { colors } from '../../theme/tokens';
 import { WhenCaption } from '../../lib/WhenCaption';
 import { PatternCards } from '../../patterns/PatternCards';
@@ -38,9 +38,16 @@ import { migrateWork } from './migrate';
 import {
   cadence as cadenceRepo,
   events as eventsRepo,
+  handoffs as handoffsRepo,
+  scheduledBlocks as scheduledBlocksRepo,
   tasks as tasksRepo,
 } from './repo';
-import type { WorkEvent, WorkTask } from './types';
+import type {
+  WorkEvent,
+  WorkHandoffNote,
+  WorkScheduledBlock,
+  WorkTask,
+} from './types';
 import { FocusTimer } from './FocusTimer';
 
 const SMCP_STYLE: CSSProperties = {
@@ -59,6 +66,8 @@ export function WorkBox(): JSX.Element {
   const [allTasks, setAllTasks] = useState<WorkTask[]>([]);
   const [deadlines, setDeadlines] = useState<WorkTask[]>([]);
   const [recentEvents, setRecentEvents] = useState<WorkEvent[]>([]);
+  const [blocks, setBlocks] = useState<WorkScheduledBlock[]>([]);
+  const [openHandoffs, setOpenHandoffs] = useState<WorkHandoffNote[]>([]);
   const [taskCadence, setTaskCadence] = useState<Map<string, CadenceEstimate>>(
     () => new Map(),
   );
@@ -70,17 +79,21 @@ export function WorkBox(): JSX.Element {
 
   const refresh = useCallback(async () => {
     const { fromMs, toMs } = todayWindow();
-    const [t, d, e, focusMin, lastDone] = await Promise.all([
+    const [t, d, e, focusMin, lastDone, blk, ho] = await Promise.all([
       tasksRepo.list(),
       tasksRepo.listDeadlines(),
       eventsRepo.list(20),
       eventsRepo.focusMinutesBetween(fromMs, toMs),
       tasksRepo.lastDone(),
+      scheduledBlocksRepo.list(),
+      handoffsRepo.listOpen(),
     ]);
     setAllTasks(t);
     setDeadlines(d);
     setRecentEvents(e);
     setToday({ focusMinutes: focusMin, lastDone });
+    setBlocks(blk);
+    setOpenHandoffs(ho);
 
     // Fan-out cadence reads — one per distinct task text touched by both
     // sections. Tasks dedupe by text within the open set; recurring chores
@@ -148,6 +161,41 @@ export function WorkBox(): JSX.Element {
     [refresh],
   );
 
+  const handleAddBlock = useCallback(
+    async (input: { label: string | null; startTs: number }) => {
+      await scheduledBlocksRepo.add({
+        label: input.label,
+        startTs: input.startTs,
+      });
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const handleCancelBlock = useCallback(
+    async (id: string) => {
+      await scheduledBlocksRepo.cancel(id);
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const handleAddHandoff = useCallback(
+    async (input: { text: string; project: string | null }) => {
+      await handoffsRepo.add(input);
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const handleResolveHandoff = useCallback(
+    async (id: string) => {
+      await handoffsRepo.resolve(id);
+      await refresh();
+    },
+    [refresh],
+  );
+
   // Tasks section excludes deadlines (those have their own surface).
   const taskRows = allTasks.filter((t) => t.kind === 'task');
   const isEmpty =
@@ -155,7 +203,9 @@ export function WorkBox(): JSX.Element {
     deadlines.length === 0 &&
     recentEvents.length === 0 &&
     today.focusMinutes === 0 &&
-    !today.lastDone;
+    !today.lastDone &&
+    blocks.length === 0 &&
+    openHandoffs.length === 0;
 
   // The glance line above the body — first phrase reads as the lead, second
   // half is the calm tail. Mirrors the v2 face's `glanceLead — glanceTail`.
@@ -217,6 +267,29 @@ export function WorkBox(): JSX.Element {
         <div style={{ marginTop: 18, marginLeft: 78 }}>
           {/* Focus timer — always visible, independent of data readiness */}
           <FocusTimer onSessionLogged={() => void refresh()} />
+
+          {/* Capture: schedule a deep-work block + leave a hand-off note.
+              Always visible (they are inputs), separated by a hairline. */}
+          <div
+            style={{
+              marginTop: 32,
+              paddingTop: 28,
+              borderTop: `1px solid ${colors.hairlineSoft}`,
+            }}
+          >
+            <Stack gap={28}>
+              <ScheduleBlockSection
+                blocks={blocks}
+                onAdd={(i) => void handleAddBlock(i)}
+                onCancel={(id) => void handleCancelBlock(id)}
+              />
+              <HandoffSection
+                notes={openHandoffs}
+                onAdd={(i) => void handleAddHandoff(i)}
+                onResolve={(id) => void handleResolveHandoff(id)}
+              />
+            </Stack>
+          </div>
 
           {/* Data sections — separated by a hairline */}
           <div
@@ -572,6 +645,240 @@ function RemoveButton({ onClick }: { onClick: () => void }): JSX.Element {
       remove
     </button>
   );
+}
+
+// ─── schedule deep-work block ───────────────────────────────────────────────
+
+/**
+ * Capture a future deep-work block (optional label + start time) and see the
+ * upcoming ones. Once booked, the bridge mirrors it into work.scheduled_blocks
+ * and the orchestrator fires a reminder ahead of the start. Calm: a single
+ * label field, a native datetime picker, one quiet "schedule" button.
+ */
+function ScheduleBlockSection({
+  blocks,
+  onAdd,
+  onCancel,
+}: {
+  blocks: WorkScheduledBlock[];
+  onAdd: (input: { label: string | null; startTs: number }) => void;
+  onCancel: (id: string) => void;
+}): JSX.Element {
+  const [label, setLabel] = useState('');
+  const [when, setWhen] = useState('');
+
+  const submit = () => {
+    if (!when) return;
+    const ts = new Date(when).getTime();
+    if (!Number.isFinite(ts)) return;
+    onAdd({ label: label.trim() || null, startTs: ts });
+    setLabel('');
+    setWhen('');
+  };
+
+  // Only show blocks still in the future as "upcoming"; past ones drop off.
+  const upcoming = blocks.filter((b) => b.startTs >= Date.now());
+
+  return (
+    <Stack gap={12}>
+      <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
+        deep-work blocks
+      </Text>
+      <Stack gap={10}>
+        <Input
+          value={label}
+          onChange={setLabel}
+          placeholder="what — e.g. Q3 deck"
+          label="block label"
+          labelHidden
+        />
+        <Row gap={10} align="center">
+          <input
+            type="datetime-local"
+            value={when}
+            onChange={(e) => setWhen(e.target.value)}
+            aria-label="start time"
+            style={{
+              flex: 1,
+              minWidth: 0,
+              background: 'transparent',
+              border: 'none',
+              borderBottom: `1px solid ${colors.hairline}`,
+              padding: '6px 2px',
+              color: colors.ink,
+              fontSize: 14,
+              fontFamily: 'inherit',
+            }}
+          />
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={submit}
+            disabled={!when}
+          >
+            schedule
+          </Button>
+        </Row>
+      </Stack>
+      {upcoming.length === 0 ? (
+        <Text scale="caption" color={colors.inkFaint}>
+          none booked — ollie will nudge you before one starts
+        </Text>
+      ) : (
+        <Stack gap={6}>
+          {upcoming.map((b) => (
+            <Row key={b.id} gap={12} align="baseline" justify="space-between">
+              <Text scale="body">
+                {b.label ?? 'deep work'}
+                <Text
+                  as="span"
+                  scale="caption"
+                  color={colors.inkFaint}
+                  style={{ marginLeft: 8 }}
+                >
+                  · {formatBlockWhen(b.startTs)}
+                </Text>
+              </Text>
+              <button
+                onClick={() => onCancel(b.id)}
+                aria-label="cancel block"
+                style={GHOST_LINK_STYLE}
+              >
+                cancel
+              </button>
+            </Row>
+          ))}
+        </Stack>
+      )}
+    </Stack>
+  );
+}
+
+// ─── hand-off notes ─────────────────────────────────────────────────────────
+
+/**
+ * Capture a hand-off — "asked Burhan to send the file" — against an optional
+ * project, and resolve open ones. Capture + display only; no watcher consumes
+ * hand-offs yet (see bridge.ts header), so this never feeds work.* — it's a
+ * memory surface, intentionally.
+ */
+function HandoffSection({
+  notes,
+  onAdd,
+  onResolve,
+}: {
+  notes: WorkHandoffNote[];
+  onAdd: (input: { text: string; project: string | null }) => void;
+  onResolve: (id: string) => void;
+}): JSX.Element {
+  const [text, setText] = useState('');
+  const [project, setProject] = useState('');
+
+  const submit = () => {
+    if (!text.trim()) return;
+    onAdd({ text: text.trim(), project: project.trim() || null });
+    setText('');
+    setProject('');
+  };
+
+  return (
+    <Stack gap={12}>
+      <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
+        hand-offs
+      </Text>
+      <Stack gap={10}>
+        <Input
+          value={text}
+          onChange={setText}
+          placeholder="who you handed what to — e.g. asked Burhan to send the file"
+          label="hand-off note"
+          labelHidden
+        />
+        <Row gap={10} align="center">
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <Input
+              value={project}
+              onChange={setProject}
+              placeholder="project (optional)"
+              label="project"
+              labelHidden
+            />
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={submit}
+            disabled={!text.trim()}
+          >
+            remember
+          </Button>
+        </Row>
+      </Stack>
+      {notes.length === 0 ? (
+        <Text scale="caption" color={colors.inkFaint}>
+          nothing waiting on anyone
+        </Text>
+      ) : (
+        <Stack gap={6}>
+          {notes.map((n) => (
+            <Stack key={n.id} gap={2}>
+              <Row gap={12} align="baseline" justify="space-between">
+                <Row gap={12} align="baseline">
+                  <Checkbox checked={false} onClick={() => onResolve(n.id)} />
+                  <Text scale="body">
+                    {n.text}
+                    {n.project && (
+                      <Text
+                        as="span"
+                        scale="caption"
+                        color={colors.inkFaint}
+                        style={{ marginLeft: 8 }}
+                      >
+                        · {n.project}
+                      </Text>
+                    )}
+                  </Text>
+                </Row>
+              </Row>
+              <WhenCaption ts={n.ts} style={{ marginLeft: 26 }} />
+            </Stack>
+          ))}
+        </Stack>
+      )}
+    </Stack>
+  );
+}
+
+const GHOST_LINK_STYLE: CSSProperties = {
+  background: 'none',
+  border: 'none',
+  padding: '4px 8px',
+  color: colors.inkFaint,
+  cursor: 'pointer',
+  fontVariantCaps: 'all-small-caps',
+  letterSpacing: '0.08em',
+  fontSize: 12,
+};
+
+/** Friendly local "Mon 3:00 PM" / "Jun 4, 3:00 PM" for an upcoming block. */
+function formatBlockWhen(ts: number): string {
+  const d = new Date(ts);
+  const now = new Date();
+  const sameWeek =
+    Math.abs(ts - now.getTime()) < 6 * 24 * 60 * 60 * 1000;
+  const time = d.toLocaleTimeString(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+  if (sameWeek) {
+    const day = d.toLocaleDateString(undefined, { weekday: 'short' });
+    return `${day} ${time}`;
+  }
+  const date = d.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+  });
+  return `${date}, ${time}`;
 }
 
 // ─── stack glyph ──────────────────────────────────────────────────────────
