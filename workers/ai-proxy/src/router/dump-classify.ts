@@ -108,12 +108,13 @@ RETROSPECTIVE: when the fragment references a past day ("dün"/"yesterday"/"3 da
 
 CRISIS: ONLY for unambiguous suicidal ideation, self-harm intent, or method-seeking. NOT sadness/venting/anger. payload: \`{ tier: 2 | 3 }\` (2=ideation, 3=method-seeking). Confidence must be ≥ 0.9; otherwise pick dump_only.
 
-RESPONSE — JSON only, no prose:
+RESPONSE FORMAT — return ONLY a valid JSON object, no prose, no markdown, no code fences. The object MUST contain ALL FOUR keys (module, action, confidence, payload) every time. Never omit a key. Never return an empty string. If you have no payload fields, return payload: {}.
+
 {
   "module": one of [${MODULES.join(', ')}],
-  "action": one of that module's actions,
-  "confidence": 0..1,
-  "payload": { ...obvious fields from the fragment + any cross-module hint field above + optional daysAgo + optional remindIn }
+  "action": one of that module's actions for the chosen module,
+  "confidence": a number between 0 and 1,
+  "payload": an object with the obvious fields extracted from the fragment, plus any cross-module hint field listed above, plus optional daysAgo, plus optional remindIn. Use {} when no fields apply.
 }
 
 MINI EXAMPLES:
