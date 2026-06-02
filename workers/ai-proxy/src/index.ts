@@ -64,6 +64,7 @@ import { handleCookHistory, type CookHistoryEnv } from './router/cook-history';
 import { handleReplenishment, type ReplenishmentEnv } from './router/replenishment';
 import { handleFeedMe, type FeedMeEnv } from './router/feed-me';
 import { handleTranscribe, type TranscribeEnv } from './router/transcribe';
+import { handlePartner, type PartnerEnv } from './router/partner';
 import {
   handleShelfLifeAll,
   handleShelfLifeLookup,
@@ -91,7 +92,8 @@ export interface Env
     FeedMeEnv,
     ShelfLifeEnv,
     CookHistoryEnv,
-    TranscribeEnv {
+    TranscribeEnv,
+    PartnerEnv {
   ANTHROPIC_API_KEY: string;
   CACHE_KV: KVNamespace;
   RATE_KV: KVNamespace;
@@ -201,6 +203,24 @@ export default {
         }
       }
       return withCors(await handleTranscribe(req, env));
+    }
+
+    // ── /partner/* — bilateral "intimate window" sync ──────────────────────
+    const partnerMatch = url.pathname.match(/^\/partner\/([a-z]+)$/i);
+    if (partnerMatch) {
+      const pUser = await resolveUserIdForRateLimit(req, env);
+      if (pUser) {
+        const allowed = await checkRate(
+          env.TELEM_RATE_LIMITER,
+          env.RATE_KV,
+          `rl:partner:${pUser}`,
+          PURCHASE_RATE_MAX,
+        );
+        if (!allowed) {
+          return withCors(json({ error: 'rate_limited' }, 429));
+        }
+      }
+      return withCors(await handlePartner(req, env, partnerMatch[1]));
     }
 
     // ── /feed-me/:user — AI recipe suggestion (user mode + pet mode) ────────

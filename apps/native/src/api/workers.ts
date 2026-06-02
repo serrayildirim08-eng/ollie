@@ -183,6 +183,64 @@ export async function routeTranscribe(
   }
 }
 
+// ─── ai-proxy: /partner/* — bilateral "intimate window" sync ─────────────────
+
+export interface PartnerSnapshotWire {
+  phrases: string[];
+  self_word: string | null;
+  crisis: boolean;
+  gone_dark: boolean;
+  updated_at?: string;
+}
+
+export interface PartnerSnapshotResult {
+  paired: boolean;
+  partnerId: string | null;
+  snapshot: PartnerSnapshotWire | null;
+}
+
+export function mintPartnerCode(opts: { bearer: string }): Promise<ApiResult<{ code: string; expiresInSec: number }>> {
+  return post(`${urls.aiProxy}/partner/code`, {}, { authJwt: opts.bearer, timeoutMs: 12_000 });
+}
+
+export function pairPartner(code: string, opts: { bearer: string }): Promise<ApiResult<{ partnerId: string }>> {
+  return post(`${urls.aiProxy}/partner/pair`, { code }, { authJwt: opts.bearer, timeoutMs: 12_000 });
+}
+
+export function putPartnerSnapshot(
+  snapshot: PartnerSnapshotWire,
+  opts: { bearer: string },
+): Promise<ApiResult<{ ok: true }>> {
+  return post(`${urls.aiProxy}/partner/snapshot`, snapshot, { authJwt: opts.bearer, timeoutMs: 12_000 });
+}
+
+export function unpairPartner(opts: { bearer: string }): Promise<ApiResult<{ ok: true }>> {
+  return post(`${urls.aiProxy}/partner/unpair`, {}, { authJwt: opts.bearer, timeoutMs: 12_000 });
+}
+
+/** GET the partner's current snapshot (the other side). */
+export async function getPartnerSnapshot(opts: { bearer: string; timeoutMs?: number }): Promise<ApiResult<PartnerSnapshotResult>> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? 12_000);
+  try {
+    const res = await fetch(`${urls.aiProxy}/partner/snapshot`, {
+      method: 'GET',
+      headers: { accept: 'application/json', authorization: `Bearer ${opts.bearer}` },
+      signal: controller.signal,
+    });
+    if (res.status === 401) return { ok: false, error: { code: 'unauthorized', status: 401, message: 'unauthorized' } };
+    if (!res.ok) return { ok: false, error: { code: 'http', status: res.status, message: `http ${res.status}` } };
+    const data = (await res.json()) as PartnerSnapshotResult;
+    return { ok: true, data, status: res.status };
+  } catch (err) {
+    const e = err as Error & { name?: string };
+    if (e?.name === 'AbortError') return { ok: false, error: { code: 'timeout', message: 'timeout' } };
+    return { ok: false, error: { code: 'network', message: e?.message ?? 'network error' } };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // ─── ai-proxy: /shelf-life/all — pantry aging reference table ────────────────
 
 /**

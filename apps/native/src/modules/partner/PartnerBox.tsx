@@ -11,8 +11,9 @@
  * plain "taking today off"; crisis is text-only).
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useUser } from '@clerk/clerk-react';
+import { useCallback, useEffect, useState } from 'react';
+import { useAuth, useUser } from '@clerk/clerk-react';
+import { mintPartnerCode } from '../../api';
 import { Stack, Row } from '../../layout';
 import { Text } from '../../ui';
 import { colors } from '../../theme/tokens';
@@ -51,8 +52,10 @@ function codeFromId(id: string | undefined): string {
 
 export function PartnerBox(): JSX.Element {
   const { user } = useUser();
-  const myCode = useMemo(() => codeFromId(user?.id), [user?.id]);
+  const { getToken } = useAuth();
+  const getBearer = useCallback(async () => (await getToken()) ?? '', [getToken]);
 
+  const [myCode, setMyCode] = useState<string>(() => codeFromId(user?.id));
   const [phase, setPhase] = useState<Phase>('loading');
   const [state, setState] = useState<PartnerLocalState | null>(null);
   const [theirState, setTheirState] = useState<InterpretedState | null>(null);
@@ -67,60 +70,73 @@ export function PartnerBox(): JSX.Element {
     setState(local);
     if (local.pairing) {
       setPhase('paired');
-      setTheirState(await partnerRepo.getPartnerInterpreted());
+      setTheirState(await partnerRepo.getPartnerInterpreted(local, getBearer));
     } else {
       setPhase((p) => (p === 'wizard' ? 'wizard' : 'pairing'));
+      // Mint a real, shareable pairing code for the pairing screen.
+      const minted = await mintPartnerCode({ bearer: await getBearer() }).catch(() => null);
+      if (minted?.ok) setMyCode(minted.data.code);
     }
-  }, []);
+  }, [getBearer]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
   // ── pairing → wizard ──
+  const [pairError, setPairError] = useState<string | null>(null);
   const onConnect = () => {
     if (enteredCode.trim().length < 4) return;
+    setPairError(null);
     setWizardConsent({ ...DEFAULT_CONSENT });
     setPhase('wizard');
   };
 
   const onFinishWizard = async () => {
-    const next = await partnerRepo.pair(`code:${enteredCode.trim()}`, partnerName, wizardConsent);
-    setState(next);
-    setTheirState(await partnerRepo.getPartnerInterpreted());
+    const res = await partnerRepo.pairWithCode(enteredCode.trim(), partnerName, wizardConsent, getBearer);
+    if (!res.ok) {
+      setPairError(
+        res.error === 'code_not_found' ? "that code didn't match anyone"
+        : res.error === 'code_expired' ? 'that code has expired — ask for a fresh one'
+        : res.error === 'cannot_pair_self' ? "that's your own code"
+        : 'couldn’t connect — try again',
+      );
+      setPhase('pairing');
+      return;
+    }
+    setState(res.state);
+    setTheirState(await partnerRepo.getPartnerInterpreted(res.state, getBearer));
     setPhase('paired');
   };
 
   const onToggleConsent = async (key: ShareKey) => {
     if (!state) return;
-    const next = await partnerRepo.setConsent(state, key, !state.consent[key]);
+    const next = await partnerRepo.setConsent(state, key, !state.consent[key], getBearer);
     setState(next);
   };
 
   const onGoDark = async () => {
     if (!state) return;
     const dark = partnerRepo.isDarkToday(state);
-    const next = dark ? await partnerRepo.clearDark(state) : await partnerRepo.goDarkToday(state);
+    const next = dark
+      ? await partnerRepo.clearDark(state, getBearer)
+      : await partnerRepo.goDarkToday(state, getBearer);
     setState(next);
   };
 
-  // Solo preview — no second user needed. Pairs locally with a demo partner so
-  // you can see the inside; "remove partner" cleans it right back out.
+  // Solo preview — no second user needed. Local demo pairing, never hits the
+  // backend; "remove partner" cleans it right back out.
   const onPreview = async () => {
-    const next = await partnerRepo.pair('demo:preview', 'Pınar', {
-      cycle: true,
-      mood: true,
-      energy: true,
-      focus: true,
-    });
+    const next = await partnerRepo.pairDemo({ cycle: true, mood: true, energy: true, focus: true });
     setState(next);
-    setTheirState(await partnerRepo.getPartnerInterpreted());
+    setTheirState(await partnerRepo.getPartnerInterpreted(next, getBearer));
     setPhase('paired');
   };
 
   const onUnpair = async () => {
     if (!window.confirm('Remove your partner? This unlinks you both right away.')) return;
-    const next = await partnerRepo.unpair();
+    const cur = state ?? (await partnerRepo.load());
+    const next = await partnerRepo.unpair(cur, getBearer);
     setState(next);
     setTheirState(null);
     setPartnerName('');
@@ -155,6 +171,7 @@ export function PartnerBox(): JSX.Element {
           onCode={setEnteredCode}
           onConnect={onConnect}
           onPreview={() => void onPreview()}
+          error={pairError}
         />
       )}
 
@@ -192,6 +209,7 @@ function PairingView({
   onCode,
   onConnect,
   onPreview,
+  error,
 }: {
   myCode: string;
   partnerName: string;
@@ -200,6 +218,7 @@ function PairingView({
   onCode: (v: string) => void;
   onConnect: () => void;
   onPreview: () => void;
+  error?: string | null;
 }): JSX.Element {
   return (
     <Stack gap={44}>
@@ -253,6 +272,11 @@ function PairingView({
         <PrimaryButton disabled={enteredCode.trim().length < 4} onClick={onConnect}>
           continue
         </PrimaryButton>
+        {error && (
+          <Text scale="caption" color={colors.inkSoft}>
+            {error}
+          </Text>
+        )}
       </Stack>
 
       {/* no second user yet → see the inside */}
