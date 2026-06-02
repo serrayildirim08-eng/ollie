@@ -1,15 +1,25 @@
 /**
- * Partner · local persistence + the (currently mocked) partner-state seam.
+ * Partner · local state + bilateral-sync orchestration.
  *
- * THIS device's state — pairing, my consent flags, my go-dark day — is a small
- * singleton, so it lives under one kv key. The PARTNER's interpreted state
- * (what *they* are sharing) comes over the wire from their device; until the
- * bilateral sync backend lands, `getPartnerInterpreted()` returns a mock so the
- * card + screen are fully visible. The backend swap is isolated to that one
- * function — everything else is real.
+ * THIS device's state (pairing, consent, go-dark) is a kv singleton. The
+ * partner's interpreted state comes over the wire from the ai-proxy /partner/*
+ * endpoints (real pairing by code, snapshot store/fetch). A local "preview"
+ * pairing (isDemo) short-circuits the network so the surface is usable before a
+ * second real user exists.
+ *
+ * Privacy (decision 10): we only ever upload the *interpreted, consent-filtered*
+ * snapshot — never raw mood/cycle/energy/focus.
  */
 
 import { kv } from '../../storage';
+import {
+  getPartnerSnapshot,
+  pairPartner,
+  putPartnerSnapshot,
+  unpairPartner,
+  type PartnerSnapshotWire,
+} from '../../api';
+import { interpret, type RawSignals } from './interpret';
 import {
   DEFAULT_CONSENT,
   type ConsentFlags,
@@ -26,19 +36,33 @@ const EMPTY: PartnerLocalState = {
   goDarkDate: null,
 };
 
+/** TODO(signals): replace with a real read of the user's mood/energy/cycle/
+ *  focus. Until then a stable sample flows so the bilateral plumbing is real
+ *  and demonstrable; consent filtering + go-dark are already honest. */
+const SAMPLE_SIGNALS: RawSignals = { mood: 'low', energy: 'high', cyclePhase: null, focus: 'deep' };
+
+type Bearer = () => Promise<string>;
+
 function dayKey(nowMs: number): string {
-  // Local-date 'YYYY-MM-DD' so "today" matches the user's wall clock.
   const d = new Date(nowMs);
-  const m = `${d.getMonth() + 1}`.padStart(2, '0');
-  const day = `${d.getDate()}`.padStart(2, '0');
-  return `${d.getFullYear()}-${m}-${day}`;
+  return `${d.getFullYear()}-${`${d.getMonth() + 1}`.padStart(2, '0')}-${`${d.getDate()}`.padStart(2, '0')}`;
+}
+
+function wireToInterpreted(w: PartnerSnapshotWire | null): InterpretedState {
+  if (!w) return { phrases: [], selfWord: null, crisis: false, goneDark: false, updatedAtMs: Date.now() };
+  return {
+    phrases: Array.isArray(w.phrases) ? w.phrases : [],
+    selfWord: w.self_word ?? null,
+    crisis: !!w.crisis,
+    goneDark: !!w.gone_dark,
+    updatedAtMs: w.updated_at ? Date.parse(w.updated_at) : Date.now(),
+  };
 }
 
 export const partnerRepo = {
   async load(): Promise<PartnerLocalState> {
     const saved = await kv.get<PartnerLocalState>(KEY);
     if (!saved) return { ...EMPTY, consent: { ...DEFAULT_CONSENT } };
-    // Defensive merge — tolerate older shapes.
     return {
       pairing: saved.pairing ?? null,
       consent: { ...DEFAULT_CONSENT, ...(saved.consent ?? {}) },
@@ -50,10 +74,49 @@ export const partnerRepo = {
     await kv.set(KEY, state);
   },
 
-  /** Wizard completion — store the pairing + the initial consent (decision 11). */
-  async pair(partnerId: string, partnerName: string, consent: ConsentFlags): Promise<PartnerLocalState> {
+  isDarkToday(state: PartnerLocalState, nowMs: number = Date.now()): boolean {
+    return !!state.goDarkDate && state.goDarkDate === dayKey(nowMs);
+  },
+
+  /** The snapshot we publish: interpret the (sampled) signals through consent. */
+  buildMySnapshot(state: PartnerLocalState): PartnerSnapshotWire {
+    const i = interpret(SAMPLE_SIGNALS, state.consent, {
+      nowMs: Date.now(),
+      goneDark: this.isDarkToday(state),
+    });
+    return { phrases: i.phrases, self_word: i.selfWord ?? null, crisis: !!i.crisis, gone_dark: !!i.goneDark };
+  },
+
+  /** Real pairing — claim the partner's code, then publish my first snapshot. */
+  async pairWithCode(
+    code: string,
+    partnerName: string,
+    consent: ConsentFlags,
+    getBearer: Bearer,
+  ): Promise<{ ok: true; state: PartnerLocalState } | { ok: false; error: string }> {
+    const bearer = await getBearer();
+    if (!bearer) return { ok: false, error: 'not signed in' };
+    const res = await pairPartner(code, { bearer });
+    if (!res.ok) return { ok: false, error: res.error.code };
     const next: PartnerLocalState = {
-      pairing: { partnerId, partnerName: partnerName.trim() || 'your partner', pairedAtMs: Date.now() },
+      pairing: {
+        partnerId: res.data.partnerId,
+        partnerName: partnerName.trim() || 'your partner',
+        pairedAtMs: Date.now(),
+        isDemo: false,
+      },
+      consent: { ...consent },
+      goDarkDate: null,
+    };
+    await this.save(next);
+    await putPartnerSnapshot(this.buildMySnapshot(next), { bearer }).catch(() => {});
+    return { ok: true, state: next };
+  },
+
+  /** Local-only preview pairing (decision-safe demo; never touches backend). */
+  async pairDemo(consent: ConsentFlags): Promise<PartnerLocalState> {
+    const next: PartnerLocalState = {
+      pairing: { partnerId: 'demo:preview', partnerName: 'Pınar', pairedAtMs: Date.now(), isDemo: true },
       consent: { ...consent },
       goDarkDate: null,
     };
@@ -61,53 +124,60 @@ export const partnerRepo = {
     return next;
   },
 
-  /** Clean break (decision 13) — wipes everything, no cooldown, no approval. */
-  async unpair(): Promise<PartnerLocalState> {
+  async unpair(state: PartnerLocalState, getBearer: Bearer): Promise<PartnerLocalState> {
+    if (state.pairing && !state.pairing.isDemo) {
+      const bearer = await getBearer().catch(() => '');
+      if (bearer) await unpairPartner({ bearer }).catch(() => {});
+    }
     const next = { ...EMPTY, consent: { ...DEFAULT_CONSENT } };
     await this.save(next);
     return next;
   },
 
-  async setConsent(state: PartnerLocalState, key: ShareKey, value: boolean): Promise<PartnerLocalState> {
+  async setConsent(
+    state: PartnerLocalState,
+    key: ShareKey,
+    value: boolean,
+    getBearer: Bearer,
+  ): Promise<PartnerLocalState> {
     const next: PartnerLocalState = { ...state, consent: { ...state.consent, [key]: value } };
     await this.save(next);
+    await this.publish(next, getBearer);
     return next;
   },
 
-  /** "taking today off" — silent go-dark for the rest of the day (decision 9). */
-  async goDarkToday(state: PartnerLocalState): Promise<PartnerLocalState> {
+  async goDarkToday(state: PartnerLocalState, getBearer: Bearer): Promise<PartnerLocalState> {
     const next: PartnerLocalState = { ...state, goDarkDate: dayKey(Date.now()) };
     await this.save(next);
+    await this.publish(next, getBearer);
     return next;
   },
 
-  /** Manual early resume (the auto-resume is just the date no longer matching). */
-  async clearDark(state: PartnerLocalState): Promise<PartnerLocalState> {
+  async clearDark(state: PartnerLocalState, getBearer: Bearer): Promise<PartnerLocalState> {
     const next: PartnerLocalState = { ...state, goDarkDate: null };
     await this.save(next);
+    await this.publish(next, getBearer);
     return next;
   },
 
-  /** True while I'm dark *today*; tomorrow it silently lapses (auto-resume). */
-  isDarkToday(state: PartnerLocalState, nowMs: number = Date.now()): boolean {
-    return !!state.goDarkDate && state.goDarkDate === dayKey(nowMs);
+  /** Push my current snapshot (real pairs only; demo is local). */
+  async publish(state: PartnerLocalState, getBearer: Bearer): Promise<void> {
+    if (!state.pairing || state.pairing.isDemo) return;
+    const bearer = await getBearer().catch(() => '');
+    if (!bearer) return;
+    await putPartnerSnapshot(this.buildMySnapshot(state), { bearer }).catch(() => {});
   },
 
-  /**
-   * The partner's interpreted state (what THEY share with me).
-   *
-   * TODO(backend): replace with a fetch of the partner's latest interpreted
-   * snapshot from the bilateral sync worker (keyed by pairing.partnerId). The
-   * shape returned here is exactly what the real endpoint must produce, so the
-   * card + crisis + go-dark rendering is already correct.
-   */
-  async getPartnerInterpreted(): Promise<InterpretedState> {
-    return {
-      phrases: ['tender day', 'low energy'],
-      selfWord: null,
-      crisis: false,
-      goneDark: false,
-      updatedAtMs: Date.now(),
-    };
+  /** The partner's interpreted state — mock for demo, live fetch for real. */
+  async getPartnerInterpreted(state: PartnerLocalState, getBearer: Bearer): Promise<InterpretedState> {
+    if (!state.pairing) return wireToInterpreted(null);
+    if (state.pairing.isDemo) {
+      return { phrases: ['tender day', 'low energy'], selfWord: null, crisis: false, goneDark: false, updatedAtMs: Date.now() };
+    }
+    const bearer = await getBearer().catch(() => '');
+    if (!bearer) return wireToInterpreted(null);
+    const res = await getPartnerSnapshot({ bearer });
+    if (!res.ok) return wireToInterpreted(null);
+    return wireToInterpreted(res.data.snapshot);
   },
 };

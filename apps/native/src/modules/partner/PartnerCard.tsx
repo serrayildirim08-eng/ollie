@@ -7,7 +7,8 @@
  * text, never the loudness.
  */
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { useAuth } from '@clerk/clerk-react';
 import { Stack, Row } from '../../layout';
 import { Text } from '../../ui';
 import { colors } from '../../theme/tokens';
@@ -21,6 +22,8 @@ const SMCP: React.CSSProperties = {
 };
 
 export function PartnerCard(): JSX.Element | null {
+  const { getToken } = useAuth();
+  const getBearer = useCallback(async () => (await getToken()) ?? '', [getToken]);
   const [pairing, setPairing] = useState<PartnerPairing | null>(null);
   const [state, setState] = useState<InterpretedState | null>(null);
 
@@ -31,7 +34,7 @@ export function PartnerCard(): JSX.Element | null {
       if (cancelled) return;
       setPairing(local.pairing);
       if (local.pairing) {
-        const theirs = await partnerRepo.getPartnerInterpreted();
+        const theirs = await partnerRepo.getPartnerInterpreted(local, getBearer);
         if (!cancelled) setState(theirs);
       } else {
         setState(null);
@@ -44,7 +47,7 @@ export function PartnerCard(): JSX.Element | null {
       cancelled = true;
       window.removeEventListener('focus', onFocus);
     };
-  }, []);
+  }, [getBearer]);
 
   if (!pairing || !state) return null;
 

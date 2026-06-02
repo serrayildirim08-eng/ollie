@@ -18,11 +18,13 @@ export const SHARE_KEYS: ShareKey[] = ['cycle', 'mood', 'energy', 'focus'];
 export type ConsentFlags = Record<ShareKey, boolean>;
 
 export interface PartnerPairing {
-  /** The other user's id (Clerk id once the real pairing backend lands). */
+  /** The other user's Clerk id (server-confirmed for real pairs). */
   partnerId: string;
   /** Display name shown on the ambient card ("Serra · tender day"). */
   partnerName: string;
   pairedAtMs: number;
+  /** True for the local "preview the inside" demo — never hits the backend. */
+  isDemo?: boolean;
 }
 
 /**

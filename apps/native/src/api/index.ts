@@ -8,6 +8,11 @@ export {
   brainDump,
   routeDump,
   routeTranscribe,
+  mintPartnerCode,
+  pairPartner,
+  getPartnerSnapshot,
+  putPartnerSnapshot,
+  unpairPartner,
   enrichDump,
   ingestEvent,
   label,
@@ -43,3 +48,5 @@ export type {
   PushRegisterResponse,
   SentryEnvelope,
 } from './types';
+
+export type { PartnerSnapshotWire, PartnerSnapshotResult } from './workers';
