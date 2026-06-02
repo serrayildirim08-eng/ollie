@@ -28,6 +28,7 @@ import { HabitsBox } from "../modules/habits";
 import { GoalsBox } from "../modules/goals";
 import { MedicationBox } from "../modules/medication";
 import { CycleBox } from "../modules/cycle";
+import { PartnerBox } from "../modules/partner";
 import { TodoScreen } from "../todo/TodoScreen";
 import { useServerReminderBridge } from "../notify/serverReminderBridge";
 
@@ -57,6 +58,7 @@ export function Router() {
           <Route path="box/goals" element={<GoalsBox />} />
           <Route path="box/medication" element={<MedicationBox />} />
           <Route path="box/cycle" element={<CycleBox />} />
+          <Route path="box/partner" element={<PartnerBox />} />
           <Route path="modules" element={<ModulesIndex />} />
           <Route path="todo" element={<TodoScreen />} />
           <Route path="settings" element={<SettingsScreen />} />
@@ -91,6 +93,7 @@ const MODULE_GROUPS: ModuleGroup[] = [
       { id: "medication", label: "Medication", hint: "doses + side effects" },
       { id: "habits", label: "Habits", hint: "what you do" },
       { id: "goals", label: "Goals", hint: "what you're moving toward" },
+      { id: "partner", label: "Partner", hint: "an intimate window" },
     ],
   },
   {

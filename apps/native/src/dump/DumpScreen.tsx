@@ -25,6 +25,7 @@ import type { CrisisSignal, RouterOutput } from '../router/schema';
 import { NeedsConfirmCard } from './NeedsConfirmCard';
 import { PatternCards } from '../patterns/PatternCards';
 import { GoalCreateModal } from '../modules/goals/GoalCreateModal';
+import { PartnerCard } from '../modules/partner';
 import styles from './DumpScreen.module.css';
 
 const SMCP_STYLE: React.CSSProperties = {
@@ -199,6 +200,9 @@ export function DumpScreen(): JSX.Element {
           journal watcher. Renders nothing until patterns compute, so the dump
           UX stays silent by default (no feed of past dumps). */}
       <PatternCards module="dump" />
+
+      {/* Level-2 ambient partner line — renders only when paired (decision 4). */}
+      <PartnerCard />
 
       {goalDraft && (
         <GoalCreateModal
