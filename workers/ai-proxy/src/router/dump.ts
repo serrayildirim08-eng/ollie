@@ -226,24 +226,37 @@ export async function handleDumpRoute(req: Request, env: DumpRouteEnv): Promise<
   }
   const misses: Miss[] = [];
 
-  // ── Pass A — embed + cache lookup ──
-  for (let i = 0; i < fragmentsText.length; i++) {
-    const text = fragmentsText[i];
-    const language = detectFragmentLanguage(text);
+  // ── Pass A — batch embed + parallel cache lookup ──
+  // Fragments are independent, so instead of N serial round-trips we (1) embed
+  // every fragment in ONE Voyage call and (2) fan the Vectorize lookups out
+  // with Promise.all. A multi-fragment dump's Pass-A latency drops from O(N)
+  // round-trips to O(1) — the user-visible "sort out" delay on long dumps.
+  const uid = userId; // non-null past the 401 guard; pin as const for the closures
+  const languages = fragmentsText.map((t) => detectFragmentLanguage(t));
 
-    let embedding: number[];
+  let embeddings: number[][] = [];
+  if (fragmentsText.length > 0) {
     try {
-      embedding = await voyageEmbed(text, env.VOYAGE_API_KEY);
+      embeddings = await voyageEmbedBatch(fragmentsText, env.VOYAGE_API_KEY);
     } catch (err) {
       return upstreamError('voyage_embed_failed', 502, err, { dumpId });
     }
+  }
 
-    let cacheRow = null as Awaited<ReturnType<typeof cacheLookup>>;
-    try {
-      cacheRow = await cacheLookup(env.VECTORIZE_INDEX, userId, embedding);
-    } catch (err) {
-      console.error('[route/dump] vectorize lookup failed, miss-through', err);
-    }
+  const cacheRows = await Promise.all(
+    embeddings.map((embedding) =>
+      cacheLookup(env.VECTORIZE_INDEX, uid, embedding).catch((err) => {
+        console.error('[route/dump] vectorize lookup failed, miss-through', err);
+        return null as Awaited<ReturnType<typeof cacheLookup>>;
+      }),
+    ),
+  );
+
+  for (let i = 0; i < fragmentsText.length; i++) {
+    const text = fragmentsText[i];
+    const language = languages[i];
+    const embedding = embeddings[i];
+    const cacheRow = cacheRows[i];
 
     if (cacheRow) {
       cacheHits++;
@@ -383,7 +396,11 @@ export async function handleDumpRoute(req: Request, env: DumpRouteEnv): Promise<
   return json(output);
 }
 
-async function voyageEmbed(text: string, apiKey: string): Promise<number[]> {
+/** Embed every fragment in a single Voyage call. Voyage accepts an input
+ *  array and returns one row per input, each tagged with its `index`; we
+ *  re-order by that index so the result aligns positionally with `texts`
+ *  regardless of response ordering. */
+async function voyageEmbedBatch(texts: string[], apiKey: string): Promise<number[][]> {
   const res = await fetch('https://api.voyageai.com/v1/embeddings', {
     method: 'POST',
     headers: {
@@ -391,7 +408,7 @@ async function voyageEmbed(text: string, apiKey: string): Promise<number[]> {
       authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      input: [text],
+      input: texts,
       model: VOYAGE_MODEL,
       input_type: 'query',
       output_dimension: VOYAGE_EMBED_DIM,
@@ -401,10 +418,20 @@ async function voyageEmbed(text: string, apiKey: string): Promise<number[]> {
     const detail = await res.text().catch(() => '');
     throw new Error(`voyage ${res.status}: ${detail.slice(0, 200)}`);
   }
-  const data = (await res.json()) as { data: Array<{ embedding: number[] }> };
-  const embedding = data?.data?.[0]?.embedding;
-  if (!Array.isArray(embedding) || embedding.length !== VOYAGE_EMBED_DIM) {
+  const data = (await res.json()) as { data: Array<{ embedding: number[]; index?: number }> };
+  const rows = data?.data;
+  if (!Array.isArray(rows) || rows.length !== texts.length) {
     throw new Error(`voyage returned unexpected shape`);
   }
-  return embedding;
+  const out: number[][] = new Array(texts.length);
+  rows.forEach((row, i) => {
+    if (!Array.isArray(row.embedding) || row.embedding.length !== VOYAGE_EMBED_DIM) {
+      throw new Error(`voyage returned unexpected shape`);
+    }
+    // Honor the response's own `index` when present (Voyage sets it), else
+    // fall back to array position — the response is already input-ordered.
+    const slot = typeof row.index === 'number' ? row.index : i;
+    out[slot] = row.embedding;
+  });
+  return out;
 }

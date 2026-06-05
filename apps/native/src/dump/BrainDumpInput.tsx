@@ -188,7 +188,20 @@ export function BrainDumpInput({
     if (hasText) body.text = trimmed;
     if (photo.image) body.image = photo.image;
 
+    // Measurement sayacı: full round-trip the user actually feels (network +
+    // worker + AI), as opposed to the worker-only latency logged in groq.ts.
+    const routeStartedAt = Date.now();
     const res = await routeDump(body, { bearer });
+    if (res.ok) {
+      console.log(
+        JSON.stringify({
+          metric: 'dump_roundtrip',
+          roundtrip_ms: Date.now() - routeStartedAt,
+          had_text: hasText,
+          had_image: hasImage,
+        }),
+      );
+    }
     if (!res.ok) {
       // Translate ApiError to a one-line human message. The draft stays in
       // the box AND on disk; the image stays in state so the user can retry.
