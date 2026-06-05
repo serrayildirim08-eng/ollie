@@ -97,7 +97,12 @@ function installFetchMock(opts: VisionFetchOptions = {}) {
     }
 
     if (url.includes('voyageai.com')) {
-      return new Response(JSON.stringify({ data: [{ embedding: Array(1024).fill(0.1) }] }), {
+      // Mirror the real Voyage batch contract: one row per input, tagged with
+      // its index. The worker now embeds all fragments in a single call.
+      const reqBody = init?.body ? (JSON.parse(init.body as string) as { input?: string[] }) : {};
+      const inputs = Array.isArray(reqBody.input) ? reqBody.input : [''];
+      const rows = inputs.map((_, index) => ({ embedding: Array(1024).fill(0.1), index }));
+      return new Response(JSON.stringify({ data: rows }), {
         status: 200,
         headers: { 'content-type': 'application/json' },
       });

@@ -8,10 +8,25 @@
  * scoped to `ollie-nav-sidebar` / `ollie-nav-bottom` classes used in TabBar.
  */
 
+import { Profiler, type ProfilerOnRenderCallback } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router";
 import { Box } from "../layout";
 import { colors, space } from "../theme/tokens";
 import { TabBar } from "./TabBar";
+
+// Measurement sayacı: per-screen render cost. Only logs renders slower than
+// one 60fps frame (16ms) so the console stays quiet unless a screen janks.
+const onScreenRender: ProfilerOnRenderCallback = (id, phase, actualDuration) => {
+  if (actualDuration < 16) return;
+  console.log(
+    JSON.stringify({
+      metric: "screen_render",
+      screen: id,
+      phase,
+      render_ms: Math.round(actualDuration),
+    }),
+  );
+};
 
 const SMCP: React.CSSProperties = {
   fontVariantCaps: "all-small-caps",
@@ -84,6 +99,7 @@ const responsiveCss = `
 `;
 
 export function Layout(): JSX.Element {
+  const location = useLocation();
   return (
     <>
       <style>{responsiveCss}</style>
@@ -118,7 +134,9 @@ export function Layout(): JSX.Element {
             }}
           >
             <BackBar />
-            <Outlet />
+            <Profiler id={location.pathname} onRender={onScreenRender}>
+              <Outlet />
+            </Profiler>
           </Box>
         </Box>
       </Box>

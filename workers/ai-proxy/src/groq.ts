@@ -57,6 +57,29 @@ export interface GroqChoice {
   finish_reason: string;
 }
 
+/** OpenAI-compatible usage block Groq returns alongside choices. */
+interface GroqUsage {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  total_tokens?: number;
+}
+
+/**
+ * gpt-oss-120b pricing, USD per 1M tokens. [VERIFY] confirm against
+ * https://groq.com/pricing before trusting the cost_usd field — token
+ * counts below are real (from the API), only this rate is assumed.
+ */
+const PRICE_PER_MTOK = { input: 0.15, output: 0.6 };
+
+function costUsd(u: GroqUsage | undefined): number {
+  const inTok = u?.prompt_tokens ?? 0;
+  const outTok = u?.completion_tokens ?? 0;
+  return (
+    (inTok / 1_000_000) * PRICE_PER_MTOK.input +
+    (outTok / 1_000_000) * PRICE_PER_MTOK.output
+  );
+}
+
 /** Error thrown when Groq returns a non-2xx. `status` carries the HTTP code
  *  so callers can distinguish 429 (rate limit — recoverable, surface softly)
  *  from a genuine upstream failure. */
@@ -75,6 +98,7 @@ export async function groqChat(opts: GroqOpts, label: string): Promise<GroqChoic
     body.tool_choice = opts.toolChoice ?? 'auto';
   }
 
+  const startedAt = Date.now();
   const res = await fetch(GROQ_URL, {
     method: 'POST',
     headers: {
@@ -83,6 +107,7 @@ export async function groqChat(opts: GroqOpts, label: string): Promise<GroqChoic
     },
     body: JSON.stringify(body),
   });
+  const latencyMs = Date.now() - startedAt;
 
   if (!res.ok) {
     const detail = await res.text().catch(() => '');
@@ -91,10 +116,25 @@ export async function groqChat(opts: GroqOpts, label: string): Promise<GroqChoic
     throw err;
   }
 
-  const data = (await res.json()) as { choices?: GroqChoice[] };
+  const data = (await res.json()) as { choices?: GroqChoice[]; usage?: GroqUsage };
   const choice = data?.choices?.[0];
   if (!choice) {
     throw new Error(`${label} groq no choices: ${JSON.stringify(data).slice(0, 300)}`);
   }
+
+  // Measurement sayacı: one structured line per AI call. Watch live with
+  // `wrangler tail ollie-ai-proxy`. No DB, no migration — pure observation.
+  console.log(
+    JSON.stringify({
+      metric: 'ai_call',
+      label,
+      model: (body.model as string) ?? GROQ_MODEL,
+      latency_ms: latencyMs,
+      input_tokens: data.usage?.prompt_tokens ?? null,
+      output_tokens: data.usage?.completion_tokens ?? null,
+      cost_usd: Number(costUsd(data.usage).toFixed(6)),
+    }),
+  );
+
   return choice;
 }
