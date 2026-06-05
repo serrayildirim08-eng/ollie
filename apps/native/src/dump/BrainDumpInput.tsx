@@ -27,6 +27,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Textarea, Button, Text } from '../ui';
 import { Stack, Row } from '../layout';
 import { routeDump } from '../api';
+import { detectCrisis } from '@ollie/logic/crisis';
 import type { RouteDumpRequest } from '../api';
 import { kv } from '../storage';
 import { colors } from '../theme/tokens';
@@ -52,6 +53,15 @@ export interface BrainDumpInputProps {
    * refresh the token transparently.
    */
   getBearer: () => string | Promise<string>;
+
+  /**
+   * Fired SYNCHRONOUSLY the moment a non-empty dump is submitted, before the
+   * cloud route call. Lets the parent flash an instant "okay!" ack so perceived
+   * latency is ~0. The route + dispatch then run in the background. Callers must
+   * retract the optimistic ack post-route for crisis / goal-intent dumps (only
+   * discoverable from the RouterOutput) — see onResult / onCrisis.
+   */
+  onSubmitted?: () => void;
 
   /** Fired on a successful classification. */
   onResult?: (output: RouterOutput) => void;
@@ -85,6 +95,7 @@ const DEFAULT_PLACEHOLDER = "What's in your head?";
 
 export function BrainDumpInput({
   getBearer,
+  onSubmitted,
   onResult,
   onCrisis,
   placeholder = DEFAULT_PLACEHOLDER,
@@ -137,6 +148,22 @@ export function BrainDumpInput({
     // empty, do nothing." We DON'T flip to error state — quietly bail.
     if (!hasText && !hasImage) return;
     setState({ kind: 'loading' });
+
+    // Instant ack: fire the moment we know the dump is non-empty, BEFORE the
+    // cloud round-trip + dispatch, so perceived latency is ~0. The parent shows
+    // "okay!" now and retracts it later if the route reveals a goal-intent dump
+    // (only knowable from res.data → harmless flash-then-modal). A bearer failure
+    // below would ack-then-show-an-error; acceptable per the fire-and-forget
+    // dump UX (the words are saved to disk regardless).
+    //
+    // EXCEPT crisis: "crisis must never ack", not even an optimistic flash we
+    // retract post-route. The server verdict isn't known until res.data, so we
+    // pre-screen locally with the same offline EN/ES/TR matchers the crisis
+    // surface uses (detectCrisis is pure, no I/O). If it trips, withhold the
+    // instant ack entirely and let the post-route crisis path own the screen;
+    // image-only dumps (no text) can't be screened so they ack as normal.
+    const localCrisis = hasText && detectCrisis(trimmed).match;
+    if (onSubmitted && !localCrisis) onSubmitted();
 
     let bearer: string;
     try {
@@ -200,7 +227,7 @@ export function BrainDumpInput({
       onCrisis(res.data.crisis, res.data);
     }
     if (onResult) onResult(res.data);
-  }, [text, photo, getBearer, onResult, onCrisis, clearOnSuccess]);
+  }, [text, photo, getBearer, onSubmitted, onResult, onCrisis, clearOnSuccess]);
 
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
