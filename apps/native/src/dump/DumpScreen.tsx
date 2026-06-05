@@ -94,6 +94,20 @@ export function DumpScreen(): JSX.Element {
     setPendingConfirms((prev) => prev.filter((c) => c.id !== id));
   }, []);
 
+  // Force-remount the Ack so its CSS animation restarts on every fire.
+  const fireAck = useCallback(() => {
+    _ackTick += 1;
+    setAckKey(_ackTick);
+  }, []);
+
+  // Instant ack: fired SYNCHRONOUSLY by BrainDumpInput the moment a non-empty
+  // dump is submitted, before the cloud route. Perceived latency ~0. We retract
+  // it post-route in onResult/onCrisis for the two cases that can't ack yet
+  // (goal-intent waits for the modal save; crisis must never ack).
+  const onSubmitted = useCallback(() => {
+    fireAck();
+  }, [fireAck]);
+
   const onResult = useCallback(async (output: RouterOutput) => {
     // Goal intent → rich capture. When the AI classifies a fragment as a new
     // goal ("i want to go to greece this year"), DON'T silently file a bare
@@ -107,6 +121,11 @@ export function DumpScreen(): JSX.Element {
     if (goalFragment) {
       const pl = goalFragment.payload as { what?: string; why?: string };
       setGoalDraft({ what: pl.what ?? goalFragment.text, why: pl.why ?? '' });
+      // Retract the optimistic instant ack: a goal-intent dump files NOTHING
+      // until the user completes + saves the modal, so the "okay!" must fire
+      // from onCreated instead. Goal intent is only knowable here (post-route),
+      // so the ack already flashed on submit — pull it back now.
+      setAckKey(null);
     }
     const dispatchOutput: RouterOutput = goalFragment
       ? {
@@ -173,15 +192,17 @@ export function DumpScreen(): JSX.Element {
       setPendingConfirms((prev) => [...prev, ...cards]);
     }
 
-    // Don't ack a goal-intent dump yet — nothing is filed until the user
-    // completes + saves the modal. The "okay!" fires from onCreated instead.
-    if (!goalFragment) {
-      _ackTick += 1;
-      setAckKey(_ackTick);
-    }
+    // No ack fired here anymore — it already flashed instantly on submit (see
+    // onSubmitted). Goal-intent dumps retract it above (modal owns the ack);
+    // crisis dumps are hidden by the `!crisis` render guard once onCrisis sets
+    // crisis state. Confirm cards (above) are additive and don't touch the ack.
   }, [dismissConfirm]);
 
   const onCrisis = useCallback((signal: CrisisSignal) => {
+    // Crisis is only knowable post-route, so the optimistic ack already
+    // flashed on submit. The `!crisis` render guard hides it reactively, but
+    // we also clear it so it can't reappear if crisis is later dismissed.
+    setAckKey(null);
     setCrisis(signal);
   }, []);
 
@@ -194,7 +215,12 @@ export function DumpScreen(): JSX.Element {
         <Text scale="display">What's in your head?</Text>
       </Stack>
 
-      <BrainDumpInput getBearer={getBearer} onResult={onResult} onCrisis={onCrisis} />
+      <BrainDumpInput
+        getBearer={getBearer}
+        onSubmitted={onSubmitted}
+        onResult={onResult}
+        onCrisis={onCrisis}
+      />
 
       {/* Layer-2 dump noticings — gentle resurface / anniversary cards from the
           journal watcher. Renders nothing until patterns compute, so the dump
@@ -211,8 +237,8 @@ export function DumpScreen(): JSX.Element {
           onClose={() => setGoalDraft(null)}
           onCreated={() => {
             setGoalDraft(null);
-            _ackTick += 1;
-            setAckKey(_ackTick);
+            // Now the goal is actually filed — ack for real.
+            fireAck();
           }}
         />
       )}

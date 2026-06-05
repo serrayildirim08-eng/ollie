@@ -48,10 +48,20 @@ const SYNCS: readonly NamedSync[] = [
 ];
 
 /**
- * Mirror every module's SQLite capture into the @ollie/store keys its
- * watcher reads. Awaits all 12; each is isolated so one failure can't break
- * the others, and the whole call resolves rather than rejects — safe to
- * await inside the dispatch path.
+ * Mirror module SQLite captures into the @ollie/store keys their watchers
+ * read. Each sync is isolated so one failure can't break the others, and the
+ * whole call resolves rather than rejects — safe to fire-and-forget or await.
+ *
+ * Always fans out to ALL modules — deliberately NOT scoped to a dump's touched
+ * modules. In-app capture UIs write SQLite without mirroring to the store (e.g.
+ * FocusTimer → work/repo.ts addFocus inserts an event only), and their
+ * syncToStore runs ONLY here + at boot. The all-modules sweep is therefore the
+ * safety net that mirrors those in-app captures on the next dump of any kind; a
+ * touched-only scope would leave them stale and silently darken their watchers
+ * (the "great disconnect" this bridge exists to fix). It's cheap regardless:
+ * store.set no-ops on deep-equal values, so unchanged modules cause zero
+ * watcher churn. Speed is achieved by the dispatch caller firing this
+ * non-blocking, not by narrowing the set.
  */
 export async function runAllSyncs(store: Store): Promise<void> {
   await Promise.all(
@@ -59,7 +69,7 @@ export async function runAllSyncs(store: Store): Promise<void> {
       try {
         await fn(store);
       } catch (err) {
-        // eslint-disable-next-line no-console
+         
         console.error(`[bridge] ${module} syncToStore failed (non-fatal):`, err);
       }
     }),

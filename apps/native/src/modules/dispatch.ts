@@ -68,19 +68,39 @@ export async function dispatchRouterOutput(
 
   // The great rewiring: handlers just wrote freshly-captured data into the
   // module SQLite repos. Mirror it into the @ollie/store keys the Layer-2
-  // watchers read, BEFORE the next watcher tick, so a dump's effects can be
-  // noticed this cycle rather than next boot. Also tag the dump's mood (feeds
-  // goals' low-mood delete lock + finance doom-buying — see bridge/mood.ts).
+  // watchers read so a dump's effects can be noticed this cycle. Also tag the
+  // dump's mood (feeds goals' low-mood delete lock + finance doom-buying — see
+  // bridge/mood.ts).
   //
-  // Both are awaited but fully isolated: runAllSyncs resolves-not-rejects and
-  // mood is try/caught here, so neither can throw into the dispatch path.
-  await Promise.all([
+  // We sync ALL modules, not just the ones this dump touched. Tempting as it is
+  // to scope to `output.fragments`, scoping silently re-opens the "great
+  // disconnect": in-app capture UIs write SQLite WITHOUT mirroring to the store
+  // (e.g. FocusTimer → work/repo.ts addFocus does insertEvent only — no store
+  // write, no event). Their bridge.syncToStore runs ONLY here + at boot, so the
+  // all-modules sweep is what mirrors an in-app focus session on the *next* dump
+  // of any kind; the work watcher (woken by the always-mirrored dump.items) then
+  // sees it. A grocery-only scoped sync would leave work.focus_log stale → work
+  // cues go dark until a work-touching dump or reboot. The sweep is cheap anyway:
+  // store.set no-ops on deep-equal values, so unchanged modules cause zero
+  // watcher churn. Speed comes from making this NON-BLOCKING below, not from
+  // narrowing it.
+  //
+  // Non-blocking: fire-and-forget so the dump ack/UI never waits on the mirror.
+  // Both are fully isolated — runAllSyncs resolves-not-rejects and mood is
+  // try/caught — so neither can reject the floated promise. Trade-off: a watcher
+  // may tick before the mirror lands; acceptable because each module's own
+  // subscribed keys still fire on its next change, and the boot sync already
+  // populated all foreign keys once.
+  void Promise.all([
     runAllSyncs(store),
     recordMoodFromDump(store, output.originalDump).catch((err) => {
-      // eslint-disable-next-line no-console
+       
       console.error('[bridge] recordMoodFromDump failed (non-fatal):', err);
     }),
-  ]);
+  ]).catch((err) => {
+     
+    console.error('[bridge] post-dispatch sync failed (non-fatal):', err);
+  });
 
   return { entries, crisisSkipped: false };
 }
