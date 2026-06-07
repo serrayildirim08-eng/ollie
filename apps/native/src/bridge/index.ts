@@ -29,6 +29,7 @@ import { syncToStore as syncPets } from '../modules/pets/bridge';
 import { syncToStore as syncGrocery } from '../modules/grocery/bridge';
 import { syncToStore as syncMedication } from '../modules/medication/bridge';
 import { syncToStore as syncDump } from '../modules/dump/bridge';
+import { syncToStore as syncMood } from '../modules/mood/bridge';
 
 type NamedSync = readonly [module: string, fn: (store: Store) => Promise<void>];
 
@@ -44,6 +45,7 @@ const SYNCS: readonly NamedSync[] = [
   ['pets', syncPets],
   ['grocery', syncGrocery],
   ['medication', syncMedication],
+  ['mood', syncMood],
   ['dump', syncDump],
 ];
 

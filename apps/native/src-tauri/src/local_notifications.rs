@@ -36,7 +36,7 @@ pub fn cancel_local_notification(id: String) -> Result<(), String> {
 mod imp {
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    use objc2_foundation::{NSArray, NSString};
+    use objc2_foundation::{NSArray, NSBundle, NSString};
     use objc2_user_notifications::{
         UNMutableNotificationContent, UNNotificationRequest, UNNotificationSound,
         UNTimeIntervalNotificationTrigger, UNUserNotificationCenter,
@@ -49,12 +49,32 @@ mod imp {
             .unwrap_or(0.0)
     }
 
+    /// `UNUserNotificationCenter::currentNotificationCenter()` throws an
+    /// `NSException` ("bundleProxyForCurrentProcess is nil") and HARD-CRASHES the
+    /// whole process when the binary is not a real `.app` bundle. That is exactly
+    /// the case under `tauri dev`: `cargo run` produces a bare
+    /// `target/debug/native` with no `Info.plist` and no bundle identifier. A
+    /// packaged build always has one. So we gate every center access on the
+    /// presence of a bundle identifier and no-op (rather than crash) when absent —
+    /// the dev app stays alive; reminders simply aren't registered in dev.
+    fn is_app_bundled() -> bool {
+        NSBundle::mainBundle().bundleIdentifier().is_some()
+    }
+
     pub fn schedule(
         id: String,
         title: String,
         body: Option<String>,
         fire_at_ms: f64,
     ) -> Result<(), String> {
+        // Unbundled dev binary → currentNotificationCenter() would crash. Skip.
+        if !is_app_bundled() {
+            eprintln!(
+                "[local-notifications] not app-bundled (dev mode) — skipping schedule of '{id}'"
+            );
+            return Ok(());
+        }
+
         // Delay in seconds; the OS requires a strictly positive time interval,
         // so clamp to at least 1 second.
         let delay = ((fire_at_ms - now_ms()) / 1000.0).max(1.0);
@@ -89,6 +109,10 @@ mod imp {
     }
 
     pub fn cancel(id: String) -> Result<(), String> {
+        // Same unbundled-dev guard as schedule — avoid the crashing center access.
+        if !is_app_bundled() {
+            return Ok(());
+        }
         let center = UNUserNotificationCenter::currentNotificationCenter();
         let identifier = NSString::from_str(&id);
         let identifiers = NSArray::from_retained_slice(&[identifier]);
