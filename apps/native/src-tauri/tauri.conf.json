@@ -13,6 +13,7 @@
     "windows": [
       {
         "title": "Ollie",
+        "url": "http://localhost:9527",
         "width": 1100,
         "height": 820,
         "minWidth": 940,

@@ -20,6 +20,7 @@ import { DumpScreen } from "../dump";
 import { GroceryBox } from "../modules/grocery";
 import { PetsBox } from "../modules/pets";
 import { BodyBox } from "../modules/body";
+import { MoodBox } from "../modules/mood";
 import { WorkBox } from "../modules/work";
 import { FinanceBox } from "../modules/finance";
 import { SleepBox } from "../modules/sleep";
@@ -50,6 +51,7 @@ export function Router() {
           <Route path="box/grocery" element={<GroceryBox />} />
           <Route path="box/pets" element={<PetsBox />} />
           <Route path="box/body" element={<BodyBox />} />
+          <Route path="box/mood" element={<MoodBox />} />
           <Route path="box/work" element={<WorkBox />} />
           <Route path="box/finance" element={<FinanceBox />} />
           <Route path="box/sleep" element={<SleepBox />} />
@@ -88,6 +90,7 @@ const MODULE_GROUPS: ModuleGroup[] = [
     aside: "how you are this week.",
     items: [
       { id: "body", label: "Body", hint: "water, movement, symptoms" },
+      { id: "mood", label: "Mood", hint: "feelings, energy, self-talk" },
       { id: "sleep", label: "Sleep", hint: "logs + insomnia" },
       { id: "cycle", label: "Cycle", hint: "period + symptoms" },
       { id: "medication", label: "Medication", hint: "doses + side effects" },

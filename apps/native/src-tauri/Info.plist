@@ -10,5 +10,13 @@
   <dict>
     <key>NSMicrophoneUsageDescription</key>
     <string>Ollie uses the microphone to turn what you say into a brain dump.</string>
+    <key>NSCalendarsUsageDescription</key>
+    <string>Ollie adds and reads your schedule so dumped plans land in your calendar.</string>
+    <key>NSCalendarsFullAccessUsageDescription</key>
+    <string>Ollie adds and reads your schedule so dumped plans land in your calendar.</string>
+    <key>NSRemindersUsageDescription</key>
+    <string>Ollie creates and reads your reminders so dumped to-dos land in Apple Reminders.</string>
+    <key>NSRemindersFullAccessUsageDescription</key>
+    <string>Ollie creates and reads your reminders so dumped to-dos land in Apple Reminders.</string>
   </dict>
 </plist>

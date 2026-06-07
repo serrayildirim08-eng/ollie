@@ -24,6 +24,7 @@ import type { ActionPayload, DumpOnlyAction } from '../router/schema';
 import { groceryHandler } from './grocery';
 import { petsHandler } from './pets';
 import { bodyHandler } from './body';
+import { moodHandler } from './mood';
 import { workHandler } from './work';
 import { financeHandler } from './finance';
 import { sleepHandler } from './sleep';
@@ -98,6 +99,7 @@ export const stubHandlers: Record<Module, ModuleHandler<Module>> = {
   admin: adminHandler as unknown as ModuleHandler<Module>,
   sleep: sleepHandler as unknown as ModuleHandler<Module>,
   body: bodyHandler as unknown as ModuleHandler<Module>,
+  mood: moodHandler as unknown as ModuleHandler<Module>,
   habits: habitsHandler as unknown as ModuleHandler<Module>,
   goals: goalsHandler as unknown as ModuleHandler<Module>,
   medication: medicationHandler as unknown as ModuleHandler<Module>,

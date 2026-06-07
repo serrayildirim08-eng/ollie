@@ -16,6 +16,7 @@ export type Module =
   | 'finance'
   | 'sleep'
   | 'body'
+  | 'mood'
   | 'habits'
   | 'goals'
   | 'grocery'

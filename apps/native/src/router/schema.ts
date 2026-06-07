@@ -26,6 +26,7 @@ export type Module =
   | 'finance'
   | 'sleep'
   | 'body'
+  | 'mood'
   | 'habits'
   | 'goals'
   | 'grocery'
@@ -110,6 +111,7 @@ export interface RoutingSummary {
 
 export type ActionPayload =
   | BodyAction
+  | MoodAction
   | WorkAction
   | AdminAction
   | PetsAction
@@ -144,6 +146,17 @@ export type BodyAction =
    * see grocery/handler.ts ~line 32-55 for rationale).
    */
   | { module: 'body'; action: 'log_movement'; type: 'walk' | 'stretch' | 'lift' | string; duration_min?: number; pet?: string };
+
+// ── MOOD ─────────────────────────────────────────────────────────────
+// Feelings + energy + self-talk. Distinct from body (physical symptoms) and
+// habits.identity_statement (deliberate positive identity goals only).
+// `valence`/`level` are STRING enums — they match the Layer-1 router prompt
+// (workers/ai-proxy/src/router/dump-classify.ts) which is the source of truth.
+
+export type MoodAction =
+  | { module: 'mood'; action: 'log_mood'; label: string; valence?: 'pos' | 'neu' | 'neg'; intensity?: 1 | 2 | 3 }
+  | { module: 'mood'; action: 'log_energy'; level: 'low' | 'mid' | 'high'; label?: string }
+  | { module: 'mood'; action: 'self_talk'; statement: string; valence?: 'pos' | 'neg' };
 
 // ── WORK ─────────────────────────────────────────────────────────────
 

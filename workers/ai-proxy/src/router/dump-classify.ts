@@ -28,6 +28,7 @@ const MODULES: Module[] = [
   'finance',
   'sleep',
   'body',
+  'mood',
   'habits',
   'goals',
   'grocery',
@@ -55,6 +56,7 @@ MODULES → ACTIONS
 - finance: log_transaction | log_income | log_refund | spending_reflection | pending_decision | add_bill | savings_note | subscription_log
 - sleep: log_sleep | wind_down_note | dream_log | log_insomnia
 - body: log_symptom | log_water | log_supplement | log_episode | log_posture | log_hunger | log_movement
+- mood: log_mood | log_energy | self_talk
 - habits: complete | identity_statement   (streak_break_note FORBIDDEN; Ollie has no streaks)
 - goals: progress_note | create_goal | milestone_hit | obstacle_note
 - grocery: pantry_add | pantry_use | pantry_depleted | shopping_list_add | pantry_low_flag | meal_request | recipe_cooked
@@ -90,8 +92,13 @@ Other module-choice hints:
 - grocery.pantry_low_flag ("running low") vs shopping_list_add ("need to buy") vs pantry_depleted ("out of"/"ran out"/"bitti"/"se acabó").
 - pets.log_supplement (named vitamin/calcium) vs pets.log_care (generic).
 - body.log_movement covers ALL physical activity (walk/run/yoga/lift/stretch/swim).
+- MOOD vs body vs habits (mood owns feelings/energy/self-talk):
+  · Transient EMOTION (anxious, sad, happy, numb, overwhelmed, scared, "X is scaring me", "did nothing today" as a feeling) → mood.log_mood { label, valence:"pos"|"neu"|"neg" }.
+  · ENERGY state (tired, exhausted, drained, wired, "no energy", "running on empty") → mood.log_energy { level:"low"|"mid"|"high", label }. NOT body — body is PHYSICAL symptoms only (headache, cramp, nausea, dizzy, sore).
+  · SELF-TALK / self-evaluation ("don't like myself", "I'm failing", "I'm lazy", "habits all empty this week", "hate myself") → mood.self_talk { statement, valence:"pos"|"neg" }.
+  · habits.identity_statement is now ONLY a DELIBERATE positive identity goal ("I'm becoming someone who reads daily"). Negative self-judgment → mood.self_talk, NOT habits.
 - cycle.pill_logged is BIRTH CONTROL pill. Generic Rx → medication.log_dose.
-- habits.streak_break_note FORBIDDEN. "Broke X habit" / "missed 5 days" → identity_statement (reflective) or dump_only (observational).
+- habits.streak_break_note FORBIDDEN. "Broke X habit" / "missed 5 days" said as self-judgment → mood.self_talk; as neutral observation → dump_only. NEVER identity_statement for negative habit talk.
 - TIME-DEFERRED REMINDER ("remind me to X in N", "Y dakika sonra hatırlat", "recuérdame X en N"): classify by what to do (e.g. "remind me to call mama in 1 min" → admin.create_phone_task person="mama"), add top-level \`remindIn: { amount: number, unit: "sec"|"min"|"hr"|"day" }\`. Never a separate reminder fragment, never dump_only when remindIn present. "Remind me to take <med> in N" → admin.create_task text="take <med>" + remindIn (NOT medication.log_dose — that is past-tense).
 
 CROSS-MODULE HINT FIELDS (Layer 1 emits hint on payload; primary handler mirrors to secondary — never emit a separate fragment):
@@ -128,6 +135,9 @@ MINI EXAMPLES:
 - "couldn't sleep so took melatonin" → sleep.log_insomnia { med_taken:"melatonin" }
 - "walked buddy 30 min" → body.log_movement { type:"walk", duration_min:30, pet:"buddy" }
 - "meditation done" → habits.complete { habitName:"meditation" }
+- "so tired today" → mood.log_energy { level:"low", label:"tired" }
+- "feeling really anxious" → mood.log_mood { label:"anxious", valence:"neg" }
+- "i don't like myself" → mood.self_talk { statement:"don't like myself", valence:"neg" }
 - "want to run a half marathon" → goals.create_goal { what:"run a half marathon" }
 - "bought milk" → grocery.pantry_add { item:"milk" }
 - "out of lemons" → grocery.pantry_depleted { item:"lemons" }
