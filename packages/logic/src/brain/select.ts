@@ -56,6 +56,20 @@ export interface NoticingCandidate {
   urgencyAt?: number | null;
   /** ms-since-epoch the noticing was first created/detected, when known. */
   createdAt?: number | null;
+  /**
+   * Sprint 3 — optional situation facts the gatherer recovered from the source
+   * pattern (item names, days-past, count). Carried so the copy layer can
+   * generate a fitted sentence and the action layer can recover what to act on
+   * (e.g. WHICH items to add to the grocery list). Opaque to the selector — it
+   * scores on the fields above only. Kept tolerant so any source can attach it.
+   */
+  facts?: {
+    /** Item / subject names involved (e.g. ['milk']). */
+    items?: string[];
+    /** Days past the relevant date for the headline item, when known. */
+    days?: number | null;
+    [extra: string]: unknown;
+  } | null;
 }
 
 /** A scored candidate — the candidate plus its computed score + parts. */

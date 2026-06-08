@@ -56,6 +56,8 @@ interface RawPattern {
   dueAt?: number | string | null;
   dueDate?: number | string | null;
   predictedOutAtMs?: number | null;
+  /** Detector-attached item list (replenish/expiration/cascade carry this). */
+  items?: Array<{ name?: string; days?: number; count?: number }>;
   [extra: string]: unknown;
 }
 
@@ -104,7 +106,24 @@ function toCandidate(p: RawPattern, module: string): NoticingCandidate | null {
     category: (p.category ?? p.pattern ?? null) as string | null,
     urgencyAt: urgencyAtOf(p),
     createdAt: typeof p.ts === 'number' ? p.ts : null,
+    facts: factsOf(p),
   };
+}
+
+/**
+ * Recover the situation facts the Sprint-3 copy + action layers need from a raw
+ * pattern card: the item names involved + the headline item's days-past. The
+ * replenish ("milk") detector carries `items: [{name, days}]`; other detectors
+ * that attach an items list work too. Returns null when there's nothing.
+ */
+function factsOf(p: RawPattern): { items: string[]; days: number | null } | null {
+  const list = Array.isArray(p.items) ? p.items : [];
+  const items = list
+    .map((it) => (it?.name ?? '').toString().trim())
+    .filter(Boolean);
+  if (items.length === 0) return null;
+  const firstDays = list.find((it) => typeof it?.days === 'number')?.days;
+  return { items, days: typeof firstDays === 'number' ? firstDays : null };
 }
 
 /** Harm-kind → cold-start category the defer map understands. */
