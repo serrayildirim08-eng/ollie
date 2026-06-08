@@ -23,7 +23,7 @@ import { dispatchRouterOutput } from '../modules';
 import type { DispatchEntry } from '../modules';
 import type { CrisisSignal, RouterOutput } from '../router/schema';
 import { NeedsConfirmCard } from './NeedsConfirmCard';
-import { PatternCards } from '../patterns/PatternCards';
+import { TodayNoticings } from '../modules/brain/TodayNoticings';
 import { GoalCreateModal } from '../modules/goals/GoalCreateModal';
 import { PartnerCard } from '../modules/partner';
 import styles from './DumpScreen.module.css';
@@ -222,10 +222,13 @@ export function DumpScreen(): JSX.Element {
         onCrisis={onCrisis}
       />
 
-      {/* Layer-2 dump noticings — gentle resurface / anniversary cards from the
-          journal watcher. Renders nothing until patterns compute, so the dump
-          UX stays silent by default (no feed of past dumps). */}
-      <PatternCards module="dump" />
+      {/* The cross-life "today" surface — the PRIMARY brain surface (Sprint 2).
+          Replaces the old per-module dump card here: the selection discipline
+          gathers noticings across her whole life, scores them, and shows only
+          the top 2–3 with a calm "not now" (postpone) + dismiss. Renders
+          nothing when nothing clears the bar, so the dump UX stays silent by
+          default. (Per-module PatternCards remain inside each Box as-is.) */}
+      <TodayNoticings />
 
       {/* Level-2 ambient partner line — renders only when paired (decision 4). */}
       <PartnerCard />
