@@ -138,6 +138,11 @@ export function detectReplenishNeeded(
   );
 
   const needed: Array<{ name: string; days: number }> = [];
+  // Track the SOONEST run-out (the most-overdue item) so the brain's selection
+  // can treat the noticing as mildly time-pressed: without this the gatherer
+  // finds no urgencyAt, the note scores 0, and a real "milk ran out" never
+  // clears the selection bar (the "dark on device" bug, 2026-06-08).
+  let soonestOutMs: number | null = null;
   for (const p of pantry) {
     if (!p) continue;
     if (p.archived === true) continue;
@@ -148,6 +153,7 @@ export function detectReplenishNeeded(
     if (onList.has(key)) continue; // already on the list — stay quiet
     const daysPast = Math.round(((now - p.predictedOutAtMs) / DAY_MS) * 10) / 10;
     needed.push({ name: (p.normalizedName ?? p.name ?? ''), days: daysPast });
+    if (soonestOutMs === null || p.predictedOutAtMs < soonestOutMs) soonestOutMs = p.predictedOutAtMs;
   }
 
   if (needed.length === 0) return null;
@@ -160,6 +166,8 @@ export function detectReplenishNeeded(
     confidence: needed.length >= 2 ? 'high' : 'medium',
     sample_n: needed.length,
     items: needed,
+    // The brain gatherer reads this as urgencyAt (already-past → mild urgency).
+    predictedOutAtMs: soonestOutMs,
     copy: needed.length === 1
       ? `your ${top.name}'s probably run low — want it back on the list?`
       : `${top.name} and ${needed.length - 1} other${needed.length - 1 === 1 ? '' : 's'} probably ran low — want them back on the list?`,

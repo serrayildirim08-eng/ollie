@@ -140,6 +140,8 @@ export interface ReplenishNeededSignal {
   confidence: 'high' | 'medium';
   sample_n: number;
   items: Array<{ name: string; days: number }>;
+  /** Soonest (most-overdue) predicted run-out ms — the brain reads it as urgencyAt. */
+  predictedOutAtMs: number | null;
   copy: string;
 }
 

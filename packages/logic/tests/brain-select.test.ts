@@ -94,15 +94,15 @@ describe('selectNoticings · the 2–3 cap', () => {
     expect(out).toHaveLength(0);
   });
 
-  it('shows fewer than 2 rather than padding when few clear the bar', () => {
+  it('a replenish noticing (run-out passed) clears the bar and surfaces', () => {
+    // The real fix: a "milk ran low" noticing carries the past run-out time as
+    // urgencyAt, so it scores ~1.5 (overdue × deferrable weight) and clears the
+    // normal bar — a bare add with no run-out (above) stays at 0 and doesn't.
     const out = selectNoticings(
-      [
-        cand({ id: 'urgent', module: 'medication', category: 'dose', urgencyAt: NOW }),
-        cand({ id: 'trivial', module: 'grocery', category: 'grocery-add' }),
-      ],
+      [cand({ id: 'milk', module: 'grocery', category: 'grocery-replenish-needed', urgencyAt: NOW - DAY })],
       NOW,
     );
-    expect(out.map((n) => n.id)).toEqual(['urgent']);
+    expect(out.map((n) => n.id)).toEqual(['milk']);
   });
 });
 
