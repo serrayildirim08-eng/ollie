@@ -21,6 +21,8 @@
 
 import type {
   ApiResult,
+  BrainCopyRequest,
+  BrainCopyResponse,
   BrainDumpRequest,
   BrainDumpResponse,
   CookHistoryRequest,
@@ -89,6 +91,26 @@ export function routeModule(
     `${urls.aiProxy}/route/${module}`,
     req,
     { authJwt: opts.bearer, timeoutMs: opts.timeoutMs ?? 15_000 },
+  );
+}
+
+// ─── ai-proxy: /brain-copy — Sprint 3 noticing sentence generation ───────────
+
+/**
+ * Generate ONE calm, neutral noticing sentence in the user's app language. The
+ * system + user prompts are built client-side by @ollie/logic/brain's
+ * buildCopyPrompt; the worker only wraps a Layer-2 model. Short timeout — the
+ * caller has a trilingual hardcoded fallback (fallbackCopy) and uses it on any
+ * non-ok result, so a live worker is NOT required for correctness.
+ */
+export function routeBrainCopy(
+  req: BrainCopyRequest,
+  opts: { bearer: string; timeoutMs?: number },
+): Promise<ApiResult<BrainCopyResponse>> {
+  return post<BrainCopyResponse>(
+    `${urls.aiProxy}/brain-copy`,
+    req,
+    { authJwt: opts.bearer, timeoutMs: opts.timeoutMs ?? 8_000 },
   );
 }
 

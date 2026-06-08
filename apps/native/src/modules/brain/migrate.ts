@@ -57,6 +57,22 @@ const MIGRATIONS = [
   )`,
   `CREATE INDEX IF NOT EXISTS idx_brain_deferral_events_deferred_at
     ON brain_deferral_events(deferred_at DESC)`,
+  // Sprint 3 — "speak in your words" copy cache. The AI-generated noticing
+  // sentence is produced AT MOST ONCE per (noticing, day, language): keyed by
+  // the noticing's stable id + the local day-bucket + the app language. A hit
+  // means no re-call on re-render (or on a second app-open the same day). The
+  // surface ALWAYS has a sentence (the trilingual fallback) even with no row.
+  `CREATE TABLE IF NOT EXISTS brain_copy_cache (
+    cache_key   TEXT PRIMARY KEY,
+    noticing_id TEXT NOT NULL,
+    lang        TEXT NOT NULL,
+    day_bucket  INTEGER NOT NULL,
+    text        TEXT NOT NULL,
+    source      TEXT,
+    created_at  INTEGER NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_brain_copy_cache_day
+    ON brain_copy_cache(day_bucket)`,
 ];
 
 let migrationPromise: Promise<void> | null = null;
