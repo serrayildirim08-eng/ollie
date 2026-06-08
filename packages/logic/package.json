@@ -23,7 +23,8 @@
     "./crisis": "./src/crisis/index.ts",
     "./dissection": "./src/dissection/index.ts",
     "./burhan": "./src/burhan/index.ts",
-    "./medication": "./src/medication/index.ts"
+    "./medication": "./src/medication/index.ts",
+    "./brain": "./src/brain/index.ts"
   },
   "scripts": {
     "test": "vitest run",
