@@ -180,8 +180,12 @@ describe('computeCapacity', () => {
     expect(computeCapacity({ lastSleepHours: 8, sleepQuality: 5 }, NOW).level).toBe('high');
   });
 
-  it('high load alone pulls to low', () => {
-    expect(computeCapacity({ todayLoad: 10 }, NOW).level).toBe('low');
+  it('high load alone does NOT pull to low (busy ≠ depleted) — stays medium', () => {
+    expect(computeCapacity({ todayLoad: 10 }, NOW).level).toBe('medium');
+  });
+
+  it('high load tips to low only with a real depletion signal (poor sleep)', () => {
+    expect(computeCapacity({ todayLoad: 10, lastSleepHours: 4 }, NOW).level).toBe('low');
   });
 
   it('accepts numeric mood valence', () => {

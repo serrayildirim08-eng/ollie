@@ -76,10 +76,15 @@ function moodScore(mood: CapacityInputs['recentMood']): number {
   return 0;
 }
 
-/** Load contribution: a heavy day spends spoons → −1; light day → 0. */
+/**
+ * Load contribution: a heavy day spends spoons, but being BUSY is not the same
+ * as being DEPLETED — lots of captures ≠ overwhelmed. So load only DAMPENS
+ * (−0.5); on its own it can't push capacity to 'low'. It tips the read down
+ * only when combined with a real depletion signal (poor sleep or low mood).
+ */
 function loadScore(load: number | null | undefined): number {
   if (typeof load !== 'number' || !Number.isFinite(load)) return 0;
-  return load >= 6 ? -1 : 0;
+  return load >= 6 ? -0.5 : 0;
 }
 
 /**
