@@ -54,6 +54,12 @@ export async function syncToStore(store: Store): Promise<void> {
       // gate; null when the cache hasn't loaded — the detector then falls
       // back to its own alias table, so a null is safe (not a wrong number).
       ...(shelf != null ? { shelfLifeDays: shelf } : {}),
+      // Cadence/shelf-life run-out prediction — load-bearing for the
+      // replenish-needed detector (the "milk noticing"). pantry.list() returns
+      // only active rows, so archived is always false here; set it explicitly
+      // so the detector's gate is honest regardless of the source query.
+      predictedOutAtMs: p.predictedOutAtMs ?? null,
+      archived: false,
       // A pantry row IS an owned item — model it as "checked" (bought) so the
       // duplicate detector treats it as in-stock.
       checked: true,

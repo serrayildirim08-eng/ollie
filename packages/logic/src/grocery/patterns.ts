@@ -10,6 +10,7 @@ import type {
   GroceryOpts,
   DuplicateSignal,
   ExpirationDriftSignal,
+  ReplenishNeededSignal,
   StockoutCascadeSignal,
   StaleListSignal,
   ShoppingCadenceSignal,
@@ -106,6 +107,62 @@ export function detectExpirationDrift(
       ? `${drifting[0].name} turns soon. one breakfast away. or compost.`
       : `${drifting.length} items turn this week. ${drifting.slice(0, 3).map(d => d.name).join(', ')}.`,
     source: 'Barkley & Murphy 2010, Arch Clin Neuropsychol',
+  };
+}
+
+// ─── detectReplenishNeeded ───────────────────────────────────────────────
+//
+// The "milk noticing": a pantry row whose cadence/shelf-life prediction
+// (`predictedOutAtMs`) is already in the PAST is most likely run out. If the
+// row isn't archived and the item isn't already on the shopping list, surface
+// a calm assistant-offer to put it back on the list.
+//
+// This is DISTINCT from detectExpirationDrift — that warns BEFORE expiry
+// ("turns soon"); this fires AFTER the predicted run-out and offers to re-add.
+
+export function detectReplenishNeeded(
+  history: GroceryHistory | null,
+  opts: GroceryOpts = {},
+): ReplenishNeededSignal | null {
+  const now = resolveNow(history, opts);
+  if (!Number.isFinite(now) || now <= 0) return null;
+  const pantry = resolvePantry(history);
+  if (pantry.length === 0) return null;
+
+  // Names already on the shopping list (still-to-buy) — never re-offer these.
+  const onList = new Set(
+    resolveItems(history)
+      .filter((it) => it && it.checked !== true)
+      .map((it) => ((it.normalizedName ?? it.name) ?? '').toLowerCase().trim())
+      .filter(Boolean),
+  );
+
+  const needed: Array<{ name: string; days: number }> = [];
+  for (const p of pantry) {
+    if (!p) continue;
+    if (p.archived === true) continue;
+    if (typeof p.predictedOutAtMs !== 'number' || !Number.isFinite(p.predictedOutAtMs)) continue;
+    if (p.predictedOutAtMs > now) continue; // not predicted-out yet
+    const key = ((p.normalizedName ?? p.name) ?? '').toLowerCase().trim();
+    if (!key) continue;
+    if (onList.has(key)) continue; // already on the list — stay quiet
+    const daysPast = Math.round(((now - p.predictedOutAtMs) / DAY_MS) * 10) / 10;
+    needed.push({ name: (p.normalizedName ?? p.name ?? ''), days: daysPast });
+  }
+
+  if (needed.length === 0) return null;
+  // Soonest-run-out first so the headline item is the most-overdue one.
+  needed.sort((a, b) => b.days - a.days);
+  const top = needed[0];
+
+  return {
+    pattern: 'grocery-replenish-needed',
+    confidence: needed.length >= 2 ? 'high' : 'medium',
+    sample_n: needed.length,
+    items: needed,
+    copy: needed.length === 1
+      ? `your ${top.name}'s probably run low — want it back on the list?`
+      : `${top.name} and ${needed.length - 1} other${needed.length - 1 === 1 ? '' : 's'} probably ran low — want them back on the list?`,
   };
 }
 
@@ -226,6 +283,7 @@ export function detectPatterns(
 ): GroceryPattern[] {
   const out: GroceryPattern[] = [];
   try { const a = detectExpirationDrift(history, opts); if (a) out.push(a); } catch { /* pass */ }
+  try { const r = detectReplenishNeeded(history, opts); if (r) out.push(r); } catch { /* pass */ }
   try { const b = detectStockoutCascade(history, opts); if (b) out.push(b); } catch { /* pass */ }
   try { const c = detectStaleListItems(history, opts); if (c) out.push(c); } catch { /* pass */ }
   try { const d = detectShoppingCadence(history, opts); if (d) out.push(d); } catch { /* pass */ }
