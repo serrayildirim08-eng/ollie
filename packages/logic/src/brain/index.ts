@@ -37,3 +37,27 @@ export type {
   SelectOptions,
   Deferability,
 } from './select';
+
+// Sprint 3 — "speak in your words": AI-generated calm copy + trilingual
+// fallbacks + the offers-really-act action framework. All pure here; the
+// native side owns the AI fetch, the per-(noticing, day) cache, and execute().
+export {
+  buildCopyPrompt,
+  fallbackCopy,
+  copyKindOf,
+  resolveLang,
+  APP_LANGS,
+  DEFAULT_LANG,
+} from './copy';
+export type { AppLang, CopyKind, CopyFacts, CopyActionKind } from './copy';
+
+export {
+  actionLabel,
+  buildAddToGroceryListAction,
+} from './actions';
+export type {
+  ActionKind,
+  ActionPayload,
+  AddToGroceryListPayload,
+  NoticingAction,
+} from './actions';
