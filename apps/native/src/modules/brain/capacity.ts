@@ -21,8 +21,6 @@ import { computeCapacity } from '@ollie/logic/brain';
 import type { CapacityInputs } from '@ollie/logic/brain';
 import type { Store } from '@ollie/store';
 
-const DAY_MS = 86_400_000;
-
 /** sleep.records entry — subset of the bridge's MirroredSleepRecord we use. */
 interface SleepRecordLite {
   night_of?: string;
@@ -46,23 +44,34 @@ interface DumpItemLite {
   mood?: string | null;
 }
 
-/** Most recent sleep → hours + quality. Records are oldest-first. */
-function readSleep(store: Store): { hours: number | null; quality: number | null } {
+/**
+ * Last night's sleep → hours + quality. Records are oldest-first. Only counted
+ * when logged TODAY (created since local midnight) — last night's sleep is
+ * logged in the morning, so a stale record from a prior day must NOT keep
+ * dragging capacity down on a fresh day. No fresh record → unknown (0 weight).
+ */
+function readSleep(store: Store, now: number): { hours: number | null; quality: number | null } {
   const records = store.get<SleepRecordLite[]>('sleep', 'records', []) ?? [];
   if (!Array.isArray(records) || records.length === 0) return { hours: null, quality: null };
   const last = records[records.length - 1];
+  // Stale (logged before today) → treat as unknown so yesterday doesn't bleed in.
+  if (typeof last?.created_at === 'number' && last.created_at < startOfDayMs(now)) {
+    return { hours: null, quality: null };
+  }
   const hours = typeof last?.tst_min === 'number' ? last.tst_min / 60 : null;
   const quality = typeof last?.quality === 'number' ? last.quality : null;
   return { hours, quality };
 }
 
 /**
- * Recent mood read. Prefer the most recent mood-kind log within the last 2
- * days; fall back to today's dump mood tag. Returns a coarse low/neutral/high.
+ * TODAY'S mood read. Capacity is a read of how she is RIGHT NOW, so we only
+ * count mood logged since the start of today — yesterday's "I'm so drained"
+ * must NOT bleed into a fresh day (it's a new day; that was yesterday). Falls
+ * back to today's dump mood tag. Returns a coarse low/neutral/high.
  */
 function readMood(store: Store, now: number): 'low' | 'neutral' | 'high' | null {
   const logs = store.get<MoodLogLite[]>('mood', 'logs', []) ?? [];
-  const recentCutoff = now - 2 * DAY_MS;
+  const recentCutoff = startOfDayMs(now);
   // mood.logs is newest-first; find the newest mood/energy entry in window.
   for (const log of Array.isArray(logs) ? logs : []) {
     if (typeof log?.ts !== 'number' || log.ts < recentCutoff) continue;
@@ -107,7 +116,7 @@ function startOfDayMs(now: number): number {
  */
 export function recomputeCapacity(store: Store, now: number = Date.now()): 'low' | 'medium' | 'high' | null {
   try {
-    const { hours, quality } = readSleep(store);
+    const { hours, quality } = readSleep(store, now);
     const inputs: CapacityInputs = {
       lastSleepHours: hours,
       sleepQuality: quality,
