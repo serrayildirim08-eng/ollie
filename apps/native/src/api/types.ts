@@ -99,6 +99,30 @@ export interface RouteModuleResponse {
   }>;
 }
 
+// ─── /brain-copy (POST) — Sprint 3 "speak in your words" ──────────────────────
+//
+// Generate one calm, neutral, situation-fitted noticing sentence in the user's
+// app language. The worker wraps a Layer-2 model with the system+user prompt
+// built client-side (packages/logic/src/brain/copy.ts). On any upstream failure
+// the worker SHOULD return source='static_fallback' with text='' (HTTP 200);
+// the client then uses its own trilingual fallbackCopy. The client also falls
+// back on a non-ok ApiResult, so a live worker is not required for correctness.
+
+export interface BrainCopyRequest {
+  /** Pre-built system prompt (calm/neutral voice + target language). */
+  system: string;
+  /** Pre-built user prompt (the situation facts). */
+  user: string;
+  /** Target app language — passed through for worker-side logging / guards. */
+  lang: 'en' | 'es' | 'tr';
+}
+
+export interface BrainCopyResponse {
+  /** The generated sentence, or '' when the worker fell back. */
+  text: string;
+  source?: 'ai' | 'cache_hit' | 'static_fallback';
+}
+
 // ─── /enrich-dump (POST) ──────────────────────────────────────────────────────
 
 export interface EnrichDumpRequest {
