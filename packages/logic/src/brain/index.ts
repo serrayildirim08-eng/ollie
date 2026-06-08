@@ -22,3 +22,18 @@ export type {
 
 export { computeCapacity } from './capacity';
 export type { CapacityLevel, CapacityInputs, CapacityRead } from './capacity';
+
+export {
+  selectNoticings,
+  scoreNoticing,
+  deferabilityOf,
+  thresholdFor,
+  MAX_NOTICINGS,
+  TARGET_NOTICINGS,
+} from './select';
+export type {
+  NoticingCandidate,
+  ScoredNoticing,
+  SelectOptions,
+  Deferability,
+} from './select';
