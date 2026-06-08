@@ -41,6 +41,7 @@ import type { NotificationSpec } from '@ollie/notifications';
 import { isOverdue } from '@ollie/cadence';
 import { scheduleSystemNotification } from './notify/systemNotify';
 import { runAllSyncs } from './bridge';
+import { recomputeBrain } from './modules/brain';
 import { enumerateCadences as enumerateGrocery } from './modules/grocery';
 import { enumerateCadences as enumerateBody } from './modules/body';
 import { enumerateCadences as enumerateHabits } from './modules/habits';
@@ -128,10 +129,19 @@ orchestrator.init();
  * try/caught inside runAllSyncs, so a rejection here can't crash boot. We do
  * NOT await — boot must not block on the mirror.
  */
-void runAllSyncs(store).catch((err) => {
-  // eslint-disable-next-line no-console
-  console.error('[bridge] boot sync failed (non-fatal):', err);
-});
+void runAllSyncs(store)
+  .catch((err) => {
+    // eslint-disable-next-line no-console
+    console.error('[bridge] boot sync failed (non-fatal):', err);
+  })
+  // The silent-observer brain (Sprint 1) reads the store keys the bridges
+  // just mirrored — scan harm-of-deferral + compute the daily capacity read
+  // AFTER the sync so it sees fresh data. Best-effort; never blocks boot.
+  .then(() => recomputeBrain(store))
+  .catch((err) => {
+    // eslint-disable-next-line no-console
+    console.error('[brain] boot recompute failed (non-fatal):', err);
+  });
 
 /**
  * Mount the pattern→APNs push subscriber. This is the ONLY consumer of the

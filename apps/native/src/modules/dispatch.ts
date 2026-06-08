@@ -20,6 +20,7 @@ import type { DispatchEntry, DispatchOutput } from './types';
 import { stubHandlers } from './stubs';
 import { store } from '../store';
 import { runAllSyncs } from '../bridge';
+import { recomputeBrain } from './brain';
 import { recordMoodFromDump } from '../bridge/mood';
 
 export interface DispatchOptions {
@@ -94,13 +95,18 @@ export async function dispatchRouterOutput(
   void Promise.all([
     runAllSyncs(store),
     recordMoodFromDump(store, output.originalDump).catch((err) => {
-       
+
       console.error('[bridge] recordMoodFromDump failed (non-fatal):', err);
     }),
-  ]).catch((err) => {
-     
-    console.error('[bridge] post-dispatch sync failed (non-fatal):', err);
-  });
+  ])
+    // The silent-observer brain reads the just-mirrored store keys (and this
+    // dump bumped today's capture load + maybe its mood tag), so recompute
+    // harm + capacity AFTER the sync. Best-effort; never blocks the ack.
+    .then(() => recomputeBrain(store))
+    .catch((err) => {
+
+      console.error('[bridge] post-dispatch sync failed (non-fatal):', err);
+    });
 
   return { entries, crisisSkipped: false };
 }
