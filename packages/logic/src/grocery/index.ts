@@ -19,6 +19,7 @@ export {
 export {
   detectDuplicate,
   detectExpirationDrift,
+  detectReplenishNeeded,
   detectStockoutCascade,
   detectStaleListItems,
   detectShoppingCadence,
