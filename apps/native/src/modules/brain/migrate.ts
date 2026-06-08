@@ -73,6 +73,29 @@ const MIGRATIONS = [
   )`,
   `CREATE INDEX IF NOT EXISTS idx_brain_copy_cache_day
     ON brain_copy_cache(day_bucket)`,
+  // Sprint 4 — the LEARNED per-person procrastination map. A snapshot of the
+  // verdict learnBucket() produced for each bucket, recomputed on boot / after a
+  // dump (NOT per render) from brain_deferral_events + brain_harm_events. Keyed
+  // by bucket: a coarse domain ('groceries') OR a fine '${domain}:${item}'
+  // ('groceries:milk'). The selector reads this to override the cold-start
+  // defaults per-person. SILENT — nothing here surfaces as copy.
+  `CREATE TABLE IF NOT EXISTS brain_learned_map (
+    bucket       TEXT PRIMARY KEY,
+    deferability TEXT NOT NULL,
+    confidence   REAL NOT NULL,
+    sample_size  INTEGER NOT NULL,
+    harm_rate    REAL NOT NULL,
+    computed_at  INTEGER NOT NULL
+  )`,
+  // Sprint 4 — USER PINS (DECISION 4): a correction that WINS over both the
+  // learned verdict AND the cold-start default. One row per pinned bucket;
+  // pin ∈ {'protect','ok-to-defer'}. Written by setPin() (a future settings UI
+  // calls it); read into the LearnedMap.pins the resolver respects above all.
+  `CREATE TABLE IF NOT EXISTS brain_pins (
+    bucket  TEXT PRIMARY KEY,
+    pin     TEXT NOT NULL,
+    set_at  INTEGER NOT NULL
+  )`,
 ];
 
 let migrationPromise: Promise<void> | null = null;
