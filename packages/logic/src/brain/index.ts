@@ -36,7 +36,28 @@ export type {
   ScoredNoticing,
   SelectOptions,
   Deferability,
+  DeferabilityResolver,
 } from './select';
+
+// Sprint 4 — "learn YOU": the pure per-person procrastination-map learner. The
+// native side reads the deferral + harm tables, groups by bucket, computes a
+// LearnedMap, and feeds resolveDeferability into selectNoticings. Pins (user
+// corrections) win over learned, which wins over the cold-start defaults.
+export {
+  learnBucket,
+  resolveDeferability,
+  verdictToDeferability,
+  MIN_SAMPLE,
+  HARM_RATE_PROTECT,
+} from './learn';
+export type {
+  LearnedDeferability,
+  BucketObservations,
+  LearnedVerdict,
+  Pin,
+  LearnedMap,
+  ResolvedDeferability,
+} from './learn';
 
 // Sprint 3 — "speak in your words": AI-generated calm copy + trilingual
 // fallbacks + the offers-really-act action framework. All pure here; the
