@@ -15,6 +15,7 @@ import type { Store } from '@ollie/store';
 import { migrateBrain } from './migrate';
 import { scanAndRecordHarm } from './harm';
 import { recomputeCapacity } from './capacity';
+import { recomputeLearnedMap } from './learn';
 
 export { migrateBrain } from './migrate';
 export { scanAndRecordHarm, countHarmEvents, listHarmEvents } from './harm';
@@ -28,6 +29,16 @@ export {
   countDeferralEvents,
   POSTPONE_MS,
 } from './noticings';
+// Sprint 4 — the "learn YOU" loop: per-person procrastination map + pins.
+export {
+  recomputeLearnedMap,
+  loadLearnedMap,
+  makeDeferabilityResolver,
+  setPin,
+  bucketKeysFor,
+  coarseBucketOf,
+  tallyBuckets,
+} from './learn';
 
 /**
  * Recompute both brain signals from current state. Best-effort and isolated —
@@ -44,4 +55,11 @@ export async function recomputeBrain(store: Store, now: number = Date.now()): Pr
       console.error('[brain] capacity recompute failed (non-fatal):', err);
     }),
   ]);
+  // Sprint 4 — recompute the LEARNED per-person map AFTER the harm scan, so the
+  // freshest harm events feed the verdicts. Isolated + best-effort: with no
+  // accumulated data the map is mostly 'unknown' → cold-start (correct; it
+  // sharpens over weeks). Recomputed here on boot / after a dump, NOT per render.
+  await recomputeLearnedMap(now).catch((err) => {
+    console.error('[brain] learned-map recompute failed (non-fatal):', err);
+  });
 }

@@ -23,6 +23,7 @@ import type { Store } from '@ollie/store';
 import { sql } from '../../storage';
 import { migrateBrain } from './migrate';
 import { listHarmEvents } from './harm';
+import { loadLearnedMap, makeDeferabilityResolver } from './learn';
 
 const DAY_MS = 86_400_000;
 /** Default postpone window — a noticing snoozed today comes back tomorrow. */
@@ -309,12 +310,21 @@ export async function selectTodaysNoticings(
   now: number = Date.now(),
 ): Promise<ScoredNoticing[]> {
   try {
-    const [candidates, exclude] = await Promise.all([
+    const [candidates, exclude, learnedMap] = await Promise.all([
       gatherCandidates(store),
       excludedIds(now),
+      // Sprint 4 — the per-person learned map (verdicts + pins). Cheap read of a
+      // persisted snapshot (recomputed on boot / after dump, not here). An empty
+      // map → pure cold-start behaviour, which is correct cold-start.
+      loadLearnedMap(),
     ]);
     const capacity = store.get<CapacityState>('shared', 'capacity', {})?.level ?? 'medium';
-    return selectNoticings(candidates, now, { capacity, excludeIds: exclude });
+    return selectNoticings(candidates, now, {
+      capacity,
+      excludeIds: exclude,
+      // USER PIN > learned (if confident) > cold-start, applied per candidate.
+      resolveDeferability: makeDeferabilityResolver(learnedMap),
+    });
   } catch (err) {
     console.error('[brain] selectTodaysNoticings failed (non-fatal):', err);
     return [];
