@@ -154,8 +154,10 @@ const CATEGORY_DEFERABILITY: Array<{ match: string; value: Deferability }> = [
 ];
 
 /**
- * Resolve a candidate's deferability (0 protect … 1 freely defer). Category /
- * pattern-id match wins; otherwise the module default; otherwise NEUTRAL.
+ * Resolve a candidate's COLD-START deferability (0 protect … 1 freely defer).
+ * Category / pattern-id match wins; otherwise the module default; otherwise
+ * NEUTRAL. This is the Serra-approved default that Sprint 4's learned per-person
+ * map overrides — see {@link DeferabilityResolver}.
  */
 export function deferabilityOf(candidate: NoticingCandidate): Deferability {
   const cat = (candidate.category ?? '').toString().toLowerCase();
@@ -167,6 +169,37 @@ export function deferabilityOf(candidate: NoticingCandidate): Deferability {
   const mod = (candidate.module ?? '').toString().toLowerCase();
   if (mod in MODULE_DEFERABILITY) return MODULE_DEFERABILITY[mod];
   return NEUTRAL;
+}
+
+/**
+ * Sprint 4's seam. A function the native side supplies that, given a candidate
+ * AND its cold-start default, returns the deferability the scorer should use —
+ * applying the USER-PIN > learned > cold-start resolution order. Returning the
+ * passed-in `coldStart` (or any number) is fine; returning null/undefined ALSO
+ * means "keep cold-start". This is the ONLY override point — it's wired through
+ * {@link scoreNoticing} / {@link selectNoticings} so the per-person learned map
+ * changes what surfaces WITHOUT touching any caller that doesn't pass one.
+ */
+export type DeferabilityResolver = (
+  candidate: NoticingCandidate,
+  coldStart: Deferability,
+) => Deferability | null | undefined;
+
+/**
+ * The deferability the scorer actually uses for a candidate: the resolver's
+ * answer when it gives a finite number, else the cold-start default. Kept
+ * separate + small so the override order lives in exactly one place.
+ */
+function resolvedDeferability(
+  candidate: NoticingCandidate,
+  resolve?: DeferabilityResolver | null,
+): Deferability {
+  const coldStart = deferabilityOf(candidate);
+  if (!resolve) return coldStart;
+  const learned = resolve(candidate, coldStart);
+  return typeof learned === 'number' && Number.isFinite(learned)
+    ? Math.max(0, Math.min(1, learned))
+    : coldStart;
 }
 
 // ─── scoring ──────────────────────────────────────────────────────────────
@@ -234,8 +267,12 @@ const DEFERRABLE_URGENCY_WEIGHT = 0.5;
  * transparent (parts retained) so Sprint 4 can swap the deferability source
  * for a learned per-person map without changing callers.
  */
-export function scoreNoticing(candidate: NoticingCandidate, now: number): ScoredNoticing {
-  const deferability = deferabilityOf(candidate);
+export function scoreNoticing(
+  candidate: NoticingCandidate,
+  now: number,
+  resolve?: DeferabilityResolver | null,
+): ScoredNoticing {
+  const deferability = resolvedDeferability(candidate, resolve);
   const urgencyWeight = 1 - deferability * (1 - DEFERRABLE_URGENCY_WEIGHT);
   const urgency = urgencyScore(candidate.urgencyAt, now) * urgencyWeight;
   const deferScore = deferabilityScore(deferability);
@@ -258,6 +295,13 @@ export interface SelectOptions {
   capacity?: 'low' | 'medium' | 'high';
   /** Ids currently snoozed (postpone) OR permanently dismissed — excluded. */
   excludeIds?: Iterable<string>;
+  /**
+   * Sprint 4 — the per-person learned-map override. When supplied, each
+   * candidate's deferability becomes USER-PIN > learned > cold-start instead of
+   * the bare cold-start default. Omit it and selection is exactly as before
+   * (pure cold-start), so existing callers are untouched.
+   */
+  resolveDeferability?: DeferabilityResolver | null;
 }
 
 /**
@@ -282,13 +326,14 @@ export function selectNoticings(
   const capacity = options.capacity ?? 'medium';
   const threshold = thresholdFor(capacity);
   const excluded = new Set<string>(options.excludeIds ?? []);
+  const resolve = options.resolveDeferability ?? null;
 
   const scored = (Array.isArray(candidates) ? candidates : [])
     .filter((c): c is NoticingCandidate => !!c && typeof c.id === 'string' && c.id.length > 0)
     .filter((c) => !excluded.has(c.id))
     // de-dupe by id — first occurrence wins (gatherer may merge own + shared)
     .filter((c, i, arr) => arr.findIndex((o) => o.id === c.id) === i)
-    .map((c) => scoreNoticing(c, now))
+    .map((c) => scoreNoticing(c, now, resolve))
     .filter((s) => s.score >= threshold);
 
   scored.sort((a, b) => {
