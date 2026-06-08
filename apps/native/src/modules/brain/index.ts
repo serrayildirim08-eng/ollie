@@ -19,6 +19,15 @@ import { recomputeCapacity } from './capacity';
 export { migrateBrain } from './migrate';
 export { scanAndRecordHarm, countHarmEvents, listHarmEvents } from './harm';
 export { recomputeCapacity } from './capacity';
+export {
+  selectTodaysNoticings,
+  gatherCandidates,
+  excludedIds,
+  postponeNoticing,
+  dismissNoticing,
+  countDeferralEvents,
+  POSTPONE_MS,
+} from './noticings';
 
 /**
  * Recompute both brain signals from current state. Best-effort and isolated —
