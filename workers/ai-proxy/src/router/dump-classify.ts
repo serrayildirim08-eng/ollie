@@ -12,9 +12,7 @@
  */
 
 import { groqChat } from '../groq';
-import { geminiJson } from '../gemini';
-import { cloudflareJson, type CfAiBinding } from '../cloudflare-ai';
-import { openRouterJson } from '../openrouter';
+import { jsonCascade, type JsonProviders } from './json-cascade';
 import type { FragmentLanguage, Module } from './dump-schema';
 
 // Allowed Module values (enumerated in the system prompt so the model
@@ -252,16 +250,9 @@ function parseBatchResults(rawText: string, expected: number, provider: string):
  *
  * Output order matches input order; a count mismatch throws.
  */
-export interface ClassifyProviders {
-  /** Groq API key — primary (fastest). Required. */
-  groq: string;
-  /** Gemini API key — high-TPM fallback (~250k tokens/min). */
-  gemini?: string;
-  /** Cloudflare Workers AI binding — same-platform fallback, no key, ~10k/day. */
-  cfAI?: CfAiBinding;
-  /** OpenRouter API key — final catch-all (one key → many free models). */
-  openrouter?: string;
-}
+/** @deprecated alias — the cascade now lives in `json-cascade.ts`. Kept so
+ *  existing callers (`classifyBatch(..., providers)`) read unchanged. */
+export type ClassifyProviders = JsonProviders;
 
 export async function classifyBatch(
   items: Array<{ text: string; language: FragmentLanguage }>,
@@ -282,69 +273,13 @@ export async function classifyBatch(
 
   const maxTokens = 256 * items.length + 256;
 
-  // Ordered free-tier cascade: Groq (fastest) → Cloudflare Workers AI
-  // (same-platform, no key) → Gemini (huge TPM). On ANY error we advance to
-  // the next provider — stacking the free tiers makes the chain effectively
-  // un-exhaustable. The LAST provider's error bubbles up so the caller can map
-  // a final 429/503 to a soft "rate_limited" rather than an alarming 502.
-  const chain: Array<{ name: string; run: () => Promise<string> }> = [
-    {
-      name: 'groq',
-      run: async () => {
-        const choice = await groqChat(
-          {
-            apiKey: providers.groq,
-            messages: [
-              { role: 'system', content: SYSTEM_PROMPT },
-              { role: 'user', content: userMessage },
-            ],
-            jsonMode: true,
-            maxTokens,
-          },
-          'classify-batch',
-        );
-        const rawText = choice.message.content ?? '';
-        if (!rawText) {
-          throw new Error(`classify-batch groq empty content (finish=${choice.finish_reason})`);
-        }
-        return rawText;
-      },
-    },
-  ];
-  if (providers.cfAI) {
-    const cf = providers.cfAI;
-    chain.push({
-      name: 'cloudflare',
-      run: () => cloudflareJson(cf, { system: SYSTEM_PROMPT, user: userMessage, maxTokens }, 'classify-batch'),
-    });
-  }
-  if (providers.gemini) {
-    const key = providers.gemini;
-    chain.push({
-      name: 'gemini',
-      run: () => geminiJson({ apiKey: key, system: SYSTEM_PROMPT, user: userMessage, maxTokens }, 'classify-batch'),
-    });
-  }
-  if (providers.openrouter) {
-    const key = providers.openrouter;
-    chain.push({
-      name: 'openrouter',
-      run: () => openRouterJson({ apiKey: key, system: SYSTEM_PROMPT, user: userMessage, maxTokens }, 'classify-batch'),
-    });
-  }
-
-  let lastErr: unknown;
-  for (let i = 0; i < chain.length; i++) {
-    const provider = chain[i];
-    const isLast = i === chain.length - 1;
-    try {
-      const rawText = await provider.run();
-      return parseBatchResults(rawText, items.length, provider.name);
-    } catch (err) {
-      lastErr = err;
-      if (isLast) throw err;
-      console.error(`[classify-batch] ${provider.name} failed, falling through to next provider`, err);
-    }
-  }
-  throw lastErr;
+  // Free-tier cascade (Groq → Cloudflare → Gemini → OpenRouter). A provider
+  // that errors OR returns a body `parseBatchResults` rejects (bad JSON /
+  // count mismatch) advances to the next; the last provider's error bubbles
+  // up so the caller can map a final 429/503 to a soft "rate_limited".
+  return jsonCascade(
+    { system: SYSTEM_PROMPT, user: userMessage, maxTokens, label: 'classify-batch' },
+    providers,
+    (rawText, provider) => parseBatchResults(rawText, items.length, provider),
+  );
 }

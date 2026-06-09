@@ -115,20 +115,38 @@ function installFetchMock(opts: VisionFetchOptions = {}) {
         confidence: 0.9,
         payload: classificationPayload,
       };
+      // Two distinct router calls hit Groq: pass-2 segmentation (system prompt
+      // "You split a long…", expects { fragments: [...] }) and classification
+      // (expects { results: [...] }). Mirror the REAL Groq contract for each —
+      // a pass-2 request answered with a classify shape would (correctly) fail
+      // pass-2's parser and cascade to Gemini, inflating the Gemini call count.
+      let groqSystem = '';
+      let groqUser = '';
+      try {
+        const reqBody = JSON.parse(typeof init?.body === 'string' ? init.body : '{}');
+        groqSystem = reqBody?.messages?.find((m: { role: string }) => m.role === 'system')?.content ?? '';
+        groqUser = reqBody?.messages?.find((m: { role: string }) => m.role === 'user')?.content ?? '';
+      } catch {
+        // fall through with empty strings → treated as a single classification
+      }
+      if (groqSystem.includes('You split a long')) {
+        // pass-2 segmentation: echo the fragment back unsplit, valid shape.
+        return new Response(
+          JSON.stringify({
+            choices: [
+              { message: { content: JSON.stringify({ fragments: [groqUser] }) }, finish_reason: 'stop' },
+            ],
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
       // classifyBatch sends ALL fragments in one call and expects a
       // { results: [...] } array sized to the fragment count. Parse how many
       // fragments the request asked for so the mock returns a matching array
       // (replicates the old once-per-fragment classify behaviour exactly).
       let n = 1;
-      try {
-        const reqBody = JSON.parse(typeof init?.body === 'string' ? init.body : '{}');
-        const userMsg: string =
-          reqBody?.messages?.find((m: { role: string }) => m.role === 'user')?.content ?? '';
-        const matches = userMsg.match(/\[\d+\] \(lang=/g);
-        if (matches) n = matches.length;
-      } catch {
-        // fall back to a single result
-      }
+      const matches = groqUser.match(/\[\d+\] \(lang=/g);
+      if (matches) n = matches.length;
       return new Response(
         JSON.stringify({
           choices: [

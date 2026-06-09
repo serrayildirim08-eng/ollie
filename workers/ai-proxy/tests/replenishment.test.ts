@@ -128,9 +128,13 @@ describe('GET /replenishment/:user', () => {
   });
 
   it('200: 1-row unknown canonical → low-data with 14d static fallback', async () => {
+    // 'unobtanium' is deliberately absent from SHELF_LIFE_MAP so the code
+    // falls back to STATIC_FALLBACK_DAYS (14). ('hay' used to be unknown but
+    // is now a mapped pet canonical at 180d — it no longer exercises the
+    // fallback path.)
     fetchSpy.mockImplementation(mockRpc([
       {
-        canonical: 'hay',
+        canonical: 'unobtanium',
         sample_size: 1,
         median_interval_days: null,
         last_purchase_ts: isoDaysAgo(2),
@@ -213,11 +217,15 @@ describe('GET /replenishment/:user', () => {
 
   // ── auth ───────────────────────────────────────────────────────────────────
 
-  it('400: malformed user_id (not a UUID)', async () => {
+  it('400: malformed user_id (illegal chars)', async () => {
+    // The handler-level id regex was widened to accept Clerk IDs (user_xxx)
+    // alongside UUIDs, so a plain 'not-a-uuid' now passes format-validation
+    // and falls through to the 401 auth boundary. 400 invalid_user_id now
+    // fires only for ids with genuinely illegal chars (space / punctuation).
     const res = await handleReplenishment(
-      new Request('https://worker.dev/replenishment/not-a-uuid'),
+      new Request('https://worker.dev/replenishment/bad%20id!'),
       makeEnv(),
-      'not-a-uuid',
+      'bad id!',
     );
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: string };
