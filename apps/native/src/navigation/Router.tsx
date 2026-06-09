@@ -13,6 +13,7 @@
 import { BrowserRouter, Link, Route, Routes } from "react-router";
 import { useUser, useClerk } from "@clerk/clerk-react";
 import { Layout } from "./Layout";
+import { useFeature } from "../settings/features";
 import { Stack, Row } from "../layout";
 import { Text } from "../ui";
 import { colors } from "../theme/tokens";
@@ -43,6 +44,9 @@ export function Router() {
   // cron → APNs). Mounted here under <SignedIn> so it always has a Clerk
   // identity to resolve. No-op until a device push token exists.
   useServerReminderBridge();
+  // Partner is deferred out of v1 behind a feature flag (audit #10). The module
+  // stays in the tree; its route only mounts when the flag is on.
+  const partnerEnabled = useFeature('partner');
   return (
     <BrowserRouter>
       <Routes>
@@ -60,7 +64,7 @@ export function Router() {
           <Route path="box/goals" element={<GoalsBox />} />
           <Route path="box/medication" element={<MedicationBox />} />
           <Route path="box/cycle" element={<CycleBox />} />
-          <Route path="box/partner" element={<PartnerBox />} />
+          {partnerEnabled ? <Route path="box/partner" element={<PartnerBox />} /> : null}
           <Route path="modules" element={<ModulesIndex />} />
           <Route path="todo" element={<TodoScreen />} />
           <Route path="settings" element={<SettingsScreen />} />
@@ -130,6 +134,12 @@ const ASIDE_STYLE: React.CSSProperties = {
 };
 
 function ModulesIndex() {
+  // Hide feature-flagged-off modules (audit #10: Partner deferred from v1).
+  const partnerEnabled = useFeature('partner');
+  const groups = MODULE_GROUPS.map((g) => ({
+    ...g,
+    items: g.items.filter((m) => m.id !== 'partner' || partnerEnabled),
+  }));
   return (
     <Stack gap={48}>
       <Stack gap={12}>
@@ -142,7 +152,7 @@ function ModulesIndex() {
         </Text>
       </Stack>
 
-      {MODULE_GROUPS.map((group) => (
+      {groups.map((group) => (
         <Stack key={group.id} gap={8}>
           <Text
             scale="caption"

@@ -19,10 +19,11 @@ import { colors } from '../theme/tokens';
 import { BrainDumpInput } from './BrainDumpInput';
 import { dumpArchive } from './archive';
 import { tagDumpMood } from './mood-lexicon';
-import { dispatchRouterOutput } from '../modules';
+import { dispatchRouterOutput, applyFragment } from '../modules';
 import type { DispatchEntry } from '../modules';
 import type { CrisisSignal, RouterOutput } from '../router/schema';
 import { useAppLang } from '../settings/appLang';
+import { useFeature } from '../settings/features';
 import { crisisBannerCopy } from './crisisCopy';
 import { NeedsConfirmCard } from './NeedsConfirmCard';
 import { TodayNoticings } from '../modules/brain/TodayNoticings';
@@ -49,7 +50,9 @@ interface PendingConfirm {
   id: string;
   fragmentPreview: string;
   routeLabel: string;
-  /** Called when user clicks undo — best-effort remove on the module handler. */
+  /** Called when user clicks keep — applies a draft fragment (#9), else a no-op. */
+  onKeep: () => void;
+  /** Called when user clicks undo — drop a draft, or remove a written row. */
   onUndo: () => void;
   /** True when the source RouterOutput had visionUsed === true. */
   fromPhoto: boolean;
@@ -70,6 +73,9 @@ export function DumpScreen(): JSX.Element {
   const [ackKey, setAckKey] = useState<number | null>(null);
   const [crisis, setCrisis] = useState<CrisisSignal | null>(null);
   const [pendingConfirms, setPendingConfirms] = useState<PendingConfirm[]>([]);
+  // Partner is deferred out of v1 (audit #10) — its home ambient card only
+  // shows when the feature flag is on.
+  const partnerEnabled = useFeature('partner');
   // Rich goal capture from the home screen: when a dump is classified as a
   // new goal, the modal opens PRE-FILLED with what/why the AI extracted so
   // the user just completes obstacle/premortem/ulysses. Null = closed.
@@ -169,16 +175,29 @@ export function DumpScreen(): JSX.Element {
       .map((e, i) => {
         const id = `${output.dumpId}-${i}`;
         const realUndo = e.result.undo;
+        // Draft-first (audit #9): a grey-zone fragment was NOT written. "keep"
+        // applies it now; "undo" just drops it (nothing to remove). Legacy
+        // write-then-undo entries (handler already wrote + set needsConfirm)
+        // keep their behaviour: "keep" is a no-op, "undo" removes the row.
+        const isDraft = e.result.draft === true;
         return {
           id,
           fragmentPreview: e.fragment.text.slice(0, 60),
           routeLabel: buildRouteLabel(e),
           fromPhoto,
-          // Run the handler's real undo closure first (removes the written
-          // row), then dismiss the card. Handlers that did not persist
-          // (dump_only, validation reject) omit `undo` — we just dismiss.
+          onKeep: async () => {
+            if (isDraft) {
+              try {
+                await applyFragment(e.fragment);
+              } catch (err) {
+                console.error('[dump] draft apply failed', err);
+              }
+            }
+            dismissConfirm(id);
+          },
           onUndo: async () => {
-            if (realUndo) {
+            // draft → nothing was written; just drop it. legacy → remove row.
+            if (!isDraft && realUndo) {
               try {
                 await realUndo();
               } catch (err) {
@@ -232,8 +251,9 @@ export function DumpScreen(): JSX.Element {
           default. (Per-module PatternCards remain inside each Box as-is.) */}
       <TodayNoticings />
 
-      {/* Level-2 ambient partner line — renders only when paired (decision 4). */}
-      <PartnerCard />
+      {/* Level-2 ambient partner line — only when paired (decision 4) AND the
+          v1 Partner feature flag is enabled (audit #10). */}
+      {partnerEnabled && <PartnerCard />}
 
       {goalDraft && (
         <GoalCreateModal
@@ -260,7 +280,7 @@ export function DumpScreen(): JSX.Element {
               fragmentPreview={card.fragmentPreview}
               routeLabel={card.routeLabel}
               fromPhoto={card.fromPhoto}
-              onKeep={() => dismissConfirm(card.id)}
+              onKeep={card.onKeep}
               onUndo={card.onUndo}
             />
           ))}

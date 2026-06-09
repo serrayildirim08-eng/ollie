@@ -384,6 +384,13 @@ export interface HandlerResult {
   /** Set when handler wants the user to confirm before persisting */
   needsConfirm?: boolean;
   /**
+   * Draft-first (audit #9): true when a grey-zone (0.60–0.79) fragment was held
+   * UNAPPLIED, awaiting the user's confirm. No write happened yet — the confirm
+   * card applies it on "keep" and simply drops it on "undo". Distinguishes the
+   * draft path from the legacy write-then-undo path (where `undo` is set).
+   */
+  draft?: boolean;
+  /**
    * Real undo for the needsConfirm card. When the handler writes a row, it
    * captures the row id and returns a closure that removes it. Omitted when
    * the handler did not persist (dump_only, validation reject, etc.).

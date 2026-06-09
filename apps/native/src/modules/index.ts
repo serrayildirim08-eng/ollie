@@ -6,7 +6,7 @@
  * this barrel only exports the runtime pieces a screen needs to wire up.
  */
 
-export { dispatchRouterOutput } from './dispatch';
+export { dispatchRouterOutput, applyFragment } from './dispatch';
 export type { DispatchOptions } from './dispatch';
 export { stubHandlers } from './stubs';
 export type { DispatchEntry, DispatchOutput, HandlerOutcome, ModuleName } from './types';
