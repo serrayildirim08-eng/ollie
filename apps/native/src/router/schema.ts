@@ -69,11 +69,33 @@ export interface RouterOutput {
 // CRISIS SIGNAL · highest priority
 // ─────────────────────────────────────────────────────────────────────
 
+/**
+ * Crisis signal — mirrors `@ollie/crisis-lexicon`'s `CrisisSignal` BY HAND
+ * (kept in sync manually, same convention as the worker's dump-schema.ts).
+ * This is exactly what the worker serialises via `detectCrisis()` into
+ * `RouterOutput.crisis`, so the native client must read the same fields.
+ *
+ * Earlier this declared `{ type, confidence, language }`, which the worker
+ * never sent — the banner read `undefined` (audit #1). The lexicon shape is
+ * the source of truth: a matched tier (severity), which lexicons fired, and
+ * the audit matches. Severity comes from `tier`, not a fabricated `type`.
+ */
+export type CrisisTier = 1 | 2 | 3 | 4;
+export type CrisisLanguage = 'tr' | 'en' | 'es';
+
 export interface CrisisSignal {
   detected: true;
-  type: 'ideation' | 'method_seeking' | 'distress' | 'panic';
-  confidence: number;      // 0..1
-  language: 'en' | 'es' | 'tr';
+  /** Highest tier matched across all language lexicons (2=ideation … 4=method-seeking). */
+  tier: CrisisTier;
+  /** Which lexicons fired. */
+  languages: CrisisLanguage[];
+  /** First matched entry per lexicon, for audit. */
+  matches: Array<{
+    language: CrisisLanguage;
+    tier: CrisisTier;
+    pattern: string;
+    line: string;
+  }>;
 }
 
 // ─────────────────────────────────────────────────────────────────────

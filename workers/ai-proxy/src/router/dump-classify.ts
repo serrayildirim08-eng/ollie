@@ -155,6 +155,24 @@ export interface ClassifyResult {
   confidence: number;
 }
 
+/**
+ * Confidence the router falls back to when the model returns a non-numeric /
+ * NaN / missing confidence. The floor of the needs-confirm band (0.60), so a
+ * parse glitch surfaces the fragment for confirmation instead of demoting it
+ * to dump_only (silent data loss — audit #5a).
+ */
+export const UNCERTAIN_CONFIDENCE = 0.6;
+
+/**
+ * Coerce a model-supplied confidence into a safe [0,1] number. A real finite
+ * number is clamped; anything else (string, NaN, undefined) becomes
+ * UNCERTAIN_CONFIDENCE — NEVER 0, which would discard a possibly-correct route.
+ */
+export function normalizeConfidence(v: unknown): number {
+  if (typeof v === 'number' && Number.isFinite(v)) return Math.min(1, Math.max(0, v));
+  return UNCERTAIN_CONFIDENCE;
+}
+
 export async function classifyFragment(
   fragmentText: string,
   language: FragmentLanguage,
@@ -197,7 +215,7 @@ export async function classifyFragment(
   return {
     module: parsed.module,
     payload: { ...parsed.payload, module: parsed.module, action: parsed.action },
-    confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0,
+    confidence: normalizeConfidence(parsed.confidence),
   };
 }
 
@@ -228,7 +246,7 @@ function parseBatchResults(rawText: string, expected: number, provider: string):
   return results.map((r) => ({
     module: r.module,
     payload: { ...r.payload, module: r.module, action: r.action },
-    confidence: typeof r.confidence === 'number' ? r.confidence : 0,
+    confidence: normalizeConfidence(r.confidence),
   }));
 }
 

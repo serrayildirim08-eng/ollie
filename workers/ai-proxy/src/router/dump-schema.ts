@@ -76,14 +76,18 @@ export function applyConfidencePolicy(
     return { module, payload, needsConfirm: true };
   }
   // < 0.60 — demote.
-  return {
+  const demotedPayload: Record<string, unknown> = {
     module: 'dump_only',
-    payload: {
-      module: 'dump_only',
-      action: 'archive_only',
-      reason: 'low_confidence',
-      originalGuess: { module, payload },
-    },
-    needsConfirm: false,
+    action: 'archive_only',
+    reason: 'low_confidence',
+    originalGuess: { module, payload },
   };
+  // Preserve a time-deferred reminder across demotion (audit #5b). Without this,
+  // injectScheduledAt looks for `payload.remindIn` at the top level — which the
+  // demotion buried inside originalGuess — and the reminder was silently lost,
+  // contradicting the classifier rule "never dump_only when remindIn present".
+  if (payload && typeof payload === 'object' && 'remindIn' in payload) {
+    demotedPayload.remindIn = (payload as Record<string, unknown>).remindIn;
+  }
+  return { module: 'dump_only', payload: demotedPayload, needsConfirm: false };
 }
