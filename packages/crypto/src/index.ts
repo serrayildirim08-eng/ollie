@@ -15,14 +15,45 @@
  * LOGIN passphrase off-server, (b) encrypted backup export/import, and
  * (c) the future opt-out sync path if a B2B customer demands it.
  *
- * Parameters (locked):
- *   PBKDF2:  SHA-256, 100_000 iterations, 16-byte random salt
+ * Parameters:
+ *   PBKDF2:  SHA-256, 16-byte random salt
+ *            iteration count — see below (S7)
  *   AES-GCM: 256-bit key, 12-byte random IV (NIST-recommended)
+ *
+ * SECURITY (S7 · iteration count is migration-sensitive):
+ *   The PBKDF2 iteration count was raised from 100_000 to 600_000 to
+ *   meet OWASP's current PBKDF2-SHA256 guidance. A flat bump would have
+ *   broken decryption of every existing backup, profile, and login —
+ *   their keys were derived at 100k and a 600k re-derivation yields a
+ *   DIFFERENT key.
+ *
+ *   The fix is structural: every encrypted envelope now STORES the
+ *   iteration count it was derived with, and the decrypter reads it
+ *   back. New derivations use `PBKDF2_ITERATIONS` (600k). Old payloads
+ *   carry no stored count — the decrypter falls back to
+ *   `LEGACY_PBKDF2_ITERATIONS` (100k) so they still decrypt.
+ *
+ *   `deriveKey`'s `iterations` parameter is therefore EXPLICIT for any
+ *   read path: a caller decrypting a stored payload MUST pass the
+ *   payload's stored count (or LEGACY when absent). The default (600k)
+ *   is only correct for a brand-new derivation.
  *
  * All functions are pure — no store, no events, no wall-clock reads.
  */
 
-const PBKDF2_ITERATIONS = 100_000;
+/**
+ * Current PBKDF2 iteration count for NEW derivations (OWASP 2023+
+ * guidance for PBKDF2-SHA256).
+ */
+const PBKDF2_ITERATIONS = 600_000;
+
+/**
+ * The historical iteration count. Payloads written before the S7 bump
+ * carry NO stored count; the decrypter falls back to this value.
+ * DO NOT change — it is a fixed compatibility constant.
+ */
+const LEGACY_PBKDF2_ITERATIONS = 100_000;
+
 const SALT_BYTES = 16;
 const IV_BYTES = 12;
 const KEY_BITS = 256;
@@ -83,15 +114,29 @@ export function randomIv(): Uint8Array {
 
 /**
  * Derive an AES-GCM-256 CryptoKey from a passphrase + salt.
- * PBKDF2 SHA-256 100k iterations. Pure — deterministic given the
- * same passphrase + salt.
+ * PBKDF2 SHA-256. Pure — deterministic given the same passphrase + salt
+ * + iteration count.
+ *
+ * @param iterations PBKDF2 iteration count. Defaults to the current
+ *   `PBKDF2_ITERATIONS` (600k) — correct ONLY for a fresh derivation.
+ *   When DECRYPTING a stored payload you MUST pass the count that
+ *   payload was written with: read it from the envelope, falling back
+ *   to `LEGACY_PBKDF2_ITERATIONS` (100k) when the field is absent. See
+ *   the S7 note at the top of this file.
  */
-export async function deriveKey(passphrase: string, salt: Uint8Array): Promise<CryptoKey> {
+export async function deriveKey(
+  passphrase: string,
+  salt: Uint8Array,
+  iterations: number = PBKDF2_ITERATIONS,
+): Promise<CryptoKey> {
   if (!passphrase) {
     throw new Error('@ollie/crypto: passphrase must be a non-empty string');
   }
   if (!salt || salt.byteLength < 8) {
     throw new Error(`@ollie/crypto: salt must be ≥ 8 bytes, got ${salt?.byteLength ?? 0}`);
+  }
+  if (!Number.isInteger(iterations) || iterations < 1) {
+    throw new Error(`@ollie/crypto: iterations must be a positive integer, got ${iterations}`);
   }
   const subtle = getSubtle();
   const passphraseKey = await subtle.importKey(
@@ -105,7 +150,7 @@ export async function deriveKey(passphrase: string, salt: Uint8Array): Promise<C
     {
       name: 'PBKDF2',
       salt: salt as BufferSource,
-      iterations: PBKDF2_ITERATIONS,
+      iterations,
       hash: 'SHA-256',
     },
     passphraseKey,
@@ -173,7 +218,7 @@ export function bytesToBase64(bytes: Uint8Array): string {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const g: any = globalThis;
   if (typeof g.btoa === 'function') return g.btoa(bin);
-  return Buffer.from(bytes).toString('base64');
+  return g.Buffer.from(bytes).toString('base64');
 }
 
 export function base64ToBytes(b64: string): Uint8Array {
@@ -185,15 +230,21 @@ export function base64ToBytes(b64: string): Uint8Array {
     for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
     return out;
   }
-  return new Uint8Array(Buffer.from(b64, 'base64'));
+  return new Uint8Array(g.Buffer.from(b64, 'base64'));
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-// Strength meter — used by signup UI (C5). Pure, no entropy library deps.
+// Strength meter — used by signup UI (C5).
+//
+// Backed by zxcvbn (Dropbox's research-grade estimator: dictionary, l33t,
+// keyboard-pattern and date detection) instead of the old hand-rolled
+// length × character-class heuristic. zxcvbn ships a ~400 KB dictionary,
+// so it is LAZY-LOADED via dynamic import — the cost is only paid the
+// first time the signup screen scores a passphrase.
 // ──────────────────────────────────────────────────────────────────────────
 
 export interface PassphraseStrength {
-  /** 0–100. Crude but useful: length × character-class diversity. */
+  /** 0–100. Derived from zxcvbn's 0–4 crack-resistance score. */
   score: number;
   /** human-readable bucket. */
   band: 'weak' | 'ok' | 'strong' | 'great';
@@ -201,36 +252,55 @@ export interface PassphraseStrength {
   notes: string[];
 }
 
-const MIN_LENGTH = 16;
+const MIN_LENGTH = 12;
 
-export function passphraseStrength(passphrase: string): PassphraseStrength {
+/** Map zxcvbn's integer 0–4 score onto our 0–100 scale + band. */
+function bandFor(zScore: 0 | 1 | 2 | 3 | 4): { score: number; band: PassphraseStrength['band'] } {
+  switch (zScore) {
+    case 0: return { score: 10,  band: 'weak' };
+    case 1: return { score: 35,  band: 'weak' };
+    case 2: return { score: 55,  band: 'ok' };
+    case 3: return { score: 75,  band: 'strong' };
+    case 4: return { score: 95,  band: 'great' };
+  }
+}
+
+/**
+ * Score a passphrase with zxcvbn. Async because zxcvbn is lazy-loaded.
+ *
+ * The MIN_LENGTH (12-char) hard floor is enforced on top of zxcvbn: a
+ * passphrase shorter than the minimum is always capped to the 'weak'
+ * band regardless of entropy, and carries the explicit length note.
+ */
+export async function passphraseStrength(passphrase: string): Promise<PassphraseStrength> {
+  const { default: zxcvbn } = await import('zxcvbn');
+  const result = zxcvbn(passphrase ?? '');
+
+  const zScore = result.score as 0 | 1 | 2 | 3 | 4;
+  let { score, band } = bandFor(zScore);
+
   const notes: string[] = [];
-  const len = passphrase.length;
-  let classes = 0;
-  if (/[a-z]/.test(passphrase)) classes++;
-  if (/[A-Z]/.test(passphrase)) classes++;
-  if (/[0-9]/.test(passphrase)) classes++;
-  if (/[^A-Za-z0-9]/.test(passphrase)) classes++;
-
-  if (len < MIN_LENGTH) notes.push(`must be at least ${MIN_LENGTH} characters`);
-  if (classes < 2) notes.push('mix in upper/lower/digits or punctuation');
-  if (/(.)\1\1/.test(passphrase)) notes.push('avoid three-in-a-row repeats');
-
-  let score = Math.min(100, Math.round(len * 4 + (classes - 1) * 10));
-  if (len < MIN_LENGTH) score = Math.min(score, 35);
-  if (classes < 2) score = Math.min(score, 50);
-
-  let band: PassphraseStrength['band'];
-  if (score >= 85) band = 'great';
-  else if (score >= 65) band = 'strong';
-  else if (score >= 45) band = 'ok';
-  else band = 'weak';
+  if ((passphrase ?? '').length < MIN_LENGTH) {
+    notes.push(`must be at least ${MIN_LENGTH} characters`);
+    // Below the hard floor we never advertise more than 'weak'.
+    band = 'weak';
+    score = Math.min(score, 35);
+  }
+  // Surface zxcvbn's own guidance (warning + suggestions) verbatim.
+  const warning = result.feedback?.warning;
+  if (warning) notes.push(warning.toLowerCase());
+  for (const s of result.feedback?.suggestions ?? []) {
+    notes.push(s.toLowerCase());
+  }
 
   return { score, band, notes };
 }
 
 export const CRYPTO_PARAMS = {
+  /** Iteration count for NEW derivations (OWASP 2023+ guidance). */
   PBKDF2_ITERATIONS,
+  /** Historical count — payloads with no stored count decrypt with this. */
+  LEGACY_PBKDF2_ITERATIONS,
   SALT_BYTES,
   IV_BYTES,
   KEY_BITS,

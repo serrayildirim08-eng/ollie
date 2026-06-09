@@ -15,6 +15,7 @@
  */
 
 import type { FinanceRecord, SavingsGoal } from './types';
+import { median as medianOf } from '../stats';
 
 // ─── types ────────────────────────────────────────────────────────────────
 
@@ -223,9 +224,7 @@ export function matchTransfersToGoals(
         .map((c) => c.amount)
         .filter((v): v is number => v != null && v > 0);
       if (contribs.length === 0) continue;
-      const sorted = [...contribs].sort((a, b) => a - b);
-      const mid = Math.floor(sorted.length / 2);
-      const median = sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+      const median = medianOf(contribs);
       if (Math.abs(transfer.amount - median) / median <= 0.05) {
         amtMatches.push({ goal, medianContrib: median });
       }

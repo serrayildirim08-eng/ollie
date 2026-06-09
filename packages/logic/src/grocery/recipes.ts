@@ -8,7 +8,7 @@ import type { GroceryHistory, GroceryOpts, RecipeInferredSignal, PantryItem } fr
 import { ALIAS_TABLE, RECIPE_TABLE, SORTED_RECIPE_ALIASES } from './data';
 import { foldDiacritics } from './parse';
 
-const DAY_MS = 86_400_000;
+import { DAY_MS } from '../util';
 
 export function inferRecipe(
   history: GroceryHistory | null,

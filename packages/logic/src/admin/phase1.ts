@@ -34,6 +34,7 @@ import {
   SOURCES,
 } from './constants';
 import { resolveNow } from './helpers';
+import { DAY_MS } from '../util';
 
 // ─── A1 ──────────────────────────────────────────────────────────────────
 
@@ -119,7 +120,7 @@ export function scheduleRenewalCues(
     if (!t?.id) continue;
     if (t.kind !== 'renewal') continue;
     if (typeof t.expiry_ts !== 'number') continue;
-    const daysLeft = (t.expiry_ts - now) / 86_400_000;
+    const daysLeft = (t.expiry_ts - now) / DAY_MS;
     let stage: RenewalCueSignal['stage'] | null = null;
     if (daysLeft <= 0) stage = 'overdue';
     else if (daysLeft <= 7) stage = 'urgent';
@@ -155,17 +156,20 @@ export function scheduleRenewalCues(
 // ─── A9 ──────────────────────────────────────────────────────────────────
 
 /**
- * detectStaleBall — ADHD object permanence: tasks parked on someone else's
- * side vanish. Surfaces THEIRS state older than 14d, or WAITING tasks past
- * eta+3d.
+ * detectStaleBall — ADHD object permanence: tasks that go quiet vanish from
+ * mind. v1 resurfacing rules (audit #8):
+ *   - `mine` with a due date → resurface once OVERDUE.
+ *   - `mine` without a due date → resurface if UNTOUCHED ≥ untouchedDays (7).
+ *   - `waiting` → resurface if UNTOUCHED ≥ untouchedDays (7).
+ *   - `done` → never.
+ * Copy is gentle + forward-moving, never shaming.
  */
 export function detectStaleBall(
   history: AdminHistory | null | undefined,
   opts: AdminOpts = {},
 ): StaleBallSignal[] | null {
   const now = resolveNow(history, opts);
-  const theirsDays = opts.theirsDays ?? 14;
-  const etaGraceDays = opts.etaGraceDays ?? 3;
+  const untouchedDays = opts.untouchedDays ?? 7;
   const tasks = Array.isArray(history?.tasks) ? history!.tasks : [];
   if (tasks.length === 0) return null;
 
@@ -173,39 +177,49 @@ export function detectStaleBall(
   for (const t of tasks) {
     if (!t?.id) continue;
     const state = t.ball_state;
+    if (state === 'done') continue;
     const label = typeof t.label === 'string' && t.label.trim() ? t.label.trim() : 'task';
 
-    if (state === 'THEIRS') {
-      const last = typeof t.last_transition_at === 'number' ? t.last_transition_at : null;
-      if (last === null) continue;
-      const ageMs = now - last;
-      if (ageMs <= theirsDays * 86_400_000) continue;
-      const daysOver = Math.floor(ageMs / 86_400_000);
-      out.push({
-        signal: 'admin_stale_ball',
-        task_id: t.id,
-        kind: 'stale_theirs',
-        days_overdue: daysOver,
-        copy: `${label} — they've had it ${daysOver} days. nudge?`,
-        copy_es: `${label} — lo tienen del otro lado hace ${daysOver} días. ¿un toque?`,
-        sources: [SOURCES.barkley],
-        ts: now,
-      });
-      continue;
+    // mine + due date → overdue check (a dated task is never "untouched")
+    if (state === 'mine' && typeof t.due_date === 'string') {
+      const due = Date.parse(t.due_date);
+      if (!Number.isNaN(due)) {
+        const dueDay = Math.floor(due / DAY_MS);
+        const nowDay = Math.floor(now / DAY_MS);
+        if (dueDay < nowDay) {
+          out.push({
+            signal: 'admin_stale_ball',
+            task_id: t.id,
+            kind: 'overdue',
+            days_overdue: nowDay - dueDay,
+            copy: `${label} — this is still open.`,
+            copy_es: `${label} — esto sigue pendiente.`,
+            sources: [SOURCES.barkley],
+            ts: now,
+          });
+        }
+        continue;
+      }
+      // unparseable due date → fall through to the untouched check
     }
 
-    if (state === 'WAITING') {
-      const eta = typeof t.eta_at === 'number' ? t.eta_at : null;
-      if (eta === null) continue;
-      if (now <= eta + etaGraceDays * 86_400_000) continue;
-      const daysOver = Math.floor((now - eta) / 86_400_000);
+    // untouched check — mine (no usable due date) OR waiting that has gone quiet
+    if (state === 'mine' || state === 'waiting') {
+      const last = typeof t.last_transition_at === 'number' ? t.last_transition_at : null;
+      if (last === null) continue;
+      const ageDays = Math.floor((now - last) / DAY_MS);
+      if (ageDays < untouchedDays) continue;
+      const copy =
+        state === 'waiting' ? `${label} — still waiting on this?` : `${label} — want to move this forward?`;
+      const copy_es =
+        state === 'waiting' ? `${label} — ¿sigues esperando esto?` : `${label} — ¿quieres avanzar con esto?`;
       out.push({
         signal: 'admin_stale_ball',
         task_id: t.id,
-        kind: 'deadline_passed',
-        days_overdue: daysOver,
-        copy: `${label} — deadline passed by ${daysOver} days. ball still in their court.`,
-        copy_es: `${label} — el plazo pasó hace ${daysOver} días. la pelota sigue en su lado.`,
+        kind: 'untouched',
+        days_overdue: ageDays,
+        copy,
+        copy_es,
         sources: [SOURCES.barkley],
         ts: now,
       });
@@ -284,8 +298,8 @@ export function detectLast5Pct(
     if (typeof t.done_at !== 'number') continue;
     if (typeof t.closed_at === 'number') continue;
     const ageMs = now - t.done_at;
-    if (ageMs <= gapDays * 86_400_000) continue;
-    const daysSince = Math.floor(ageMs / 86_400_000);
+    if (ageMs <= gapDays * DAY_MS) continue;
+    const daysSince = Math.floor(ageMs / DAY_MS);
     const label = typeof t.label === 'string' && t.label.trim() ? t.label.trim() : 'task';
     out.push({
       signal: 'admin_last_5pct',

@@ -7,7 +7,7 @@
 
 import type { Observation, SpeciesProfiles, PetHealthFlag } from './types';
 
-const DAY_MS = 86_400_000;
+import { DAY_MS } from '../util';
 
 /**
  * Scan observations for a pet and surface health flags whose signals

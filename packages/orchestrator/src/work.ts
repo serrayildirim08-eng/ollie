@@ -13,6 +13,8 @@
  * Subscriptions:
  *   work.tasks             → schedule recompute
  *   work.sessions          → schedule recompute
+ *   work.focus_log         → schedule recompute (UI source of truth;
+ *                            projected into sessions slice for detectors)
  *   work.meetings          → schedule recompute
  *   work.shutdown_log      → schedule recompute
  *   work.triage_days       → schedule recompute
@@ -33,6 +35,7 @@ import { detectPatterns, computePomodoroBreakState } from '@ollie/logic/work';
 import type {
   AnyWorkPattern,
   WorkState,
+  WorkSession,
   Meeting,
   ScheduledFocusBlock,
   FocusLogEntry,
@@ -40,6 +43,7 @@ import type {
 } from '@ollie/logic/work';
 import type { NotificationSpec } from '@ollie/notifications';
 import type { Orchestrator } from './types';
+import { appendCapped } from './dedup-store';
 
 const DEBOUNCE_MS = 500;
 const MIN = 60_000;
@@ -93,6 +97,36 @@ function localDayKey(ts: number): string {
   return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
 }
 
+/**
+ * Adapt completed focus_log entries (UI source of truth) into the
+ * WorkSession shape the W0/W1/W3 detectors read.
+ *
+ * work.focus_log is mirrored from the native FocusTimer's SQLite
+ * work_events on every sync (apps/native/src/modules/work/bridge.ts —
+ * runs on boot + after each dump dispatch); nothing writes to
+ * work.sessions on native. Before that bridge, detectors saw an empty
+ * sessions array and never matched. Now we project focus_log → sessions
+ * at orchestrator-boundary so the existing detector contracts stay
+ * pure (still keyed off state.sessions).
+ */
+function focusLogToSessions(log: FocusLogEntry[]): WorkSession[] {
+  const out: WorkSession[] = [];
+  for (const e of log) {
+    if (!e || typeof e.ts !== 'number') continue;
+    const dur =
+      typeof e.duration_min === 'number' && e.duration_min > 0 ? e.duration_min : null;
+    const elapsedMs = typeof e.duration_ms === 'number' && e.duration_ms > 0 ? e.duration_ms : null;
+    out.push({
+      id: `focus:${e.ts}`,
+      at: e.ts,
+      start: e.ts,
+      end: e.ts + (elapsedMs ?? (dur ?? 0) * 60_000),
+      duration_min: dur ?? (elapsedMs ? elapsedMs / 60_000 : 0),
+    });
+  }
+  return out;
+}
+
 export function createWorkOrchestrator(
   store: Store,
   opts: WorkOrchestratorOptions = {},
@@ -117,9 +151,18 @@ export function createWorkOrchestrator(
     try {
       const now = getNow();
 
+      // The native bridge mirrors completed focus sessions (SQLite
+      // work_events) into work.focus_log. Detectors read state.sessions.
+      // Project the former into the latter at this boundary so legacy seeded
+      // `work.sessions` data still works AND real captured activity drives the
+      // detectors.
+      const rawSessions = store.get<WorkSession[]>('work', 'sessions', []) ?? [];
+      const rawFocusLog = store.get<FocusLogEntry[]>('work', 'focus_log', []) ?? [];
+      const sessions: WorkSession[] = [...rawSessions, ...focusLogToSessions(rawFocusLog)];
+
       const workState: WorkState = {
         tasks:                store.get('work', 'tasks', []) ?? [],
-        sessions:             store.get('work', 'sessions', []) ?? [],
+        sessions,
         meetings:             store.get('work', 'meetings', []) ?? [],
         recurring_meetings:   store.get('work', 'recurring_meetings', []) ?? [],
         shutdown_log:         store.get('work', 'shutdown_log', []) ?? [],
@@ -172,7 +215,8 @@ export function createWorkOrchestrator(
           fresh.push(id);
         }
         if (fresh.length) {
-          store.set('work', '_hyperfocusEmittedIds', [...seenIds, ...fresh]);
+          // Cap the persisted dedup array (audit #8) — it grew unbounded.
+          store.set('work', '_hyperfocusEmittedIds', appendCapped([...seenIds], fresh));
         }
       } catch { /* non-fatal */ }
 
@@ -348,6 +392,9 @@ export function createWorkOrchestrator(
 
     unsubs.push(store.subscribeKey('work', 'tasks', schedule));
     unsubs.push(store.subscribeKey('work', 'sessions', schedule));
+    // focus_log is the UI's source of truth for completed focus sessions;
+    // detectors project it into the sessions slice (see focusLogToSessions).
+    unsubs.push(store.subscribeKey('work', 'focus_log', schedule));
     unsubs.push(store.subscribeKey('work', 'meetings', schedule));
     unsubs.push(store.subscribeKey('work', 'shutdown_log', schedule));
     unsubs.push(store.subscribeKey('work', 'triage_days', schedule));

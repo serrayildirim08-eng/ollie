@@ -3,6 +3,7 @@ packages:
   - "packages/*"
   - "workers/*"
 allowBuilds:
+  '@clerk/shared': true
   '@sentry/capacitor': true
   core-js: false
   electron: true

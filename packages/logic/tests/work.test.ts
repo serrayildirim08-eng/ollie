@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import {
   DAY,
   HOUR,
-  DEADLINE_CUE_OFFSETS_DAYS,
   DEADLINE_RE,
   FEEDBACK_RE,
   dayKey,
@@ -32,7 +31,6 @@ import {
   detectRSDPattern,
   detectPatterns,
   type WorkState,
-  type WorkPatternOpts,
   type Deadline,
 } from '../src/work';
 

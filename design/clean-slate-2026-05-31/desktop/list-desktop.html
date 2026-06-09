@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Grocery · List · desktop</title>
+<style>
+  :root{--paper:#FAF8F3;--ink:#23211C;--soft:#6B675E;--faint:#A8A29A;--hair:#EAE5DB;--sage:#7C8C6F;--rail:#F2EFE8;}
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{width:1100px;height:720px;margin:0 auto;background:var(--paper);color:var(--ink);
+    font-family:"DM Sans",-apple-system,BlinkMacSystemFont,sans-serif;-webkit-font-smoothing:antialiased;display:flex;}
+  .serif{font-family:"DM Serif Display",Georgia,serif;font-weight:400;}
+  .smcp{font-variant-caps:all-small-caps;letter-spacing:.14em;font-size:12px;color:var(--faint);}
+  .spine{width:84px;flex:none;background:var(--rail);border-right:1px solid var(--hair);display:flex;flex-direction:column;align-items:center;padding:26px 0;}
+  .spine .mark{width:12px;height:12px;border-radius:50%;background:var(--sage);margin-bottom:46px;}
+  .spine nav{display:flex;flex-direction:column;gap:30px;align-items:center;}
+  .spine a{writing-mode:vertical-rl;transform:rotate(180deg);font-variant-caps:all-small-caps;letter-spacing:.18em;font-size:13px;color:var(--faint);text-decoration:none;font-weight:500;}
+  .spine a.on{color:var(--ink);font-weight:600;}
+  .main{flex:1;display:flex;flex-direction:column;}
+  .canvas{flex:1;padding:56px 80px 0;overflow:auto;max-width:760px;}
+  h1.serif{font-size:34px;letter-spacing:-.01em;margin-bottom:4px;}
+  .sub{color:var(--soft);font-size:14px;margin-bottom:24px;}
+  .row{display:flex;align-items:center;gap:18px;padding:15px 0;border-top:1px solid var(--hair);}
+  .tick{width:21px;height:21px;border-radius:50%;border:1.5px solid var(--faint);flex:none;}
+  .name{font-size:18px;}.name .qty{color:var(--faint);font-size:14px;margin-left:8px;}
+  .done .name{color:var(--faint);text-decoration:line-through;}
+  .done .tick{border-color:var(--sage);background:var(--sage);position:relative;}
+  .done .tick:after{content:"";position:absolute;left:6px;top:3px;width:5px;height:9px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg);}
+  .pred{margin-top:30px;}.pred .smcp{display:block;margin-bottom:4px;}
+  .prow{display:flex;align-items:center;justify-content:space-between;padding:13px 0;border-top:1px solid var(--hair);}
+  .prow .pn{font-size:17px;color:var(--faint);}.prow .add{font-size:12px;color:var(--sage);font-weight:600;font-variant-caps:all-small-caps;letter-spacing:.08em;}
+  .dock{padding:22px 80px 30px;}
+  .dump{border:1px solid var(--hair);border-radius:16px;background:#fff;padding:16px 20px;display:flex;align-items:center;gap:18px;max-width:760px;}
+  .dump .ph{flex:1;color:var(--faint);font-size:16px;}.dump .ic{color:var(--faint);}.dump .kbd{font-size:11px;color:var(--faint);border:1px solid var(--hair);border-radius:6px;padding:3px 7px;}
+  svg{display:block;}
+</style>
+</head>
+<body>
+  <aside class="spine"><div class="mark"></div><nav><a href="now-desktop.html">now</a><a class="on" href="#">list</a><a href="kitchen-desktop.html">kitchen</a><a href="cook-desktop.html">cook</a></nav></aside>
+  <div class="main">
+    <div class="canvas">
+      <h1 class="serif">To buy</h1>
+      <div class="sub">tap a circle when it's in the cart — it moves to your kitchen.</div>
+      <div class="row"><span class="tick"></span><span class="name">lemons <span class="qty">· need</span></span></div>
+      <div class="row"><span class="tick"></span><span class="name">oat milk <span class="qty">2</span></span></div>
+      <div class="row"><span class="tick"></span><span class="name">chicken thighs</span></div>
+      <div class="row done"><span class="tick"></span><span class="name">garlic</span></div>
+      <div class="row"><span class="tick"></span><span class="name">parmesan</span></div>
+      <div class="pred">
+        <span class="smcp">≈ likely needed soon</span>
+        <div class="prow"><span class="pn">coffee</span><span class="add">+ add</span></div>
+        <div class="prow"><span class="pn">dish soap</span><span class="add">+ add</span></div>
+      </div>
+    </div>
+    <div class="dock"><div class="dump"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><line x1="12" y1="18" x2="12" y2="21"/></svg></span><span class="ph">add to the list…</span><span class="kbd">⌘↵</span></div></div>
+  </div>
+</body>
+</html>

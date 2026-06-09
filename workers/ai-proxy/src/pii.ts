@@ -16,6 +16,16 @@
  * them downstream when extracting structured signals.
  *
  * Brands are NOT scrubbed — they are the highest-value B2B signal.
+ *
+ * Medical / body-module terms are NOT scrubbed either. This scrubber
+ * targets identity PII (names, addresses, phones, emails, GPS, URLs)
+ * only — there is no MEDICAL / MEDICATION regex category. Common body
+ * terms like "ibuprofen", "advil", "headache", "panic attack", "asthma",
+ * "migraine", "ADHD", "vitamin D", "magnesium" pass through unchanged,
+ * which is exactly what /route/body Layer 2 needs to classify accurately.
+ * The Anthropic-side prompt layer (label.ts) does NOT add medical
+ * filtering either. If a future scrubber adds medical categories, it
+ * MUST allowlist these terms first — see body.config.ts for the rationale.
  */
 
 export interface ScrubResult {

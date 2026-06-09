@@ -20,6 +20,7 @@ import type {
   WeatherAlert,
 } from './types';
 import { NEGATION_WINDOW, NEGATION_MARKERS } from './constants';
+import { DAY_MS, HOUR_MS } from '../util';
 
 // ─── parsePetMention ────────────────────────────────────────────────────
 
@@ -48,9 +49,9 @@ export function parsePetMention(
 
     // Temporal offset
     let tsOffsetMs = 0;
-    if (/\byesterday\b/.test(sentence)) tsOffsetMs = 24 * 3_600_000;
-    else if (/\blast night\b/.test(sentence)) tsOffsetMs = 12 * 3_600_000;
-    else if (/\bthis morning\b|\bearlier\b/.test(sentence)) tsOffsetMs = 6 * 3_600_000;
+    if (/\byesterday\b/.test(sentence)) tsOffsetMs = 24 * HOUR_MS;
+    else if (/\blast night\b/.test(sentence)) tsOffsetMs = 12 * HOUR_MS;
+    else if (/\bthis morning\b|\bearlier\b/.test(sentence)) tsOffsetMs = 6 * HOUR_MS;
     const occurred_at = now - tsOffsetMs;
 
     // Candidate pets in this sentence
@@ -169,7 +170,7 @@ export function parseAwayIntent(
   if (!hasAway) return null;
   const m = lower.match(/away for (\d+)\s*days?/);
   const days = m ? parseInt(m[1], 10) : 3;
-  return { active: true, returning_at: now + days * 86_400_000 };
+  return { active: true, returning_at: now + days * DAY_MS };
 }
 
 // ─── parseSessionIntent ─────────────────────────────────────────────────

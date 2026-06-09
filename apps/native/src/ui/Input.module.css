@@ -1,0 +1,62 @@
+/* Input — Ollie UI primitive, editorial minimal style */
+
+.wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ollie-space-xs);
+  width: 100%;
+}
+
+.input {
+  appearance: none;
+  background: transparent;
+  width: 100%;
+  box-sizing: border-box;
+  font-family: inherit;
+  font-size: var(--ollie-size-body);
+  font-weight: var(--ollie-weight-normal);
+  color: var(--ollie-ink-dark);
+  line-height: var(--ollie-leading);
+
+  /* Editorial: bottom border only */
+  border: none;
+  border-bottom: 1px solid var(--ollie-ceramic-dim);
+  border-radius: 0;
+
+  /* Generous padding for readability + ADHD hit target */
+  padding: var(--ollie-space-sm) 0;
+
+  outline: none;
+  transition:
+    border-color var(--ollie-duration-fast) var(--ollie-easing-standard);
+}
+
+.input::placeholder {
+  color: var(--ollie-ink-light);
+  font-weight: var(--ollie-weight-light);
+}
+
+.input:focus {
+  border-bottom-color: var(--ollie-sage);
+}
+
+/* Error state */
+.inputError {
+  border-bottom-color: var(--ollie-error-border);
+}
+
+.inputError:focus {
+  border-bottom-color: var(--ollie-error-border);
+}
+
+.errorMsg {
+  font-size: var(--ollie-size-caption);
+  color: var(--ollie-error-text);
+  letter-spacing: var(--ollie-tracking-wide);
+}
+
+/* Disabled */
+.input:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}

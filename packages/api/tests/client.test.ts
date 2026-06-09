@@ -56,6 +56,34 @@ describe('client · basic', () => {
     await api.supabase.rest.upsert('encrypted_state', [{ id: 'x' }]);
     expect(seenPrefer).toContain('resolution=merge-duplicates');
   });
+
+  it('rpc POSTs to /rest/v1/rpc/<fn> with the args as the JSON body', async () => {
+    let seenUrl = '';
+    let seenMethod = '';
+    let seenBody = '';
+    let seenApiKey = '';
+    const api = createOllieAPI({
+      supabaseUrl: 'https://x.supabase.co',
+      supabaseAnonKey: 'anon',
+      fetchImpl: makeFetch((url, init) => {
+        seenUrl = url;
+        seenMethod = init?.method ?? '';
+        seenBody = typeof init?.body === 'string' ? init.body : '';
+        seenApiKey = (init?.headers as Record<string, string>)?.apikey ?? '';
+        return res([{ id: 'u1', salt: 's', encrypted_server_pw: 'c' }]);
+      }),
+    });
+    const r = await api.supabase.rest.rpc<Array<{ id: string }>>(
+      'profile_recovery_lookup',
+      { p_email: 'serra@example.com' },
+    );
+    expect(seenMethod).toBe('POST');
+    expect(seenUrl).toBe('https://x.supabase.co/rest/v1/rpc/profile_recovery_lookup');
+    expect(JSON.parse(seenBody)).toEqual({ p_email: 'serra@example.com' });
+    expect(seenApiKey).toBe('anon');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.data[0].id).toBe('u1');
+  });
 });
 
 describe('client · error envelopes', () => {
@@ -118,6 +146,7 @@ describe('client · error envelopes', () => {
 
 describe('client · retry', () => {
   it('GET retries up to max on network error then succeeds', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     let calls = 0;
     const api = createOllieAPI({
       supabaseUrl: 'https://x.supabase.co',
@@ -132,6 +161,7 @@ describe('client · retry', () => {
     const r = await api.supabase.rest.get('encrypted_state');
     expect(r.ok).toBe(true);
     expect(calls).toBe(3);
+    warn.mockRestore();
   });
 
   it('POST does NOT retry by default', async () => {
@@ -163,6 +193,63 @@ describe('client · retry', () => {
     const r = await api.supabase.rest.get('encrypted_state');
     expect(r.ok).toBe(false);
     expect(calls).toBe(1);
+  });
+});
+
+describe('client · retry telemetry', () => {
+  it('logs each retry attempt and the eventual recovery', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    let calls = 0;
+    const api = createOllieAPI({
+      supabaseUrl: 'https://x.supabase.co',
+      supabaseAnonKey: 'anon',
+      fetchImpl: makeFetch(() => {
+        calls++;
+        if (calls < 3) throw new Error('offline');
+        return res({ ok: true });
+      }),
+      defaultGetRetry: { max: 3, baseDelayMs: 1 },
+    });
+    const r = await api.supabase.rest.get('encrypted_state');
+    expect(r.ok).toBe(true);
+
+    const lines = warn.mock.calls.map((c) => String(c[0]));
+    // Two retry attempts logged (attempt 1 and 2), plus a recovery line.
+    expect(lines.some((l) => l.includes('retry attempt 1/3'))).toBe(true);
+    expect(lines.some((l) => l.includes('retry attempt 2/3'))).toBe(true);
+    expect(lines.some((l) => l.includes('recovered after 2 retries'))).toBe(true);
+    warn.mockRestore();
+  });
+
+  it('logs a give-up line when all retries are exhausted', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const api = createOllieAPI({
+      supabaseUrl: 'https://x.supabase.co',
+      supabaseAnonKey: 'anon',
+      fetchImpl: makeFetch(() => { throw new Error('offline'); }),
+      defaultGetRetry: { max: 2, baseDelayMs: 1 },
+    });
+    const r = await api.supabase.rest.get('encrypted_state');
+    expect(r.ok).toBe(false);
+
+    const lines = warn.mock.calls.map((c) => String(c[0]));
+    expect(lines.some((l) => l.includes('gave up after 3 attempts'))).toBe(true);
+    expect(lines.some((l) => l.includes('network'))).toBe(true);
+    warn.mockRestore();
+  });
+
+  it('does NOT log telemetry when the first attempt succeeds', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const api = createOllieAPI({
+      supabaseUrl: 'https://x.supabase.co',
+      supabaseAnonKey: 'anon',
+      fetchImpl: makeFetch(() => res({ ok: true })),
+      defaultGetRetry: { max: 2, baseDelayMs: 1 },
+    });
+    const r = await api.supabase.rest.get('encrypted_state');
+    expect(r.ok).toBe(true);
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
   });
 });
 

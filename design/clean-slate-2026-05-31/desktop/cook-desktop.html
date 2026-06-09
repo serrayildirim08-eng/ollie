@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Grocery · Cook · desktop</title>
+<style>
+  :root{--paper:#FAF8F3;--ink:#23211C;--soft:#6B675E;--faint:#A8A29A;--hair:#EAE5DB;--sage:#7C8C6F;--rail:#F2EFE8;}
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{width:1100px;height:720px;margin:0 auto;background:var(--paper);color:var(--ink);
+    font-family:"DM Sans",-apple-system,BlinkMacSystemFont,sans-serif;-webkit-font-smoothing:antialiased;display:flex;}
+  .serif{font-family:"DM Serif Display",Georgia,serif;font-weight:400;}
+  .smcp{font-variant-caps:all-small-caps;letter-spacing:.14em;font-size:12px;color:var(--faint);}
+  .spine{width:84px;flex:none;background:var(--rail);border-right:1px solid var(--hair);display:flex;flex-direction:column;align-items:center;padding:26px 0;}
+  .spine .mark{width:12px;height:12px;border-radius:50%;background:var(--sage);margin-bottom:46px;}
+  .spine nav{display:flex;flex-direction:column;gap:30px;align-items:center;}
+  .spine a{writing-mode:vertical-rl;transform:rotate(180deg);font-variant-caps:all-small-caps;letter-spacing:.18em;font-size:13px;color:var(--faint);text-decoration:none;font-weight:500;}
+  .spine a.on{color:var(--ink);font-weight:600;}
+  /* two panes */
+  .ideas{width:420px;flex:none;border-right:1px solid var(--hair);padding:54px 44px;overflow:auto;}
+  .ideas h1{font-size:30px;letter-spacing:-.01em;margin-bottom:6px;}
+  .ideas .sub{color:var(--soft);font-size:14px;margin-bottom:18px;}
+  .chips{display:flex;gap:9px;margin-bottom:14px;}
+  .chips .c{font-size:12px;color:var(--soft);border:1px solid var(--hair);border-radius:20px;padding:6px 13px;}
+  .chips .c.on{color:#fff;background:var(--sage);border-color:var(--sage);}
+  .dish{padding:18px 0;border-top:1px solid var(--hair);cursor:pointer;}
+  .dish.sel{}
+  .dish .name{font-size:21px;}
+  .dish.sel .name{color:var(--ink);} .dish .name{color:var(--soft);}
+  .dish.sel .name{color:var(--ink);}
+  .dish .meta{margin-top:5px;font-size:12px;color:var(--faint);}
+  .dish.sel{border-left:2px solid var(--sage);margin-left:-44px;padding-left:42px;}
+  /* reading pane */
+  .read{flex:1;padding:56px 64px;overflow:auto;}
+  .read h2{font-size:38px;line-height:1.08;letter-spacing:-.015em;margin-bottom:8px;}
+  .read .rmeta{font-size:13px;color:var(--soft);margin-bottom:28px;}
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:0 56px;}
+  .smcp.blk{display:block;margin:0 0 12px;}
+  .ing{display:flex;align-items:baseline;justify-content:space-between;padding:8px 0;}
+  .ing .nm{font-size:15px;}.have .nm{color:var(--ink);}.need .nm{color:var(--soft);}
+  .need .add{font-size:11px;color:var(--sage);font-weight:600;font-variant-caps:all-small-caps;letter-spacing:.08em;}
+  .steps{margin-top:30px;}
+  .step{display:flex;gap:14px;padding:11px 0;border-top:1px solid var(--hair);}
+  .step .num{font-family:"DM Serif Display",Georgia,serif;font-size:15px;color:var(--faint);width:16px;flex:none;}
+  .step .tx{font-size:15px;line-height:1.55;max-width:520px;}
+  .cooked{margin-top:30px;}
+  .cooked span{font-size:13px;color:var(--sage);font-weight:600;font-variant-caps:all-small-caps;letter-spacing:.12em;border:1px solid var(--hair);border-radius:24px;padding:11px 26px;}
+  svg{display:block;}
+</style>
+</head>
+<body>
+  <aside class="spine"><div class="mark"></div><nav><a href="now-desktop.html">now</a><a href="list-desktop.html">list</a><a href="kitchen-desktop.html">kitchen</a><a class="on" href="#">cook</a></nav></aside>
+
+  <section class="ideas">
+    <h1 class="serif">Tonight</h1>
+    <div class="sub">from what you have · pick one to read</div>
+    <div class="chips"><span class="c on">anything</span><span class="c">veg</span><span class="c">quick</span></div>
+    <div class="dish sel"><div class="name serif">Lemon Chicken Pasta</div><div class="meta">about 30 min · mediterranean</div></div>
+    <div class="dish"><div class="name serif">Chicken Fried Rice</div><div class="meta">about 25 min · one pan</div></div>
+    <div class="dish"><div class="name serif">Creamy Lemon Rice</div><div class="meta">about 25 min · vegetarian</div></div>
+  </section>
+
+  <section class="read">
+    <h2 class="serif">Lemon Chicken Pasta</h2>
+    <div class="rmeta">about 30 min · serves 2 · mediterranean</div>
+    <div class="cols">
+      <div>
+        <span class="smcp blk">you have</span>
+        <div class="ing have"><span class="nm">pasta — 200 g</span></div>
+        <div class="ing have"><span class="nm">chicken thighs — 2</span></div>
+        <div class="ing have"><span class="nm">olive oil</span></div>
+        <div class="ing have"><span class="nm">garlic — 2 cloves</span></div>
+      </div>
+      <div>
+        <span class="smcp blk">you'll need</span>
+        <div class="ing need"><span class="nm">lemon — 1</span><span class="add">+ add</span></div>
+        <div class="ing need"><span class="nm">parmesan</span><span class="add">+ add</span></div>
+      </div>
+    </div>
+    <div class="steps">
+      <span class="smcp blk">how</span>
+      <div class="step"><span class="num">1</span><span class="tx">Boil the pasta in well-salted water until just shy of done.</span></div>
+      <div class="step"><span class="num">2</span><span class="tx">Sear the chicken in olive oil, then the garlic, until golden.</span></div>
+      <div class="step"><span class="num">3</span><span class="tx">Add a ladle of pasta water + the lemon; toss the pasta through.</span></div>
+      <div class="step"><span class="num">4</span><span class="tx">Finish with parmesan and a little more lemon to taste.</span></div>
+    </div>
+    <div class="cooked"><span>cooked it</span></div>
+  </section>
+</body>
+</html>

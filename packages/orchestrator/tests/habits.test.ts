@@ -377,3 +377,72 @@ describe('habits orchestrator · habits:morning_check + push subscriber', () => 
     orch2.teardown();
   });
 });
+
+// ─── audit item #4 · emittedCompletions Set pruning ─────────────────────────
+
+describe('habits orchestrator · emittedCompletions does not leak (audit #4)', () => {
+  const DAY = 86_400_000;
+  const DAY0 = new Date('2026-01-01T12:00:00Z').getTime();
+
+  afterEach(() => {
+    _clearAllHandlers();
+    vi.useRealTimers();
+  });
+
+  it('prunes stale day-keys so the Set stays bounded across many days', () => {
+    vi.useFakeTimers();
+    let now = DAY0;
+    vi.setSystemTime(now);
+    const store = createStore(createMemoryAdapter());
+    const orch = createHabitsOrchestrator(store, { now: () => now });
+    orch.init();
+
+    // Simulate 30 days. Each day a habit completes — without pruning the
+    // Set would hold one key per habit per day (30 keys here).
+    for (let d = 0; d < 30; d++) {
+      now = DAY0 + d * DAY;
+      vi.setSystemTime(now);
+      store.set('shared', 'habits_v2', [
+        { id: 'h_teeth', name: 'brush teeth', cueTime: 'morning', completions: [{ ts: now }] },
+      ]);
+    }
+
+    // After 30 days the dedup Set holds ONLY the current day's keys
+    // (1 habit) — the prior 29 day-keys were pruned at scan time.
+    expect(orch._emittedCompletionCount()).toBe(1);
+    orch.teardown();
+  });
+
+  it('still dedups within a day and re-emits on a fresh day', () => {
+    vi.useFakeTimers();
+    let now = DAY0;
+    vi.setSystemTime(now);
+    const store = createStore(createMemoryAdapter());
+    const orch = createHabitsOrchestrator(store, { now: () => now });
+    orch.init();
+
+    const captured: HabitsCompletedPayload[] = [];
+    on('habits:completed', (p) => captured.push(p as HabitsCompletedPayload));
+
+    // Day 0 — two writes, same completion day → emits once.
+    store.set('shared', 'habits_v2', [
+      { id: 'h_teeth', name: 'brush teeth', cueTime: 'morning', completions: [{ ts: now }] },
+    ]);
+    store.set('shared', 'habits_v2', [
+      { id: 'h_teeth', name: 'brush teeth', cueTime: 'morning', completions: [{ ts: now + 1000 }] },
+    ]);
+    expect(captured).toHaveLength(1);
+
+    // Day 1 — same habit completes again → emits a second time.
+    now = DAY0 + DAY;
+    vi.setSystemTime(now);
+    store.set('shared', 'habits_v2', [
+      { id: 'h_teeth', name: 'brush teeth', cueTime: 'morning', completions: [{ ts: now }] },
+    ]);
+    expect(captured).toHaveLength(2);
+
+    // The stale day-0 key was pruned — only day-1's key remains.
+    expect(orch._emittedCompletionCount()).toBe(1);
+    orch.teardown();
+  });
+});

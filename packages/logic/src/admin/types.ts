@@ -14,7 +14,12 @@ export interface AdminSource {
 // ─── Task shapes ────────────────────────────────────────────────────────
 
 export type TaskState = 'active' | 'done' | 'closed' | 'waiting';
-export type BallState = 'MINE' | 'THEIRS' | 'WAITING';
+/**
+ * Whose court a task is in (v1 — audit #7/#8). Minimal three-state model; NO
+ * 'theirs'. Resurfacing (detectStaleBall) keys off this + due_date +
+ * last_transition_at.
+ */
+export type BallState = 'mine' | 'waiting' | 'done';
 export type RenewalStage = 'early' | 'mid' | 'urgent' | 'overdue';
 export type EFState = 1 | 2 | 3 | 4 | 5;
 export type EFStateName = 'crash' | 'low' | 'flow' | 'peak';
@@ -42,6 +47,8 @@ export interface AdminTask {
   done_at?: number;
   closed_at?: number;
   last_transition_at?: number;
+  /** ISO yyyy-mm-dd due date (v1 resurfacing: overdue `mine` tasks). */
+  due_date?: string;
   eta_at?: number;
   ef_cost?: number;
   cost_of_delay?: string;
@@ -70,6 +77,8 @@ export interface AdminOpts {
   tasks?: AdminTask[];
   theirsDays?: number;
   etaGraceDays?: number;
+  /** v1 stale-ball: a task untouched for ≥ this many days resurfaces (default 7). */
+  untouchedDays?: number;
   gapDays?: number;
   minDefers?: number;
   horizonDays?: number;
@@ -111,7 +120,8 @@ export interface RenewalCueSignal {
 export interface StaleBallSignal {
   signal: 'admin_stale_ball';
   task_id: string;
-  kind: 'stale_theirs' | 'deadline_passed';
+  /** v1: `overdue` (mine, past due date) | `untouched` (mine/waiting gone quiet ≥7d). */
+  kind: 'overdue' | 'untouched';
   days_overdue: number;
   copy: string;
   copy_es: string;

@@ -49,17 +49,23 @@ function job(over: Partial<ScheduledJobRow> = {}): ScheduledJobRow {
 interface Harness {
   env: FlushEnv;
   patches: Array<{ id: string; body: Record<string, unknown> }>;
-  apnsCalls: Array<{ deviceToken: string }>;
+  apnsCalls: Array<{ deviceToken: string; authorization: string }>;
 }
+
+const APNS_SECRET = 'apns-internal-secret-fake';
 
 function makeHarness(opts: {
   dueJobs: ScheduledJobRow[];
   tokensByUser?: Record<string, string[]>;
   sentTodayByUser?: Record<string, number>;
   apns?: (deviceToken: string) => { status: number; reason?: string };
+  /** When set, the sent-today count query returns this HTTP status. */
+  countFails?: number;
+  /** When true, the sent-today count query throws (network error). */
+  countThrows?: boolean;
 }): Harness {
   const patches: Array<{ id: string; body: Record<string, unknown> }> = [];
-  const apnsCalls: Array<{ deviceToken: string }> = [];
+  const apnsCalls: Array<{ deviceToken: string; authorization: string }> = [];
   const tokensByUser = opts.tokensByUser ?? { 'user-1': ['tok-aaa'] };
   const sentTodayByUser = opts.sentTodayByUser ?? {};
   const apns = opts.apns ?? (() => ({ status: 200 }));
@@ -79,6 +85,11 @@ function makeHarness(opts: {
     // GET scheduled_jobs — either the due-jobs select or the sent-today count
     if (method === 'GET' && url.includes('/rest/v1/scheduled_jobs')) {
       if (url.includes('status=eq.sent')) {
+        // Audit #13 — simulate a count-query outage.
+        if (opts.countThrows) throw new Error('network down');
+        if (opts.countFails) {
+          return new Response('count query failed', { status: opts.countFails });
+        }
         const m = url.match(/user_id=eq\.([^&]+)/);
         const userId = m ? m[1] : '';
         const n = sentTodayByUser[userId] ?? 0;
@@ -110,10 +121,15 @@ function makeHarness(opts: {
   const env: FlushEnv = {
     SUPABASE_URL: 'https://example.supabase.co',
     SUPABASE_SERVICE_ROLE: 'service-role-fake',
+    APNS_INTERNAL_SECRET: APNS_SECRET,
     APNS_PUSH: {
       fetch: async (_input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
         const body = JSON.parse(String(init?.body ?? '{}')) as { deviceToken: string };
-        apnsCalls.push({ deviceToken: body.deviceToken });
+        const headers = (init?.headers ?? {}) as Record<string, string>;
+        apnsCalls.push({
+          deviceToken: body.deviceToken,
+          authorization: headers.authorization ?? '',
+        });
         const r = apns(body.deviceToken);
         if (r.status >= 200 && r.status < 300) {
           return new Response('{}', { status: r.status });
@@ -169,6 +185,16 @@ describe('flushNotificationQueue · happy path', () => {
     expect(String(selectCall![0])).toContain('fire_at=lte.');
     expect(String(selectCall![0])).toContain('order=fire_at.asc');
     expect(String(selectCall![0])).toContain('limit=100');
+  });
+
+  it('sends the APNS_INTERNAL_SECRET as a Bearer header on every /push call', async () => {
+    const j = job();
+    const h = makeHarness({ dueJobs: [j] });
+
+    await flushNotificationQueue(h.env);
+
+    expect(h.apnsCalls).toHaveLength(1);
+    expect(h.apnsCalls[0].authorization).toBe(`Bearer ${APNS_SECRET}`);
   });
 
   it('multi-device: delivers to every registered token', async () => {
@@ -386,8 +412,67 @@ describe('flushNotificationQueue · idempotency + edge cases', () => {
     const stats = await flushNotificationQueue({
       SUPABASE_URL: '',
       SUPABASE_SERVICE_ROLE: '',
+      APNS_INTERNAL_SECRET: APNS_SECRET,
       APNS_PUSH: { fetch: async () => new Response('{}') } as unknown as Fetcher,
     });
     expect(stats.processed).toBe(0);
+  });
+});
+
+describe('flushNotificationQueue · daily-cap fail-closed (audit #13)', () => {
+  beforeEach(() => vi.restoreAllMocks());
+
+  it('count query HTTP error → job stays pending (retried), NOT delivered', async () => {
+    const j = job({ attempts: 0 });
+    const h = makeHarness({ dueJobs: [j], countFails: 500 });
+
+    const stats = await flushNotificationQueue(h.env);
+
+    // Fail CLOSED: no APNs call, job not 'sent', not terminal 'budget_skipped'.
+    expect(h.apnsCalls).toHaveLength(0);
+    expect(stats.sent).toBe(0);
+    expect(stats.budget_skipped).toBe(0);
+    // It is retried — left 'pending' with a bumped attempt count.
+    expect(stats.retried).toBe(1);
+    const patch = h.patches.find((p) => p.id === j.id);
+    expect(patch?.body.status).toBe('pending');
+    expect(patch?.body.attempts).toBe(1);
+    expect(patch?.body.last_error).toBe('count-unavailable');
+  });
+
+  it('count query network throw → job stays pending (retried), NOT delivered', async () => {
+    const j = job({ attempts: 0 });
+    const h = makeHarness({ dueJobs: [j], countThrows: true });
+
+    const stats = await flushNotificationQueue(h.env);
+
+    expect(h.apnsCalls).toHaveLength(0);
+    expect(stats.sent).toBe(0);
+    expect(stats.retried).toBe(1);
+    const patch = h.patches.find((p) => p.id === j.id);
+    expect(patch?.body.status).toBe('pending');
+  });
+
+  it('repeated count failures eventually flip the job to failed (does not retry forever)', async () => {
+    // attempts already at MAX-1 → next failed attempt is terminal.
+    const j = job({ attempts: 2 });
+    const h = makeHarness({ dueJobs: [j], countFails: 500 });
+
+    const stats = await flushNotificationQueue(h.env);
+
+    expect(h.apnsCalls).toHaveLength(0);
+    expect(stats.failed).toBe(1);
+    const patch = h.patches.find((p) => p.id === j.id);
+    expect(patch?.body.status).toBe('failed');
+  });
+
+  it('count query succeeds → normal delivery (cap not disabled)', async () => {
+    const j = job();
+    const h = makeHarness({ dueJobs: [j], sentTodayByUser: { 'user-1': 0 } });
+
+    const stats = await flushNotificationQueue(h.env);
+
+    expect(stats.sent).toBe(1);
+    expect(h.apnsCalls).toHaveLength(1);
   });
 });

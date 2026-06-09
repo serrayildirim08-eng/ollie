@@ -23,10 +23,21 @@
  *   the visually ambiguous 0/o/1/l/I removed. Lower-cased.
  */
 
+import { json, upstreamError } from '@ollie/worker-http';
+import { verifyClerkJwt } from './clerk-verify';
+
 export interface InvitesEnv {
   SUPABASE_URL: string;
   SUPABASE_SERVICE_ROLE: string;
   SUPABASE_ANON_KEY: string;
+  /**
+   * Clerk issuer URL — e.g. https://faithful-stag-15.clerk.accounts.dev.
+   * Set as a wrangler secret on deploy. When present, the JWT verify path
+   * tries Clerk first; when absent, behaviour is identical to pre-Clerk
+   * (Supabase-only). Migration-safe: a deploy with no CLERK_ISSUER keeps
+   * existing Supabase-authed sessions working.
+   */
+  CLERK_ISSUER?: string;
   INVITE_BASE_URL?: string;
   RATE_KV: KVNamespace;
 }
@@ -44,6 +55,8 @@ const CODE_ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789';
 
 interface GenerateInviteRequest {
   inviter_user_hash: string;
+  /** Optional acquisition-channel tag — normalised server-side. */
+  channel?: string;
 }
 
 export async function handleGenerateInvite(req: Request, env: InvitesEnv): Promise<Response> {
@@ -74,14 +87,17 @@ export async function handleGenerateInvite(req: Request, env: InvitesEnv): Promi
     return json({ error: 'supabase_not_configured' }, 500);
   }
 
+  // Optional acquisition-channel tag for the activation funnel. Normalised
+  // here so the column stays tidy; null when absent → reads as a referral.
+  const channel = normalizeChannel(body.channel);
+
   // Generate a fresh code. Retry up to 3 times if we hit a UNIQUE collision
   // on the `code` column (vanishingly unlikely with 30^8 keyspace, but
   // worth handling — service_role inserts surface 409 on conflict via
   // Prefer: return=minimal so we re-roll deterministically).
-  let code = '';
   let lastErr = '';
   for (let attempt = 0; attempt < 3; attempt++) {
-    code = makeCode();
+    const code = makeCode();
     const expiresAt = new Date(Date.now() + INVITE_TTL_DAYS * 86_400_000).toISOString();
     const url = `${env.SUPABASE_URL.replace(/\/$/, '')}/rest/v1/invites`;
     const resp = await fetchWithTimeout(url, {
@@ -96,6 +112,7 @@ export async function handleGenerateInvite(req: Request, env: InvitesEnv): Promi
         code,
         inviter_user_hash: body.inviter_user_hash,
         expires_at: expiresAt,
+        ...(channel ? { channel } : {}),
       }),
     });
     if (resp.ok) {
@@ -110,10 +127,16 @@ export async function handleGenerateInvite(req: Request, env: InvitesEnv): Promi
     lastErr = errText;
     // 409 → unique collision. Loop. Anything else → surface.
     if (resp.status !== 409 && !/duplicate key/i.test(errText)) {
-      return json({ error: 'supabase_error', status: resp.status, detail: errText }, 502);
+      // SECURITY (S8): generic code to the client; PostgREST detail logged
+      // server-side only behind a request id.
+      return upstreamError('supabase_error', 502, errText, {
+        endpoint: 'generate-invite',
+        upstream_status: resp.status,
+      });
     }
   }
-  return json({ error: 'code_collision', detail: lastErr }, 503);
+  // All retries collided — log the last upstream body server-side only.
+  return upstreamError('code_collision', 503, lastErr, { endpoint: 'generate-invite' });
 }
 
 // ─── /validate-invite ──────────────────────────────────────────────────────────
@@ -227,8 +250,13 @@ export async function handleClaimInvite(req: Request, env: InvitesEnv): Promise<
     }),
   });
   if (!resp.ok) {
+    // SECURITY (S8): generic code to the client; PostgREST detail logged
+    // server-side only behind a request id.
     const errText = await resp.text();
-    return json({ error: 'supabase_error', status: resp.status, detail: errText }, 502);
+    return upstreamError('supabase_error', 502, errText, {
+      endpoint: 'claim-invite',
+      upstream_status: resp.status,
+    });
   }
   const rows = (await resp.json()) as Array<{ code: string }>;
   if (rows.length === 0) {
@@ -282,6 +310,25 @@ export function makeCode(): string {
   return `olli-${randSegment(4)}-${randSegment(4)}`;
 }
 
+/**
+ * Normalise an optional channel tag: lowercase, trim, collapse whitespace
+ * to hyphens, strip to [a-z0-9-], cap at 40 chars. Returns null when the
+ * input is missing or empty after normalising — a null channel reads as
+ * an in-app referral in the activation funnel.
+ */
+export function normalizeChannel(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const cleaned = raw
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9-]/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40);
+  return cleaned || null;
+}
+
 function randSegment(n: number): string {
   const bytes = new Uint8Array(n);
   crypto.getRandomValues(bytes);
@@ -292,7 +339,48 @@ function randSegment(n: number): string {
   return out;
 }
 
-async function verifyJwt(jwt: string, env: InvitesEnv): Promise<string | null> {
+/**
+ * Verify a user JWT and return the verified user id.
+ *
+ * Dual-mode (Clerk migration · Phase 3 / T0):
+ *   1. If `env.CLERK_ISSUER` is set, try Clerk JWKS verify first. Clerk's
+ *      issued tokens carry `iss === CLERK_ISSUER`, so this path matches
+ *      every new sign-in.
+ *   2. Fall back to Supabase `GET /auth/v1/user` for any token Clerk
+ *      rejects. This keeps any still-live Supabase sessions working
+ *      through the migration window. Once no Supabase sessions remain,
+ *      this branch can be deleted.
+ *
+ * Returns null on any failure (signature, expired, wrong issuer, missing
+ * env). Never throws. Exported so the telemetry endpoints
+ * (/ingest-event, /label, /enrich-dump) gate on the same check.
+ *
+ * The user id returned is:
+ *   - Clerk: the `sub` claim (`user_<…>`).
+ *   - Supabase: the `id` field from /auth/v1/user (a uuid).
+ * Callers MUST treat the value opaquely — it is a "verified user id",
+ * not a Supabase uuid.
+ */
+export async function verifyJwt(
+  jwt: string,
+  env: {
+    SUPABASE_URL: string;
+    SUPABASE_ANON_KEY: string;
+    CLERK_ISSUER?: string;
+  },
+): Promise<string | null> {
+  // Clerk path — try first when configured. A successful Clerk verify is
+  // local (no upstream hop after the JWKS cache warms), so it is both
+  // faster and the canonical post-migration path.
+  if (env.CLERK_ISSUER) {
+    const clerkUserId = await verifyClerkJwt(jwt, env);
+    if (clerkUserId) return clerkUserId;
+    // Fall through to Supabase — a Clerk failure does not prove the token
+    // is bad, it might be a legacy Supabase JWT issued before the cutover.
+  }
+
+  // Supabase fallback (legacy). Removed once the Supabase session window
+  // has fully aged out.
   if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) return null;
   const url = `${env.SUPABASE_URL.replace(/\/$/, '')}/auth/v1/user`;
   try {
@@ -321,9 +409,4 @@ async function fetchWithTimeout(url: string, init: RequestInit): Promise<Respons
   }
 }
 
-function json(obj: unknown, status = 200): Response {
-  return new Response(JSON.stringify(obj), {
-    status,
-    headers: { 'content-type': 'application/json' },
-  });
-}
+// `json()` is the shared helper from @ollie/worker-http (imported above).

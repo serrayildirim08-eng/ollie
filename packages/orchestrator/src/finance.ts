@@ -81,7 +81,6 @@ import type {
   Cancellation,
   SavingsTotals,
   SavingsTransfer,
-  ADHDTaxCandidate,
   DuplicatePurchase,
 } from '@ollie/logic/finance';
 import type {
@@ -92,6 +91,7 @@ import type {
   DumpEntry,
 } from '@ollie/logic/finance';
 import type { Orchestrator } from './types';
+import { appendCapped } from './dedup-store';
 
 const DEBOUNCE_MS = 500;
 const MAX_DUMP_LEN = 4000;
@@ -394,7 +394,8 @@ export function createFinanceOrchestrator(
           });
         }
         if (freshStale.length) {
-          store.set('finance', '_staleSubEmittedIds', [...seenStale, ...freshStale]);
+          // Cap the persisted dedup array (audit #8) — it grew unbounded.
+          store.set('finance', '_staleSubEmittedIds', appendCapped([...seenStale], freshStale));
         }
       } catch { /* non-fatal */ }
       const upcoming = upcomingBills(detect.recurring, 14, now);
@@ -419,7 +420,8 @@ export function createFinanceOrchestrator(
           });
         }
         if (freshBillDue.length) {
-          store.set('finance', '_billDuePredictedIds', [...seenBillDue, ...freshBillDue]);
+          // Cap the persisted dedup array (audit #8) — it grew unbounded.
+          store.set('finance', '_billDuePredictedIds', appendCapped([...seenBillDue], freshBillDue));
         }
       } catch { /* non-fatal */ }
 
@@ -486,7 +488,8 @@ export function createFinanceOrchestrator(
           }
         }
         if (fresh.length) {
-          store.set('finance', '_anomalyEmittedIds', [...seen, ...fresh]);
+          // Cap the persisted dedup array (audit #8) — it grew unbounded.
+          store.set('finance', '_anomalyEmittedIds', appendCapped([...seen], fresh));
         }
       } catch { /* non-fatal */ }
 
@@ -825,7 +828,8 @@ export function createFinanceOrchestrator(
           }
         }
         if (freshSavings.length) {
-          store.set('finance', '_savingsDepositEmittedIds', [...seenSavings, ...freshSavings]);
+          // Cap the persisted dedup array (audit #8) — it grew unbounded.
+          store.set('finance', '_savingsDepositEmittedIds', appendCapped([...seenSavings], freshSavings));
         }
       } catch (err) {
         console.error('[orchestrator/finance] savings deposit detection failed', err);
@@ -905,7 +909,8 @@ export function createFinanceOrchestrator(
         }
 
         if (freshAdhdTax.length) {
-          store.set('finance', '_adhdTaxCandidateEmittedIds', [...seenAdhdTax, ...freshAdhdTax]);
+          // Cap the persisted dedup array (audit #8) — it grew unbounded.
+          store.set('finance', '_adhdTaxCandidateEmittedIds', appendCapped([...seenAdhdTax], freshAdhdTax));
         }
       } catch (err) {
         console.error('[orchestrator/finance] ADHD tax detection failed', err);

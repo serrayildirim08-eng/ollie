@@ -10,6 +10,14 @@
  * astrology, dump, journal, dissection, predict) land in follow-up phases.
  */
 
+// Shared internal primitives — single source of truth for statistical
+// helpers (stats) and small utilities (util): time constants (DAY_MS /
+// HOUR_MS / MINUTE_MS), calendar day-keys (dayKey local + dayKeyUTC) and
+// the capped Levenshtein edit distance. Every duplicate site across the
+// package imports from these two modules.
+export * as stats from './stats';
+export * as util from './util';
+
 export * as cycle from './cycle';
 export * as products from './products';
 export * as corrections from './corrections';
@@ -30,3 +38,4 @@ export * as habits from './habits';
 export * as astrology from './astrology';
 export * as journal from './journal';
 export * as dissection from './dissection';
+export * as brain from './brain';

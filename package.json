@@ -4,27 +4,37 @@
   "private": true,
   "description": "Life operating system for ADHD brains. Monorepo.",
   "scripts": {
-    "dev": "pnpm --filter @ollie/web dev",
-    "build": "pnpm --filter @ollie/web build",
+    "dev": "pnpm --filter native tauri dev",
+    "build": "pnpm --filter native tauri build",
     "typecheck": "pnpm -r typecheck",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
     "scan:banned": "node tools/scan-banned-phrases.cjs",
     "scan:banned:test": "node tools/banned-phrases.test.cjs",
     "pretest": "node tools/banned-phrases.test.cjs && node tools/scan-banned-phrases.cjs",
     "test": "pnpm -r test",
-    "ios:sync": "pnpm --filter @ollie/ios sync",
-    "ios:open": "pnpm --filter @ollie/ios open",
-    "ios:run": "pnpm --filter @ollie/ios run",
-    "electron:dev": "pnpm --filter @ollie/desktop dev",
-    "electron:build:mac": "pnpm --filter @ollie/desktop build:mac",
-    "electron:build:win": "pnpm --filter @ollie/desktop build:win",
-    "electron:build:linux": "pnpm --filter @ollie/desktop build:linux",
-    "electron:build:all": "pnpm --filter @ollie/desktop build:all"
+    "tauri:dev": "pnpm --filter native tauri dev",
+    "tauri:build": "pnpm --filter native tauri build"
   },
   "devDependencies": {
-    "typescript": "^5.6.0"
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^22.19.19",
+    "eslint": "^10.4.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.6.0",
+    "typescript": "^5.6.0",
+    "typescript-eslint": "^8.60.0"
   },
   "packageManager": "pnpm@11.0.9",
   "engines": {
     "node": ">=20"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@clerk/shared",
+      "esbuild",
+      "sharp",
+      "workerd"
+    ]
   }
 }

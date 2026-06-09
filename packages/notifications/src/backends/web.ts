@@ -91,6 +91,10 @@ export const webBackend: NotificationBackend = {
     platformIds.delete(dedupeKey);
   },
   requestPermission: ensurePermission,
+  async checkPermission() {
+    if (!hasNotifications()) return 'denied';
+    return window.Notification!.permission;
+  },
 };
 
 /** Install the web backend into the dispatcher. Call once at boot. */

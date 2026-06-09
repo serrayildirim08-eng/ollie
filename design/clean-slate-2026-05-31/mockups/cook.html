@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Grocery · Cook</title>
+<style>
+  :root{--paper:#FAF8F3;--ink:#23211C;--soft:#6B675E;--faint:#A8A29A;--hair:#EAE5DB;--sage:#7C8C6F;}
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{width:390px;height:844px;margin:0 auto;background:var(--paper);color:var(--ink);
+    font-family:"DM Sans",-apple-system,BlinkMacSystemFont,sans-serif;-webkit-font-smoothing:antialiased;
+    display:flex;flex-direction:column;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom);}
+  .serif{font-family:"DM Serif Display",Georgia,serif;font-weight:400;}
+  .smcp{font-variant-caps:all-small-caps;letter-spacing:.13em;font-size:11px;color:var(--faint);}
+  .spine{display:flex;gap:24px;padding:18px 28px 0;}
+  .spine a{font-size:14px;color:var(--faint);text-decoration:none;padding-bottom:7px;font-weight:500;}
+  .spine a.on{color:var(--ink);font-weight:600;border-bottom:2px solid var(--sage);}
+  .scroll{flex:1;overflow:auto;padding:0 28px;}
+  .head{margin:30px 0 8px;display:flex;align-items:baseline;justify-content:space-between;}
+  .head h1{font-size:30px;letter-spacing:-.01em;}
+  .head .from{font-size:12px;color:var(--faint);font-variant-caps:all-small-caps;letter-spacing:.1em;}
+  .sub{color:var(--soft);font-size:14px;margin-bottom:6px;}
+  .dish{padding:22px 0;border-top:1px solid var(--hair);cursor:pointer;}
+  .dish .t{display:flex;align-items:baseline;justify-content:space-between;}
+  .dish .name{font-size:24px;}
+  .dish .open{font-size:11px;color:var(--faint);font-variant-caps:all-small-caps;letter-spacing:.1em;}
+  .dish .meta{margin-top:8px;font-size:13px;color:var(--soft);}
+  .dish .ing{margin-top:10px;font-size:11px;color:var(--faint);font-variant-caps:all-small-caps;letter-spacing:.07em;}
+  .ask{margin:24px 0 10px;display:flex;align-items:center;gap:10px;}
+  .ask .chip{font-size:12px;color:var(--soft);border:1px solid var(--hair);border-radius:20px;padding:6px 13px;}
+  .ask .chip.on{color:#fff;background:var(--sage);border-color:var(--sage);}
+  .dump{margin:0 16px 14px;border:1px solid var(--hair);border-radius:14px;background:#fff;padding:14px 16px;display:flex;align-items:center;gap:14px;}
+  .dump .ph{flex:1;color:var(--faint);font-size:15px;}.dump .ic{color:var(--faint);}
+  .dump .send{width:34px;height:34px;border-radius:50%;background:var(--sage);display:flex;align-items:center;justify-content:center;color:#fff;}
+  svg{display:block;}
+</style>
+</head>
+<body>
+  <nav class="spine"><a href="now.html">now</a><a href="list.html">list</a><a href="kitchen.html">kitchen</a><a class="on" href="#">cook</a></nav>
+  <div class="scroll">
+    <div class="head"><h1 class="serif">Tonight</h1><span class="from">from what you have</span></div>
+    <div class="sub">three ideas. tap one to see how.</div>
+
+    <div class="ask">
+      <span class="chip on">anything</span><span class="chip">veg</span><span class="chip">quick</span>
+    </div>
+
+    <a class="dish" href="recipe.html" style="text-decoration:none;color:inherit;display:block;">
+      <div class="t"><span class="name serif">Lemon Chicken Pasta</span><span class="open">recipe →</span></div>
+      <div class="meta">about 30 min · mediterranean</div>
+      <div class="ing">pasta · chicken · oil · lemon</div>
+    </a>
+    <div class="dish">
+      <div class="t"><span class="name serif">Chicken Fried Rice</span><span class="open">recipe →</span></div>
+      <div class="meta">about 25 min · one pan</div>
+      <div class="ing">rice · chicken · oil · egg</div>
+    </div>
+    <div class="dish">
+      <div class="t"><span class="name serif">Creamy Lemon Rice</span><span class="open">recipe →</span></div>
+      <div class="meta">about 25 min · vegetarian</div>
+      <div class="ing">rice · milk · oil · lemon</div>
+    </div>
+  </div>
+  <div class="dump">
+    <span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><line x1="12" y1="18" x2="12" y2="21"/></svg></span>
+    <span class="ph">"something with the spinach"…</span>
+    <div class="send"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></div>
+  </div>
+</body>
+</html>

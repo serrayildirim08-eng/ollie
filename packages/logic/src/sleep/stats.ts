@@ -34,6 +34,7 @@ import {
   _median,
 } from './helpers';
 import { CHRONO_BANDS } from './constants';
+import { DAY_MS } from '../util';
 
 export function deriveSleepStats(records: SleepRecord[], W = 14): SleepStats | null {
   if (!Array.isArray(records)) return null;
@@ -65,7 +66,7 @@ export function computeSleepDebt(
   const targetMin = target * 60;
   if (!Array.isArray(records) || records.length === 0)
     return { totalDeficitHours: 0, nightsCounted: 0 };
-  const cutoff = typeof now === 'number' ? now - W * 86400000 : 0;
+  const cutoff = typeof now === 'number' ? now - W * DAY_MS : 0;
   const window = records
     .filter((r) => r && !r.is_skipped && r.tst_min != null)
     .filter((r) => {
@@ -345,10 +346,16 @@ export function forecastTonightTST(
  * passes `new Date(now).getDay()` (tonight's bedtime falls on today).
  * Returns null with fewer than 3 usable nights — same floor as the
  * old API version, so the UI card behaves identically when data is thin.
+ *
+ * `_now` is retained as a positional parameter (callers pass tonight's
+ * epoch) but is currently unused — the forecast is computed purely from
+ * the `records` series and `targetDow`. Kept in the signature so the
+ * call site does not have to reshuffle args; underscore-prefixed to
+ * satisfy noUnusedParameters.
  */
 export function forecastTonightHeuristic(
   records: SleepRecord[],
-  now: number,
+  _now: number,
   targetDow?: number,
 ): ForecastResult | null {
   if (!Array.isArray(records)) return null;

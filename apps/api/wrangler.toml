@@ -35,10 +35,24 @@ APNS_USE_SANDBOX = "0"
 # scheduled_jobs table is live (Sprint 4 / E4).
 SCHEDULED_JOBS_ENABLED = "0"
 
-# Run the cron handler every minute. Cloudflare bills per invocation
-# but the workload is bounded (LIMIT 100 jobs per tick).
-[triggers]
-crons = ["* * * * *"]
+# DECOMMISSIONED 2026-05-18 (audit item #1 — double-delivery cron).
+#
+# This worker's per-minute cron previously scanned `scheduled_jobs` and
+# delivered pushes. The workers/cron worker (ollie-cron) now owns that
+# scan on a 5-min schedule (flushNotificationQueue). Running both meant
+# duplicate push delivery + a broken daily cap (two processes both
+# counting + incrementing). The `[triggers]` block is removed so this
+# worker no longer schedules a cron — it stays a pure HTTP worker
+# (/register-token, /send, /account/delete). `runCron` is retained only
+# behind the manual POST /cron/tick endpoint for local testing.
+#
+# ollie-notifications is NOT currently deployed (verified via
+# `wrangler deployments list` — "Worker does not exist"), so removing
+# the trigger needs no redeploy. If it is ever deployed, deploy this
+# config so the cron does not arm.
+#
+# [triggers]
+# crons = ["* * * * *"]
 
 # Device-token store (D1 or KV — KV is simpler for the registration use case)
 [[kv_namespaces]]
