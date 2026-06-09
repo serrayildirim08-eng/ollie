@@ -13,15 +13,17 @@
  */
 
 import { mulberry32, spearman, bootstrapCI } from './stats';
+import { dayKey } from '../util';
 import type { Confidence, DumpEntry, DetectorOptions, SleepMoodLagPattern, SleepSession } from './types';
 
 const FATIGUE_RE = /\b(tired|exhausted|wiped|drained|wrecked|burnt out|knackered|yorgun|bitkin|halsiz)\b/i;
 
-function dayKeyFromTs(ts: number): string {
-  const d = new Date(ts);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
+// Local-time day key — delegates to the shared util.
+const dayKeyFromTs = dayKey;
 
+// Pure date-string arithmetic: parses the YYYY-MM-DD key as UTC and shifts
+// by whole days. NOT a dayKey reimplementation — keeps key→key semantics
+// independent of host timezone, so it stays local to this module.
 function addDays(key: string, n: number): string {
   const [y, m, dd] = key.split('-').map(Number);
   const d = new Date(Date.UTC(y, m - 1, dd));

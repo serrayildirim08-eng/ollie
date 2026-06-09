@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Grocery · Now · desktop</title>
+<style>
+  :root{--paper:#FAF8F3;--ink:#23211C;--soft:#6B675E;--faint:#A8A29A;--hair:#EAE5DB;--sage:#7C8C6F;--rail:#F2EFE8;}
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{width:1100px;height:720px;margin:0 auto;background:var(--paper);color:var(--ink);
+    font-family:"DM Sans",-apple-system,BlinkMacSystemFont,sans-serif;-webkit-font-smoothing:antialiased;display:flex;}
+  .serif{font-family:"DM Serif Display",Georgia,serif;font-weight:400;}
+  .smcp{font-variant-caps:all-small-caps;letter-spacing:.14em;font-size:12px;color:var(--faint);}
+  /* thin spine */
+  .spine{width:84px;flex:none;background:var(--rail);border-right:1px solid var(--hair);
+    display:flex;flex-direction:column;align-items:center;padding:26px 0;}
+  .spine .mark{width:12px;height:12px;border-radius:50%;background:var(--sage);margin-bottom:46px;}
+  .spine nav{display:flex;flex-direction:column;gap:30px;align-items:center;}
+  .spine a{writing-mode:vertical-rl;transform:rotate(180deg);font-variant-caps:all-small-caps;
+    letter-spacing:.18em;font-size:13px;color:var(--faint);text-decoration:none;font-weight:500;}
+  .spine a.on{color:var(--ink);font-weight:600;}
+  .spine a.on:before{content:"";display:block;width:6px;height:6px;border-radius:50%;background:var(--sage);
+    margin:0 auto 12px;transform:rotate(180deg);}
+  /* main */
+  .main{flex:1;display:flex;flex-direction:column;padding:0;}
+  .canvas{flex:1;padding:64px 80px 0;max-width:920px;}
+  .hello .smcp{display:block;margin-bottom:16px;}
+  .hello h1{font-size:48px;line-height:1.04;letter-spacing:-.015em;max-width:660px;}
+  .grid{margin-top:54px;display:grid;grid-template-columns:1fr 1fr;gap:0 64px;}
+  .band{padding:26px 0;border-top:1px solid var(--hair);}
+  .band .smcp{display:block;margin-bottom:14px;}
+  .need{font-size:21px;line-height:1.5;}.need b{font-weight:500;}
+  .aging{font-size:21px;color:var(--soft);line-height:1.5;}
+  .aging .q{display:inline-flex;gap:16px;margin-top:12px;}
+  .aging .q span{font-size:14px;font-weight:600;}.aging .yes{color:var(--sage);}.aging .no{color:var(--faint);}
+  .cook{grid-column:1 / -1;}
+  .cook a{display:flex;align-items:baseline;justify-content:space-between;text-decoration:none;color:inherit;}
+  .cook .big{font-size:26px;}.cook .arrow{color:var(--sage);font-size:22px;}
+  /* dump bar — a wide command bar pinned bottom */
+  .dock{padding:22px 80px 30px;}
+  .dump{border:1px solid var(--hair);border-radius:16px;background:#fff;padding:16px 20px;display:flex;align-items:center;gap:18px;max-width:760px;box-shadow:0 1px 0 rgba(0,0,0,.02);}
+  .dump .ph{flex:1;color:var(--faint);font-size:16px;}
+  .dump .ic{color:var(--faint);}
+  .dump .kbd{font-size:11px;color:var(--faint);border:1px solid var(--hair);border-radius:6px;padding:3px 7px;}
+  svg{display:block;}
+</style>
+</head>
+<body>
+  <aside class="spine">
+    <div class="mark"></div>
+    <nav>
+      <a class="on" href="#">now</a><a href="list-desktop.html">list</a>
+      <a href="kitchen-desktop.html">kitchen</a><a href="cook-desktop.html">cook</a>
+    </nav>
+  </aside>
+
+  <div class="main">
+    <div class="canvas">
+      <div class="hello">
+        <span class="smcp">tuesday morning · grocery</span>
+        <h1 class="serif">Quiet kitchen. A few things worth a glance.</h1>
+      </div>
+
+      <div class="grid">
+        <div class="band">
+          <span class="smcp">likely needed soon</span>
+          <div class="need"><b>coffee</b> · <b>dish soap</b> · <b>olive oil</b></div>
+        </div>
+        <div class="band">
+          <span class="smcp">getting old</span>
+          <div class="aging">the spinach has been here a while.
+            <span class="q"><span class="yes">still good</span><span class="no">it's gone</span></span>
+          </div>
+        </div>
+        <div class="band cook">
+          <span class="smcp">tonight</span>
+          <a href="cook-desktop.html"><span class="big serif">3 dinners you can make from what you have</span><span class="arrow">→</span></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="dock">
+      <div class="dump">
+        <span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h3l1.5-2h9L18 8h3v11H3z"/><circle cx="12" cy="13" r="3.2"/></svg></span>
+        <span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><line x1="12" y1="18" x2="12" y2="21"/></svg></span>
+        <span class="ph">tell me what changed…</span>
+        <span class="kbd">⌘↵</span>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

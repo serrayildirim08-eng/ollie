@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Grocery · Recipe</title>
+<style>
+  :root{--paper:#FAF8F3;--ink:#23211C;--soft:#6B675E;--faint:#A8A29A;--hair:#EAE5DB;--sage:#7C8C6F;}
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{width:390px;height:844px;margin:0 auto;background:var(--paper);color:var(--ink);
+    font-family:"DM Sans",-apple-system,BlinkMacSystemFont,sans-serif;-webkit-font-smoothing:antialiased;
+    display:flex;flex-direction:column;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom);}
+  .serif{font-family:"DM Serif Display",Georgia,serif;font-weight:400;}
+  .smcp{font-variant-caps:all-small-caps;letter-spacing:.13em;font-size:11px;color:var(--faint);}
+  .top{padding:16px 28px 0;}
+  .back{font-size:13px;color:var(--soft);text-decoration:none;}
+  .scroll{flex:1;overflow:auto;padding:0 28px;}
+  h1.serif{font-size:32px;line-height:1.08;margin:18px 0 8px;letter-spacing:-.01em;}
+  .meta{font-size:13px;color:var(--soft);margin-bottom:24px;}
+  .sec{margin-top:8px;}
+  .sec .smcp{display:block;margin:22px 0 12px;}
+  .ing{display:flex;align-items:baseline;justify-content:space-between;padding:9px 0;}
+  .ing .nm{font-size:16px;}
+  .have .nm{color:var(--ink);}
+  .need .nm{color:var(--soft);}
+  .need .add{font-size:11px;color:var(--sage);font-weight:600;font-variant-caps:all-small-caps;letter-spacing:.08em;}
+  .step{display:flex;gap:14px;padding:11px 0;border-top:1px solid var(--hair);}
+  .step .num{font-family:"DM Serif Display",Georgia,serif;font-size:15px;color:var(--faint);flex:none;width:16px;}
+  .step .tx{font-size:16px;line-height:1.5;}
+  .cooked{margin:30px 0 24px;text-align:center;}
+  .cooked span{font-size:13px;color:var(--sage);font-weight:600;font-variant-caps:all-small-caps;letter-spacing:.12em;border:1px solid var(--hair);border-radius:24px;padding:11px 26px;}
+  svg{display:block;}
+</style>
+</head>
+<body>
+  <div class="top"><a class="back" href="cook.html">‹ ideas</a></div>
+  <div class="scroll">
+    <h1 class="serif">Lemon Chicken Pasta</h1>
+    <div class="meta">about 30 min · serves 2 · mediterranean</div>
+
+    <div class="sec">
+      <span class="smcp">you have</span>
+      <div class="ing have"><span class="nm">pasta — 200 g</span></div>
+      <div class="ing have"><span class="nm">chicken thighs — 2</span></div>
+      <div class="ing have"><span class="nm">olive oil</span></div>
+      <div class="ing have"><span class="nm">garlic — 2 cloves</span></div>
+    </div>
+
+    <div class="sec">
+      <span class="smcp">you'll need</span>
+      <div class="ing need"><span class="nm">lemon — 1</span><span class="add">+ add</span></div>
+      <div class="ing need"><span class="nm">parmesan</span><span class="add">+ add</span></div>
+    </div>
+
+    <div class="sec">
+      <span class="smcp">how</span>
+      <div class="step"><span class="num">1</span><span class="tx">Boil the pasta in well-salted water until just shy of done.</span></div>
+      <div class="step"><span class="num">2</span><span class="tx">Sear the chicken in olive oil, then the garlic, until golden.</span></div>
+      <div class="step"><span class="num">3</span><span class="tx">Add a ladle of pasta water + the lemon; toss the pasta through.</span></div>
+      <div class="step"><span class="num">4</span><span class="tx">Finish with parmesan and a little more lemon to taste.</span></div>
+    </div>
+
+    <div class="cooked"><span>cooked it</span></div>
+  </div>
+</body>
+</html>

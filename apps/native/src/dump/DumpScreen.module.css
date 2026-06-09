@@ -1,0 +1,56 @@
+/* DumpScreen — the full-screen sage ack.
+   Whole viewport floods sage; "Okay!" in giant serif in the centre.
+   Fades in (~250ms), holds (~1.4s), fades back (~600ms). Total ~2.4s. */
+
+.ack {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--ollie-color-sage-deep);
+  color: var(--ollie-color-cream);
+  z-index: 9999;
+  opacity: 0;
+  pointer-events: none;
+  animation: ollie-ack-flood 2400ms cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+  will-change: opacity;
+}
+
+.ackText {
+  font-family: var(--ollie-font-serif);
+  font-weight: 400;
+  font-size: clamp(96px, 18vw, 220px);
+  line-height: 1;
+  letter-spacing: -0.025em;
+  margin: 0;
+  text-align: center;
+  transform: scale(0.96);
+  animation: ollie-ack-text 2400ms cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+}
+
+@keyframes ollie-ack-flood {
+  0%   { opacity: 0; }
+  12%  { opacity: 1; }
+  72%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@keyframes ollie-ack-text {
+  0%   { transform: scale(0.96); }
+  18%  { transform: scale(1); }
+  72%  { transform: scale(1); }
+  100% { transform: scale(1.02); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ack {
+    animation-duration: 0ms;
+    animation-fill-mode: forwards;
+    opacity: 1;
+  }
+  .ackText {
+    animation: none;
+    transform: none;
+  }
+}

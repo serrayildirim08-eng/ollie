@@ -23,7 +23,8 @@
     "./crisis": "./src/crisis/index.ts",
     "./dissection": "./src/dissection/index.ts",
     "./burhan": "./src/burhan/index.ts",
-    "./medication": "./src/medication/index.ts"
+    "./medication": "./src/medication/index.ts",
+    "./brain": "./src/brain/index.ts"
   },
   "scripts": {
     "test": "vitest run",
@@ -32,6 +33,6 @@
   },
   "devDependencies": {
     "typescript": "^5.6.0",
-    "vitest": "^2.1.5"
+    "vitest": "^2.1.9"
   }
 }

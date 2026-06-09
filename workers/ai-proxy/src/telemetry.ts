@@ -28,14 +28,46 @@
  */
 
 import { scrubPII } from './pii';
+import { json, upstreamError } from '@ollie/worker-http';
+
+/**
+ * Server-side anonymized user identity (audit #4 — IDOR fix).
+ *
+ * The verified Clerk userId is the ONLY source of truth. We derive the
+ * `user_hash` here from it + a server-held salt, and ignore/overwrite any
+ * client-supplied `user_hash`/`user_id` so a caller can never write or enrich
+ * telemetry on behalf of another user. SHA-256 hex; deterministic per user.
+ *
+ * The salt should be set (secret `USER_HASH_SALT`) and, to keep analytics
+ * continuity with previously client-hashed rows, match the client salt. If the
+ * salt is absent the hash is still server-derived (so the IDOR is still closed)
+ * — it just isn't salted; we warn so the missing secret is visible in logs.
+ */
+export async function deriveUserHash(userId: string, salt: string | undefined): Promise<string> {
+  if (!salt) console.warn('[telemetry] USER_HASH_SALT unset — hashing userId unsalted');
+  const data = new TextEncoder().encode(`${salt ?? ''}:${userId}`);
+  const digest = await crypto.subtle.digest('SHA-256', data);
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
 
 export interface EnrichEnv {
   CACHE_KV: KVNamespace;
+  /** Server-side salt for deriving user_hash from the verified Clerk userId. */
+  USER_HASH_SALT?: string;
+  // Cloudflare Queues producer binding (item #4). OPTIONAL: when the
+  // [[queues.producers]] block in wrangler.toml is uncommented (after
+  // `wrangler queues create ollie-enrich-queue`) this is bound and the
+  // dump is sent to the durable Queue. When absent, the handler falls
+  // back to the legacy `q:enrich:*` KV queue so a routine deploy that
+  // has NOT provisioned the queue keeps working unchanged.
+  ENRICH_QUEUE?: Queue<QueuedDump>;
 }
 
 export interface IngestEnv {
   SUPABASE_URL: string;
   SUPABASE_SERVICE_ROLE: string;
+  /** Server-side salt for deriving user_hash from the verified Clerk userId. */
+  USER_HASH_SALT?: string;
 }
 
 const ALLOWED_TABLES = new Set([
@@ -80,7 +112,11 @@ export interface QueuedDump {
   queued_at: string;
 }
 
-export async function handleEnrichDump(req: Request, env: EnrichEnv): Promise<Response> {
+export async function handleEnrichDump(
+  req: Request,
+  env: EnrichEnv,
+  userId: string,
+): Promise<Response> {
   let body: EnrichDumpRequest;
   try {
     body = (await req.json()) as EnrichDumpRequest;
@@ -88,9 +124,10 @@ export async function handleEnrichDump(req: Request, env: EnrichEnv): Promise<Re
     return json({ error: 'bad_json' }, 400);
   }
 
+  // user_hash is no longer trusted from the client — it is derived server-side
+  // from the verified Clerk userId below, so it is NOT required in the payload.
   if (
     !body ||
-    typeof body.user_hash !== 'string' ||
     typeof body.device_id !== 'string' ||
     typeof body.raw_text !== 'string' ||
     typeof body.event_ts !== 'string' ||
@@ -114,12 +151,15 @@ export async function handleEnrichDump(req: Request, env: EnrichEnv): Promise<Re
   // PII scrub (layer 1).
   const { scrubbed } = scrubPII(body.raw_text);
 
+  // IDOR fix: ownership comes from the verified JWT, never the client field.
+  const serverUserHash = await deriveUserHash(userId, env.USER_HASH_SALT);
+
   const id = crypto.randomUUID();
   const queuedAt = new Date().toISOString();
   const entry: QueuedDump = {
     id,
     payload: {
-      user_hash: body.user_hash,
+      user_hash: serverUserHash,
       device_id: body.device_id,
       event_ts: body.event_ts,
       locale: body.locale,
@@ -133,8 +173,16 @@ export async function handleEnrichDump(req: Request, env: EnrichEnv): Promise<Re
     queued_at: queuedAt,
   };
 
-  // Key prefix `q:enrich:<unix-ts-ms>:<uuid>` — drain can do a prefix list
-  // and ordering by timestamp falls out for free.
+  // Cloudflare Queues path (item #4) — preferred when the producer binding
+  // is present. The Queue gives us native retry/backoff + a real DLQ,
+  // replacing the hand-rolled KV-prefix queue + retry-counter.
+  if (env.ENRICH_QUEUE) {
+    await env.ENRICH_QUEUE.send(entry);
+    return json({ id, queued: true });
+  }
+
+  // Legacy fallback — KV-prefix queue. Key `q:enrich:<unix-ts-ms>:<uuid>`
+  // so the drain can do a prefix list and timestamp ordering falls out.
   const tsMs = Date.now();
   const key = `q:enrich:${tsMs}:${id}`;
   await env.CACHE_KV.put(key, JSON.stringify(entry), { expirationTtl: QUEUE_TTL_SEC });
@@ -149,7 +197,11 @@ export interface IngestEventRequest {
   row: Record<string, unknown>;
 }
 
-export async function handleIngestEvent(req: Request, env: IngestEnv): Promise<Response> {
+export async function handleIngestEvent(
+  req: Request,
+  env: IngestEnv,
+  userId: string,
+): Promise<Response> {
   let body: IngestEventRequest;
   try {
     body = (await req.json()) as IngestEventRequest;
@@ -166,6 +218,14 @@ export async function handleIngestEvent(req: Request, env: IngestEnv): Promise<R
   if (!body.row || typeof body.row !== 'object' || Array.isArray(body.row)) {
     return json({ error: 'invalid_row' }, 400);
   }
+
+  // IDOR fix: force the row's identity to the verified user. These five
+  // telemetry tables are anonymized + keyed by user_hash, so we overwrite any
+  // client-supplied identity field (`user_hash` / `user_id`) with the
+  // server-derived hash — a caller can never write a row "as" another user.
+  const serverUserHash = await deriveUserHash(userId, env.USER_HASH_SALT);
+  if ('user_hash' in body.row) body.row.user_hash = serverUserHash;
+  if ('user_id' in body.row) body.row.user_id = serverUserHash;
 
   // US + cycle restriction for module_events only.
   if (
@@ -196,15 +256,16 @@ export async function handleIngestEvent(req: Request, env: IngestEnv): Promise<R
     return json({ ok: true, table: body.table, inserted: 1 });
   }
 
+  // SECURITY (S8): generic code to the client; PostgREST detail (which
+  // discloses the target table's column/constraint names) logged
+  // server-side only behind a request id.
   const errText = await resp.text();
-  return json({ ok: false, table: body.table, status: resp.status, error: errText }, 502);
+  return upstreamError('ingest_failed', 502, errText, {
+    endpoint: 'ingest-event',
+    table: body.table,
+    upstream_status: resp.status,
+  });
 }
 
 // ─── helpers ───────────────────────────────────────────────────────────────────
-
-function json(obj: unknown, status = 200): Response {
-  return new Response(JSON.stringify(obj), {
-    status,
-    headers: { 'content-type': 'application/json' },
-  });
-}
+// `json()` is the shared helper from @ollie/worker-http (imported above).

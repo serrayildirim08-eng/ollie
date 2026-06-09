@@ -132,6 +132,15 @@ export function createOllieAPI(cfg: OllieApiConfig = {}) {
   }
 
   async function doFetch<T>(req: PreparedRequest, attempt: number): Promise<OllieApiResult<T>> {
+    // Retry telemetry: `attempt` is 0 on the first try. Anything higher
+    // means a prior attempt failed retriably and we're now re-issuing
+    // the request. Log it so retry storms are visible in the console.
+    // Lightweight on purpose — matches the `console.warn('[prefix] …')`
+    // pattern already used across the codebase; no metrics sink exists.
+    if (attempt > 0) {
+      const method = req.init.method ?? 'GET';
+      console.warn(`[api] retry attempt ${attempt}/${req.retry.max} — ${method} ${req.url}`);
+    }
     // Compose abort: caller signal + our timeout signal.
     const controller = new AbortController();
     const onCallerAbort = () => controller.abort('caller-aborted');
@@ -214,7 +223,14 @@ export function createOllieAPI(cfg: OllieApiConfig = {}) {
     let lastError: OllieApiError | undefined;
     for (let attempt = 0; attempt <= req.retry.max; attempt++) {
       const result = await doFetch<T>(req, attempt);
-      if (result.ok) return result;
+      if (result.ok) {
+        // Telemetry: a retry that eventually succeeded is worth a line —
+        // it means the network/server was flaky but the request landed.
+        if (attempt > 0) {
+          console.warn(`[api] recovered after ${attempt} retr${attempt === 1 ? 'y' : 'ies'} — ${req.init.method ?? 'GET'} ${req.url}`);
+        }
+        return result;
+      }
       lastError = result.error;
       // Retry only network / timeout / 5xx. Never retry 4xx, parse, or aborted.
       const retriable =
@@ -225,6 +241,10 @@ export function createOllieAPI(cfg: OllieApiConfig = {}) {
       if (attempt === req.retry.max) break;
       const delay = req.retry.baseDelayMs * Math.pow(2, attempt);
       await sleep(delay);
+    }
+    // Telemetry: all retries exhausted — surface the give-up point.
+    if (req.retry.max > 0) {
+      console.warn(`[api] gave up after ${req.retry.max + 1} attempts — ${req.init.method ?? 'GET'} ${req.url} (${lastError?.code ?? 'unknown'})`);
     }
     return { ok: false, error: lastError ?? { code: 'network', message: 'unknown failure' } };
   }
@@ -277,6 +297,23 @@ export function createOllieAPI(cfg: OllieApiConfig = {}) {
         get<T>(table: string, opts: RequestOptions & { params?: Record<string, string> } = {}): Promise<OllieApiResult<T>> {
           return request<T>('GET', supabaseRestUrl(table, opts.params), {
             ...opts,
+            headers: { ...supabaseHeaders(), ...(opts.headers ?? {}) },
+          });
+        },
+        /**
+         * Call a Postgres function via PostgREST's RPC surface
+         * (`POST /rest/v1/rpc/<fn>`). `args` becomes the JSON request body —
+         * named arguments map 1:1 to the function's parameter names.
+         *
+         * Used for SECURITY DEFINER functions that must be reachable with
+         * only the anon key but without granting table-level SELECT — e.g.
+         * `profile_recovery_lookup` for the new-device sign-in path. Pass
+         * `authJwt` when the function should run as an authed user.
+         */
+        rpc<T>(fn: string, args: Record<string, unknown> = {}, opts: RequestOptions = {}): Promise<OllieApiResult<T>> {
+          return request<T>('POST', supabaseRestUrl(`/rest/v1/rpc/${fn}`), {
+            ...opts,
+            body: args,
             headers: { ...supabaseHeaders(), ...(opts.headers ?? {}) },
           });
         },

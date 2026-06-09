@@ -24,6 +24,12 @@ export interface Env {
   APPLE_TEAM_ID: string;    // 10-char Apple Team ID
   APPLE_BUNDLE_ID: string;  // e.g. app.ollie.ollie
 
+  // Shared secret — callers (cron) MUST send `Authorization: Bearer
+  // <APNS_INTERNAL_SECRET>`. Fails CLOSED when unset: without it /push
+  // is an open relay that lets anyone push to any device token and burn
+  // the Apple cert. Same pattern as cron's CRON_TRIGGER_SECRET.
+  APNS_INTERNAL_SECRET: string;
+
   // Bindings — set in wrangler.toml.
   RATE_KV: KVNamespace;
 }
@@ -52,6 +58,18 @@ export default {
 
     if (req.method !== 'POST' || url.pathname !== '/push') {
       return json({ error: 'not_found' }, 404);
+    }
+
+    // Auth: require the internal shared secret. Fail CLOSED when the
+    // secret is unconfigured so a misdeploy can never expose an open
+    // push relay.
+    const auth = req.headers.get('authorization') ?? '';
+    if (
+      !env.APNS_INTERNAL_SECRET ||
+      !auth.startsWith('Bearer ') ||
+      auth.slice('Bearer '.length) !== env.APNS_INTERNAL_SECRET
+    ) {
+      return json({ error: 'unauthorized' }, 401);
     }
 
     let body: PushBody;

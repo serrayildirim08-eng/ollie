@@ -19,12 +19,13 @@ export const REGISTRY: Registry = {
   // ─── inventory & cycle ──────────────────────────────────────────
   'void:inventory:refill':         { payload: '{ productType: string, absorbency?: string, quantity: number, source: "grocery" | "manual" | "braindump" }' },
   'void:inventory:updated':        { payload: '{ productType: string, count: number, capacity: number }' },
-  'void:cycle:started':            { payload: '{ ts: number, source: "user" | "braindump" | "import" }' },
   'void:cycle:closed':             { payload: '{ cycleStartTs: number, cycleEndTs: number, cycleLengthDays: number }' },
 
   // ─── crisis pathway ─────────────────────────────────────────────
-  // Fired before routing; downstream pipeline must not process crisis text.
-  'void:crisis:detected':        { payload: '{ text: string, matchedLine: string, ts: number }' },
+  // Fired before routing. Carries NO content — only a timestamp — so crisis
+  // text never enters the event bus or the retention bridge. Day30Prompt
+  // listens to this to suppress its prompt for the rest of the session.
+  'void:crisis:detected':        { payload: '{ ts: number }' },
 
   // ─── brain dump spine ───────────────────────────────────────────
   'void:braindump:submitted':      { payload: '{ v: 2, items: Array<{module,text,intent,extracted?,confidence,horizon?}>, raw: string, ts: number, idempotency_key: string, route_path: string }  // legacy v:1 shape: { id, text, moduleContext, ts } only on bypassed entrypoints' },
@@ -35,6 +36,48 @@ export const REGISTRY: Registry = {
   // ─── grocery ────────────────────────────────────────────────────
   'grocery:duplicate_detected':    { payload: '{ name: string, days_since_purchase: number, ts: number }' },
   'grocery:pattern_detected':      { payload: '{ pattern: string, confidence: string, sample_n: number, ts: number }' },
+
+  // ─── grocery · AI routing (frontend hook + SortedToast contract) ─
+  // Backend agent (T0/T1/T2) will own the producer side. Frontend
+  // subscribes via apps/web/src/hooks/useGroceryRouting.ts. The shape
+  // string below is the contract — backend should match it 1:1 when
+  // they finalize packages/events/src/grocery-routing.ts.
+  // `pending` fires synchronously on submit (instant UI feedback);
+  // `routed` fires once the router (cache hit or Gemini call) returns.
+  // `source` distinguishes instant cache-hits ("cache") from
+  // delayed Gemini calls ("gemini") and the deterministic fallback
+  // path ("fallback") that runs when AI is offline / cost-capped.
+  'grocery:routing:pending':       { payload: '{ idempotency_key: string, raw: string, ts: number }' },
+  'grocery:routed':                { payload: '{ idempotency_key: string, raw: string, items: Array<{ name: string, target: "shopping"|"pantry", recipe_parent?: string }>, source: "cache"|"gemini"|"fallback", latency_ms: number, ts: number, error?: string }' },
+
+  // ─── grocery · mutation feedback (SortedToast modes) ────────────
+  // Emitted by the frontend applyRoute layer after a mutation command
+  // (remove / check / move_to_pantry) is confirmed by the AI result.
+  // `mode` maps directly to SortedToastMode. `slice` is "shopping" or
+  // "pantry" — used by the toast copy template ("removed: X from shopping").
+  // `itemName` is the AI-resolved name; `itemCount` is for multi-item
+  // mutations (mode='checked': "checked: N items off shop").
+  'grocery:mutation':              { payload: '{ mode: "removed"|"moved"|"checked", itemName?: string, itemCount?: number, slice?: "shopping"|"pantry", ts: number }' },
+
+  // ─── grocery · undo stack (SortedToast undone mode) ─────────────
+  // Emitted by frontend-junior-1 after popUndo() + undo() executes.
+  // `description` is the human-readable label from GroceryUndoEntry
+  // (e.g. "removed: pasta from shopping"). `mode` is the original
+  // mutation kind; empty description means the stack was already empty.
+  'grocery:undone':                { payload: '{ description: string, mode: "add" | "remove" | "check" | "move_to_pantry", ts: number }' },
+
+  // ─── grocery · Feed Me v2 (frontend hook + telemetry contract) ──
+  // Spec: docs/handoffs/feed-me/00-SPEC.md. The frontend FeedMeView
+  // emits all four; backend is free to ignore. Reserved for research
+  // stream + B2B activation funnel ingestion.
+  //   `requested`  — fires when the hook fetches a fresh suggestion set.
+  //   `suggested`  — fires when suggestions resolve (any source).
+  //   `cooked`     — fires when the user records a cook via the modal.
+  //   `rejected`   — fires when the user dismisses a card with "× not this".
+  'feedme:requested':              { payload: '{ pantryCount: number, diet: string, feedTarget: "user"|"pet", ts: number }' },
+  'feedme:suggested':              { payload: '{ source: "gemini"|"cache_hit"|"static_fallback", count: number, latencyMs: number, ts: number }' },
+  'feedme:cooked':                 { payload: '{ dish: string, rating: -1|0|1, ts: number }' },
+  'feedme:rejected':               { payload: '{ dish: string, ts: number }' },
 
   // ─── cycle prediction & flags ───────────────────────────────────
   'void:cycle:symptom_logged':     { payload: '{ ts: number, tags: string[], moduleContext: string }' },
@@ -106,6 +149,7 @@ export const REGISTRY: Registry = {
 
   // ─── pattern detection (per-module) ─────────────────────────────
   'work:pattern_detected':         { payload: '{ pattern: string, confidence: string, sample_n: number, ts: number }' },
+  'work:matters_routed':           { payload: '{ filed: number, loose: number, suggestions: number, ts: number }' },
   'body:pattern_detected':         { payload: '{ pattern: string, confidence: string, sample_n: number, ts: number }' },
   'sleep:pattern_detected':        { payload: '{ pattern: string, confidence: string, sample_n: number, ts: number }' },
   'pattern:caffeine_sleep_detected': { payload: '{ correlation: number, threshold: { hours: number, minutes: number } | null, sampleSize: number, copy: string, ts: number }' },
@@ -123,7 +167,6 @@ export const REGISTRY: Registry = {
   'habits:fresh_start_crash':          { payload: '{ confidence: string, ts: number }' },
   'habits:identity_framing':           { payload: '{ confidence: string, ts: number }' },
   'habits:body_vs_cognitive':          { payload: '{ confidence: string, ts: number }' },
-  'habits:drift':                      { payload: '{ habit_id: string, drop_pct: number, ts: number }' },
   'habits:friction_signature':         { payload: '{ habit_id: string, worst_day: string, ts: number }' },
   'habits:sleep_coupling':             { payload: '{ confidence: string, ts: number }' },
   'habits:rebirth_pattern':            { payload: '{ rebirths_n: number, ts: number }' },
@@ -235,6 +278,13 @@ export const REGISTRY: Registry = {
   'auth:signed_in':                    { payload: '{ user_id: string, ts: number }' },
   'auth:signed_out':                   { payload: '{ ts: number }' },
   'auth:decryption_failed':            { payload: '{ reason: string, ts: number }' },
+
+  // ─── encryption vault (Clerk migration · 2026-05-19) ────────────
+  // The passphrase-derived vault (@ollie/auth). Emitted on key derivation
+  // (create/unlock) and on lock/reset. Payload is metadata only — never
+  // the passphrase or the derived key.
+  'vault:unlocked':                    { payload: '{ ts: number }' },
+  'vault:locked':                      { payload: '{ ts: number }' },
 
   // ─── Sprint 2 / Group C · research stream ───────────────────────
   'research:event_queued':             { payload: '{ event_id: string, ts: number }' },

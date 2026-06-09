@@ -26,9 +26,18 @@ import { createWorkOrchestrator } from './work';
 import { createGoalsOrchestrator } from './goals';
 import { createBurhanOrchestrator } from './burhan';
 import { createMedicationOrchestrator } from './medication';
-import { createResearchOrchestrator } from './research';
+import { scheduleWeeklyReview } from './body-weekly';
+import { scheduleBodyCorrelationPass, runBodyCorrelationPass } from './body-correlations';
+import { createOrphanCueBridge } from './orphan-cue-bridge';
+import { createMatterRoutingOrchestrator } from './matter-routing';
+import {
+  createCadenceScanner,
+  type CadenceScanner,
+  type CadenceSourceFn,
+} from './cadence-scanner';
 
 export type { Orchestrator } from './types';
+export { appendCapped, DEFAULT_DEDUP_CAP } from './dedup-store';
 export { createCycleOrchestrator } from './cycle';
 export { createPetsOrchestrator } from './pets';
 export { createBodyOrchestrator } from './body';
@@ -44,6 +53,17 @@ export { createWorkOrchestrator } from './work';
 export { createGoalsOrchestrator } from './goals';
 export { createBurhanOrchestrator } from './burhan';
 export { createMedicationOrchestrator } from './medication';
+export {
+  createOrphanCueBridge,
+  appendCueTelemetry,
+  BRIDGED_CUE_EVENTS,
+  CUE_TELEMETRY_CAP,
+} from './orphan-cue-bridge';
+export type {
+  BridgedCueEvent,
+  CueTelemetryEntry,
+  OrphanCueBridgeOptions,
+} from './orphan-cue-bridge';
 export {
   createResearchOrchestrator,
   runResearchPipeline,
@@ -77,13 +97,51 @@ export type {
 } from './body-correlations';
 export { runBodySignalsPass } from './body-signals';
 export type { RunBodySignalsOpts } from './body-signals';
-export { routeBrainDump, dispatchAction } from './braindump-dispatch';
+export {
+  routeBrainDump,
+  dispatchAction,
+  applyGroceryMutations,
+  matchItem,
+} from './braindump-dispatch';
 export type {
   RouteBrainDumpResult,
   DispatchLocale,
   DispatchOptions,
   FinanceSlice,
+  GroceryPurchaseEvent,
+  GroceryRoutedItem,
+  GroceryRoutedAction,
+  GroceryRoutingResult,
+  GroceryRoutingSource,
+  GroceryListContext,
+  GroceryMutationEntry,
+  GroceryMutationReverse,
 } from './braindump-dispatch';
+export {
+  createMatterRoutingOrchestrator,
+  runMatterRoutingPass,
+  collectRoutableDumps,
+} from './matter-routing';
+export type {
+  MatterRoutingOptions,
+  MatterRoutingPassResult,
+  LooseDumpRef,
+} from './matter-routing';
+export {
+  createCadenceScanner,
+  DEFAULT_CADENCE_COPY,
+  buildDedupeKey,
+  localDayKey as cadenceLocalDayKey,
+  pickCopyVariant,
+} from './cadence-scanner';
+export type {
+  CadenceScanner,
+  CadenceScannerOptions,
+  CadenceScanResult,
+  CadenceTrackedEntry,
+  CadenceSourceFn,
+  CadenceCopyTemplates,
+} from './cadence-scanner';
 
 export interface RootOrchestrator extends Orchestrator {
   cycle: ReturnType<typeof createCycleOrchestrator>;
@@ -100,6 +158,9 @@ export interface RootOrchestrator extends Orchestrator {
   goals: ReturnType<typeof createGoalsOrchestrator>;
   burhan: ReturnType<typeof createBurhanOrchestrator>;
   medication: ReturnType<typeof createMedicationOrchestrator>;
+  orphanCueBridge: ReturnType<typeof createOrphanCueBridge>;
+  matterRouting: ReturnType<typeof createMatterRoutingOrchestrator>;
+  cadenceScanner: CadenceScanner;
 }
 
 export interface RootOrchestratorOptions {
@@ -109,6 +170,13 @@ export interface RootOrchestratorOptions {
   scheduleNotification?: (spec: NotificationSpec, fireAt: number) => void;
   /** Opt-in for ovulation notifications (cycle.cycle:ovulation_imminent). */
   ovulationOptIn?: boolean;
+  /**
+   * Cadence sources keyed by module — each function returns the tracked
+   * cadence entries for that module. App boot wires the live modules
+   * (grocery / body / habits today; 8 more coming). Omit in tests or
+   * contexts where the local cadence stores aren't available.
+   */
+  cadenceSources?: Record<string, CadenceSourceFn>;
 }
 
 /**
@@ -155,6 +223,33 @@ export function createOrchestrator(
   const medicationOrch = createMedicationOrchestrator(store, {
     scheduleNotification: opts.scheduleNotification,
   });
+  // Audit #3: gives every orphan cross-module cue a real consumer.
+  const orphanCueBridge = createOrphanCueBridge(store);
+  // WORK-VISION Phase 2: batches dumps → matters (deterministic, no AI).
+  const matterRoutingOrch = createMatterRoutingOrchestrator(store);
+  // Generic cadence-overdue → notification glue. Each live module
+  // (grocery / body / habits today, +8 incoming) registers an
+  // `enumerateCadences` adapter at boot via opts.cadenceSources.
+  const cadenceScanner = createCadenceScanner(store);
+  if (opts.cadenceSources) {
+    for (const [module, fn] of Object.entries(opts.cadenceSources)) {
+      cadenceScanner.registerSource(module, fn);
+    }
+  }
+
+  // ── client-side timed passes ──────────────────────────────────────────
+  // These two are NOT createXOrchestrator()-shaped — they are
+  // self-arming schedulers that return a teardown fn. They are folded
+  // into this root composer (not booted ad-hoc by the app) so they can
+  // never be silently un-wired again — the architecture audit's
+  // explicit recommendation. `init()` arms them; `teardown()` disarms.
+  //   - scheduleWeeklyReview          → emits body:weekly_review Sun 19:00
+  //   - scheduleBodyCorrelationPass   → emits pattern:detected daily 03:00
+  //     (the ONLY emitter of pattern:detected — without this the
+  //     initPatternDetectedSubscriber push path can never fire).
+  let weeklyReviewTeardown: (() => void) | null = null;
+  let bodyCorrelationTeardown: (() => void) | null = null;
+  let firstCorrelationPass: ReturnType<typeof setTimeout> | null = null;
 
   return {
     cycle: cycleOrch,
@@ -171,6 +266,9 @@ export function createOrchestrator(
     goals: goalsOrch,
     burhan: burhanOrch,
     medication: medicationOrch,
+    orphanCueBridge,
+    matterRouting: matterRoutingOrch,
+    cadenceScanner,
 
     init() {
       cycleOrch.init();
@@ -187,6 +285,31 @@ export function createOrchestrator(
       goalsOrch.init();
       burhanOrch.init();
       medicationOrch.init();
+      orphanCueBridge.init();
+      matterRoutingOrch.init();
+      cadenceScanner.init();
+
+      // Arm the two timed passes. Idempotent — re-arming clears any
+      // prior timer first.
+      weeklyReviewTeardown?.();
+      weeklyReviewTeardown = scheduleWeeklyReview({
+        store,
+        now: () => Date.now(),
+        scheduleNotification: opts.scheduleNotification ?? null,
+      });
+      // `skipFirstRun` so the cold-start correlation pass does NOT run
+      // synchronously inside init(): the app boot sequence may register
+      // the `pattern:detected` push subscriber on the line AFTER
+      // createOrchestrator().init(), and a synchronous first-pass emit
+      // would land before that subscriber exists. We instead run the
+      // first pass on a 0ms timer — after the synchronous boot finishes.
+      bodyCorrelationTeardown?.();
+      bodyCorrelationTeardown = scheduleBodyCorrelationPass({ store, skipFirstRun: true });
+      if (firstCorrelationPass) clearTimeout(firstCorrelationPass);
+      firstCorrelationPass = setTimeout(() => {
+        firstCorrelationPass = null;
+        try { runBodyCorrelationPass({ store }); } catch { /* non-fatal */ }
+      }, 0);
     },
 
     teardown() {
@@ -204,6 +327,15 @@ export function createOrchestrator(
       goalsOrch.teardown();
       burhanOrch.teardown();
       medicationOrch.teardown();
+      orphanCueBridge.teardown();
+      matterRoutingOrch.teardown();
+      cadenceScanner.teardown();
+
+      weeklyReviewTeardown?.();
+      weeklyReviewTeardown = null;
+      bodyCorrelationTeardown?.();
+      bodyCorrelationTeardown = null;
+      if (firstCorrelationPass) { clearTimeout(firstCorrelationPass); firstCorrelationPass = null; }
     },
   };
 }

@@ -11,12 +11,14 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@ollie/notifications": "workspace:*"
+    "@ollie/apns-jwt": "workspace:*",
+    "@ollie/notifications": "workspace:*",
+    "@ollie/worker-http": "workspace:*"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20240419.0",
+    "@cloudflare/workers-types": "^4.20250906.0",
     "typescript": "^5.6.0",
-    "vitest": "^2.1.5",
-    "wrangler": "^3.0.0"
+    "vitest": "^2.1.9",
+    "wrangler": "^4.0.0"
   }
 }

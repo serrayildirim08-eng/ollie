@@ -8,8 +8,8 @@
  */
 
 import type { HabitsHistory, HabitsOpts, HabitSignal, Habit } from './types';
-import { NEG_SELF_RE } from './constants';
-import { dayKey, mean, buildDayCompletionMap } from './helpers';
+import { mean, buildDayCompletionMap } from './helpers';
+import { DAY_MS, dayKey } from '../util';
 
 // ─── detectFreshStartCrash ────────────────────────────────────────────
 
@@ -26,7 +26,7 @@ export function detectFreshStartCrash(
   const minSilentAfter = o.minSilentAfter ?? 2;
   const earlyDays = o.earlyDays ?? 6;
   const silenceDays = o.silenceDays ?? 21;
-  const windowStart = now - windowDays * 86400000;
+  const windowStart = now - windowDays * DAY_MS;
 
   const arr = history.habits ?? [];
   const dumps = history.dumps ?? [];
@@ -54,11 +54,11 @@ export function detectFreshStartCrash(
       .map(e => e.ts)
       .sort((a, b) => a - b);
     const createdAt = h.created_at as number;
-    const earlyEnd = createdAt + earlyDays * 86400000;
+    const earlyEnd = createdAt + earlyDays * DAY_MS;
     const earlyHits = tsList.filter(t => t >= createdAt && t <= earlyEnd);
     if (earlyHits.length >= 1 && earlyHits.length <= 6) {
       const lastTs = tsList.length > 0 ? tsList[tsList.length - 1] : h.created_at;
-      if (now - lastTs >= silenceDays * 86400000) silentAfter++;
+      if (now - lastTs >= silenceDays * DAY_MS) silentAfter++;
     }
   }
 
@@ -113,7 +113,7 @@ export function detectIdentityFraming(
     : Date.now();
   const windowDays = o.windowDays ?? 30;
   const minDisavowal = o.minDisavowal ?? 2;
-  const windowStart = now - windowDays * 86400000;
+  const windowStart = now - windowDays * DAY_MS;
 
   const dumps = history.dumps ?? [];
   if (dumps.length === 0) return null;
@@ -175,7 +175,7 @@ export function detectBodyVsCognitive(
   const minPerSide = o.minPerSide ?? 3;
   const minCompletionsPerHabit = o.minCompletionsPerHabit ?? 4;
   const minLift = typeof o.minLift === 'number' ? o.minLift : 1.4;
-  const windowStart = now - windowDays * 86400000;
+  const windowStart = now - windowDays * DAY_MS;
 
   const BODY_RE = /\b(walk|stretch|water|cold|hydrate|exercise|workout|yoga|sleep|drink|move)\b/i;
   const COG_RE = /\b(meditate|journal|plan|read|think|reflect|study|review)\b/i;
@@ -274,8 +274,8 @@ export function detectHabitDrift(
   const flatCompletions = history.completions ?? null;
   if (arr.length === 0) return null;
 
-  const recentStart = now - halfDays * 86400000;
-  const priorStart = now - 2 * halfDays * 86400000;
+  const recentStart = now - halfDays * DAY_MS;
+  const priorStart = now - 2 * halfDays * DAY_MS;
 
   const perHabit = new Map<string, { habit: Habit; recent: number; prior: number }>();
   for (const h of arr) {
@@ -355,7 +355,7 @@ export function detectFrictionSignature(
   const minRatio = typeof o.minRatio === 'number' ? o.minRatio : 1.8;
   const minDiff = typeof o.minDiff === 'number' ? o.minDiff : 0.3;
   const windowDays = o.windowDays ?? (minWeeks * 7);
-  const windowStart = now - windowDays * 86400000;
+  const windowStart = now - windowDays * DAY_MS;
 
   const arr = history.habits ?? [];
   const flatCompletions = history.completions ?? null;
@@ -367,7 +367,7 @@ export function detectFrictionSignature(
   for (const h of arr) {
     if (!h || !h.id) continue;
     const dowOccurrences = [0, 0, 0, 0, 0, 0, 0];
-    for (let t = windowStart; t <= now; t += 86400000) {
+    for (let t = windowStart; t <= now; t += DAY_MS) {
       dowOccurrences[new Date(t).getUTCDay()]++;
     }
     const dowHits = [0, 0, 0, 0, 0, 0, 0];
@@ -445,7 +445,7 @@ export function detectSleepHabitCoupling(
   const minNormalN = o.minNormalN ?? 7;
   const lowTstMin = typeof o.lowTstMin === 'number' ? o.lowTstMin : 360;
   const maxRatio = typeof o.maxRatio === 'number' ? o.maxRatio : 0.7;
-  const windowStart = now - windowDays * 86400000;
+  const windowStart = now - windowDays * DAY_MS;
 
   const arr = history.habits ?? [];
   const sleep = history.sleepRecords ?? [];
@@ -453,10 +453,6 @@ export function detectSleepHabitCoupling(
   if (arr.length === 0 || sleep.length === 0) return null;
 
   const habitsActive = arr.length;
-  const dKey = (ts: number): string => {
-    const d = new Date(ts);
-    return d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0') + '-' + String(d.getUTCDate()).padStart(2, '0');
-  };
 
   const dayCompletions = buildDayCompletionMap(arr, flatCompletions, windowStart, now);
 
@@ -465,15 +461,20 @@ export function detectSleepHabitCoupling(
   for (const r of sleep) {
     if (!r || r.is_skipped) continue;
     if (typeof r.tst_min !== 'number') continue;
+    // Day-key the sleep record in LOCAL time so the follow-day key shares the
+    // same key-space as `dayCompletions` (built with the LOCAL `dayKey`). A
+    // date-only `night_of` is anchored at LOCAL noon ('T12:00:00', no 'Z') so
+    // a ±12h shift can never cross a calendar boundary — the record maps to
+    // exactly that calendar day with no off-by-one.
     let baseTs: number | null = null;
     if (typeof r.ts === 'number') baseTs = r.ts;
     else if (typeof r.night_of === 'string') {
-      const t = Date.parse(r.night_of + 'T12:00:00Z');
+      const t = Date.parse(r.night_of + 'T12:00:00');
       if (!isNaN(t)) baseTs = t;
     }
     if (baseTs == null) continue;
     if (baseTs < windowStart || baseTs > now) continue;
-    const followKey = dKey(baseTs + 86400000);
+    const followKey = dayKey(baseTs + DAY_MS);
     if (r.tst_min < lowTstMin) lowSleepFollowDays.add(followKey);
     else normalSleepFollowDays.add(followKey);
   }
@@ -539,8 +540,8 @@ export function detectHabitRebirth(
   const minGapDays = o.minGapDays ?? 21;
   const reentryDays = o.reentryDays ?? 14;
   const minRebirths = o.minRebirths ?? 2;
-  const windowStart = now - windowDays * 86400000;
-  const reentryStart = now - reentryDays * 86400000;
+  const windowStart = now - windowDays * DAY_MS;
+  const reentryStart = now - reentryDays * DAY_MS;
 
   const arr = history.habits ?? [];
   const flatCompletions = history.completions ?? null;
@@ -581,7 +582,7 @@ export function detectHabitRebirth(
       const gap = tsList[i] - tsList[i - 1];
       if (gap > longest) { longest = gap; longestEndTs = tsList[i]; }
     }
-    const gapD = longest / 86400000;
+    const gapD = longest / DAY_MS;
     if (gapD < minGapDays) continue;
     if (longestEndTs < reentryStart) continue;
     rebirthHabits.add(hid);
@@ -627,7 +628,7 @@ export function detectSelfTalkHabit(
   const minEvents = o.minEvents ?? 3;
   const minHabits = o.minHabits ?? 2;
   const maxRatio = typeof o.maxRatio === 'number' ? o.maxRatio : 0.7;
-  const windowStart = now - windowDays * 86400000;
+  const windowStart = now - windowDays * DAY_MS;
 
   const SELF_TALK_RE = /\b(stupid|lazy|useless|worthless|i suck|i'm bad|nothing works|aptal|tembel|işe yaramaz|berbat)\b/i;
 
@@ -666,8 +667,8 @@ export function detectSelfTalkHabit(
 
   let dropSum = 0, validEvents = 0;
   for (const ts of events) {
-    const preStart = ts - followDays * 86400000;
-    const postEnd = ts + followDays * 86400000;
+    const preStart = ts - followDays * DAY_MS;
+    const postEnd = ts + followDays * DAY_MS;
     const preCount = allTs.filter(t => t >= preStart && t < ts).length;
     const postCount = allTs.filter(t => t > ts && t <= postEnd).length;
     const preExpected = followDays * habitsActive;

@@ -20,6 +20,7 @@
  */
 
 import type { FocusLogEntry } from './types';
+import { MINUTE_MS, dayKey } from '../util';
 
 /** Blocks per long-break cycle. Classic pomodoro = 4. */
 export const DEFAULT_BLOCKS_PER_LONG_BREAK = 4;
@@ -29,8 +30,6 @@ export const DEFAULT_BLOCKS_PER_LONG_BREAK = 4;
  * completed block. 0.9 ⇒ a 25-min block needs ≥ 22.5 real minutes.
  */
 export const COMPLETION_RATIO = 0.9;
-
-const MIN_MS = 60_000;
 
 export interface PomodoroBreakOptions {
   /** ms epoch — defines "today" and bounds the scan. Required for determinism. */
@@ -67,11 +66,6 @@ export interface PomodoroBreakState {
   last_block_ts: number | null;
 }
 
-/** Local calendar-day key (YYYY-M-D). Mirrors orchestrator/work helper. */
-function localDayKey(ts: number): string {
-  const d = new Date(ts);
-  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
-}
 
 /**
  * A focus_log entry counts as a completed block when its real elapsed
@@ -83,7 +77,7 @@ function isCompletedBlock(e: FocusLogEntry, ratio: number): boolean {
   if (!e || typeof e.ts !== 'number') return false;
   if (typeof e.duration_min !== 'number' || e.duration_min <= 0) return false;
   if (typeof e.duration_ms !== 'number') return true; // legacy: logged only on finish
-  const planned = e.duration_min * MIN_MS;
+  const planned = e.duration_min * MINUTE_MS;
   return e.duration_ms >= planned * ratio;
 }
 
@@ -109,7 +103,9 @@ export function computePomodoroBreakState(
       ? opts.completionRatio
       : COMPLETION_RATIO;
 
-  const todayKey = localDayKey(now);
+  // Local-time day key — "today" tracks the user's wall clock. Used only
+  // for equality against other dayKey() outputs, never parsed/exposed.
+  const todayKey = dayKey(now);
   const log = Array.isArray(focusLog) ? focusLog : [];
 
   let blocksToday = 0;
@@ -117,7 +113,7 @@ export function computePomodoroBreakState(
   for (const e of log) {
     if (!isCompletedBlock(e, ratio)) continue;
     if (e.ts > now) continue; // ignore future-dated rows
-    if (localDayKey(e.ts) !== todayKey) continue;
+    if (dayKey(e.ts) !== todayKey) continue;
     blocksToday += 1;
     if (lastBlockTs === null || e.ts > lastBlockTs) lastBlockTs = e.ts;
   }

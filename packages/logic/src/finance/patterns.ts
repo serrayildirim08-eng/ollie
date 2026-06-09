@@ -23,9 +23,7 @@ import type {
   FinanceSource,
   DetectPatternsState,
 } from './types';
-import { DAY_MS } from './math';
-
-const HOUR_MS = 3_600_000;
+import { DAY_MS, HOUR_MS } from './math';
 
 const LOW_MOOD_RE =
   /\b(sad|exhausted|tired|drained|empty|numb|burned\s*out|burnt\s*out|overwhelmed|anxious|stressed|low|down|depressed|hopeless)\b/i;

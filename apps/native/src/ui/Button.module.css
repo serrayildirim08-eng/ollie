@@ -1,0 +1,99 @@
+/* Button — Ollie UI primitive.
+   Aligned to the redesign-branch token system: sharp edges, sage accent. */
+
+.btn {
+  appearance: none;
+  border: none;
+  background: none;
+  margin: 0;
+  padding: 0;
+  cursor: pointer;
+  font-family: var(--ollie-font-sans);
+  text-decoration: none;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ollie-space-2);
+
+  border-radius: 0;
+
+  font-weight: var(--ollie-weight-medium);
+  letter-spacing: var(--ollie-tracking-caps);
+  text-transform: uppercase;
+  white-space: nowrap;
+
+  transition:
+    background-color var(--ollie-duration-tap) var(--ollie-ease-calm-out),
+    color            var(--ollie-duration-tap) var(--ollie-ease-calm-out),
+    border-color     var(--ollie-duration-tap) var(--ollie-ease-calm-out),
+    opacity          var(--ollie-duration-tap) var(--ollie-ease-calm-out);
+
+  position: relative;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--ollie-color-sage-deep);
+  outline-offset: 3px;
+}
+
+.sm { font-size: 11px; padding: 8px 16px; min-height: 36px; }
+.md { font-size: 12px; padding: 12px 24px; min-height: 44px; }
+.lg { font-size: 13px; padding: 16px 32px; min-height: 52px; }
+
+.primary {
+  background-color: var(--ollie-color-sage-deep);
+  color: var(--ollie-color-cream);
+  border: 1px solid var(--ollie-color-sage-deep);
+}
+.primary:hover:not(:disabled):not(.loading) {
+  background-color: var(--ollie-color-ink);
+  border-color: var(--ollie-color-ink);
+}
+.primary:active:not(:disabled):not(.loading) { opacity: 0.85; }
+
+.secondary {
+  background-color: transparent;
+  color: var(--ollie-color-ink);
+  border: 1px solid var(--ollie-color-hairline);
+}
+.secondary:hover:not(:disabled):not(.loading) {
+  background-color: var(--ollie-color-paper);
+  border-color: var(--ollie-color-ink-faint);
+}
+.secondary:active:not(:disabled):not(.loading) {
+  background-color: var(--ollie-color-paper-2);
+}
+
+.ghost {
+  background-color: transparent;
+  color: var(--ollie-color-sage-deep);
+  border: 1px solid transparent;
+}
+.ghost:hover:not(:disabled):not(.loading) { background-color: var(--ollie-color-paper); }
+.ghost:active:not(:disabled):not(.loading) {
+  background-color: var(--ollie-color-paper-2);
+  opacity: 0.8;
+}
+
+.btn:disabled,
+.loading {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 1.5px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 999px;
+  animation: spin 800ms linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }

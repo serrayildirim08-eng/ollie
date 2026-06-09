@@ -11,14 +11,135 @@ compatibility_flags = ["nodejs_compat"]
 binding = "CACHE_KV"
 id = "6031aea7f9c14f96884e55ec1be527f3"
 
+# RATE_KV is the LEGACY rate-limit store. It is kept as a fallback while the
+# native Rate Limiting binding (below) rolls out — the worker prefers the
+# native limiter and only falls back to this KV counter if the binding is
+# absent. Safe to remove once the native limiter is confirmed live.
 [[kv_namespaces]]
 binding = "RATE_KV"
 id = "5e222944bc8f450cb3cca05e709e3b88"
+
+# ─── Vectorize binding (Decision 8: /route/dump cache) ────────────────────────
+# Provisioning (one-time per environment):
+#   wrangler vectorize create ollie-routing-cache \
+#     --dimensions=1024 \
+#     --metric=cosine
+# Free tier: 5M dim/mo — covers dogfood. Per-user namespacing via metadata
+# filter (userId from Clerk JWT sub).
+[[vectorize]]
+binding = "VECTORIZE_INDEX"
+index_name = "ollie-routing-cache"
+
+# ─── Workers AI (brain-dump classify fallback) ─────────────────────────────────
+# Same-platform classify backup in the Groq → Cloudflare → Gemini cascade.
+# No API key (it's a binding), ~10k neurons/day free. env.AI in the worker.
+[ai]
+binding = "AI"
+
+# ─── native Rate Limiting bindings (item #5) ───────────────────────────────────
+# These replace the racy KV-counter rate limiter. The binding is DECLARATIVE —
+# Cloudflare provisions it automatically on `wrangler deploy`, no `wrangler`
+# CLI resource-creation step is required (needs Wrangler ≥ 4.36).
+# `period` must be 10 or 60. namespace_id is an arbitrary positive integer,
+# unique per limiter within the account.
+#
+# AI_RATE_LIMITER   — /brain-dump + /v1/messages : 10 requests / 60s per user.
+# TELEM_RATE_LIMITER — /enrich-dump + /ingest-event + /label : 10 / 60s per user.
+[[ratelimits]]
+name = "AI_RATE_LIMITER"
+namespace_id = "2001"
+simple = { limit = 10, period = 60 }
+
+[[ratelimits]]
+name = "TELEM_RATE_LIMITER"
+namespace_id = "2002"
+simple = { limit = 10, period = 60 }
+
+# ─── Cloudflare Queues producer (item #4) — COMMENTED OUT, see DEPLOY_TODO ─────
+# The brain-dump enrichment queue migrates from the hand-rolled `q:enrich:*`
+# KV queue to a native Cloudflare Queue. This block is intentionally left
+# commented: an uncommented producer binding pointing at a queue that does
+# not exist makes `wrangler deploy` FAIL. Until the queue is provisioned the
+# worker falls back to the KV queue (env.ENRICH_QUEUE is undefined).
+#
+# To enable (see DEPLOY_TODO.md §"Item #4 — Cloudflare Queues"):
+#   1. wrangler queues create ollie-enrich-queue
+#   2. wrangler queues create ollie-enrich-dlq
+#   3. uncomment the block below, AND the [[queues.consumers]] block in
+#      workers/cron/wrangler.toml
+#   4. deploy ai-proxy, then cron
+#
+[[queues.producers]]
+binding = "ENRICH_QUEUE"
+queue = "ollie-enrich-queue"
 
 # ─── secrets (set with `wrangler secret put`) ──────────────────────────────────
 # ANTHROPIC_API_KEY       — sk-ant-… key. NEVER ship to the client.
 # SUPABASE_URL            — https://<ref>.supabase.co (used by /ingest-event)
 # SUPABASE_SERVICE_ROLE   — server-only key (used by /ingest-event + invites)
-# SUPABASE_ANON_KEY       — public anon key (used to verify user JWTs on invite endpoints)
+# SUPABASE_ANON_KEY       — public anon key. Used to verify user JWTs on the
+#                           invite endpoints AND on the telemetry endpoints
+#                           (/ingest-event, /label, /enrich-dump). REQUIRED
+#                           while the Supabase fallback exists; remove only
+#                           when CLERK_ISSUER is set AND every Supabase session
+#                           has aged out.
+# CLERK_ISSUER            — Clerk migration · Phase 3 (T0). e.g.
+#                           https://faithful-stag-15.clerk.accounts.dev. When
+#                           set, the worker verifies Clerk session JWTs via
+#                           JWKS (`${CLERK_ISSUER}/.well-known/jwks.json`) and
+#                           accepts the Clerk `sub` claim as the verified user
+#                           id. Supabase verify stays as a fallback for legacy
+#                           sessions until they age out. To set:
+#                             wrangler secret put CLERK_ISSUER
+#                           (paste the issuer URL with no trailing slash).
 # INVITE_BASE_URL         — optional; e.g. https://ollie.app. Defaults to ollie.app
 #                           when unset. Used in /generate-invite share_url.
+#
+# ── T2 /route/:module secrets ──────────────────────────────────────────────────
+# VOYAGE_API_KEY          — Voyage AI key for multilingual-2 embeddings.
+#                           wrangler secret put VOYAGE_API_KEY
+# GROQ_API_KEY            — Groq API key for Llama 3.3 70B classify + segment.
+#                           https://console.groq.com → API Keys → Create.
+#                           wrangler secret put GROQ_API_KEY
+# T0_JWT_ENFORCED         — Auth now fails CLOSED by default: Clerk JWT is
+#                           required on /route/:module, /grocery/purchase,
+#                           /cook-history, /feed-me, /replenishment unless this
+#                           is explicitly "0". Set to "0" ONLY for local dev.
+#                           Requires CLERK_ISSUER to be set. Leave UNSET in prod.
+
+# ─── staging environment ──────────────────────────────────────────────────────
+# Deploys to a separate worker (ollie-ai-proxy-staging) so prod stays untouched
+# while we test /route/dump end-to-end against real Groq + Voyage.
+# Bindings inherit from top-level (wrangler 3+ requires explicit re-declaration).
+[env.staging]
+name = "ollie-ai-proxy-staging"
+
+[[env.staging.kv_namespaces]]
+binding = "CACHE_KV"
+id = "6031aea7f9c14f96884e55ec1be527f3"
+
+[[env.staging.kv_namespaces]]
+binding = "RATE_KV"
+id = "5e222944bc8f450cb3cca05e709e3b88"
+
+[[env.staging.vectorize]]
+binding = "VECTORIZE_INDEX"
+index_name = "ollie-routing-cache"
+
+# Workers AI binding (named envs don't inherit the top-level [ai]).
+[env.staging.ai]
+binding = "AI"
+
+[[env.staging.ratelimits]]
+name = "AI_RATE_LIMITER"
+namespace_id = "2001"
+simple = { limit = 10, period = 60 }
+
+[[env.staging.ratelimits]]
+name = "TELEM_RATE_LIMITER"
+namespace_id = "2002"
+simple = { limit = 10, period = 60 }
+
+[[env.staging.queues.producers]]
+binding = "ENRICH_QUEUE"
+queue = "ollie-enrich-queue"

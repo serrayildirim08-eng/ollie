@@ -1,0 +1,256 @@
+/**
+ * Router — top-level router for the native shell.
+ *
+ * React Router v7 declarative API.
+ *
+ * Routes:
+ *   /              — DumpScreen (brain-dump universal entry)
+ *   /modules       — module index
+ *   /settings      — settings screen
+ *   /box/<module>  — per-module box screens
+ */
+
+import { BrowserRouter, Link, Route, Routes } from "react-router";
+import { useUser, useClerk } from "@clerk/clerk-react";
+import { Layout } from "./Layout";
+import { useFeature } from "../settings/features";
+import { Stack, Row } from "../layout";
+import { Text } from "../ui";
+import { colors } from "../theme/tokens";
+import { DumpScreen } from "../dump";
+import { GroceryBox } from "../modules/grocery";
+import { PetsBox } from "../modules/pets";
+import { BodyBox } from "../modules/body";
+import { MoodBox } from "../modules/mood";
+import { WorkBox } from "../modules/work";
+import { FinanceBox } from "../modules/finance";
+import { SleepBox } from "../modules/sleep";
+import { AdminBox } from "../modules/admin";
+import { HabitsBox } from "../modules/habits";
+import { GoalsBox } from "../modules/goals";
+import { MedicationBox } from "../modules/medication";
+import { CycleBox } from "../modules/cycle";
+import { PartnerBox } from "../modules/partner";
+import { TodoScreen } from "../todo/TodoScreen";
+import { useServerReminderBridge } from "../notify/serverReminderBridge";
+
+const SMCP_STYLE: React.CSSProperties = {
+  fontVariantCaps: "all-small-caps",
+  letterSpacing: "0.08em",
+};
+
+export function Router() {
+  // Wire the durable app-closed reminder path (Supabase scheduled_jobs →
+  // cron → APNs). Mounted here under <SignedIn> so it always has a Clerk
+  // identity to resolve. No-op until a device push token exists.
+  useServerReminderBridge();
+  // Partner is deferred out of v1 behind a feature flag (audit #10). The module
+  // stays in the tree; its route only mounts when the flag is on.
+  const partnerEnabled = useFeature('partner');
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route element={<Layout />}>
+          <Route index element={<DumpScreen />} />
+          <Route path="box/grocery" element={<GroceryBox />} />
+          <Route path="box/pets" element={<PetsBox />} />
+          <Route path="box/body" element={<BodyBox />} />
+          <Route path="box/mood" element={<MoodBox />} />
+          <Route path="box/work" element={<WorkBox />} />
+          <Route path="box/finance" element={<FinanceBox />} />
+          <Route path="box/sleep" element={<SleepBox />} />
+          <Route path="box/admin" element={<AdminBox />} />
+          <Route path="box/habits" element={<HabitsBox />} />
+          <Route path="box/goals" element={<GoalsBox />} />
+          <Route path="box/medication" element={<MedicationBox />} />
+          <Route path="box/cycle" element={<CycleBox />} />
+          {partnerEnabled ? <Route path="box/partner" element={<PartnerBox />} /> : null}
+          <Route path="modules" element={<ModulesIndex />} />
+          <Route path="todo" element={<TodoScreen />} />
+          <Route path="settings" element={<SettingsScreen />} />
+          <Route path="box/:id" element={<BoxPlaceholder />} />
+          <Route path="*" element={<NotFoundPlaceholder />} />
+        </Route>
+      </Routes>
+    </BrowserRouter>
+  );
+}
+
+interface ModuleEntry { id: string; label: string; hint: string }
+
+interface ModuleGroup {
+  id: string;
+  label: string;
+  aside: string;
+  items: ModuleEntry[];
+}
+
+// Three rooms — see memory: project_ollie_4_modules_grouping (2026-05-28).
+// "you / your stuff / your responsibilities" is the user's mental model.
+const MODULE_GROUPS: ModuleGroup[] = [
+  {
+    id: "you",
+    label: "you",
+    aside: "how you are this week.",
+    items: [
+      { id: "body", label: "Body", hint: "water, movement, symptoms" },
+      { id: "mood", label: "Mood", hint: "feelings, energy, self-talk" },
+      { id: "sleep", label: "Sleep", hint: "logs + insomnia" },
+      { id: "cycle", label: "Cycle", hint: "period + symptoms" },
+      { id: "medication", label: "Medication", hint: "doses + side effects" },
+      { id: "habits", label: "Habits", hint: "what you do" },
+      { id: "goals", label: "Goals", hint: "what you're moving toward" },
+      { id: "partner", label: "Partner", hint: "an intimate window" },
+    ],
+  },
+  {
+    id: "your-stuff",
+    label: "your stuff",
+    aside: "what's in the kitchen, who's in the house.",
+    items: [
+      { id: "grocery", label: "Grocery", hint: "pantry + shopping" },
+      { id: "pets", label: "Pets", hint: "tontin + pinpon" },
+    ],
+  },
+  {
+    id: "your-responsibilities",
+    label: "your responsibilities",
+    aside: "things that won't wait.",
+    items: [
+      { id: "work", label: "Work", hint: "tasks + deadlines" },
+      { id: "admin", label: "Admin", hint: "renewals + paperwork" },
+      { id: "finance", label: "Finance", hint: "transactions + bills" },
+    ],
+  },
+];
+
+const ASIDE_STYLE: React.CSSProperties = {
+  fontFamily: 'var(--ollie-font-serif)',
+  fontStyle: 'italic',
+  fontSize: 14,
+  color: colors.inkFaint,
+  margin: '-2px 0 12px',
+  letterSpacing: '0.005em',
+};
+
+function ModulesIndex() {
+  // Hide feature-flagged-off modules (audit #10: Partner deferred from v1).
+  const partnerEnabled = useFeature('partner');
+  const groups = MODULE_GROUPS.map((g) => ({
+    ...g,
+    items: g.items.filter((m) => m.id !== 'partner' || partnerEnabled),
+  }));
+  return (
+    <Stack gap={48}>
+      <Stack gap={12}>
+        <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
+          modules
+        </Text>
+        <Text scale="display">All of it</Text>
+        <Text scale="body" color={colors.inkSoft} style={{ maxWidth: 540 }}>
+          three rooms — yourself, your stuff, the things you owe.
+        </Text>
+      </Stack>
+
+      {groups.map((group) => (
+        <Stack key={group.id} gap={8}>
+          <Text
+            scale="caption"
+            color={colors.inkFaint}
+            style={{ ...SMCP_STYLE, letterSpacing: "0.20em" }}
+          >
+            {group.label}
+          </Text>
+          <p style={ASIDE_STYLE}>{group.aside}</p>
+          <Stack gap={0}>
+            {group.items.map((m, i) => (
+              <Link
+                key={m.id}
+                to={`/box/${m.id}`}
+                style={{
+                  textDecoration: "none",
+                  color: "inherit",
+                  borderTop: i === 0 ? `1px solid ${colors.hairline}` : "none",
+                  borderBottom: `1px solid ${colors.hairline}`,
+                }}
+              >
+                <Row gap={12} align="baseline" justify="space-between" style={{ padding: "16px 0" }}>
+                  <Text scale="body">{m.label}</Text>
+                  <Text scale="caption" color={colors.inkFaint}>
+                    {m.hint}
+                  </Text>
+                </Row>
+              </Link>
+            ))}
+          </Stack>
+        </Stack>
+      ))}
+    </Stack>
+  );
+}
+
+function SettingsScreen() {
+  const { user } = useUser();
+  const { signOut } = useClerk();
+  return (
+    <Stack gap={32}>
+      <Stack gap={8}>
+        <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
+          settings
+        </Text>
+        <Text scale="display">Settings</Text>
+      </Stack>
+
+      <Stack gap={16}>
+        <Stack gap={4}>
+          <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
+            account
+          </Text>
+          <Text scale="body">{user?.primaryEmailAddress?.emailAddress ?? "—"}</Text>
+        </Stack>
+
+        <button
+          onClick={() => void signOut()}
+          style={{
+            alignSelf: "flex-start",
+            background: "none",
+            border: "none",
+            padding: "12px 0",
+            color: colors.inkFaint,
+            cursor: "pointer",
+            fontVariantCaps: "all-small-caps",
+            letterSpacing: "0.08em",
+            fontSize: 13,
+          }}
+        >
+          sign out
+        </button>
+      </Stack>
+    </Stack>
+  );
+}
+
+function BoxPlaceholder() {
+  return (
+    <Stack gap={16}>
+      <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>Box</Text>
+      <Text scale="display">{readBoxIdFromPath()}</Text>
+      <Text color={colors.inkFaint}>Screen slot — not yet built.</Text>
+    </Stack>
+  );
+}
+
+function NotFoundPlaceholder() {
+  return (
+    <Stack gap={16}>
+      <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>404</Text>
+      <Text scale="display">Not here.</Text>
+    </Stack>
+  );
+}
+
+function readBoxIdFromPath(): string {
+  if (typeof window === "undefined") return "";
+  const match = window.location.pathname.match(/\/box\/([^/]+)/);
+  return match?.[1] ?? "";
+}

@@ -10,8 +10,8 @@ import type { Prior } from './types';
 /** Population prior — Urteaga 2021 / Bull 2019 on Natural Cycles data. */
 export const DEFAULT_PRIOR: Prior = { mean: 28.5, sd: 4.0 };
 
-/** Milliseconds in one day. */
-export const DAY_MS = 86_400_000;
+// DAY_MS is re-exported from the shared util module — single definition.
+export { DAY_MS } from '../util';
 
 /**
  * Medical-impossibility floor: two "period started" events less than this

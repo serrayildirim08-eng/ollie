@@ -1,0 +1,93 @@
+/**
+ * Worker mirror of apps/native/src/router/schema.ts · RouterOutput v1.0
+ *
+ * Kept in sync by hand for now. Dedup via packages/router-schema/ later
+ * if the schema stabilizes and both surfaces want to drift-check.
+ */
+
+import type { CrisisSignal } from '@ollie/crisis-lexicon';
+
+export type Module =
+  | 'crisis'
+  | 'work'
+  | 'admin'
+  | 'pets'
+  | 'cycle'
+  | 'finance'
+  | 'sleep'
+  | 'body'
+  | 'mood'
+  | 'habits'
+  | 'goals'
+  | 'grocery'
+  | 'medication'
+  | 'dump_only';
+
+export type FragmentLanguage = 'tr' | 'en' | 'es' | 'mixed' | 'unknown';
+
+export interface RouterOutput {
+  schemaVersion: '1.0';
+  originalDump: string;
+  dumpId: string;
+  timestamp: number;
+  language: FragmentLanguage;
+  crisis?: CrisisSignal;
+  fragments: Fragment[];
+  summary: RoutingSummary;
+  /** True when the dump was augmented by Gemini Flash 2.5 vision extraction.
+   *  Client surfaces a subtle "from photo" badge on the resulting cards. */
+  visionUsed?: boolean;
+}
+
+export interface Fragment {
+  text: string;
+  language: FragmentLanguage;
+  module: Module;
+  payload: Record<string, unknown>;
+  confidence: number;
+  /** Server-side tier enforcement output flag. */
+  needsConfirm: boolean;
+  source: 'cache' | 'ai' | 'fast_path';
+}
+
+export interface RoutingSummary {
+  moduleCount: Partial<Record<Module, number>>;
+  cacheHitRate: number;
+  aiCalls: number;
+  durationMs: number;
+  pass2Triggered: number;
+}
+
+/**
+ * Confidence tier policy — Decision #5 (server-side enforcement).
+ *  ≥0.80  → silent route,     needsConfirm = false
+ *  0.60-  → silent route,     needsConfirm = true   (small edit affordance on the card)
+ *  <0.60  → demote to dump_only, originalGuess stashed in payload
+ */
+export function applyConfidencePolicy(
+  module: Module,
+  payload: Record<string, unknown>,
+  confidence: number,
+): { module: Module; payload: Record<string, unknown>; needsConfirm: boolean } {
+  if (confidence >= 0.8) {
+    return { module, payload, needsConfirm: false };
+  }
+  if (confidence >= 0.6) {
+    return { module, payload, needsConfirm: true };
+  }
+  // < 0.60 — demote.
+  const demotedPayload: Record<string, unknown> = {
+    module: 'dump_only',
+    action: 'archive_only',
+    reason: 'low_confidence',
+    originalGuess: { module, payload },
+  };
+  // Preserve a time-deferred reminder across demotion (audit #5b). Without this,
+  // injectScheduledAt looks for `payload.remindIn` at the top level — which the
+  // demotion buried inside originalGuess — and the reminder was silently lost,
+  // contradicting the classifier rule "never dump_only when remindIn present".
+  if (payload && typeof payload === 'object' && 'remindIn' in payload) {
+    demotedPayload.remindIn = (payload as Record<string, unknown>).remindIn;
+  }
+  return { module: 'dump_only', payload: demotedPayload, needsConfirm: false };
+}

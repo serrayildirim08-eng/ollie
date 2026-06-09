@@ -201,6 +201,16 @@ export function isLikelyName(word: string, locale: Locale): boolean {
   return SETS[locale].has(lc);
 }
 
+/**
+ * True when `word` is on the stoplist of capitalized-but-not-a-name terms
+ * (geographic names, module/ADHD vocabulary that overlaps with names).
+ * Used by the capitalization heuristic (audit item #3) to suppress false
+ * positives like a capitalized "London" or "Mercury".
+ */
+export function isCommonCapitalizedWord(word: string): boolean {
+  return NAME_STOPLIST.has(word.toLowerCase());
+}
+
 /** Wordlist sizes per locale (exposed for diagnostics + tests). */
 export const WORDLIST_SIZES: Record<Locale, number> = {
   en: SETS.en.size,

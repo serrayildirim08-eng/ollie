@@ -47,4 +47,5 @@ export const TIME_PATTERNS: RegExp[] = [
   /\bin \d+ (hours?|days?|weeks?|months?|years?)\b/i,
 ];
 
-export const DAY_MS = 86_400_000;
+// DAY_MS is re-exported from the shared util module — single definition.
+export { DAY_MS } from '../util';

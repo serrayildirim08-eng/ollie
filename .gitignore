@@ -25,3 +25,15 @@ workers/cron/supabase/
 # Originals live elsewhere (Meshy AI / cloud storage), too large for git.
 assets/*.glb
 assets/*/*.glb
+
+# Claude Code agent state (worktrees, sessions, cache — multi-GB, never ship)
+.claude/
+
+# Cofounder/pitch presentation artifacts (regenerated, not source of truth)
+OLLIE_COFOUNDER_PRESENTATION.*
+
+# Swift Package Manager build output (apps/desktop/native helpers)
+.build/
+
+# Cloudflare Worker local dev secrets (NEVER commit)
+.dev.vars

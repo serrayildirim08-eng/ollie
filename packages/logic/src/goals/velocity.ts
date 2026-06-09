@@ -28,7 +28,7 @@ import type {
   PatternSource,
 } from './types';
 
-const DAY_MS = 86_400_000;
+import { DAY_MS } from '../util';
 const DEFAULT_WINDOW_DAYS = 90;
 const DEFAULT_MIN_SAMPLE = 3;
 

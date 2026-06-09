@@ -32,6 +32,14 @@ export {
 } from './survey';
 export type { InsomniaSurveyQuestion } from './survey';
 export {
+  EPWORTH_LENGTH,
+  EPWORTH_QUESTIONS,
+  EPWORTH_OPTIONS,
+  epworthSleepinessBand,
+  scoreEpworth,
+} from './epworth';
+export type { EpworthQuestion } from './epworth';
+export {
   // Phase 1
   detectRevengeBedtime,
   detectCaffeineCutoff,

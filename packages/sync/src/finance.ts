@@ -41,6 +41,7 @@ import {
   decryptData,
 } from '@ollie/crypto';
 import type { EncryptedPayload } from '@ollie/crypto';
+import { createDebouncer, createBackoffScheduler, safeErrSummary } from './retry';
 
 // ──────────────────────────────────────────────────────────────────────────
 // Public types
@@ -177,15 +178,11 @@ export interface FinanceSyncClient {
   /**
    * Encrypt + enqueue a single record for upsert into finance_records.
    *
-   * Used by the Plaid inbox drain (see ./plaid-drain.ts) to land
-   * webhook-delivered transactions into the user-encrypted store
-   * without round-tripping through `store.set('finance', …)`.
+   * Lands a finance record into the user-encrypted store without
+   * round-tripping through `store.set('finance', …)`.
    *
-   * Errors propagate so the caller can decide whether to ack the
-   * staging row.
-   *
-   * TODO(serra): wire `setInterval(drainPlaidInbox, 60_000)` from
-   * account-boot.ts once Plaid env URLs are stable.
+   * Errors propagate so the caller can decide how to handle a failed
+   * write.
    */
   upsertRecord(
     row: SyncableFinanceRow,
@@ -208,8 +205,11 @@ export function createFinanceSyncClient(initialDeps: FinanceSyncDeps): FinanceSy
 
   let running = false;
   let unsubs: Array<() => void> = [];
-  const debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
-  let drainTimer: ReturnType<typeof setTimeout> | null = null;
+  // Per-store-key debounce + a single backoff-scheduled drain — shared
+  // ./retry helper. The drain scheduler adds exponential backoff and a
+  // max-attempt cap so a forever-failing server stops being retried.
+  const diffDebouncer = createDebouncer<string>(DEBOUNCE_MS);
+  const drainScheduler = createBackoffScheduler(() => drainOnce());
   // Local snapshot per store key — used to compute add/update/delete
   // diffs on each subscription tick (the store fires with the new
   // value; we keep the previous to detect deletions).
@@ -317,22 +317,18 @@ export function createFinanceSyncClient(initialDeps: FinanceSyncDeps): FinanceSy
   }
 
   function debouncedDiff(storeKey: string, recordType: FinanceRecordType): void {
-    const existing = debounceTimers.get(storeKey);
-    if (existing) clearTimeout(existing);
-    const t = setTimeout(() => {
-      debounceTimers.delete(storeKey);
+    diffDebouncer.schedule(storeKey, () => {
       void diffAndEnqueue(storeKey, recordType)
         .then(() => scheduleDrain())
         .catch((err) => {
-          console.error('[sync/finance] diffAndEnqueue failed', storeKey, err);
+          // SECURITY (S4): safe summary only — the error may carry a row.
+          console.error('[sync/finance] diffAndEnqueue failed', storeKey, safeErrSummary(err));
         });
-    }, DEBOUNCE_MS);
-    debounceTimers.set(storeKey, t);
+    });
   }
 
   // ── drain queue → Supabase ─────────────────────────────────────────────
   async function drainOnce(): Promise<void> {
-    drainTimer = null;
     if (!isEnabled()) return;
     if (!isOnlineFn()) return;
 
@@ -366,8 +362,8 @@ export function createFinanceSyncClient(initialDeps: FinanceSyncDeps): FinanceSy
           try { events.emit('sync:auth_expired', { ts: nowFn() }); }
           catch { /* registry warn ok */ }
         } else {
-          // Leave queue intact, retry with backoff.
-          scheduleDrain(2_000);
+          // Leave queue intact, retry with exponential backoff (capped).
+          drainScheduler.scheduleRetry();
         }
         return;
       }
@@ -392,8 +388,8 @@ export function createFinanceSyncClient(initialDeps: FinanceSyncDeps): FinanceSy
           catch { /* registry warn ok */ }
           return;
         }
-        // leave the delete in queue, retry later
-        scheduleDrain(2_000);
+        // leave the delete in queue, retry with exponential backoff (capped)
+        drainScheduler.scheduleRetry();
         return;
       }
     }
@@ -403,6 +399,9 @@ export function createFinanceSyncClient(initialDeps: FinanceSyncDeps): FinanceSy
       next.deletes = next.deletes.filter((d) => !shippedIds.has(d.id));
       writeQueue(next);
     }
+
+    // Full drain succeeded → clear the failure counter so backoff resets.
+    drainScheduler.reset();
 
     try {
       events.emit('sync:finance_outbound_flushed', {
@@ -414,14 +413,7 @@ export function createFinanceSyncClient(initialDeps: FinanceSyncDeps): FinanceSy
   }
 
   function scheduleDrain(delayMs = 0): void {
-    if (drainTimer) return;
-    drainTimer = setTimeout(() => {
-      void drainOnce().catch((err) => {
-        console.error('[sync/finance] drainOnce failed', err);
-        drainTimer = null;
-        scheduleDrain(5_000);
-      });
-    }, delayMs);
+    drainScheduler.schedule(delayMs);
   }
 
   // ── inbound: pull rows updated since cursor, decrypt, apply ────────────
@@ -469,7 +461,9 @@ export function createFinanceSyncClient(initialDeps: FinanceSyncDeps): FinanceSy
         decryptedByType.set(row.record_type, list);
       } catch (err) {
         // Fail-closed: skip the row, never write garbage to the store.
-        console.warn('[sync/finance] decrypt failed for row', row.id, err);
+        // SECURITY (S4): a decrypt error can carry ciphertext/plaintext —
+        // log a safe summary only.
+        console.warn('[sync/finance] decrypt failed for row', row.id, safeErrSummary(err));
       }
     }
 
@@ -594,20 +588,22 @@ export function createFinanceSyncClient(initialDeps: FinanceSyncDeps): FinanceSy
     }
 
     scheduleDrain();
-    return syncIn().catch((err) => console.warn('[sync/finance] initial syncIn failed', err));
+    return syncIn().catch((err) =>
+      console.warn('[sync/finance] initial syncIn failed:', safeErrSummary(err)),
+    );
   }
 
   function stop(): void {
     for (const u of unsubs) { try { u(); } catch { /* noop */ } }
     unsubs = [];
-    for (const t of debounceTimers.values()) clearTimeout(t);
-    debounceTimers.clear();
-    if (drainTimer) { clearTimeout(drainTimer); drainTimer = null; }
+    diffDebouncer.cancelAll();
+    drainScheduler.cancel();
+    drainScheduler.reset();
     snapshots.clear();
     running = false;
   }
 
-  // ── Public single-record upsert (used by plaid-drain) ─────────────────
+  // ── Public single-record upsert ───────────────────────────────────────
   // Encrypt the row with the user's key, enqueue, and request a drain.
   // We deliberately do NOT route through `store.set('finance', …)` for
   // two reasons:
@@ -615,17 +611,16 @@ export function createFinanceSyncClient(initialDeps: FinanceSyncDeps): FinanceSy
   //      also pull the row into the in-memory FinanceModule arrays
   //      (records[]). That's the right end-state, but the LWW reconcile
   //      via syncIn() on the next page-load handles it cleanly without
-  //      the drain having to know the FinanceRecord shape.
-  //   2. Keeps the drain free of any store-shape coupling — if the
-  //      module store schema changes, the drain still works.
+  //      the caller having to know the FinanceRecord shape.
+  //   2. Keeps the upsert free of any store-shape coupling — if the
+  //      module store schema changes, it still works.
   async function upsertRecord(
     row: SyncableFinanceRow,
     recordType: FinanceRecordType = 'transaction',
   ): Promise<void> {
     if (!isEnabled()) {
-      // Sync is opt-out — caller (plaid-drain) should treat this as a
-      // hard fail so the staging row is NOT acked. The next session
-      // with sync enabled will drain.
+      // Sync is opt-out — caller should treat this as a hard fail. The
+      // next session with sync enabled will drain the outbound queue.
       throw new Error('finance sync disabled (consent or settings)');
     }
     if (!row || typeof row !== 'object' || !row.id) {

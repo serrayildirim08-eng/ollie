@@ -29,7 +29,7 @@ export function generateGuiltTripCopy(
   const welfareNote = taskProfile.welfare_note;
   const days = careGap.days_since === null ? '?' : Math.floor(careGap.days_since);
 
-  let text = '';
+  let text: string;
   switch (level) {
     case 'nudge':
       text = `${taskDisplay} for ${petName} is coming due.`;

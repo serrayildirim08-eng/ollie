@@ -58,6 +58,15 @@ export interface PantryItem {
   shelfLifeDays?: number;
   checked?: boolean;
   ts?: number;
+  /**
+   * Cadence/shelf-life-derived guess at when this row runs out, ms-since-epoch.
+   * Null while we don't have enough signal. When this is in the PAST and the
+   * row is still unarchived, the replenish-needed detector offers to re-add it.
+   * (Mirrored from the native grocery_pantry.predicted_out_at_ms column.)
+   */
+  predictedOutAtMs?: number | null;
+  /** True when the pantry row has been archived (gone / used up). */
+  archived?: boolean;
 }
 
 export interface ShoppingItem extends PantryItem {
@@ -126,6 +135,16 @@ export interface RecipeInferredSignal {
   source?: string;
 }
 
+export interface ReplenishNeededSignal {
+  pattern: 'grocery-replenish-needed';
+  confidence: 'high' | 'medium';
+  sample_n: number;
+  items: Array<{ name: string; days: number }>;
+  /** Soonest (most-overdue) predicted run-out ms — the brain reads it as urgencyAt. */
+  predictedOutAtMs: number | null;
+  copy: string;
+}
+
 export interface StaleListSignal {
   pattern: 'stale-shopping-list';
   confidence: 'high' | 'medium';
@@ -147,6 +166,7 @@ export interface ShoppingCadenceSignal {
 export type GroceryPattern =
   | ExpirationDriftSignal
   | StockoutCascadeSignal
+  | ReplenishNeededSignal
   | StaleListSignal
   | ShoppingCadenceSignal;
 

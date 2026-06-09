@@ -169,7 +169,7 @@ export function calculateUKSelfEmployedSetAside(income: number): UKSetAsideResul
   }
 
   const taxable = Math.max(0, safeIncome - allowance);
-  let incomeTax = 0;
+  let incomeTax: number;
   if (taxable <= UK_BASIC_RATE_THRESHOLD - UK_PERSONAL_ALLOWANCE) {
     incomeTax = taxable * UK_BASIC_RATE;
   } else if (taxable <= UK_HIGHER_RATE_THRESHOLD - UK_PERSONAL_ALLOWANCE) {
@@ -281,20 +281,16 @@ export function monthlySetAsideReminder(
   calculator: TaxCalculator,
 ): MonthlySetAsideReminder {
   const income = Math.max(0, thisMonthIncome || 0);
-  let total = 0;
   let pct = 0;
 
   if (calculator.kind === 'us') {
     const r = calculateUSSelfEmployedSetAside(income, calculator.opts);
-    total = r.total;
     pct = r.suggestedPct;
   } else if (calculator.kind === 'uk') {
     const r = calculateUKSelfEmployedSetAside(income);
-    total = r.total;
     pct = r.suggestedPct;
   } else if (calculator.kind === 'eu') {
     const r = calculateEUFreelancerSetAside(income, calculator.country);
-    total = r.total;
     pct = r.suggestedPct;
   }
 

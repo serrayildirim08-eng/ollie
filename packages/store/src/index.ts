@@ -6,5 +6,5 @@ export { createStore, STORE_VERSION, STORE_META_KEY, storeModuleKey } from './st
 
 export { installCrossTabSync } from './cross-tab';
 
-export type { Migration, MigrationMap, StoreMeta } from './migrations';
+export type { Migration, MigrationMap, StoreMeta, MigrationResult } from './migrations';
 export { runMigrations, readMeta, writeMeta, NO_MIGRATIONS } from './migrations';

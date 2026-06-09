@@ -35,7 +35,7 @@ function makeFakeApi() {
       anonKey: 'anon',
       rest: {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        get: vi.fn(async (_t: string, opts: any) => {
+        get: vi.fn(async (_t: string, _opts: any) => {
           captured.getCalls++;
           return { ok: true, status: 200, data: captured.remoteRows };
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -49,6 +49,9 @@ function makeFakeApi() {
         }) as any,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         delete: vi.fn() as any,
+        // sync never calls rpc — present only to satisfy the rest interface.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        rpc: vi.fn() as any,
       },
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       auth: { signUp: vi.fn() as any, signInWithPassword: vi.fn() as any, refresh: vi.fn() as any, signOut: vi.fn() as any },
@@ -138,14 +141,6 @@ describe('sync · outbound', () => {
     store.set('cycle', 'items', [{ x: 1 }]);
     await vi.advanceTimersByTimeAsync(500);
     await vi.runAllTimersAsync();
-    // pushModule awaits encryptData (WebCrypto) before enqueueing. Under
-    // fake timers the encrypt promise needs extra microtask cycles to
-    // settle before the queue reflects the write. Mirror the bounded
-    // retry pattern used in the coalesce test above.
-    for (let i = 0; i < 20 && sync._inspect().queueDepth === 0; i++) {
-      await vi.runAllTimersAsync();
-      await Promise.resolve();
-    }
     expect(captured.upserts.length).toBe(0);
     expect(sync._inspect().queueDepth).toBeGreaterThan(0);
 

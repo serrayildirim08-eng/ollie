@@ -294,18 +294,26 @@ export function exportADHDTaxReport(
  * The on-disk envelope shape. Stored as JSON inside the returned Blob.
  *
  * Format v1:
- *   { v: 1, alg: 'AES-GCM-256+PBKDF2-SHA256-100k', salt, iv, ciphertext }
+ *   { v: 1, alg: 'AES-GCM-256+PBKDF2-SHA256', salt, iv, ciphertext,
+ *     kdf_iterations }
  *
  * salt/iv/ciphertext are base64 strings (RFC 4648). The decrypter must
- * re-derive the key from the user's passphrase + salt, then decrypt
- * the ciphertext using the iv.
+ * re-derive the key from the user's passphrase + salt + `kdf_iterations`,
+ * then decrypt the ciphertext using the iv.
+ *
+ * SECURITY (S7): `kdf_iterations` records the PBKDF2 iteration count so a
+ * decrypter reproduces the same key after the global default changes.
+ * Envelopes written before S7 used the `...-100k` alg tag and carry no
+ * `kdf_iterations` field — a decrypter must fall back to 100k for those.
  */
 export interface EncryptedExportEnvelope {
   v: 1;
-  alg: 'AES-GCM-256+PBKDF2-SHA256-100k';
+  alg: 'AES-GCM-256+PBKDF2-SHA256' | 'AES-GCM-256+PBKDF2-SHA256-100k';
   salt: string;       // base64
   iv: string;         // base64
   ciphertext: string; // base64
+  /** PBKDF2 iteration count (S7). Absent on pre-S7 envelopes → assume 100k. */
+  kdf_iterations?: number;
   /** Optional content-type hint for the original payload (e.g. 'text/csv'). */
   contentType?: string;
 }
@@ -322,13 +330,26 @@ export interface EncryptExportOpts {
  */
 export interface CryptoPrimitives {
   randomSalt: () => Uint8Array;
-  deriveKey: (passphrase: string, salt: Uint8Array) => Promise<CryptoKey>;
+  /**
+   * Derive an AES-GCM key. The optional third arg is the PBKDF2 iteration
+   * count (S7); `@ollie/crypto.deriveKey` defaults it to the current 600k.
+   */
+  deriveKey: (passphrase: string, salt: Uint8Array, iterations?: number) => Promise<CryptoKey>;
   encryptData: (
     key: CryptoKey,
     data: unknown,
   ) => Promise<{ iv: Uint8Array; ciphertext: Uint8Array }>;
   bytesToBase64: (bytes: Uint8Array) => string;
+  /**
+   * PBKDF2 iteration count to derive with + record in the envelope (S7).
+   * Optional — defaults to 600k (the current `@ollie/crypto` default) so
+   * existing callers that don't pass it still produce a correct envelope.
+   */
+  kdfIterations?: number;
 }
+
+/** Current PBKDF2 iteration count — kept in sync with `@ollie/crypto`. */
+const DEFAULT_KDF_ITERATIONS = 600_000;
 
 /**
  * encryptExport — AES-GCM-256 wrap of `content` with a key derived
@@ -352,15 +373,18 @@ export async function encryptExport(
   }
   const o = opts ?? {};
   const salt = crypto.randomSalt();
-  const key = await crypto.deriveKey(passphrase, salt);
+  // SECURITY (S7): derive at the current iteration count and record it.
+  const kdfIterations = crypto.kdfIterations ?? DEFAULT_KDF_ITERATIONS;
+  const key = await crypto.deriveKey(passphrase, salt, kdfIterations);
   const { iv, ciphertext } = await crypto.encryptData(key, content);
 
   const envelope: EncryptedExportEnvelope = {
     v: 1,
-    alg: 'AES-GCM-256+PBKDF2-SHA256-100k',
+    alg: 'AES-GCM-256+PBKDF2-SHA256',
     salt: crypto.bytesToBase64(salt),
     iv: crypto.bytesToBase64(iv),
     ciphertext: crypto.bytesToBase64(ciphertext),
+    kdf_iterations: kdfIterations,
     contentType: o.contentType ?? 'text/csv',
   };
   return JSON.stringify(envelope);

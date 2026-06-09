@@ -4,40 +4,40 @@
  * Pure stat functions. No side-effects, no wall-clock reads, no I/O.
  */
 
-export const DAY_MS = 86_400_000;
+// DAY_MS / HOUR_MS / day-key helpers come from the shared util module —
+// single source of truth. Re-exported so finance callers keep their import path.
+import { DAY_MS, HOUR_MS, dayKey, daysBetweenKeys } from '../util';
+export { DAY_MS, HOUR_MS };
 
+/** Format an epoch-ms timestamp as a local `YYYY-MM-DD` key. */
 export function isoDate(ms: number): string {
-  const d = new Date(ms);
-  return (
-    d.getFullYear() +
-    '-' +
-    String(d.getMonth() + 1).padStart(2, '0') +
-    '-' +
-    String(d.getDate()).padStart(2, '0')
-  );
+  return dayKey(ms);
 }
 
+/** Whole calendar days between two `YYYY-MM-DD` keys (b − a). */
 export function daysBetween(a: string, b: string): number {
-  return Math.round(
-    (new Date(b + 'T12:00:00').getTime() - new Date(a + 'T12:00:00').getTime()) / DAY_MS,
-  );
+  return daysBetweenKeys(a, b);
 }
 
+// The numeric kernels live in the canonical `../stats` module — single
+// source of truth. The finance API keeps its `number | null` shape (null
+// for empty input) so callers don't change; the math is delegated.
+import { mean as meanCore, median as medianCore, mad as madCore } from '../stats';
+
+/** Mean of a numeric array. Null for empty input. */
 export function fMean(a: number[]): number | null {
   if (!a || !a.length) return null;
-  return a.reduce((s, x) => s + x, 0) / a.length;
+  return meanCore(a);
 }
 
+/** Median of a numeric array. Null for empty input. Even-length safe. */
 export function fMedian(a: number[]): number | null {
   if (!a || !a.length) return null;
-  const s = [...a].sort((x, y) => x - y);
-  const n = s.length;
-  return n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2;
+  return medianCore(a);
 }
 
-/** Raw MAD (unscaled). Rousseeuw & Croux 1993: σ ≈ 1.4826·MAD. */
+/** Scaled MAD (Rousseeuw & Croux 1993: σ ≈ 1.4826·MAD). 0 for empty input. */
 export function fMad(a: number[], center?: number): number {
   if (!a || !a.length) return 0;
-  const c = center != null ? center : (fMedian(a) ?? 0);
-  return 1.4826 * (fMedian(a.map((x) => Math.abs(x - c))) ?? 0);
+  return madCore(a, 1.4826, center);
 }

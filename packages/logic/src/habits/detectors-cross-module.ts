@@ -10,6 +10,7 @@
 
 import type { HabitsHistory, HabitsOpts, HabitSignal } from './types';
 import { dayKey, buildDayCompletionMap } from './helpers';
+import { DAY_MS } from '../util';
 
 // ─── detectHyperfocusSpillover ────────────────────────────────────────
 
@@ -25,7 +26,7 @@ export function detectHyperfocusSpillover(
   const minDropRatio = typeof o.minDropRatio === 'number' ? o.minDropRatio : 0.7;
   const followDays = o.followDays ?? 2;
   const windowDays = o.windowDays ?? 60;
-  const windowStart = now - windowDays * 86400000;
+  const windowStart = now - windowDays * DAY_MS;
 
   const arr = history.habits ?? [];
   const crashLog = history.workCrashLog ?? null;
@@ -48,11 +49,11 @@ export function detectHyperfocusSpillover(
   for (const k of crashDays) {
     const t = Date.parse(k + 'T12:00:00');
     if (isNaN(t)) continue;
-    for (let i = 1; i <= followDays; i++) postSet.add(dayKey(t + i * 86400000));
+    for (let i = 1; i <= followDays; i++) postSet.add(dayKey(t + i * DAY_MS));
   }
 
   let postCompletions = 0, postDays = 0, baselineCompletions = 0, baselineDays = 0;
-  for (let t = windowStart; t <= now; t += 86400000) {
+  for (let t = windowStart; t <= now; t += DAY_MS) {
     const k = dayKey(t);
     const cs = dayCompletions.get(k) ?? 0;
     if (postSet.has(k)) { postCompletions += cs; postDays++; }
@@ -100,7 +101,7 @@ export function detectKeystoneAnchor(
   const minOverlap = o.minOverlap ?? 6;
   const minLift = typeof o.minLift === 'number' ? o.minLift : 1.5;
   const minBaselineRate = typeof o.minBaselineRate === 'number' ? o.minBaselineRate : 0.15;
-  const windowStart = now - windowDays * 86400000;
+  const windowStart = now - windowDays * DAY_MS;
 
   const arr = history.habits ?? [];
   if (arr.length < 2) return null;
@@ -198,7 +199,7 @@ export function detectMedAdherenceCoupling(
   const minMedDays = o.minMedDays ?? 5;
   const minBaselineDays = o.minBaselineDays ?? 10;
   const minLift = typeof o.minLift === 'number' ? o.minLift : 1.3;
-  const windowStart = now - windowDays * 86400000;
+  const windowStart = now - windowDays * DAY_MS;
 
   const STIM_RE = /\b(vyvanse|adderall|ritalin|methylphenidate|dexedrine|elvanse|concerta|focalin|stratter|atomoxetine|wellbutrin|bupropion|stimulant|adhd\s+med|adhd\s+pill|took\s+(?:my\s+)?meds?|took\s+the\s+pill)\b/i;
 

@@ -7,13 +7,44 @@
 
 import type { Action, AnswerRoute, ModuleName, Route } from './types';
 
+// ─── locale-safe lowercasing for keyword matching (audit item #9) ────────────
+//
+// This router matches BOTH English and Turkish keywords in a single pass,
+// so it cannot pick one locale for `toLowerCase()`. Plain `toLowerCase()`
+// turns capitalized Turkish "I" into dotted "i" and "İ" into "i̇" (i +
+// combining dot), so "SALI"/"YARIN" silently miss the keywords "salı"/
+// "yarın". `foldKeywordCase` folds the Turkish dotted/dotless-i pair (and
+// the other TR diacritics) to an ASCII form, then lowercases — so the
+// keyword `.includes()` comparison becomes case- AND diacritic-
+// insensitive. It is applied to BOTH sides (the input AND the keyword
+// tables, see FOLDED_KEYWORD_MAP). It is used ONLY for the generic
+// keyword-map pass; the precise cycle/product/question regexes keep the
+// plain `lower` so their Turkish-diacritic literals still match.
+const TR_FOLD: Record<string, string> = {
+  'ı': 'i', 'İ': 'i', 'I': 'i', 'ş': 's', 'Ş': 's',
+  'ç': 'c', 'Ç': 'c', 'ğ': 'g', 'Ğ': 'g',
+  'ö': 'o', 'Ö': 'o', 'ü': 'u', 'Ü': 'u',
+};
+
+function foldKeywordCase(s: string): string {
+  return s
+    .replace(/[ıİIşŞçÇğĞöÖüÜ]/g, (ch) => TR_FOLD[ch] ?? ch)
+    .toLowerCase();
+}
+
 // ─── keyword map (EN + TR) ───────────────────────────────────────────────────
 
+// NOTE — no `reminders` entry. Reminder semantics are handled UPSTREAM in
+// apps/web/src/hooks/useApplyBrainDump.ts: parseReminder() runs before the
+// keyword router and, on a hit, schedules the reminder via
+// reminderScheduler.add() (which writes the reminders store slice + emits
+// `void:reminder:scheduled` for the iOS local-notification bridge). If we
+// also routed `reminders` here, dispatchAction's default fallthrough would
+// write the same text into `reminders.items` — a slice no UI module reads,
+// so the entry would silently vanish (the "phantom reminders" bug). Time-
+// only phrases the parser misses ("tomorrow morning") harmlessly fall
+// through to dump.items via the catch-all at the bottom of fallbackRoute.
 const KEYWORD_MAP: Record<string, readonly string[]> = {
-  reminders: [
-    'remind me','reminder','remind ',' at ','tonight at','tomorrow at','in the morning','in the afternoon','in the evening','next monday','next tuesday','next wednesday','next thursday','next friday','next saturday','next sunday',
-    'hatırlat','unutma','saat ','yarın','önümüzdeki','pazartesi','salı','çarşamba','perşembe','cuma','cumartesi','pazar','sabah ','akşam ','gece ','öğleden sonra','birazdan','sonra',
-  ],
   grocery: [
     'egg','milk','bread','coffee','buy','grocery','food','cook','recipe','snack','fruit','vegetable','meat','cheese','rice','pasta','oil','sugar','flour','tea','juice','cereal','yogurt','butter','chicken','fish','beef','tomato','onion','garlic','potato','banana','apple','toilet paper','paper towel','soap','shampoo','detergent','sponge',
     'yumurta','süt','ekmek','kahve','aldım','alacağım','ihtiyaç','market','yemek','pişir','sebze','meyve','peynir','pirinç','yoğurt','tereyağ','tavuk','domates','soğan','sarımsak','patates','muz','elma','çay','makarna','tuvalet kağıdı','şampuan','sabun','deterjan',
@@ -63,6 +94,12 @@ const KEYWORD_MAP: Record<string, readonly string[]> = {
     'burkulma','yaralı','hasta','hastalık','grip','soğuk algınlığı','ateş','ağrı','acıyor','kırık','yara','baş ağrısı','migren','bulantı','ilaç','antibiyotik','alerji',
   ],
 };
+
+// Pre-folded keyword map (audit item #9). Built once at module load so the
+// generic keyword pass compares folded-input against folded-keywords.
+const FOLDED_KEYWORD_MAP: Record<string, readonly string[]> = Object.fromEntries(
+  Object.entries(KEYWORD_MAP).map(([mod, kws]) => [mod, kws.map(foldKeywordCase)]),
+);
 
 // Modules where the action is 'log' rather than 'add'.
 const LOG_MODULES = new Set<string>(['sleep', 'astrology', 'dump']);
@@ -219,11 +256,15 @@ export function fallbackRoute(text: string): Route {
   }
 
   // ── generic keyword matching (full-text, post-clause) ───────────────────
+  // Match against the diacritic-/case-folded text + folded keyword map so
+  // capitalized Turkish input ("YARIN", "SALI") is not silently missed
+  // (audit item #9).
+  const foldedText = foldKeywordCase(lower);
   const coveredByPattern = new Set(events.map(e => e.module));
-  for (const [mod, keywords] of Object.entries(KEYWORD_MAP)) {
+  for (const [mod, keywords] of Object.entries(FOLDED_KEYWORD_MAP)) {
     if (mod === 'cycle') continue;
     if (mod === 'grocery' && coveredByPattern.has('grocery')) continue;
-    if (!keywords.some(kw => lower.includes(kw))) continue;
+    if (!keywords.some(kw => foldedText.includes(kw))) continue;
     const action = LOG_MODULES.has(mod) ? 'log' : 'add';
     pushEvent({ module: mod as ModuleName, action, data: text });
   }

@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Grocery · clean-slate · 2026-05-31</title>
+<style>
+  :root{--paper:#FAF8F3;--ink:#23211C;--soft:#6B675E;--faint:#A8A29A;--sage:#7C8C6F;}
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:#EDEAE2;color:var(--ink);font-family:"DM Sans",-apple-system,BlinkMacSystemFont,sans-serif;-webkit-font-smoothing:antialiased;padding:48px 40px 80px;}
+  h1{font-family:"DM Serif Display",Georgia,serif;font-weight:400;font-size:40px;letter-spacing:-.01em;}
+  .lede{max-width:640px;color:var(--soft);font-size:16px;line-height:1.55;margin:14px 0 6px;}
+  .smcp{font-variant-caps:all-small-caps;letter-spacing:.13em;font-size:12px;color:var(--faint);}
+  .gallery{display:flex;gap:34px;overflow-x:auto;padding:40px 4px 20px;}
+  .frame{flex:none;}
+  .frame .cap{font-variant-caps:all-small-caps;letter-spacing:.12em;font-size:12px;color:var(--soft);margin-bottom:12px;}
+  .frame .cap b{color:var(--ink);font-weight:600;}
+  iframe{width:390px;height:844px;border:none;border-radius:30px;background:#FAF8F3;
+    box-shadow:0 24px 60px rgba(0,0,0,.16), 0 0 0 1px rgba(0,0,0,.04);}
+  .note{max-width:640px;margin-top:8px;color:var(--soft);font-size:14px;line-height:1.6;}
+  .note a{color:var(--sage);}
+</style>
+</head>
+<body>
+  <span class="smcp">clean-slate redesign · grocery · 2026-05-31</span>
+  <h1>A kitchen that runs without you thinking.</h1>
+  <p class="lede">Designed from what the module <em>does</em>, not from what it looks like today.
+  Four pulled surfaces, one you ever have to look at (Now), a dump bar everywhere,
+  and aging shown as a quiet fade instead of an alarm. Full rationale in
+  <span style="color:var(--ink)">DIRECTION.md</span>.</p>
+
+  <div class="gallery">
+    <div class="frame"><div class="cap"><b>Now</b> · the landing answer</div><iframe src="mockups/now.html"></iframe></div>
+    <div class="frame"><div class="cap"><b>List</b> · what to buy</div><iframe src="mockups/list.html"></iframe></div>
+    <div class="frame"><div class="cap"><b>Kitchen</b> · what you have (aging = fade)</div><iframe src="mockups/kitchen.html"></iframe></div>
+    <div class="frame"><div class="cap"><b>Cook</b> · three ideas</div><iframe src="mockups/cook.html"></iframe></div>
+    <div class="frame"><div class="cap"><b>Recipe</b> · have / need / how</div><iframe src="mockups/recipe.html"></iframe></div>
+    <div class="frame"><div class="cap"><b>Listening</b> · voice moment</div><iframe src="mockups/listening.html"></iframe></div>
+  </div>
+
+  <p class="note">Scroll sideways through the six screens. Each opens on its own too
+  (<a href="mockups/now.html">now.html</a> …). They're clickable where it matters —
+  Now → Cook, Cook → Recipe, the spine switch between surfaces.</p>
+</body>
+</html>

@@ -49,3 +49,40 @@ export type {
   PomodoroBreakState,
   PomodoroBreakOptions,
 } from './pomodoro';
+
+// ── Matter system (WORK-VISION Phase 1 + 2, no AI) ───────────────────
+// Phase 1 — matter container.
+export {
+  createMatter,
+  normalizeAliases,
+  matterKeys,
+  attachDumpRef,
+  detachDumpRef,
+  matterDumpCount,
+  isMatter,
+} from './matter';
+export type {
+  Matter,
+  MatterStatus,
+  MatterDumpRef,
+  MatterLinkOrigin,
+  CreateMatterInput,
+} from './matter';
+// Phase 2 — dump → matter routing (deterministic, free).
+export {
+  routeDump,
+  routeDumpBatch,
+  mineNewMatterSuggestions,
+  normalizeText,
+  keyOccursIn,
+  fuzzyScore,
+  GUESS_THRESHOLD,
+  NEW_MATTER_MIN_OCCURRENCES,
+} from './matter-routing';
+export type {
+  RoutableDump,
+  RouteOutcomeKind,
+  DumpRouteResult,
+  NewMatterSuggestion,
+  BatchRouteResult,
+} from './matter-routing';
