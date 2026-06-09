@@ -334,10 +334,10 @@ export default {
         return withCors(json({ error: 'rate_limited' }, 429));
       }
       if (url.pathname === '/enrich-dump') {
-        return withCors(await handleEnrichDump(req, env));
+        return withCors(await handleEnrichDump(req, env, userId));
       }
       if (url.pathname === '/ingest-event') {
-        return withCors(await handleIngestEvent(req, env));
+        return withCors(await handleIngestEvent(req, env, userId));
       }
       return withCors(await handleLabel(req, env));
     }

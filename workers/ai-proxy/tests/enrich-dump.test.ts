@@ -10,7 +10,11 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { scrubPII } from '../src/pii';
-import { handleEnrichDump, type EnrichDumpRequest } from '../src/telemetry';
+import { handleEnrichDump, deriveUserHash, type EnrichDumpRequest } from '../src/telemetry';
+
+const UID = 'user_enrich_authenticated';
+const SALT = 'test-salt';
+const ENRICH_ENV = (kv: KVNamespace) => ({ CACHE_KV: kv, USER_HASH_SALT: SALT });
 
 // ─── stub KV ──────────────────────────────────────────────────────────────────
 
@@ -155,7 +159,8 @@ describe('handleEnrichDump · US-cycle restriction', () => {
     const { kv } = makeKv();
     const resp = await handleEnrichDump(
       makeReq(basePayload({ country: 'US', routing_module: 'cycle', raw_text: 'cramps today' })),
-      { CACHE_KV: kv },
+      ENRICH_ENV(kv),
+      UID,
     );
     expect(resp.status).toBe(200);
     const body = await resp.json() as { queued: boolean; reason?: string; id: string | null };
@@ -168,7 +173,8 @@ describe('handleEnrichDump · US-cycle restriction', () => {
     const { kv, data } = makeKv();
     const resp = await handleEnrichDump(
       makeReq(basePayload({ country: 'US', routing_module: 'finance' })),
-      { CACHE_KV: kv },
+      ENRICH_ENV(kv),
+      UID,
     );
     expect(resp.status).toBe(200);
     const body = await resp.json() as { queued: boolean; id: string | null };
@@ -181,7 +187,8 @@ describe('handleEnrichDump · US-cycle restriction', () => {
     const { kv, data } = makeKv();
     const resp = await handleEnrichDump(
       makeReq(basePayload({ country: 'TR', routing_module: 'cycle' })),
-      { CACHE_KV: kv },
+      ENRICH_ENV(kv),
+      UID,
     );
     const body = await resp.json() as { queued: boolean };
     expect(body.queued).toBe(true);
@@ -194,7 +201,8 @@ describe('handleEnrichDump · happy path', () => {
     const { kv, data } = makeKv();
     const resp = await handleEnrichDump(
       makeReq(basePayload({ raw_text: 'remind Alex Park to call me at +14155550100' })),
-      { CACHE_KV: kv },
+      ENRICH_ENV(kv),
+      UID,
     );
     expect(resp.status).toBe(200);
 
@@ -214,18 +222,38 @@ describe('handleEnrichDump · happy path', () => {
     const resp = await handleEnrichDump(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       makeReq({ ...basePayload(), modality: 'pigeon' } as any),
-      { CACHE_KV: kv },
+      ENRICH_ENV(kv),
+      UID,
     );
     expect(resp.status).toBe(400);
   });
 
-  it('rejects missing user_hash with 400', async () => {
-    const { kv } = makeKv();
+  // ── audit #4 — IDOR ────────────────────────────────────────────────────────
+  it('ignores client user_hash and queues the server-derived hash instead', async () => {
+    const { kv, data } = makeKv();
+    const expected = await deriveUserHash(UID, SALT);
+    const resp = await handleEnrichDump(
+      makeReq(basePayload({ user_hash: 'spoofed-victim-hash' })),
+      ENRICH_ENV(kv),
+      UID,
+    );
+    expect(resp.status).toBe(200);
+    const stored = JSON.parse(data.get([...data.keys()][0])!) as { payload: { user_hash: string } };
+    expect(stored.payload.user_hash).toBe(expected);
+    expect(stored.payload.user_hash).not.toBe('spoofed-victim-hash');
+  });
+
+  it('queues even when client omits user_hash (it is server-derived, not required)', async () => {
+    const { kv, data } = makeKv();
+    const expected = await deriveUserHash(UID, SALT);
     const resp = await handleEnrichDump(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       makeReq({ ...basePayload(), user_hash: undefined } as any),
-      { CACHE_KV: kv },
+      ENRICH_ENV(kv),
+      UID,
     );
-    expect(resp.status).toBe(400);
+    expect(resp.status).toBe(200);
+    const stored = JSON.parse(data.get([...data.keys()][0])!) as { payload: { user_hash: string } };
+    expect(stored.payload.user_hash).toBe(expected);
   });
 });

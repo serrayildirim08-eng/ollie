@@ -22,6 +22,8 @@ import { tagDumpMood } from './mood-lexicon';
 import { dispatchRouterOutput } from '../modules';
 import type { DispatchEntry } from '../modules';
 import type { CrisisSignal, RouterOutput } from '../router/schema';
+import { useAppLang } from '../settings/appLang';
+import { crisisBannerCopy } from './crisisCopy';
 import { NeedsConfirmCard } from './NeedsConfirmCard';
 import { TodayNoticings } from '../modules/brain/TodayNoticings';
 import { GoalCreateModal } from '../modules/goals/GoalCreateModal';
@@ -290,6 +292,9 @@ function CrisisBanner({
   crisis: CrisisSignal;
   onDismiss: () => void;
 }): JSX.Element {
+  const lang = useAppLang();
+  const copy = crisisBannerCopy(lang, crisis.tier);
+  const body = copy.body;
   return (
     <Stack
       gap={8}
@@ -301,11 +306,10 @@ function CrisisBanner({
       }}
     >
       <Text scale="caption" color="rgb(140, 30, 30)" style={SMCP_STYLE}>
-        notice
+        {copy.kicker}
       </Text>
       <Text scale="body" color="rgb(80, 20, 20)">
-        Something in what you wrote sounded heavy. If it's urgent, a crisis
-        line in your country can help right now.
+        {body}
       </Text>
       <Text
         scale="caption"
@@ -320,7 +324,7 @@ function CrisisBanner({
           textAlign: 'left',
         }}
       >
-        dismiss · type={crisis.type} · {crisis.language}
+        {copy.dismiss}
       </Text>
     </Stack>
   );
