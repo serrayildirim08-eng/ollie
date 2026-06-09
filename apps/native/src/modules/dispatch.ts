@@ -56,6 +56,18 @@ export async function dispatchRouterOutput(
       });
       continue;
     }
+    // Draft-first (audit #9): a grey-zone fragment (0.60–0.79 → needsConfirm)
+    // is NOT written here. We hold it as a draft; the confirm card applies it
+    // on "keep" via applyFragment(). High-confidence (≥0.80) fragments fall
+    // through and write immediately (the low-friction path); <0.60 already
+    // demoted to dump_only by the worker and is not needsConfirm.
+    if (fragment.needsConfirm) {
+      entries.push({
+        fragment,
+        result: { ok: true, note: 'draft — awaiting confirm', draft: true, needsConfirm: true },
+      });
+      continue;
+    }
     try {
       const result = await handler.apply(fragment);
       entries.push({ fragment, result });
@@ -109,6 +121,37 @@ export async function dispatchRouterOutput(
     });
 
   return { entries, crisisSkipped: false };
+}
+
+/**
+ * Apply ONE fragment that was held as a draft (audit #9). Called when the user
+ * taps "keep" on a grey-zone confirm card. Runs the module handler (the write
+ * that dispatchRouterOutput deferred), then mirrors to the store + recomputes
+ * the brain — same fire-and-forget, non-blocking sweep as a normal dump, minus
+ * the mood re-tag (there is no fresh dump text here).
+ */
+export async function applyFragment(
+  fragment: Fragment,
+  opts: DispatchOptions = {},
+): Promise<HandlerResult> {
+  const handlers = { ...stubHandlers, ...(opts.handlers ?? {}) };
+  const handler = handlers[fragment.module];
+  if (!handler) return { ok: false, note: `no handler for ${fragment.module}` };
+
+  let result: HandlerResult;
+  try {
+    result = await handler.apply(fragment);
+  } catch (err) {
+    return { ok: false, note: handlerErrorNote(fragment.module, err) };
+  }
+
+  void runAllSyncs(store)
+    .then(() => recomputeBrain(store))
+    .catch((err) => {
+      console.error('[bridge] post-confirm sync failed (non-fatal):', err);
+    });
+
+  return result;
 }
 
 function handlerErrorNote(module: Module, err: unknown): string {
