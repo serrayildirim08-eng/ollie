@@ -20,7 +20,7 @@
 
 import { computeCadence, type CadenceEstimate } from '@ollie/cadence';
 import { sql } from '../../storage';
-import type { AdminRenewal, AdminTask, AdminTaskData, AdminTaskKind, RecurringDecisionRow } from './types';
+import type { AdminRenewal, AdminTask, AdminTaskData, AdminTaskKind, BallState, RecurringDecisionRow } from './types';
 
 // Index signature satisfies the sql<T extends ShimRow>() constraint; the
 // strongly-typed properties still win in autocomplete + narrowing.
@@ -30,6 +30,9 @@ interface TaskRow {
   text: string;
   data: string | null;
   done: number;
+  due_date: string | null;
+  ball_state: string | null;
+  last_transition_at: number | null;
   created_at: number;
   [col: string]: unknown;
 }
@@ -54,7 +57,7 @@ export const tasks = {
   /** Most-recent first across all kinds. UI buckets by kind locally. */
   async list(): Promise<AdminTask[]> {
     const rows = await sql.select<TaskRow>(
-      `SELECT id, kind, text, data, done, created_at
+      `SELECT id, kind, text, data, done, due_date, ball_state, last_transition_at, created_at
        FROM admin_tasks
        ORDER BY created_at DESC`,
     );
@@ -64,23 +67,52 @@ export const tasks = {
   /**
    * Add a row. Each call is a fresh row — admin rows have no natural dedupe
    * key (two "call dentist" entries are legitimate if the first was missed).
+   * `dueDate` (ISO yyyy-mm-dd) is optional; null when the router saw no date.
    */
-  async add(input: { kind: AdminTaskKind; text: string; data?: AdminTaskData }): Promise<AdminTask> {
+  async add(input: {
+    kind: AdminTaskKind;
+    text: string;
+    data?: AdminTaskData;
+    dueDate?: string | null;
+    ballState?: BallState;
+  }): Promise<AdminTask> {
     const id = newId();
     const now = Date.now();
     const data: AdminTaskData = input.data ?? ({ kind: input.kind } as AdminTaskData);
+    const dueDate = input.dueDate ?? null;
+    const ballState: BallState = input.ballState ?? 'mine';
     await sql.execute(
-      `INSERT INTO admin_tasks (id, kind, text, data, done, created_at)
-       VALUES (?, ?, ?, ?, 0, ?)`,
-      [id, input.kind, input.text, JSON.stringify(data), now],
+      `INSERT INTO admin_tasks (id, kind, text, data, done, due_date, ball_state, last_transition_at, created_at)
+       VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?)`,
+      [id, input.kind, input.text, JSON.stringify(data), dueDate, ballState, now, now],
     );
-    return { id, kind: input.kind, text: input.text, data, done: false, createdAt: now };
+    return {
+      id,
+      kind: input.kind,
+      text: input.text,
+      data,
+      done: false,
+      dueDate,
+      ballState,
+      lastTransitionAt: now,
+      createdAt: now,
+    };
   },
 
   async setDone(id: string, done: boolean): Promise<void> {
+    // Completing a task moves the ball to `done`; un-completing returns it to
+    // `mine`. Either way we stamp last_transition_at (audit #7).
     await sql.execute(
-      `UPDATE admin_tasks SET done = ? WHERE id = ?`,
-      [done ? 1 : 0, id],
+      `UPDATE admin_tasks SET done = ?, ball_state = ?, last_transition_at = ? WHERE id = ?`,
+      [done ? 1 : 0, done ? 'done' : 'mine', Date.now(), id],
+    );
+  },
+
+  /** Move a task's ball_state (mine | waiting | done) and stamp the transition. */
+  async setBallState(id: string, ballState: BallState): Promise<void> {
+    await sql.execute(
+      `UPDATE admin_tasks SET ball_state = ?, last_transition_at = ?, done = ? WHERE id = ?`,
+      [ballState, Date.now(), ballState === 'done' ? 1 : 0, id],
     );
   },
 
@@ -95,7 +127,7 @@ export const tasks = {
    */
   async listOpen(): Promise<AdminTask[]> {
     const rows = await sql.select<TaskRow>(
-      `SELECT id, kind, text, data, done, created_at
+      `SELECT id, kind, text, data, done, due_date, ball_state, last_transition_at, created_at
        FROM admin_tasks
        WHERE done = 0
        ORDER BY created_at DESC`,
@@ -103,10 +135,12 @@ export const tasks = {
     return rows.map(rowToTask);
   },
 
-  /** Mark a task complete. Thin alias over `setDone(id, true)` for the
-   *  /todo screen — keeps the cross-module aggregator's intent obvious. */
+  /** Mark a task complete. Moves the ball to `done` + stamps the transition. */
   async markComplete(id: string): Promise<void> {
-    await sql.execute(`UPDATE admin_tasks SET done = 1 WHERE id = ?`, [id]);
+    await sql.execute(
+      `UPDATE admin_tasks SET done = 1, ball_state = 'done', last_transition_at = ? WHERE id = ?`,
+      [Date.now(), id],
+    );
   },
 };
 
@@ -196,6 +230,10 @@ function rowToTask(r: TaskRow): AdminTask {
     text: r.text,
     data: parseTaskData(r.data, r.kind as AdminTaskKind),
     done: r.done === 1,
+    dueDate: r.due_date ?? null,
+    ballState: (r.ball_state as BallState) ?? 'mine',
+    // seed from created_at for legacy rows whose column is still NULL
+    lastTransitionAt: r.last_transition_at ?? r.created_at,
     createdAt: r.created_at,
   };
 }

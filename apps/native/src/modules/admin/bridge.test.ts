@@ -39,8 +39,8 @@ const FIXED_NOW = new Date('2026-05-13T12:00:00Z').getTime();
  */
 function makeTasks(): AdminTask[] {
   return [
-    { id: 'a1', kind: 'task', text: 'mail the tax form', data: { kind: 'task' }, done: true, createdAt: FIXED_NOW - 10 * DAY_MS },
-    { id: 'a2', kind: 'phone', text: 'call the dentist', data: { kind: 'phone' }, done: false, createdAt: FIXED_NOW - 2 * DAY_MS },
+    { id: 'a1', kind: 'task', text: 'mail the tax form', data: { kind: 'task' }, done: true, ballState: 'done', lastTransitionAt: FIXED_NOW - 10 * DAY_MS, createdAt: FIXED_NOW - 10 * DAY_MS },
+    { id: 'a2', kind: 'phone', text: 'call the dentist', data: { kind: 'phone' }, done: false, ballState: 'mine', lastTransitionAt: FIXED_NOW - 2 * DAY_MS, createdAt: FIXED_NOW - 2 * DAY_MS },
   ];
 }
 

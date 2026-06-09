@@ -121,37 +121,61 @@ describe('scheduleRenewalCues', () => {
 
 // ─── 4. detectStaleBall ──────────────────────────────────────────────────
 
-describe('detectStaleBall', () => {
-  it('surfaces THEIRS task older than 14 days', () => {
+describe('detectStaleBall (v1: mine | waiting | done)', () => {
+  const isoDaysAgo = (n: number) => new Date(NOW - n * DAY).toISOString().slice(0, 10);
+
+  it('surfaces an OVERDUE mine task (past due date)', () => {
     const history: AdminHistory = {
       now: NOW,
-      tasks: [{
-        id: 't1',
-        label: 'contract review',
-        ball_state: 'THEIRS',
-        last_transition_at: NOW - 20 * DAY,
-      }],
+      tasks: [{ id: 't1', label: 'pay rent', ball_state: 'mine', due_date: isoDaysAgo(3) }],
     };
     const result = detectStaleBall(history, { now: NOW });
-    expect(result![0].kind).toBe('stale_theirs');
-    expect(result![0].days_overdue).toBe(20);
+    expect(result![0].kind).toBe('overdue');
+    expect(result![0].days_overdue).toBe(3);
   });
 
-  it('returns null for THEIRS task within 14 days', () => {
+  it('does NOT surface a mine task whose due date is still in the future', () => {
+    const future = new Date(NOW + 5 * DAY).toISOString().slice(0, 10);
     const history: AdminHistory = {
       now: NOW,
-      tasks: [{ id: 't1', ball_state: 'THEIRS', last_transition_at: NOW - 5 * DAY }],
+      tasks: [{ id: 't1', label: 'pay rent', ball_state: 'mine', due_date: future }],
     };
     expect(detectStaleBall(history, { now: NOW })).toBeNull();
   });
 
-  it('surfaces WAITING task past eta+grace', () => {
+  it('surfaces an UNTOUCHED mine task with no due date after 7 days', () => {
     const history: AdminHistory = {
       now: NOW,
-      tasks: [{ id: 't2', label: 'invoice', ball_state: 'WAITING', eta_at: NOW - 10 * DAY }],
+      tasks: [{ id: 't2', label: 'fix bike', ball_state: 'mine', last_transition_at: NOW - 8 * DAY }],
     };
     const result = detectStaleBall(history, { now: NOW });
-    expect(result![0].kind).toBe('deadline_passed');
+    expect(result![0].kind).toBe('untouched');
+  });
+
+  it('does NOT surface a mine task touched within 7 days', () => {
+    const history: AdminHistory = {
+      now: NOW,
+      tasks: [{ id: 't2', ball_state: 'mine', last_transition_at: NOW - 3 * DAY }],
+    };
+    expect(detectStaleBall(history, { now: NOW })).toBeNull();
+  });
+
+  it('surfaces an UNTOUCHED waiting task after 7 days', () => {
+    const history: AdminHistory = {
+      now: NOW,
+      tasks: [{ id: 't3', label: 'invoice', ball_state: 'waiting', last_transition_at: NOW - 10 * DAY }],
+    };
+    const result = detectStaleBall(history, { now: NOW });
+    expect(result![0].kind).toBe('untouched');
+    expect(result![0].copy).toContain('still waiting');
+  });
+
+  it('never surfaces a done task', () => {
+    const history: AdminHistory = {
+      now: NOW,
+      tasks: [{ id: 't4', ball_state: 'done', last_transition_at: NOW - 100 * DAY }],
+    };
+    expect(detectStaleBall(history, { now: NOW })).toBeNull();
   });
 });
 

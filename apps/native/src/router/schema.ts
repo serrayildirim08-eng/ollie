@@ -218,10 +218,10 @@ export interface RemindIn {
 }
 
 export type AdminAction =
-  | { module: 'admin'; action: 'create_task'; text: string; remindIn?: RemindIn }
-  | { module: 'admin'; action: 'create_phone_task'; person: string; reason?: string; remindIn?: RemindIn }
+  | { module: 'admin'; action: 'create_task'; text: string; dueDate?: string; remindIn?: RemindIn }
+  | { module: 'admin'; action: 'create_phone_task'; person: string; reason?: string; dueDate?: string; remindIn?: RemindIn }
   | { module: 'admin'; action: 'schedule_appointment'; what: string; date?: string }
-  | { module: 'admin'; action: 'log_paperwork'; what: string }
+  | { module: 'admin'; action: 'log_paperwork'; what: string; dueDate?: string }
   | { module: 'admin'; action: 'recurring_decision'; what: string }
   /**
    * Renewal events that need staged cues at -90/-30/-7 days before due_date.

@@ -40,7 +40,7 @@ describe('admin orchestrator', () => {
       {
         id: 't1',
         label: 'send contract',
-        ball_state: 'THEIRS',
+        ball_state: 'waiting',
         last_transition_at: NOW - 20 * DAY_MS,
       },
     ];
@@ -57,7 +57,7 @@ describe('admin orchestrator', () => {
       {
         id: 't1',
         label: 'send contract',
-        ball_state: 'THEIRS',
+        ball_state: 'waiting',
         last_transition_at: NOW - 20 * DAY_MS,
       },
     ];
@@ -76,8 +76,8 @@ describe('admin orchestrator', () => {
   it('gives distinct stale-ball notices distinct pattern identities', () => {
     // Two stale tasks → two notices that must NOT collapse to one dismiss key.
     const tasks: AdminTask[] = [
-      { id: 'ta', label: 'send A', ball_state: 'THEIRS', last_transition_at: NOW - 20 * DAY_MS },
-      { id: 'tb', label: 'send B', ball_state: 'THEIRS', last_transition_at: NOW - 25 * DAY_MS },
+      { id: 'ta', label: 'send A', ball_state: 'waiting', last_transition_at: NOW - 20 * DAY_MS },
+      { id: 'tb', label: 'send B', ball_state: 'waiting', last_transition_at: NOW - 25 * DAY_MS },
     ];
     store.set('admin', 'tasks', tasks);
     orch.init();
@@ -101,7 +101,7 @@ describe('admin orchestrator', () => {
       {
         id: 't2',
         label: 'review draft',
-        ball_state: 'THEIRS',
+        ball_state: 'waiting',
         last_transition_at: NOW - 20 * DAY_MS,
       },
     ];
@@ -111,7 +111,7 @@ describe('admin orchestrator', () => {
 
     expect(emitted.length).toBeGreaterThan(0);
     expect(emitted[0].task_id).toBe('t2');
-    expect(emitted[0].kind).toBe('stale_theirs');
+    expect(emitted[0].kind).toBe('untouched');
   });
 
   it('does not re-emit for a pattern already in the store', () => {
@@ -121,7 +121,7 @@ describe('admin orchestrator', () => {
         signal: 'admin_stale_ball',
         pattern: 'stale-ball',
         task_id: 't3',
-        kind: 'stale_theirs',
+        kind: 'untouched',
         days_overdue: 20,
         copy: 'already known',
         copy_es: '',
@@ -135,7 +135,7 @@ describe('admin orchestrator', () => {
       {
         id: 't3',
         label: 'old task',
-        ball_state: 'THEIRS',
+        ball_state: 'waiting',
         last_transition_at: NOW - 20 * DAY_MS,
       },
     ];
@@ -208,7 +208,7 @@ describe('admin orchestrator', () => {
       {
         id: 't5',
         label: 'should-not-fire',
-        ball_state: 'THEIRS',
+        ball_state: 'waiting',
         last_transition_at: NOW - 20 * DAY_MS,
       },
     ] as AdminTask[]);
