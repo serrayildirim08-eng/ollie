@@ -17,7 +17,8 @@
  *                      read-merge rather than overwrite.
  *
  * Fields native SQLite does NOT capture today (flagged, not fabricated):
- *   - ball_state / last_transition_at: no field → A9 stale-ball stays dark.
+ *   - ball_state / last_transition_at / due_date: NOW captured (#7) and
+ *     mirrored below, so A9 stale-ball (v1 resurfacing) runs on live data.
  *   - ef_cost / cost_of_delay / scheduled_at / doc_refs: native admin_tasks
  *     has no columns for these, so A7/A11/A14/A15 detectors get whatever the
  *     dump/JSON envelope happens to carry (usually nothing) — they are wired
@@ -103,5 +104,9 @@ function toLogicTask(r: AdminTask): LogicAdminTask {
     kind: logicKind(r.kind),
     state,
     done_at: r.done ? r.createdAt : undefined,
+    // v1 resurfacing inputs (#7/#8): the detector keys off these.
+    ball_state: r.ballState,
+    last_transition_at: r.lastTransitionAt,
+    due_date: r.dueDate ?? undefined,
   };
 }

@@ -22,6 +22,17 @@ export type AdminTaskKind =
   | 'decision';    // recurring_decision — something to think about
 
 /**
+ * Whose court the task is in (audit #7, v1). Minimal three-state model — NO
+ * 'theirs' in v1:
+ *   - mine    — default; the user still has to act.
+ *   - waiting — handed off / awaiting a reply ("sent the form", "they'll confirm").
+ *   - done    — completed.
+ * `lastTransitionAt` is stamped on every state change so the resurfacing
+ * detector can find tasks that have gone quiet (untouched ≥ 7 days).
+ */
+export type BallState = 'mine' | 'waiting' | 'done';
+
+/**
  * One row in `admin_tasks`. `data` is an opaque JSON envelope for
  * kind-specific extras (phone reason, appointment date) — keeping it in
  * one column lets us add new fields without migrating.
@@ -34,6 +45,17 @@ export interface AdminTask {
   /** kind-specific extras parsed out of the JSON envelope */
   data: AdminTaskData;
   done: boolean;
+  /**
+   * Optional ISO yyyy-mm-dd due date for generic tasks (task / phone /
+   * paperwork). First-class column (not the JSON envelope) so the /todo
+   * aggregate can sort + bucket by urgency, mirroring renewals. Null when the
+   * router saw no date. (appointment rows keep their date in `data` too.)
+   */
+  dueDate?: string | null;
+  /** Whose court the task is in (v1: mine | waiting | done). Defaults to mine. */
+  ballState: BallState;
+  /** ms-since-epoch of the last ball_state change; seeds from createdAt. */
+  lastTransitionAt: number;
   createdAt: number; // ms since epoch
 }
 

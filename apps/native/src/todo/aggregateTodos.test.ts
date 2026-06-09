@@ -40,6 +40,9 @@ function adminTask(over: Partial<AdminTask> & { id: string }): AdminTask {
     text: over.text ?? 'untitled',
     data: over.data ?? ({ kind: over.kind ?? 'task' } as AdminTask['data']),
     done: over.done ?? false,
+    dueDate: over.dueDate ?? null,
+    ballState: over.ballState ?? 'mine',
+    lastTransitionAt: over.lastTransitionAt ?? over.createdAt ?? TS('2026-05-29'),
     createdAt: over.createdAt ?? TS('2026-05-29'),
   };
 }

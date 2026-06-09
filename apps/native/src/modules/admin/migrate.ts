@@ -15,7 +15,7 @@
  *                                + decision columns don't pollute the tasks schema.
  */
 
-import { sql } from '../../storage';
+import { sql, addColumnIfMissing } from '../../storage';
 
 interface PragmaColumnRow {
   name: string;
@@ -24,13 +24,18 @@ interface PragmaColumnRow {
 
 const CREATE_STATEMENTS = [
   // admin_tasks — generic todo / phone / appointment / paperwork / decision.
+  // `due_date` (ISO yyyy-mm-dd, nullable) lets generic tasks sort/bucket by
+  // urgency on /todo (audit #6). Existing installs get it via addColumnIfMissing.
   `CREATE TABLE IF NOT EXISTS admin_tasks (
-    id          TEXT PRIMARY KEY,
-    kind        TEXT NOT NULL,
-    text        TEXT NOT NULL,
-    data        TEXT,
-    done        INTEGER NOT NULL DEFAULT 0,
-    created_at  INTEGER NOT NULL
+    id                 TEXT PRIMARY KEY,
+    kind               TEXT NOT NULL,
+    text               TEXT NOT NULL,
+    data               TEXT,
+    done               INTEGER NOT NULL DEFAULT 0,
+    due_date           TEXT,
+    ball_state         TEXT NOT NULL DEFAULT 'mine',
+    last_transition_at INTEGER,
+    created_at         INTEGER NOT NULL
   )`,
 
   // admin_renewals — first-class because of the due_date sort.
@@ -94,7 +99,31 @@ export function migrateAdmin(): Promise<void> {
           `ALTER TABLE admin_recurring_decisions ADD COLUMN decision TEXT`,
         );
       }
+      // Backfill due_date onto admin_tasks for installs created before #6
+      // (idempotent: no-op when the baseline CREATE already added it). MUST run
+      // before the due_date index — a legacy table lacks the column, and
+      // indexing a missing column throws.
+      await addColumnIfMissing('admin_tasks', 'due_date', 'due_date TEXT');
+      await sql.execute(
+        `CREATE INDEX IF NOT EXISTS idx_admin_tasks_due_date ON admin_tasks(due_date ASC)`,
+      );
+
+      // ball_state + last_transition_at for forgotten-task resurfacing (audit
+      // #7). Existing rows default to 'mine'; last_transition_at stays NULL and
+      // the repo seeds it from created_at on read.
+      await addColumnIfMissing(
+        'admin_tasks',
+        'ball_state',
+        "ball_state TEXT NOT NULL DEFAULT 'mine'",
+      );
+      await addColumnIfMissing('admin_tasks', 'last_transition_at', 'last_transition_at INTEGER');
     })();
   }
   return migrationPromise;
+}
+
+/** Test-only: clear the memoised migration promise so a fresh in-memory DB
+ *  re-runs the CREATE/ALTER statements. No-op cost in production. */
+export function _resetAdminMigration(): void {
+  migrationPromise = null;
 }

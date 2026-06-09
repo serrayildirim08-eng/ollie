@@ -10,6 +10,7 @@
 import type { AdminAction, ModuleHandler, HandlerResult, RemindIn } from '../../router/schema';
 import { migrateAdmin } from './migrate';
 import { renewals, tasks } from './repo';
+import { inferInitialBallState } from './ballState';
 import { scheduleAt } from '../../notify/systemNotify';
 import { scheduleServerReminder } from '../../notify/serverReminder';
 
@@ -26,7 +27,14 @@ export const adminHandler: ModuleHandler<'admin'> = {
 
     switch (p.action) {
       case 'create_task': {
-        const task = await tasks.add({ kind: 'task', text: p.text, data: { kind: 'task' } });
+        const task = await tasks.add({
+          kind: 'task',
+          text: p.text,
+          data: { kind: 'task' },
+          dueDate: p.dueDate ?? null,
+          // move to `waiting` when the dump clearly signals a hand-off (#7)
+          ballState: inferInitialBallState(p.text),
+        });
         // Time-deferred reminder side-effect (Approach B). The worker
         // computes scheduledAtMs from the user's "in N min/hr" hint.
         scheduleReminderIfPresent(p.remindIn, task.id, 'to do', p.text);
@@ -39,6 +47,7 @@ export const adminHandler: ModuleHandler<'admin'> = {
           kind: 'phone',
           text,
           data: { kind: 'phone', reason: p.reason },
+          dueDate: p.dueDate ?? null,
         });
         const note = p.reason ? `call ${p.person} — ${p.reason}` : `call ${p.person}`;
         // Time-deferred reminder side-effect (Approach B).
@@ -60,7 +69,7 @@ export const adminHandler: ModuleHandler<'admin'> = {
       }
 
       case 'log_paperwork': {
-        const task = await tasks.add({ kind: 'paperwork', text: p.what, data: { kind: 'paperwork' } });
+        const task = await tasks.add({ kind: 'paperwork', text: p.what, data: { kind: 'paperwork' }, dueDate: p.dueDate ?? null });
         return { ok: true, note: `paperwork: ${p.what}`, deepLink: '/box/admin', undo: undoTask(task.id) };
       }
 
