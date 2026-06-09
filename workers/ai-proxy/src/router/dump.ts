@@ -93,7 +93,20 @@ export interface DumpRouteEnv {
 
 const STAGING_TEST_USER_ID = 'staging-test-user';
 
-export async function handleDumpRoute(req: Request, env: DumpRouteEnv): Promise<Response> {
+export async function handleDumpRoute(
+  req: Request,
+  env: DumpRouteEnv,
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  // Keep background cache writes alive past the Response. Without ctx.waitUntil
+  // the Workers runtime cancels any promise still pending when fetch() returns,
+  // which silently dropped the Vectorize cache writes that make repeat dumps
+  // fast + cheap (dogfood B5, 2026-06-05). Falls back to plain fire-and-forget
+  // when no ctx is threaded (unit tests) — harmless there since nothing cancels.
+  const keepAlive = (p: Promise<unknown>): void => {
+    if (ctx?.waitUntil) ctx.waitUntil(p);
+    else void p;
+  };
   const t0 = Date.now();
 
   // 1. Clerk JWT (required for /route/dump per Decision 6).
@@ -186,7 +199,12 @@ export async function handleDumpRoute(req: Request, env: DumpRouteEnv): Promise<
     if (frag.needsPass2) {
       pass2Triggered++;
       try {
-        const split = await pass2Split(frag.text, env.GROQ_API_KEY);
+        const split = await pass2Split(frag.text, {
+          groq: env.GROQ_API_KEY,
+          gemini: env.GEMINI_API_KEY,
+          cfAI: env.AI,
+          openrouter: env.OPENROUTER_API_KEY,
+        });
         if (split.length > 0) {
           fragmentsText.push(...split);
           continue;
@@ -280,9 +298,11 @@ export async function handleDumpRoute(req: Request, env: DumpRouteEnv): Promise<
         needsConfirm: tiered.needsConfirm,
         source: 'cache',
       };
-      // Bump hit count asynchronously.
-      void cacheHitBump(env.VECTORIZE_INDEX, cacheRow, userId, embedding).catch((e) =>
-        console.error('[route/dump] cache bump failed', e),
+      // Bump hit count asynchronously (survives past the Response via waitUntil).
+      keepAlive(
+        cacheHitBump(env.VECTORIZE_INDEX, cacheRow, userId, embedding).catch((e) =>
+          console.error('[route/dump] cache bump failed', e),
+        ),
       );
       continue;
     }
@@ -336,16 +356,19 @@ export async function handleDumpRoute(req: Request, env: DumpRouteEnv): Promise<
         source: 'ai',
       };
 
-      // Fire-and-forget cache write — never block response.
-      void cacheUpsert(env.VECTORIZE_INDEX, {
-        userId,
-        text: m.text,
-        embedding: m.embedding,
-        module: tiered.module,
-        payload: tiered.payload,
-        confidence: result.confidence,
-        language: m.language,
-      }).catch((e) => console.error('[route/dump] cache upsert failed', e));
+      // Background cache write — never blocks the response, but kept alive past
+      // it via waitUntil so the runtime doesn't cancel the Vectorize write.
+      keepAlive(
+        cacheUpsert(env.VECTORIZE_INDEX, {
+          userId,
+          text: m.text,
+          embedding: m.embedding,
+          module: tiered.module,
+          payload: tiered.payload,
+          confidence: result.confidence,
+          language: m.language,
+        }).catch((e) => console.error('[route/dump] cache upsert failed', e)),
+      );
     }
   }
 

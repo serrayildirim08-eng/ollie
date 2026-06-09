@@ -141,7 +141,7 @@ function withCors(res: Response): Response {
 // ─── handler ───────────────────────────────────────────────────────────────────
 
 export default {
-  async fetch(req: Request, env: Env): Promise<Response> {
+  async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(req.url);
 
     // CORS preflight — every endpoint requires Authorization or x-user-id,
@@ -357,7 +357,7 @@ export default {
     // parallel crisis check (all 3 lexicons), 3-tier confidence policy.
     // Auth: Clerk JWT REQUIRED (not gated). User namespaces the cache.
     if (url.pathname === '/route/dump') {
-      return withCors(await handleDumpRoute(req, env));
+      return withCors(await handleDumpRoute(req, env, ctx));
     }
 
     // ── /route/:module — module-agnostic AI semantic routing (T2) ────────────
