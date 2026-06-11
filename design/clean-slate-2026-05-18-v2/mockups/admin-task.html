@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Admin — a task</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E; --umber:#A8703C;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  .safe{position:absolute;top:62px;right:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .safe svg{stroke:var(--mute)}
+  .find{position:absolute;top:62px;left:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .find svg{stroke:var(--mute)}
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;
+    padding:0 26px 36px}
+
+  /* the task as the focus — the title large, its days-left + ball state
+     calm under it. margin-top clears the absolutely-positioned .who. */
+  .hero{margin-top:116px;display:flex;flex-direction:column;align-items:center}
+  .lead{font-size:13px;color:var(--mute);font-weight:500;letter-spacing:.02em}
+  .tname{font-size:34px;font-weight:300;color:var(--ink);letter-spacing:-.03em;
+    line-height:1.1;margin-top:9px;text-align:center}
+  .meta{margin-top:14px;font-size:14px;color:var(--ink);font-weight:500;
+    letter-spacing:-.01em}
+  .meta b{font-weight:600;color:var(--umber)}
+  .meta .s{color:var(--line);margin:0 7px}
+  /* the ball-state line — one calm sentence stating whose move it is */
+  .ballrow{margin-top:11px;display:flex;align-items:center;gap:8px}
+  .bmk{width:11px;height:11px;border-radius:3px;background:var(--ink);
+    flex-shrink:0}
+  .ballrow span{font-size:13px;color:var(--mute);font-weight:500;
+    letter-spacing:.01em}
+  .ballrow b{color:var(--ink);font-weight:600}
+
+  /* one amber button — mark done, the primary commit */
+  .done{margin:24px auto 0;height:50px;border-radius:25px;background:var(--accent);
+    display:flex;align-items:center;justify-content:center;gap:8px;padding:0 26px;
+    box-shadow:0 12px 28px rgba(201,146,62,.32)}
+  .done svg{stroke:#fff}
+  .done span{font-size:16px;font-weight:600;color:#fff;letter-spacing:-.01em}
+
+  /* the calm action rows — close-the-loop, defer, ball state, split.
+     each a quiet hairline row. near-zero chrome. */
+  .rows{margin-top:46px;display:flex;flex-direction:column}
+  .row{border-top:1px solid var(--line);padding:18px 2px;display:flex;
+    align-items:center}
+  .row:last-of-type{border-bottom:1px solid var(--line)}
+  .rk{font-size:13px;color:var(--mute);font-weight:600;letter-spacing:.01em;
+    flex-shrink:0}
+  .rsep{color:var(--line);margin:0 8px;font-size:13px}
+  .rv{font-size:14px;color:var(--ink);font-weight:500;letter-spacing:-.01em;flex:1}
+  .chev{stroke:var(--mute);flex-shrink:0;margin-left:8px}
+  /* close-the-loop — drawn with a quiet sage dot, distinct from done.
+     it isn't "did the task" — it's "the loop is fully shut". */
+  .row.loop .rdot{width:6px;height:6px;border-radius:50%;background:var(--sage);
+    flex-shrink:0;margin-right:11px}
+  .row.loop .rk{color:var(--sage)}
+  /* split — drawn with a quiet umber dot, the GATHER+FILL reframe */
+  .row.split .rdot{width:6px;height:6px;border-radius:50%;background:var(--umber);
+    flex-shrink:0;margin-right:11px}
+  .row.split .rk{color:var(--umber)}
+
+  /* a section label */
+  .sect{margin-top:32px;font-size:11px;color:var(--mute);font-weight:600;
+    letter-spacing:.08em;text-transform:uppercase}
+
+  /* document references — quiet attached lines, label + a link glyph.
+     A14 cognitive-offload: the paperwork lives with the task. */
+  .docs{margin-top:12px;display:flex;flex-direction:column}
+  .doc{border-top:1px solid var(--line);padding:14px 2px;display:flex;
+    align-items:center;gap:11px}
+  .docs .doc:last-child{border-bottom:1px solid var(--line)}
+  .doc .dico{width:26px;height:26px;border-radius:8px;background:#F2EEDF;
+    display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .doc .dico svg{stroke:var(--ink)}
+  .doc .dname{flex:1;font-size:14px;color:var(--ink);font-weight:500;
+    letter-spacing:-.01em}
+  .doc .dlink{font-size:12px;color:var(--mute);font-weight:500}
+  .docadd{margin-top:13px;font-size:13px;color:var(--accent);font-weight:600;
+    letter-spacing:.01em;display:flex;align-items:center;gap:6px}
+  .docadd svg{stroke:var(--accent)}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+  <div class="find">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/>
+    </svg>
+  </div>
+  <div class="safe">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.5-7 10-7 10z"/>
+    </svg>
+  </div>
+
+  <div class="who">
+    <span>a task</span>
+  </div>
+
+  <div class="scroll">
+    <div class="hero">
+      <div class="lead">renewal</div>
+      <div class="tname">renew passport</div>
+      <div class="meta">
+        <b>30 days left</b><span class="s">·</span>added 2 weeks ago
+      </div>
+      <div class="ballrow">
+        <span class="bmk"></span>
+        <span>the ball is <b>yours</b> — nothing to wait on</span>
+      </div>
+
+      <div class="done">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="2.4">
+          <path d="M5 13l4 4 10-11"/>
+        </svg>
+        <span>mark it done</span>
+      </div>
+    </div>
+
+    <div class="rows">
+      <!-- close-the-loop — distinct from done -->
+      <div class="row loop">
+        <span class="rdot"></span>
+        <span class="rk">close the loop</span><span class="rsep">·</span>
+        <span class="rv">done is filled — closed is mailed and back</span>
+        <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+
+      <!-- defer -->
+      <div class="row">
+        <span class="rk">defer</span><span class="rsep">·</span>
+        <span class="rv">push it out a week · deferred once so far</span>
+        <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+
+      <!-- ball state -->
+      <div class="row">
+        <span class="rk">whose move</span><span class="rsep">·</span>
+        <span class="rv">mine · waiting on someone · waiting on a date</span>
+        <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+
+      <!-- split into GATHER + FILL -->
+      <div class="row split">
+        <span class="rdot"></span>
+        <span class="rk">split it up</span><span class="rsep">·</span>
+        <span class="rv">into gather the docs &amp; fill the form</span>
+        <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+    </div>
+
+    <!-- document references — A14, the paperwork lives with the task -->
+    <div class="sect">documents</div>
+    <div class="docs">
+      <div class="doc">
+        <div class="dico">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="1.9"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>
+        </div>
+        <span class="dname">old passport scan</span>
+        <span class="dlink">photos</span>
+      </div>
+      <div class="doc">
+        <div class="dico">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="1.9"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg>
+        </div>
+        <span class="dname">DS-82 renewal form</span>
+        <span class="dlink">link</span>
+      </div>
+    </div>
+    <div class="docadd">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2.2"><path d="M12 5v14M5 12h14"/></svg>
+      attach a document
+    </div>
+  </div>
+</div>
+</body>
+</html>

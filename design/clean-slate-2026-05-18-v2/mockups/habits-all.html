@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Habits — all habits</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  .safe{position:absolute;top:62px;right:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .safe svg{stroke:var(--mute)}
+  .find{position:absolute;top:62px;left:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .find svg{stroke:var(--mute)}
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;
+    padding:0 26px 36px}
+
+  /* all habits — calm, ordered morning → anytime → evening. each habit is
+     ONE quiet block: name + cue + a cue-time badge, recent check-ins as
+     soft sage dots, a quiet "last · ...". NOT a grid, NOT a streak count.
+     margin-top clears the absolutely-positioned .who label. */
+  .body{margin-top:116px}
+
+  /* a section — a small quiet time-of-day label + its habits */
+  .section{margin-bottom:8px}
+  .sk{font-size:11px;color:var(--mute);font-weight:600;letter-spacing:.08em;
+    text-transform:uppercase;margin-bottom:2px}
+
+  /* one habit — a calm block, hairline-divided. no card, no shadow. */
+  .habit{border-top:1px solid var(--line);padding:17px 2px}
+  .section .habit:last-child{border-bottom:1px solid var(--line)}
+  .hhead{display:flex;align-items:baseline;gap:10px}
+  .hname{font-size:16px;color:var(--ink);font-weight:500;letter-spacing:-.012em}
+  /* the cue-time badge — a tiny outlined tag, MOR / ANY / EVE */
+  .badge{margin-left:auto;font-size:10px;font-weight:700;letter-spacing:.06em;
+    color:var(--mute);border:1px solid var(--line);border-radius:7px;
+    padding:3px 7px;flex-shrink:0}
+  /* the cue — quiet, under the name */
+  .hcue{margin-top:4px;font-size:13px;color:var(--mute);font-weight:400;
+    letter-spacing:.01em}
+  .hcue b{color:var(--ink);font-weight:600}
+
+  /* the recent check-ins — a soft row of sage dots, one per recent day.
+     a filled sage dot = a day it happened; a faint line dot = a day it
+     didn't. NEVER a grid wall, NEVER a streak number. it just shows the
+     gentle texture of recent days — no count, no judgement. */
+  .recent{margin-top:13px;display:flex;align-items:center;gap:14px}
+  .dots{display:flex;gap:6px}
+  .dots i{width:8px;height:8px;border-radius:50%;background:var(--line);
+    display:block}
+  .dots i.on{background:var(--sage)}
+  /* today's dot — a calm open sage ring, "still open, no rush" */
+  .dots i.today{background:transparent;border:1.5px solid var(--sage)}
+  /* the quiet "last ·" line — a soft factual recency note, never a streak */
+  .last{font-size:12px;color:var(--mute);font-weight:500;letter-spacing:.01em}
+  .last b{color:var(--sage);font-weight:600}
+
+  /* the closing note — restates this is a record, never a scoreboard */
+  .foot{margin-top:24px;display:flex;gap:10px;align-items:flex-start}
+  .foot svg{stroke:var(--mute);flex-shrink:0;margin-top:1px}
+  .foot span{font-size:12px;color:var(--mute);font-weight:400;line-height:1.5}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+  <div class="find">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/>
+    </svg>
+  </div>
+  <div class="safe">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.5-7 10-7 10z"/>
+    </svg>
+  </div>
+
+  <div class="who">
+    <span>all habits</span>
+  </div>
+
+  <div class="scroll">
+    <div class="body">
+
+      <!-- MORNING -->
+      <div class="section">
+        <div class="sk">morning</div>
+
+        <div class="habit">
+          <div class="hhead">
+            <span class="hname">brush teeth</span>
+            <span class="badge">MOR</span>
+          </div>
+          <div class="hcue">after <b>getting up</b></div>
+          <div class="recent">
+            <div class="dots">
+              <i class="on"></i><i class="on"></i><i></i><i class="on"></i>
+              <i class="on"></i><i class="on"></i><i class="today"></i>
+            </div>
+            <span class="last">last · <b>yesterday</b></span>
+          </div>
+        </div>
+
+        <div class="habit">
+          <div class="hhead">
+            <span class="hname">drink water</span>
+            <span class="badge">MOR</span>
+          </div>
+          <div class="hcue">after <b>coffee</b></div>
+          <div class="recent">
+            <div class="dots">
+              <i class="on"></i><i class="on"></i><i class="on"></i><i></i>
+              <i class="on"></i><i class="on"></i><i class="today"></i>
+            </div>
+            <span class="last">last · <b>today</b></span>
+          </div>
+        </div>
+
+        <div class="habit">
+          <div class="hhead">
+            <span class="hname">vitamin d</span>
+            <span class="badge">MOR</span>
+          </div>
+          <div class="hcue">with <b>breakfast</b></div>
+          <div class="recent">
+            <div class="dots">
+              <i></i><i class="on"></i><i></i><i></i>
+              <i class="on"></i><i></i><i class="today"></i>
+            </div>
+            <span class="last">last · <b>2 days ago</b></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ANYTIME -->
+      <div class="section">
+        <div class="sk">anytime</div>
+
+        <div class="habit">
+          <div class="hhead">
+            <span class="hname">move</span>
+            <span class="badge">ANY</span>
+          </div>
+          <div class="hcue">when <b>the day has a gap</b></div>
+          <div class="recent">
+            <div class="dots">
+              <i class="on"></i><i></i><i class="on"></i><i class="on"></i>
+              <i></i><i class="on"></i><i class="today"></i>
+            </div>
+            <span class="last">last · <b>yesterday</b></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- EVENING -->
+      <div class="section">
+        <div class="sk">evening</div>
+
+        <div class="habit">
+          <div class="hhead">
+            <span class="hname">evening meds</span>
+            <span class="badge">EVE</span>
+          </div>
+          <div class="hcue">after <b>dinner</b></div>
+          <div class="recent">
+            <div class="dots">
+              <i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i>
+              <i class="on"></i><i class="on"></i><i class="today"></i>
+            </div>
+            <span class="last">last · <b>yesterday</b></span>
+          </div>
+        </div>
+
+        <div class="habit">
+          <div class="hhead">
+            <span class="hname">wind down</span>
+            <span class="badge">EVE</span>
+          </div>
+          <div class="hcue">when <b>the lights go low</b></div>
+          <div class="recent">
+            <div class="dots">
+              <i></i><i></i><i class="on"></i><i></i>
+              <i></i><i class="on"></i><i class="today"></i>
+            </div>
+            <span class="last">last · <b>5 days ago</b></span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="foot">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="1.8">
+        <circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>
+      </svg>
+      <span>a soft record of recent days — not a streak, not a score.
+        a gap is just a gap. the habit waits for its cue.</span>
+    </div>
+  </div>
+</div>
+</body>
+</html>

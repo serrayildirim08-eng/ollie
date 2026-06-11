@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Pets — notifications</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+
+  /* the phone is a fixed 390×844 window. inside it, a vertical reel of
+     full-height lock-screen frames — ONE notification per frame, scrolled
+     between. you never see two notifications at once. felt the way it is
+     lived: a calm phone you glance at, mostly empty. */
+  .phone{width:390px;height:844px;position:relative;overflow-y:auto;overflow-x:hidden;
+    box-shadow:0 30px 80px rgba(0,0,0,.32);scroll-snap-type:y mandatory;
+    -webkit-overflow-scrolling:touch}
+  .phone::-webkit-scrollbar{display:none}
+
+  /* one lock-screen frame — a full 844px of warm-paper wallpaper. a soft
+     warm gradient, not a photo, so the one notification is the only thing
+     the eye lands on. */
+  .frame{height:844px;scroll-snap-align:start;position:relative;
+    display:flex;flex-direction:column;
+    background:linear-gradient(168deg,#EFE7D7 0%,#E6DBC6 56%,#DBCDB1 100%)}
+
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:#3A342C;flex-shrink:0}
+
+  /* the lock-screen clock — quiet, sets every frame as a real iOS surface */
+  .clock{text-align:center;margin-top:30px;flex-shrink:0}
+  .clock .day{font-size:15px;color:#5A5044;font-weight:500;letter-spacing:.01em}
+  .clock .time{font-size:80px;color:#3A342C;font-weight:200;letter-spacing:-.035em;
+    line-height:1;margin-top:4px}
+
+  /* the one notification — floated low, the way a single push sits on a
+     real lock screen. all the space above and below is deliberate air. */
+  .nwrap{flex:1;display:flex;align-items:center;justify-content:center;
+    padding:0 20px}
+  .note{width:100%;background:rgba(250,246,239,.9);border-radius:24px;
+    backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+    padding:18px 19px;box-shadow:0 10px 30px rgba(42,38,34,.13)}
+  .nhead{display:flex;align-items:center;gap:9px;margin-bottom:9px}
+  .nicon{width:24px;height:24px;border-radius:7px;background:var(--ink);
+    display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .nicon svg{stroke:var(--paper);fill:none}
+  .napp{font-size:12px;font-weight:700;color:var(--mute);letter-spacing:.04em;
+    text-transform:lowercase}
+  .nwhen{margin-left:auto;font-size:12px;color:var(--mute);font-weight:500}
+  /* the body — lowercase, dry, no exclamation. the copy is the only text. */
+  .ntitle{font-size:16px;font-weight:600;color:var(--ink);letter-spacing:-.012em;
+    line-height:1.34}
+  .nbody{font-size:14px;color:#6A6056;font-weight:400;line-height:1.42;
+    margin-top:4px}
+
+  /* a barely-there hint to scroll — one chevron, fades the eye downward.
+     present on every frame except the last. */
+  .more{position:absolute;left:0;right:0;bottom:34px;display:flex;
+    flex-direction:column;align-items:center;gap:7px;opacity:.5}
+  .more svg{stroke:#6A604F}
+
+  /* the closing frame — a calm note, not a notification. states the
+     health flags + behavioural patterns are deliberately screen-only. */
+  .closing{flex:1;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;padding:0 42px;text-align:center}
+  .closing .cmark{width:40px;height:40px;border-radius:50%;
+    border:1.5px solid #B7A98C;display:flex;align-items:center;
+    justify-content:center;margin-bottom:20px}
+  .closing .cmark svg{stroke:#6A604F}
+  .closing h3{font-size:17px;color:#3A342C;font-weight:600;letter-spacing:-.01em;
+    line-height:1.4;margin-bottom:10px}
+  .closing p{font-size:13px;color:#6A6056;font-weight:400;line-height:1.55}
+</style>
+</head>
+<body>
+<div class="phone">
+
+  <!-- 1 · care due — staged, deadpan, never guilt -->
+  <div class="frame">
+    <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+    <div class="clock">
+      <div class="day">tuesday, may 19</div>
+      <div class="time">9:41</div>
+    </div>
+    <div class="nwrap">
+      <div class="note">
+        <div class="nhead">
+          <div class="nicon"><svg width="14" height="14" viewBox="0 0 24 24" stroke-width="2"><path d="M5 19l5-12M19 19l-5-12M9 19l3-7 3 7"/></svg></div>
+          <span class="napp">ollie</span>
+          <span class="nwhen">now</span>
+        </div>
+        <div class="ntitle">Mango &middot; hay refill</div>
+        <div class="nbody">a day over &mdash; top it up when you pass the cage.</div>
+      </div>
+    </div>
+    <div class="more">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M6 9l6 6 6-6"/></svg>
+    </div>
+  </div>
+
+  <!-- 2 · P1 vet cue -->
+  <div class="frame">
+    <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+    <div class="clock">
+      <div class="day">thursday, may 21</div>
+      <div class="time">8:30</div>
+    </div>
+    <div class="nwrap">
+      <div class="note">
+        <div class="nhead">
+          <div class="nicon"><svg width="14" height="14" viewBox="0 0 24 24" stroke-width="2"><path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.5-7 10-7 10z"/><path d="M9 11h6M12 8v6"/></svg></div>
+          <span class="napp">ollie</span>
+          <span class="nwhen">2h ago</span>
+        </div>
+        <div class="ntitle">Tonti &middot; vet checkup &mdash; book within 2 weeks</div>
+        <div class="nbody">a 60-second call &mdash; anchor it to your morning coffee.</div>
+      </div>
+    </div>
+    <div class="more">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M6 9l6 6 6-6"/></svg>
+    </div>
+  </div>
+
+  <!-- 3 · weather alert -->
+  <div class="frame">
+    <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+    <div class="clock">
+      <div class="day">saturday, may 23</div>
+      <div class="time">11:15</div>
+    </div>
+    <div class="nwrap">
+      <div class="note">
+        <div class="nhead">
+          <div class="nicon"><svg width="14" height="14" viewBox="0 0 24 24" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.5 5.5l2 2M16.5 16.5l2 2M18.5 5.5l-2 2M7.5 16.5l-2 2"/></svg></div>
+          <span class="napp">ollie</span>
+          <span class="nwhen">now</span>
+        </div>
+        <div class="ntitle">too warm for Mango today &mdash; 29&deg;</div>
+        <div class="nbody">guinea pigs can't cool themselves above 26&deg;. keep the cage out of the sun.</div>
+      </div>
+    </div>
+    <div class="more">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M6 9l6 6 6-6"/></svg>
+    </div>
+  </div>
+
+  <!-- 4 · adoptversary — warm, gentle -->
+  <div class="frame">
+    <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+    <div class="clock">
+      <div class="day">monday, may 25</div>
+      <div class="time">8:00</div>
+    </div>
+    <div class="nwrap">
+      <div class="note">
+        <div class="nhead">
+          <div class="nicon"><svg width="14" height="14" viewBox="0 0 24 24" stroke-width="2"><path d="M12 20s-6.5-4.2-6.5-9A3.7 3.7 0 0 1 12 8a3.7 3.7 0 0 1 6.5 3c0 4.8-6.5 9-6.5 9z"/></svg></div>
+          <span class="napp">ollie</span>
+          <span class="nwhen">now</span>
+        </div>
+        <div class="ntitle">2 years with Mango today</div>
+        <div class="nbody">a quiet little anniversary. that's all &mdash; no task attached.</div>
+      </div>
+    </div>
+    <div class="more">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M6 9l6 6 6-6"/></svg>
+    </div>
+  </div>
+
+  <!-- 5 · weekly note (opt-in) -->
+  <div class="frame">
+    <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+    <div class="clock">
+      <div class="day">sunday, may 31</div>
+      <div class="time">6:00</div>
+    </div>
+    <div class="nwrap">
+      <div class="note">
+        <div class="nhead">
+          <div class="nicon"><svg width="14" height="14" viewBox="0 0 24 24" stroke-width="1.9"><path d="M4 6h16M4 12h16M4 18h10"/></svg></div>
+          <span class="napp">ollie</span>
+          <span class="nwhen">sun 6pm</span>
+        </div>
+        <div class="ntitle">your week with the pets</div>
+        <div class="nbody">a quiet recap &mdash; care logged, what you noticed. arrives only if you asked for it.</div>
+      </div>
+    </div>
+    <div class="more">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M6 9l6 6 6-6"/></svg>
+    </div>
+  </div>
+
+  <!-- 6 · the closing note — health + patterns are screen-only -->
+  <div class="frame">
+    <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+    <div class="closing">
+      <div class="cmark">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke-width="1.8">
+          <circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>
+        </svg>
+      </div>
+      <h3>the health flags and the behavioural patterns are deliberately screen-only.</h3>
+      <p>a welfare note or a "noticed" pattern never lands on your lock
+        screen as a verdict. they wait quietly in <i>health</i> and
+        <i>see the rest</i> &mdash; there for when you have a moment, never
+        pushed at you. a missed care task is never sent as a notification.</p>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

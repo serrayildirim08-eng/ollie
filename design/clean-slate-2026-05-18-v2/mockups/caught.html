@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Caught</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --sage:#5B8C7E;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  .safe{position:absolute;top:62px;right:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .safe svg{stroke:var(--mute)}
+
+  .stage{flex:1;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;padding:0 36px}
+
+  /* the one card */
+  .card{width:100%;background:#fff;border:1px solid var(--line);border-radius:28px;
+    box-shadow:0 16px 38px rgba(42,38,34,.07);padding:38px 32px 34px;
+    display:flex;flex-direction:column;align-items:center;text-align:center}
+
+  /* checkmark — landed, wordless */
+  .check{width:46px;height:46px;border-radius:50%;background:var(--sage);
+    display:flex;align-items:center;justify-content:center;margin-bottom:30px}
+  .check svg{stroke:#fff}
+
+  /* the user's own caught thought — not chrome */
+  .thought{font-size:23px;line-height:1.42;color:var(--ink);letter-spacing:-.01em;
+    font-weight:400}
+
+  /* drawer glyph — shows where it landed, no label */
+  .drawer{margin-top:34px;width:58px;height:58px;border-radius:18px;
+    background:#F2EEDF;display:flex;align-items:center;justify-content:center}
+  .drawer svg{stroke:#C9923E}
+
+  /* swipe-history dots */
+  .hist{margin-top:42px;display:flex;gap:8px}
+  .hist i{width:7px;height:7px;border-radius:50%;background:var(--line);display:block}
+  .hist i.on{background:var(--ink)}
+
+  .dots{position:absolute;bottom:38px;left:0;right:0;display:flex;
+    gap:9px;justify-content:center}
+  .dots i{width:6px;height:6px;border-radius:50%;background:var(--line);display:block}
+  .dots i.on{background:var(--ink);width:22px;border-radius:3px}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="safe">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.5-7 10-7 10z"/>
+    </svg>
+  </div>
+
+  <div class="stage">
+    <div class="card">
+      <div class="check">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.6">
+          <path d="M5 13l4 4 10-11"/>
+        </svg>
+      </div>
+      <div class="thought">car insurance renews friday &mdash; $240</div>
+      <div class="drawer">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke-width="1.7">
+          <path d="M12 2v20M5 7l7-5 7 5M5 7v10l7 5 7-5V7"/>
+        </svg>
+      </div>
+      <div class="hist"><i class="on"></i><i></i><i></i><i></i><i></i></div>
+    </div>
+  </div>
+
+  <div class="dots"><i></i><i class="on"></i><i></i></div>
+</div>
+</body>
+</html>

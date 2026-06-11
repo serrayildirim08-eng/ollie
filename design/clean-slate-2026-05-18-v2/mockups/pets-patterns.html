@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Pets — see the rest</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;
+    padding:0 26px 40px}
+
+  /* the framing line — a "see the rest" reflective surface, like
+     body-patterns. calm reading, never a charts wall. */
+  .intro{margin-top:116px}
+  .ititle{font-size:22px;font-weight:300;color:var(--ink);letter-spacing:-.02em;
+    line-height:1.3}
+  .ititle b{font-weight:500}
+  .isub{margin-top:10px;font-size:14px;color:var(--mute);font-weight:400;
+    line-height:1.5}
+
+  /* the patterns — grouped quietly under small section labels. each is a
+     calm cluster of ONE-LINE observations. a sage dot rides each line.
+     NO charts, NO badges, NO counts. supportive framing throughout. */
+  .group{margin-top:30px}
+  .gk{font-size:11px;color:var(--mute);font-weight:600;letter-spacing:.08em;
+    text-transform:uppercase;margin-bottom:4px}
+
+  .pat{border-top:1px solid var(--line);padding:16px 0}
+  .group .pat:last-child{border-bottom:1px solid var(--line)}
+  .phead{display:flex;align-items:flex-start;gap:11px}
+  .pdot{width:7px;height:7px;border-radius:50%;background:var(--sage);
+    flex-shrink:0;margin-top:6px}
+  .ptext{flex:1}
+  .pline{font-size:15px;color:var(--ink);font-weight:500;letter-spacing:-.01em;
+    line-height:1.4}
+  /* the soft sub-line — the gentle reframe, never a verdict */
+  .pframe{margin-top:4px;font-size:13px;color:var(--mute);font-weight:400;
+    line-height:1.45}
+  /* the quiet citation tag — a barely-there italic mute source line */
+  .pcite{margin-top:6px;font-size:11px;color:var(--mute);font-weight:500;
+    font-style:italic;letter-spacing:.01em;opacity:.85}
+
+  /* the closing note — restates this surface is screen-only, never pushed */
+  .foot{margin-top:26px;display:flex;gap:10px;align-items:flex-start}
+  .foot svg{stroke:var(--mute);flex-shrink:0;margin-top:1px}
+  .foot span{font-size:12px;color:var(--mute);font-weight:400;line-height:1.5}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+
+  <div class="who">
+    <span>see the rest</span>
+  </div>
+
+  <div class="scroll">
+    <div class="intro">
+      <div class="ititle"><b>what ollie noticed</b> about you and the pets</div>
+      <div class="isub">none of this needs doing today. it's here to read
+        when you're curious &mdash; quiet patterns about how care fits your
+        days, not a scorecard.</div>
+    </div>
+
+    <!-- GROUP 1 — what the pets do for you -->
+    <div class="group">
+      <div class="gk">what the pets do for you</div>
+
+      <div class="pat">
+        <div class="phead">
+          <span class="pdot"></span>
+          <div class="ptext">
+            <div class="pline">your calmest brain dumps tend to land near Mango</div>
+            <div class="pframe">sitting with a pet is a real way to settle &mdash;
+              regulation outside the body costs less than doing it alone. the
+              cage is quietly part of how you steady yourself.</div>
+            <div class="pcite">P2 · co-regulation &mdash; Beetz et al., 2012</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- GROUP 2 — where care stalls, and why -->
+    <div class="group">
+      <div class="gk">where care stalls, and why</div>
+
+      <div class="pat">
+        <div class="phead">
+          <span class="pdot"></span>
+          <div class="ptext">
+            <div class="pline">cage cleans have slipped twice now, with no first step named</div>
+            <div class="pframe">starting is the most expensive minute &mdash; not
+              the task itself. naming the 30-second first move ("just lift the
+              hay tray") is what gets it going. this is activation, not neglect.</div>
+            <div class="pcite">P3 · care-activation barrier &mdash; Barkley, 2012</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pat">
+        <div class="phead">
+          <span class="pdot"></span>
+          <div class="ptext">
+            <div class="pline">the care you miss clusters on your low-sleep and crash days</div>
+            <div class="pframe">pet care breaks first because it's the most
+              goal-directed task in your day &mdash; it has no external deadline
+              pushing it. it's a sensitivity to context, not a flaw in you.</div>
+            <div class="pcite">P4 · crash-context misses &mdash; Barkley & Murphy, 2010</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pat">
+        <div class="phead">
+          <span class="pdot"></span>
+          <div class="ptext">
+            <div class="pline">the vet checkup has waited a while &mdash; longer than its usual gap</div>
+            <div class="pframe">yours runs on event-cued reminders, not avoidance.
+              the fix isn't willpower &mdash; it's anchoring a 60-second booking
+              call to something you already do every day.</div>
+            <div class="pcite">P1 · vet-adherence delay &mdash; Gollwitzer, 1999</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- GROUP 3 — how you talk about them -->
+    <div class="group">
+      <div class="gk">how you talk about them</div>
+
+      <div class="pat">
+        <div class="phead">
+          <span class="pdot"></span>
+          <div class="ptext">
+            <div class="pline">a few of your notes read "she's mad at me" after a missed day</div>
+            <div class="pframe">pets run on present cues, not grudges &mdash; Mango
+              isn't keeping score. reading guilt into her behaviour is a
+              sensitivity, not a flaw, but it can make a small miss feel
+              heavier than it is.</div>
+            <div class="pcite">P5 · anthropomorphic projection &mdash; Serpell, 2003</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="foot">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="1.8">
+        <circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>
+      </svg>
+      <span>ollie notices patterns &mdash; it does not judge, and it never
+        shames a missed care task. these reflective ones are deliberately
+        never sent as a notification; they wait here for when you want them.</span>
+    </div>
+  </div>
+</div>
+</body>
+</html>

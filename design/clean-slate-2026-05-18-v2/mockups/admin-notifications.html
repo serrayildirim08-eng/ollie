@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Admin — notifications</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+
+  /* the phone is a fixed 390×844 window. inside it, a vertical reel of
+     full-height lock-screen frames — ONE notification per frame, scrolled
+     between. you never see two notifications at once. it is felt the way
+     it is lived: a calm phone you glance at, mostly empty. */
+  .phone{width:390px;height:844px;position:relative;overflow-y:auto;overflow-x:hidden;
+    box-shadow:0 30px 80px rgba(0,0,0,.32);scroll-snap-type:y mandatory;
+    -webkit-overflow-scrolling:touch}
+  .phone::-webkit-scrollbar{display:none}
+
+  /* one lock-screen frame — a full 844px of warm-paper wallpaper.
+     a soft warm gradient, not a photo, so the one notification is the
+     only thing the eye lands on. */
+  .frame{height:844px;scroll-snap-align:start;position:relative;
+    display:flex;flex-direction:column;
+    background:linear-gradient(168deg,#EFE7D7 0%,#E6DBC6 56%,#DBCDB1 100%)}
+
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:#3A342C;flex-shrink:0}
+
+  /* the lock-screen clock — quiet, sets every frame as a real iOS surface */
+  .clock{text-align:center;margin-top:30px;flex-shrink:0}
+  .clock .day{font-size:15px;color:#5A5044;font-weight:500;letter-spacing:.01em}
+  .clock .time{font-size:80px;color:#3A342C;font-weight:200;letter-spacing:-.035em;
+    line-height:1;margin-top:4px}
+
+  /* the one notification — floated low, the way a single push sits on a
+     real lock screen. all the space above and below it is deliberate air. */
+  .nwrap{flex:1;display:flex;align-items:center;justify-content:center;
+    padding:0 20px}
+  .note{width:100%;background:rgba(250,246,239,.9);border-radius:24px;
+    backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+    padding:18px 19px;box-shadow:0 10px 30px rgba(42,38,34,.13)}
+  .nhead{display:flex;align-items:center;gap:9px;margin-bottom:9px}
+  .nicon{width:24px;height:24px;border-radius:7px;background:var(--ink);
+    display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .nicon svg{stroke:var(--paper)}
+  .napp{font-size:12px;font-weight:700;color:var(--mute);letter-spacing:.04em;
+    text-transform:lowercase}
+  .nwhen{margin-left:auto;font-size:12px;color:var(--mute);font-weight:500}
+  /* the body — lowercase, dry, no exclamation. the copy is the only text. */
+  .ntitle{font-size:16px;font-weight:600;color:var(--ink);letter-spacing:-.012em;
+    line-height:1.34}
+  .nbody{font-size:14px;color:#6A6056;font-weight:400;line-height:1.42;
+    margin-top:4px}
+
+  /* a barely-there hint to scroll — one chevron, fades the eye downward.
+     present on every frame except the last. */
+  .more{position:absolute;left:0;right:0;bottom:34px;display:flex;
+    flex-direction:column;align-items:center;gap:7px;opacity:.5}
+  .more svg{stroke:#6A604F}
+
+  /* the closing note frame — a calm paper card, the screen-only caveat */
+  .closing{height:844px;scroll-snap-align:start;background:var(--paper);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    padding:0 44px;text-align:center}
+  .closing . chand{margin-bottom:24px}
+  .cmark{width:42px;height:42px;border-radius:50%;border:1.5px solid var(--line);
+    display:flex;align-items:center;justify-content:center;margin-bottom:22px}
+  .cmark svg{stroke:var(--sage)}
+  .closing h2{font-size:19px;font-weight:300;color:var(--ink);letter-spacing:-.02em;
+    line-height:1.4}
+  .closing h2 b{font-weight:500}
+  .closing p{margin-top:14px;font-size:13px;color:var(--mute);font-weight:400;
+    line-height:1.6}
+</style>
+</head>
+<body>
+<div class="phone">
+
+  <!-- 1 · renewal cue · 30 days -->
+  <div class="frame">
+    <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+    <div class="clock">
+      <div class="day">monday, may 18</div>
+      <div class="time">9:41</div>
+    </div>
+    <div class="nwrap">
+      <div class="note">
+        <div class="nhead">
+          <div class="nicon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M21 12a9 9 0 1 1-3-6.7M21 4v5h-5"/></svg></div>
+          <span class="napp">ollie</span>
+          <span class="nwhen">now</span>
+        </div>
+        <div class="ntitle">passport · expires in 30 days</div>
+        <div class="nbody">a month's runway. a good week to start.</div>
+      </div>
+    </div>
+    <div class="more">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M6 9l6 6 6-6"/></svg>
+    </div>
+  </div>
+
+  <!-- 2 · appointment tomorrow -->
+  <div class="frame">
+    <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+    <div class="clock">
+      <div class="day">wednesday, may 20</div>
+      <div class="time">6:00</div>
+    </div>
+    <div class="nwrap">
+      <div class="note">
+        <div class="nhead">
+          <div class="nicon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="1.9"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg></div>
+          <span class="napp">ollie</span>
+          <span class="nwhen">now</span>
+        </div>
+        <div class="ntitle">dentist · tomorrow, 2:00pm</div>
+        <div class="nbody">just so it's not a surprise in the morning.</div>
+      </div>
+    </div>
+    <div class="more">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M6 9l6 6 6-6"/></svg>
+    </div>
+  </div>
+
+  <!-- 3 · stale ball — they've had it -->
+  <div class="frame">
+    <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+    <div class="clock">
+      <div class="day">thursday, may 21</div>
+      <div class="time">11:20</div>
+    </div>
+    <div class="nwrap">
+      <div class="note">
+        <div class="nhead">
+          <div class="nicon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></svg></div>
+          <span class="napp">ollie</span>
+          <span class="nwhen">now</span>
+        </div>
+        <div class="ntitle">the lawyer's had your file · 16 days</div>
+        <div class="nbody">past their usual turnaround — a nudge is fair.</div>
+      </div>
+    </div>
+    <div class="more">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M6 9l6 6 6-6"/></svg>
+    </div>
+  </div>
+
+  <!-- 4 · last-five-percent — close the loop -->
+  <div class="frame">
+    <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+    <div class="clock">
+      <div class="day">monday, may 25</div>
+      <div class="time">8:45</div>
+    </div>
+    <div class="nwrap">
+      <div class="note">
+        <div class="nhead">
+          <div class="nicon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="1.9"><path d="M3 8l9 6 9-6"/><rect x="3" y="5" width="18" height="14" rx="2"/></svg></div>
+          <span class="napp">ollie</span>
+          <span class="nwhen">now</span>
+        </div>
+        <div class="ntitle">the form's filled — did it get mailed?</div>
+        <div class="nbody">done and closed aren't the same. just checking.</div>
+      </div>
+    </div>
+    <div class="more">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M6 9l6 6 6-6"/></svg>
+    </div>
+  </div>
+
+  <!-- 5 · recurring-annual cue -->
+  <div class="frame">
+    <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+    <div class="clock">
+      <div class="day">friday, may 29</div>
+      <div class="time">10:10</div>
+    </div>
+    <div class="nwrap">
+      <div class="note">
+        <div class="nhead">
+          <div class="nicon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M21 12a9 9 0 1 1-3-6.7M21 4v5h-5"/></svg></div>
+          <span class="napp">ollie</span>
+          <span class="nwhen">now</span>
+        </div>
+        <div class="ntitle">last march you renewed the registration</div>
+        <div class="nbody">that time of year again — want it on the list?</div>
+      </div>
+    </div>
+    <div class="more">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M6 9l6 6 6-6"/></svg>
+    </div>
+  </div>
+
+  <!-- 6 · defer-chain — name the block -->
+  <div class="frame">
+    <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+    <div class="clock">
+      <div class="day">tuesday, june 2</div>
+      <div class="time">3:30</div>
+    </div>
+    <div class="nwrap">
+      <div class="note">
+        <div class="nhead">
+          <div class="nicon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></div>
+          <span class="napp">ollie</span>
+          <span class="nwhen">now</span>
+        </div>
+        <div class="ntitle">taxes — deferred a few times now</div>
+        <div class="nbody">not a nag. what's the thing actually blocking it?</div>
+      </div>
+    </div>
+    <div class="more">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M6 9l6 6 6-6"/></svg>
+    </div>
+  </div>
+
+  <!-- 7 · weekly note (opt-in) -->
+  <div class="frame">
+    <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+    <div class="clock">
+      <div class="day">sunday, june 7</div>
+      <div class="time">6:00</div>
+    </div>
+    <div class="nwrap">
+      <div class="note">
+        <div class="nhead">
+          <div class="nicon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="1.9"><path d="M4 6h16M4 12h16M4 18h10"/></svg></div>
+          <span class="napp">ollie</span>
+          <span class="nwhen">sun 6pm</span>
+        </div>
+        <div class="ntitle">your week in admin — 4 done, 2 due ahead</div>
+        <div class="nbody">a quiet recap. arrives only if you asked for it.</div>
+      </div>
+    </div>
+    <div class="more">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M6 9l6 6 6-6"/></svg>
+    </div>
+  </div>
+
+  <!-- closing note — the reflective EF detectors stay screen-only -->
+  <div class="closing">
+    <div class="cmark">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8">
+        <circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>
+      </svg>
+    </div>
+    <h2>seven pushes. <b>that's the whole list.</b></h2>
+    <p>renewals, appointments, a stale ball, the last 5%, a yearly
+      rhythm, a defer-chain — and an opt-in weekly note.
+      the reflective detectors — schedule-drift, open loops, the
+      EF-tier match — are deliberately screen-only. they wait in
+      "see the rest" for when you're curious, never on your lock screen.</p>
+  </div>
+
+</div>
+</body>
+</html>

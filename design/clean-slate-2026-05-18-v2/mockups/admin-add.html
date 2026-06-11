@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Admin — add</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E; --umber:#A8703C;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  /* swipe-down handle dismisses — same return gesture everywhere */
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;
+    padding:0 26px 36px}
+
+  /* the lead — one calm line */
+  .lead{margin-top:116px;font-size:22px;font-weight:300;color:var(--ink);
+    letter-spacing:-.02em}
+  .lead b{font-weight:500}
+
+  /* THE TITLE FIELD — one quiet underlined line, never a big box. ink. */
+  .field{margin-top:30px;border-bottom:1.5px solid var(--ink);padding-bottom:11px;
+    display:flex;align-items:baseline;gap:2px}
+  .field span{font-size:21px;color:var(--ink);font-weight:500;letter-spacing:-.01em}
+  .field .caret{width:2px;height:22px;background:var(--accent);
+    display:inline-block;margin-left:1px;border-radius:1px}
+
+  /* a section label */
+  .sect{margin-top:34px;font-size:11px;color:var(--mute);font-weight:600;
+    letter-spacing:.08em;text-transform:uppercase}
+  .sect .opt{color:var(--line);font-weight:500;text-transform:none;
+    letter-spacing:.01em;margin-left:7px}
+
+  /* kind — task / renewal. a calm 2-up of soft tiles. one tap.
+     selected = amber edge. renewal selected here, so an expiry field shows. */
+  .kinds{margin-top:14px;display:grid;grid-template-columns:1fr 1fr;gap:9px}
+  .kt{height:58px;border-radius:16px;border:1px solid var(--line);
+    background:#fff;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;gap:4px;box-shadow:0 6px 16px rgba(42,38,34,.04)}
+  .kt span{font-size:14px;color:var(--ink);font-weight:500;letter-spacing:-.01em}
+  .kt .kh{font-size:10px;color:var(--mute);font-weight:600;letter-spacing:.03em}
+  .kt.on{border-color:var(--accent);background:#FCF6EA}
+  .kt.on span{font-weight:600}
+
+  /* category — renewal / appointment / maintenance / financial / other.
+     a calm wrap of small soft pills. one tap. selected = amber fill. */
+  .cats{margin-top:14px;display:flex;flex-wrap:wrap;gap:8px}
+  .cat{border:1px solid var(--line);background:#fff;border-radius:14px;
+    padding:8px 13px;font-size:13px;font-weight:500;color:var(--ink);
+    letter-spacing:-.01em}
+  .cat.on{border-color:var(--accent);background:var(--accent);color:#fff;
+    font-weight:600}
+
+  /* expiry — only present for a renewal. a quiet underlined date line. */
+  .date{margin-top:14px;border-bottom:1px solid var(--line);padding-bottom:11px;
+    display:flex;align-items:baseline;gap:2px}
+  .date span{font-size:17px;color:var(--ink);font-weight:500;letter-spacing:-.01em}
+  .date .caret{width:2px;height:18px;background:var(--accent);
+    display:inline-block;margin-left:1px;border-radius:1px}
+  /* the staged-cue preview — a calm sage line, what ollie will do with it */
+  .cue{margin-top:13px;display:flex;align-items:flex-start;gap:9px}
+  .cue .cdot{width:7px;height:7px;border-radius:50%;background:var(--sage);
+    flex-shrink:0;margin-top:5px}
+  .cue span{font-size:13px;color:var(--mute);font-weight:400;line-height:1.5}
+  .cue b{color:var(--ink);font-weight:600}
+
+  /* recurrence — optional. a quiet wrap of cadence pills, monthly→10yr.
+     one selected. blank = a one-off. */
+  .recs{margin-top:14px;display:flex;flex-wrap:wrap;gap:8px}
+  .rec{border:1px solid var(--line);background:#fff;border-radius:14px;
+    padding:7px 12px;font-size:12px;font-weight:500;color:var(--mute);
+    letter-spacing:.01em}
+  .rec.on{border-color:var(--umber);background:#FBF1E7;color:var(--umber);
+    font-weight:600}
+
+  /* save — full-width amber, the one commit */
+  .save{margin-top:36px;height:52px;border-radius:26px;background:var(--accent);
+    display:flex;align-items:center;justify-content:center;gap:8px;
+    box-shadow:0 12px 28px rgba(201,146,62,.32)}
+  .save svg{stroke:#fff}
+  .save span{font-size:16px;font-weight:600;color:#fff;letter-spacing:-.01em}
+  /* the saved confirmation — dry, lowercase, period */
+  .saved{margin-top:16px;text-align:center;font-size:13px;color:var(--sage);
+    font-weight:600;letter-spacing:.01em}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+
+  <div class="who">
+    <span>add to admin</span>
+  </div>
+
+  <div class="scroll">
+    <div class="lead"><b>what needs tracking</b></div>
+
+    <!-- the title field — one quiet underlined line -->
+    <div class="field">
+      <span>renew passport</span><span class="caret"></span>
+    </div>
+
+    <!-- kind — task or renewal. renewal picked → an expiry field appears -->
+    <div class="sect">kind</div>
+    <div class="kinds">
+      <div class="kt">
+        <span>task</span>
+        <span class="kh">a thing to do once</span>
+      </div>
+      <div class="kt on">
+        <span>renewal</span>
+        <span class="kh">expires on a date</span>
+      </div>
+    </div>
+
+    <!-- category -->
+    <div class="sect">category</div>
+    <div class="cats">
+      <div class="cat on">renewal</div>
+      <div class="cat">appointment</div>
+      <div class="cat">maintenance</div>
+      <div class="cat">financial</div>
+      <div class="cat">other</div>
+    </div>
+
+    <!-- expiry — present because kind = renewal -->
+    <div class="sect">expires</div>
+    <div class="date">
+      <span>june 17, 2026</span><span class="caret"></span>
+    </div>
+    <div class="cue">
+      <span class="cdot"></span>
+      <span>ollie will <b>raise it quietly</b> at 90, 30, 7 days, and the
+        day it's due — never all at once.</span>
+    </div>
+
+    <!-- recurrence — optional, monthly → 10yr -->
+    <div class="sect">repeats<span class="opt">— optional, blank = a one-off</span></div>
+    <div class="recs">
+      <div class="rec">monthly</div>
+      <div class="rec">quarterly</div>
+      <div class="rec">yearly</div>
+      <div class="rec">2 years</div>
+      <div class="rec">5 years</div>
+      <div class="rec on">10 years</div>
+    </div>
+
+    <div class="save">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.4"><path d="M5 13l4 4 10-11"/></svg>
+      <span>add it</span>
+    </div>
+    <div class="saved">noted.</div>
+  </div>
+</div>
+</body>
+</html>

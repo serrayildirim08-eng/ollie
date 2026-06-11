@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Grocery — pantry</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E; --umber:#A8703C;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  .safe{position:absolute;top:62px;right:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .safe svg{stroke:var(--mute)}
+  .find{position:absolute;top:62px;left:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .find svg{stroke:var(--mute)}
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  /* the pantry — the shelf-life-aware view of what's in the kitchen.
+     3 shelves segmented by remaining shelf life: critical ≤2d, watching
+     ≤7d, stocked >7d. each item carries a fill-bar + a "N days / today"
+     label. the 3-mode switch sits at the top, pantry selected. v2 .who. */
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;
+    padding:0 26px 36px}
+
+  /* the 3-mode switch — same near-zero-chrome filter grammar, pantry on */
+  .modes{margin-top:116px;display:flex;gap:22px;padding-bottom:2px}
+  .mode{font-size:14px;color:var(--mute);font-weight:500;letter-spacing:-.01em;
+    padding-bottom:7px;border-bottom:2px solid transparent}
+  .mode.on{color:var(--ink);border-bottom-color:var(--accent);font-weight:600}
+
+  /* the pantry lead — a calm one-liner */
+  .lead{margin-top:26px;font-size:13px;color:var(--mute);font-weight:500;
+    letter-spacing:.02em}
+  .lead b{color:var(--ink);font-weight:600}
+
+  /* a shelf — a calm group under a small label. the label carries the
+     shelf's window in plain words + a count. critical reads warm umber,
+     watching amber, stocked mute. NEVER red, never a badge. */
+  .shelf{margin-top:24px}
+  .sk{display:flex;align-items:baseline;gap:8px;margin-bottom:2px}
+  .skname{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+  .skwin{font-size:11px;color:var(--mute);font-weight:500;letter-spacing:.01em}
+  .skcount{margin-left:auto;font-size:12px;color:var(--mute);font-weight:600}
+  .shelf.critical .skname{color:var(--umber)}
+  .shelf.watching .skname{color:var(--accent)}
+  .shelf.stocked  .skname{color:var(--mute)}
+
+  /* one pantry item — a calm row, hairline-divided. the name, a shelf-
+     life fill-bar, and a "N days / today" label on the right. no card. */
+  .item{border-top:1px solid var(--line);padding:15px 2px;display:flex;
+    align-items:center;gap:14px}
+  .shelf .item:last-child{border-bottom:1px solid var(--line)}
+  .imid{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px}
+  .iname{font-size:15px;color:var(--ink);font-weight:500;letter-spacing:-.012em}
+
+  /* the shelf-life fill-bar — a thin track, a fill showing % life left.
+     the fill colour follows the shelf: umber when critical, amber when
+     watching, sage when stocked. a calm data object, never a progress
+     race. width = % of shelf life remaining. */
+  .bar{height:5px;border-radius:3px;background:var(--line);position:relative;
+    overflow:hidden}
+  .bar i{position:absolute;left:0;top:0;bottom:0;border-radius:3px}
+  .item.crit .bar i{background:var(--umber)}
+  .item.watch .bar i{background:var(--accent)}
+  .item.stock .bar i{background:var(--sage)}
+
+  /* the days label — calm, right-aligned. 'today' / a day count.
+     warm umber when critical, amber when watching, mute when stocked. */
+  .idays{font-size:13px;font-weight:600;flex-shrink:0;letter-spacing:-.01em;
+    text-align:right;min-width:52px}
+  .item.crit .idays{color:var(--umber)}
+  .item.watch .idays{color:var(--accent)}
+  .item.stock .idays{color:var(--mute)}
+  .idays small{display:block;font-size:10px;font-weight:500;color:var(--mute);
+    letter-spacing:.02em;margin-top:1px}
+
+  /* the stocked shelf collapses — a quiet expand line at the foot of it.
+     here shown expanded; the line is the collapse affordance. */
+  .collapse{margin-top:12px;display:flex;align-items:center;gap:7px;
+    padding:4px 2px}
+  .collapse svg{stroke:var(--mute)}
+  .collapse span{font-size:12px;color:var(--mute);font-weight:600;
+    letter-spacing:.02em}
+
+  /* the closing note — pantry is fed by checking items off the list */
+  .foot{margin-top:26px;display:flex;gap:10px;align-items:flex-start}
+  .foot .fdot{width:6px;height:6px;border-radius:50%;background:var(--line);
+    flex-shrink:0;margin-top:5px}
+  .foot span{font-size:12px;color:var(--mute);font-weight:400;line-height:1.5}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+  <div class="find">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/>
+    </svg>
+  </div>
+  <div class="safe">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.5-7 10-7 10z"/>
+    </svg>
+  </div>
+
+  <div class="who">
+    <span>pantry</span>
+  </div>
+
+  <div class="scroll">
+
+    <!-- the 3-mode switch — pantry selected -->
+    <div class="modes">
+      <span class="mode">shop</span>
+      <span class="mode on">pantry</span>
+      <span class="mode">feed me</span>
+    </div>
+
+    <div class="lead"><b>12</b> things in the kitchen &middot; sorted by what turns first</div>
+
+    <!-- SHELF 1 — critical, ≤2 days. warm umber. -->
+    <div class="shelf critical">
+      <div class="sk">
+        <span class="skname">critical</span>
+        <span class="skwin">— 2 days or less</span>
+        <span class="skcount">2</span>
+      </div>
+      <div class="item crit">
+        <div class="imid">
+          <span class="iname">spinach</span>
+          <div class="bar"><i style="width:8%"></i></div>
+        </div>
+        <span class="idays">today<small>use it</small></span>
+      </div>
+      <div class="item crit">
+        <div class="imid">
+          <span class="iname">fresh basil</span>
+          <div class="bar"><i style="width:22%"></i></div>
+        </div>
+        <span class="idays">2 days<small>left</small></span>
+      </div>
+    </div>
+
+    <!-- SHELF 2 — watching, ≤7 days. amber. -->
+    <div class="shelf watching">
+      <div class="sk">
+        <span class="skname">watching</span>
+        <span class="skwin">— within a week</span>
+        <span class="skcount">3</span>
+      </div>
+      <div class="item watch">
+        <div class="imid">
+          <span class="iname">milk</span>
+          <div class="bar"><i style="width:40%"></i></div>
+        </div>
+        <span class="idays">4 days<small>left</small></span>
+      </div>
+      <div class="item watch">
+        <div class="imid">
+          <span class="iname">yoghurt</span>
+          <div class="bar"><i style="width:52%"></i></div>
+        </div>
+        <span class="idays">5 days<small>left</small></span>
+      </div>
+      <div class="item watch">
+        <div class="imid">
+          <span class="iname">chicken thighs</span>
+          <div class="bar"><i style="width:64%"></i></div>
+        </div>
+        <span class="idays">7 days<small>left</small></span>
+      </div>
+    </div>
+
+    <!-- SHELF 3 — stocked, >7 days. mute, calm. collapsible. -->
+    <div class="shelf stocked">
+      <div class="sk">
+        <span class="skname">stocked</span>
+        <span class="skwin">— plenty of time</span>
+        <span class="skcount">7</span>
+      </div>
+      <div class="item stock">
+        <div class="imid">
+          <span class="iname">eggs</span>
+          <div class="bar"><i style="width:74%"></i></div>
+        </div>
+        <span class="idays">3 weeks<small>left</small></span>
+      </div>
+      <div class="item stock">
+        <div class="imid">
+          <span class="iname">parmesan</span>
+          <div class="bar"><i style="width:82%"></i></div>
+        </div>
+        <span class="idays">6 weeks<small>left</small></span>
+      </div>
+      <div class="item stock">
+        <div class="imid">
+          <span class="iname">pasta</span>
+          <div class="bar"><i style="width:94%"></i></div>
+        </div>
+        <span class="idays">months<small>left</small></span>
+      </div>
+
+      <!-- the collapse affordance — stocked folds away -->
+      <div class="collapse">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M18 15l-6-6-6 6"/></svg>
+        <span>fold the 7 stocked away</span>
+      </div>
+    </div>
+
+    <div class="foot">
+      <span class="fdot"></span>
+      <span>the pantry fills on its own — each thing lands here when you
+        check it off the shopping list, with a shelf life ollie estimates.</span>
+    </div>
+  </div>
+</div>
+</body>
+</html>

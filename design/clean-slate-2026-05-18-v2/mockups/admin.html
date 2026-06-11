@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Admin</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E; --umber:#A8703C;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  .safe{position:absolute;top:62px;right:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .safe svg{stroke:var(--mute)}
+  .find{position:absolute;top:62px;left:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .find svg{stroke:var(--mute)}
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  /* admin is a submodule reached by drilling the home page's admin card.
+     LEAF-FOCUS RULE: the face shows the ONE thing that matters most right
+     now — the next thing due. a renewal here, with its days-left counter
+     as a calm hero. everything else is air. centred .who label, v2. */
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;
+    padding:0 26px 36px}
+
+  /* THE HERO — the next thing due. above it, a small tailored visual:
+     a renewal-runway — a horizontal track with the 90/30/7/0 day stages
+     marked, a travelling marker showing where this renewal sits.
+     margin-top clears the absolutely-positioned .who label. */
+  .hero{margin-top:116px;display:flex;flex-direction:column;align-items:center}
+
+  /* the renewal runway — body's bar-grammar reworked flat. a baseline
+     track, 4 quiet stage ticks (90·30·7·now), the marker an umber dot
+     riding it at the 30-day stage. a calm "where it sits" object. */
+  .runway{width:208px;height:44px;margin-bottom:24px;position:relative}
+  .runway svg{display:block}
+
+  .lead{font-size:13px;color:var(--mute);font-weight:500;letter-spacing:.02em}
+  .thing{font-size:40px;font-weight:300;color:var(--ink);letter-spacing:-.03em;
+    line-height:1.05;margin-top:8px;text-align:center}
+  /* the days-left line — calm, factual, not a countdown alarm */
+  .days{margin-top:13px;font-size:14px;color:var(--ink);font-weight:500;
+    letter-spacing:-.01em}
+  .days b{font-weight:600;color:var(--umber)}
+  .days .s{color:var(--line);margin:0 7px}
+
+  /* one amber button — the do-it-now route on the next thing */
+  .act{margin:26px auto 0;height:50px;border-radius:25px;background:var(--accent);
+    display:flex;align-items:center;justify-content:center;gap:8px;padding:0 24px;
+    box-shadow:0 12px 28px rgba(201,146,62,.32)}
+  .act svg{stroke:#fff}
+  .act span{font-size:16px;font-weight:600;color:#fff;letter-spacing:-.01em}
+
+  /* below the hero, with air — calm drill rows. each = one tailored line.
+     tap a row → its screen. no chevron clutter, just a quiet caret. */
+  .rows{margin-top:50px;display:flex;flex-direction:column}
+  .row{border-top:1px solid var(--line);padding:18px 2px;display:flex;
+    align-items:center}
+  .row:last-child{border-bottom:1px solid var(--line)}
+  .rk{font-size:13px;color:var(--mute);font-weight:600;letter-spacing:.01em;
+    flex-shrink:0}
+  .rsep{color:var(--line);margin:0 8px;font-size:13px}
+  .rv{font-size:14px;color:var(--ink);font-weight:500;letter-spacing:-.01em;flex:1}
+  .chev{stroke:var(--mute);flex-shrink:0;margin-left:8px}
+
+  /* the observed-pattern row — sage, calm, only present when a pattern
+     is live. a small sage dot rides the line. routes to admin-patterns.
+     NEVER loud, never a badge. */
+  .row.obs .rdot{width:6px;height:6px;border-radius:50%;background:var(--sage);
+    flex-shrink:0;margin-right:11px}
+  .row.obs .rv{color:var(--ink)}
+  .row.obs .rk{color:var(--sage)}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+  <div class="find">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/>
+    </svg>
+  </div>
+  <div class="safe">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.5-7 10-7 10z"/>
+    </svg>
+  </div>
+
+  <div class="who">
+    <span>admin</span>
+  </div>
+
+  <div class="scroll">
+    <div class="hero">
+      <!-- the renewal runway — a flat track with the staged renewal cues
+           90 / 30 / 7 / 0 marked as quiet ticks. the umber marker rides
+           the track at the 30-day stage = where this renewal sits now. -->
+      <div class="runway">
+        <svg width="208" height="44" viewBox="0 0 208 44">
+          <!-- the runway baseline -->
+          <line x1="8" y1="30" x2="200" y2="30" stroke="#EAE2D4"
+            stroke-width="2" stroke-linecap="round"/>
+          <!-- the stretch already travelled — early → now, umber, soft -->
+          <line x1="8" y1="30" x2="142" y2="30" stroke="#A8703C"
+            stroke-width="2" stroke-linecap="round" opacity=".4"/>
+          <!-- stage ticks: 90d, 30d, 7d, 0d. small quiet uprights. -->
+          <line x1="8" y1="24" x2="8" y2="36" stroke="#EAE2D4" stroke-width="2"/>
+          <line x1="142" y1="22" x2="142" y2="38" stroke="#A8703C" stroke-width="2"/>
+          <line x1="178" y1="24" x2="178" y2="36" stroke="#EAE2D4" stroke-width="2"/>
+          <line x1="200" y1="24" x2="200" y2="36" stroke="#EAE2D4" stroke-width="2"/>
+          <!-- the travelling marker — an umber dot at the 30-day stage -->
+          <circle cx="142" cy="30" r="7" fill="#A8703C"/>
+          <circle cx="142" cy="30" r="7" fill="none" stroke="#FAF6EF" stroke-width="3"/>
+          <!-- the stage labels — barely-there -->
+          <text x="8" y="14" font-size="9" font-weight="600" fill="#B6ADA0"
+            text-anchor="middle" letter-spacing=".5">90</text>
+          <text x="142" y="14" font-size="9" font-weight="700" fill="#A8703C"
+            text-anchor="middle" letter-spacing=".5">30</text>
+          <text x="178" y="14" font-size="9" font-weight="600" fill="#B6ADA0"
+            text-anchor="middle" letter-spacing=".5">7</text>
+          <text x="200" y="14" font-size="9" font-weight="600" fill="#B6ADA0"
+            text-anchor="middle" letter-spacing=".5">0</text>
+        </svg>
+      </div>
+
+      <div class="lead">next thing due</div>
+      <div class="thing">renew passport</div>
+      <div class="days">
+        <b>30 days left</b><span class="s">·</span>renewal
+      </div>
+
+      <div class="act">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="2.4">
+          <path d="M5 13l4 4 10-11"/>
+        </svg>
+        <span>do this one</span>
+      </div>
+    </div>
+
+    <div class="rows">
+      <!-- calls to make — the ADHD-aversive cluster, surfaced gently -->
+      <div class="row">
+        <span class="rk">calls to make</span><span class="rsep">·</span>
+        <span class="rv">3 waiting</span>
+        <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+
+      <!-- all tasks — the full list -->
+      <div class="row">
+        <span class="rk">all tasks</span><span class="rsep">·</span>
+        <span class="rv">9 active · 2 due this week</span>
+        <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+
+      <!-- 2-minute burst — the momentum session -->
+      <div class="row">
+        <span class="rk">2-min burst</span><span class="rsep">·</span>
+        <span class="rv">5 quick things ready</span>
+        <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+
+      <!-- a pattern is live — ONE calm sage observation row.
+           only ever shown when a pattern exists; routes to admin-patterns. -->
+      <div class="row obs">
+        <span class="rdot"></span>
+        <span class="rk">see the rest</span><span class="rsep">·</span>
+        <span class="rv">a few things ollie noticed about your admin</span>
+        <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
