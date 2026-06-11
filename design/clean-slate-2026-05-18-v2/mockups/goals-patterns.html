@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Goals — see the rest</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;
+    padding:0 26px 40px}
+
+  /* the framing line — a "see the rest" reflective surface. goals + ADHD
+     is a shame minefield, so this surface is the most carefully kind:
+     a stalled or abandoned goal is read as neurology and interference,
+     never as failure. calm reading, never a charts wall. */
+  .intro{margin-top:116px}
+  .ititle{font-size:22px;font-weight:300;color:var(--ink);letter-spacing:-.02em;
+    line-height:1.3}
+  .ititle b{font-weight:500}
+  .isub{margin-top:10px;font-size:14px;color:var(--mute);font-weight:400;
+    line-height:1.5}
+
+  /* the patterns — grouped quietly under small section labels. each
+     group is a calm cluster of ONE-LINE observations. a sage dot rides
+     each line. NO charts, NO badges, NO counts. it reads like a journal. */
+  .group{margin-top:30px}
+  .gk{font-size:11px;color:var(--mute);font-weight:600;letter-spacing:.08em;
+    text-transform:uppercase;margin-bottom:4px}
+
+  .pat{border-top:1px solid var(--line);padding:16px 0}
+  .group .pat:last-child{border-bottom:1px solid var(--line)}
+  .phead{display:flex;align-items:flex-start;gap:11px}
+  .pdot{width:7px;height:7px;border-radius:50%;background:var(--sage);
+    flex-shrink:0;margin-top:6px}
+  .ptext{flex:1}
+  .pline{font-size:15px;color:var(--ink);font-weight:500;letter-spacing:-.01em;
+    line-height:1.4}
+  /* the soft sub-line — the gentle reframe, never a verdict */
+  .pframe{margin-top:4px;font-size:13px;color:var(--mute);font-weight:400;
+    line-height:1.45}
+  /* the quiet citation tag — a small italic source, like body-patterns */
+  .pcite{margin-top:6px;font-size:11.5px;color:var(--mute);font-weight:400;
+    font-style:italic}
+
+  /* the closing note — restates this surface is screen-only, never pushed,
+     and never shaming */
+  .foot{margin-top:26px;display:flex;gap:10px;align-items:flex-start}
+  .foot svg{stroke:var(--mute);flex-shrink:0;margin-top:1px}
+  .foot span{font-size:12px;color:var(--mute);font-weight:400;line-height:1.5}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+
+  <div class="who">
+    <span>see the rest</span>
+  </div>
+
+  <div class="scroll">
+    <div class="intro">
+      <div class="ititle"><b>what ollie noticed</b> about your goals</div>
+      <div class="isub">none of this is a verdict. a stalled goal isn't a
+        failing &mdash; it's information. read it when you're curious, leave
+        it when you're not.</div>
+    </div>
+
+    <!-- GROUP 1 — the blocks you predicted, showing up -->
+    <div class="group">
+      <div class="gk">the blocks you saw coming</div>
+
+      <div class="pat">
+        <div class="phead">
+          <span class="pdot"></span>
+          <div class="ptext">
+            <div class="pline">the block you predicted for &lsquo;learn spanish&rsquo;
+              is showing up in your dumps</div>
+            <div class="pframe">you wrote the speaking part scares you &mdash; that
+              language is back in this week's notes. naming it is the work,
+              not a slip.</div>
+            <div class="pcite">obstacle-echo &middot; Gollwitzer 1999</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pat">
+        <div class="phead">
+          <span class="pdot"></span>
+          <div class="ptext">
+            <div class="pline">your past self predicted this exact reason for
+              &lsquo;side project&rsquo;</div>
+            <div class="pframe">the premortem you wrote months ago matches the
+              dumps now &mdash; not bad luck, a pattern you already saw. it's
+              worth re-reading what you'd planned to do about it.</div>
+            <div class="pcite">premortem-echo &middot; Klein 2007</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- GROUP 2 — goals pulling against each other -->
+    <div class="group">
+      <div class="gk">where your goals pull against each other</div>
+
+      <div class="pat">
+        <div class="phead">
+          <span class="pdot"></span>
+          <div class="ptext">
+            <div class="pline">&lsquo;save money&rsquo; and &lsquo;travel more&rsquo;
+              pull against each other</div>
+            <div class="pframe">they want the same money in opposite directions
+              &mdash; that quiet tug is why both feel stuck. it isn't you
+              slacking; it's two goals cancelling out.</div>
+            <div class="pcite">goal-interference &middot; Riediger &amp; Freund 2004</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pat">
+        <div class="phead">
+          <span class="pdot"></span>
+          <div class="ptext">
+            <div class="pline">&lsquo;wake up earlier&rsquo; and &lsquo;finish the late
+              writing&rsquo; sit on opposite ends of the day</div>
+            <div class="pframe">one asks the night, one asks the morning &mdash;
+              they may need different seasons, not more willpower.</div>
+            <div class="pcite">goal-interference &middot; Riediger &amp; Freund 2004</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- GROUP 3 — how your goals move -->
+    <div class="group">
+      <div class="gk">how your goals actually move</div>
+
+      <div class="pat">
+        <div class="phead">
+          <span class="pdot"></span>
+          <div class="ptext">
+            <div class="pline">learning goals tend to carry all the way through
+              for you &mdash; finance ones less so</div>
+            <div class="pframe">a real strength worth knowing: a finance goal
+              might do better framed as something to learn, not something to
+              grind.</div>
+            <div class="pcite">velocity &middot; per-category, last 90 days</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pat">
+        <div class="phead">
+          <span class="pdot"></span>
+          <div class="ptext">
+            <div class="pline">&lsquo;side project&rsquo; has had a lot of thinking
+              and not much doing lately</div>
+            <div class="pframe">turning it over counts as care &mdash; and the
+              smallest concrete move would tell you more than another think.
+              what's the 10-minute version?</div>
+            <div class="pcite">research-as-progress &middot; Barkley 2012</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pat">
+        <div class="phead">
+          <span class="pdot"></span>
+          <div class="ptext">
+            <div class="pline">&lsquo;learn spanish&rsquo; began as &ldquo;the person
+              who travels deeply&rdquo; &mdash; that role hasn't surfaced in a
+              while</div>
+            <div class="pframe">roles shift with seasons. it might be the same
+              goal with a new reason, or a goal that's quietly done its job.
+              either is fine.</div>
+            <div class="pcite">identity-drift &middot; Oyserman 2015</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- GROUP 4 — when a goal might be ready to rest -->
+    <div class="group">
+      <div class="gk">when a goal might be ready to rest</div>
+
+      <div class="pat">
+        <div class="phead">
+          <span class="pdot"></span>
+          <div class="ptext">
+            <div class="pline">the last few check-ins on &lsquo;run a half
+              marathon&rsquo; were all &ldquo;carrying it from before&rdquo;</div>
+            <div class="pframe">that's a soft signal it may have done what it
+              came to do. letting it rest isn't quitting &mdash; it's making
+              room. only you decide.</div>
+            <div class="pcite">sunk-cost &middot; Arkes &amp; Blumer 1985</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pat">
+        <div class="phead">
+          <span class="pdot"></span>
+          <div class="ptext">
+            <div class="pline">&lsquo;side project&rsquo; has been quiet for a
+              while &mdash; what if it's a question, not a promise?</div>
+            <div class="pframe">reframed as &ldquo;something i'm testing&rdquo;
+              it can't fail &mdash; it can only tell you something. quiet
+              isn't dead; it's often just a different shape.</div>
+            <div class="pcite">experiment-candidate &middot; Steel 2007</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="foot">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="1.8">
+        <circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>
+      </svg>
+      <span>ollie notices patterns &mdash; it never grades you. none of this
+        is ever sent as a notification; it waits here, quietly, for when you
+        want it. a stalled goal is never a verdict.</span>
+    </div>
+  </div>
+</div>
+</body>
+</html>

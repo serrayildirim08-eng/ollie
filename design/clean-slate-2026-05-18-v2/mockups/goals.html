@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Goals</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E; --umber:#A8703C;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  .safe{position:absolute;top:62px;right:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .safe svg{stroke:var(--mute)}
+  .find{position:absolute;top:62px;left:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .find svg{stroke:var(--mute)}
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  /* goals is a submodule reached by drilling the work page's goals card.
+     LEAF-FOCUS RULE: this face shows ONE goal — the one in focus — as a
+     calm progress ring with its next milestone. multiple goals = swipe.
+     goals + ADHD is a shame minefield, so the face is forward and kind:
+     progress, never a streak; the next step, never a backlog. centred
+     .who label, v2. */
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;
+    padding:0 26px 36px}
+
+  /* THE HERO — the focus goal as a soft progress ring. a 270° open arc
+     (deliberately not a closed score-ring) filled to the goal's %. the
+     % sits inside, calm, never a number to beat. margin-top clears the
+     absolutely-positioned .who label. */
+  .hero{margin-top:116px;display:flex;flex-direction:column;align-items:center}
+  .ringwrap{position:relative;width:204px;height:204px;display:flex;
+    align-items:center;justify-content:center}
+  .ringwrap svg{position:absolute;display:block}
+  .rcentre{display:flex;flex-direction:column;align-items:center}
+  .rpct{font-size:52px;font-weight:300;color:var(--ink);letter-spacing:-.03em;
+    line-height:1}
+  .rcat{margin-top:6px;font-size:11px;color:var(--mute);font-weight:600;
+    letter-spacing:.07em;text-transform:uppercase}
+
+  /* the goal name — under the ring, calm and large */
+  .gname{margin-top:20px;font-size:26px;font-weight:400;color:var(--ink);
+    letter-spacing:-.022em;text-align:center}
+  /* the next milestone — one calm forward line, never a deadline scold */
+  .gnext{margin-top:9px;font-size:14px;color:var(--ink);font-weight:500;
+    letter-spacing:-.01em;text-align:center}
+  .gnext b{font-weight:600}
+  .gnext .pm{color:var(--mute);font-weight:500}
+
+  /* the swipe dots — this goal of N. swipe between goals. */
+  .dots{margin-top:18px;display:flex;justify-content:center;gap:7px}
+  .dots i{width:6px;height:6px;border-radius:50%;background:var(--line)}
+  .dots i.on{background:var(--accent)}
+
+  /* one amber button — open this goal */
+  .open{margin:24px auto 0;height:50px;border-radius:25px;background:var(--accent);
+    display:flex;align-items:center;justify-content:center;gap:8px;padding:0 26px;
+    box-shadow:0 12px 28px rgba(201,146,62,.32)}
+  .open svg{stroke:#fff}
+  .open span{font-size:16px;font-weight:600;color:#fff;letter-spacing:-.01em}
+
+  /* below the hero, with air — calm drill rows. each = one tailored line.
+     tap a row → its screen. no chevron clutter, just a quiet caret. */
+  .rows{margin-top:40px;display:flex;flex-direction:column}
+  .row{border-top:1px solid var(--line);padding:18px 2px;display:flex;
+    align-items:center}
+  .row:last-child{border-bottom:1px solid var(--line)}
+  .rk{font-size:13px;color:var(--mute);font-weight:600;letter-spacing:.01em;
+    flex-shrink:0}
+  .rsep{color:var(--line);margin:0 8px;font-size:13px}
+  .rv{font-size:14px;color:var(--ink);font-weight:500;letter-spacing:-.01em;flex:1}
+  .chev{stroke:var(--mute);flex-shrink:0;margin-left:8px}
+
+  /* the other goals row — a quiet count, no urgency */
+  .row .mini{display:flex;align-items:center;gap:5px;margin-right:9px}
+  .row .mini i{width:5px;height:5px;border-radius:50%;background:var(--mute)}
+
+  /* the observed-pattern row — sage, calm, only present when a pattern
+     is live. a small sage dot rides the line. routes to goals-patterns. */
+  .row.obs .rdot{width:6px;height:6px;border-radius:50%;background:var(--sage);
+    flex-shrink:0;margin-right:11px}
+  .row.obs .rv{color:var(--ink)}
+  .row.obs .rk{color:var(--sage)}
+
+  /* a closing add cue — one calm amber line, never pressured */
+  .addcue{margin-top:24px;text-align:center;font-size:13px;color:var(--accent);
+    font-weight:600;letter-spacing:.01em}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+  <div class="find">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/>
+    </svg>
+  </div>
+  <div class="safe">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.5-7 10-7 10z"/>
+    </svg>
+  </div>
+
+  <div class="who">
+    <span>goals</span>
+  </div>
+
+  <div class="scroll">
+    <div class="hero">
+      <!-- the focus goal — a soft 270° open progress arc.
+           geometry: r=86, centre 102,102. circumference ≈ 540.4.
+           the 270° track is 405.3 long, with a 135.1 gap centred
+           downward. the arc starts at 135° (bottom-left). the fill
+           is 40% of the 270° arc → 162.1 of the 405.3 track. ink
+           fill on a line-colour track — calm, never a score-ring. -->
+      <div class="ringwrap">
+        <svg width="204" height="204" viewBox="0 0 204 204">
+          <!-- the 270° open track -->
+          <circle cx="102" cy="102" r="86" fill="none"
+            stroke="#EAE2D4" stroke-width="8" stroke-linecap="round"
+            stroke-dasharray="405.3 135.1"
+            transform="rotate(135 102 102)"/>
+          <!-- the fill — 40%, ink, soft -->
+          <circle cx="102" cy="102" r="86" fill="none"
+            stroke="#2A2622" stroke-width="8" stroke-linecap="round"
+            stroke-dasharray="162.1 378.3"
+            transform="rotate(135 102 102)" opacity=".82"/>
+        </svg>
+        <div class="rcentre">
+          <div class="rpct">40%</div>
+          <div class="rcat">learning</div>
+        </div>
+      </div>
+
+      <div class="gname">learn spanish</div>
+      <div class="gnext">
+        next milestone &mdash; <b>hold a 5-minute conversation</b>
+        <span class="pm"> · whenever it's ready</span>
+      </div>
+
+      <!-- this goal of 3 — swipe between goals -->
+      <div class="dots">
+        <i class="on"></i><i></i><i></i>
+      </div>
+
+      <div class="open">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke-width="2.2">
+          <path d="M9 6l6 6-6 6"/>
+        </svg>
+        <span>open this goal</span>
+      </div>
+    </div>
+
+    <div class="rows">
+      <!-- the other goals — a quiet count, swipe or list. no urgency. -->
+      <div class="row">
+        <span class="rk">your goals</span><span class="rsep">·</span>
+        <span class="rv">2 more &mdash; swipe to see them</span>
+        <span class="mini"><i></i><i></i></span>
+        <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+
+      <!-- the soft review — a gentle check-in, never a grade -->
+      <div class="row">
+        <span class="rk">a check-in</span><span class="rsep">·</span>
+        <span class="rv">sit with learn spanish for a minute</span>
+        <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+
+      <!-- a pattern is live — ONE calm sage observation row.
+           only ever shown when a pattern exists; routes to goals-patterns. -->
+      <div class="row obs">
+        <span class="rdot"></span>
+        <span class="rk">see the rest</span><span class="rsep">·</span>
+        <span class="rv">a few quiet things ollie noticed</span>
+        <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+    </div>
+
+    <!-- a calm add cue — never pressured, never a "you should have more" -->
+    <div class="addcue">+ add a goal</div>
+
+  </div>
+</div>
+</body>
+</html>

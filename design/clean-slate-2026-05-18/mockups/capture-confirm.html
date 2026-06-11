@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Caught</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#FBF7F0; --ink:#2A2622; --mute:#7C736B; --line:#E9E1D4;
+    --amber:#E8732C; --sage:#5B8C7E; --t-finance:#C9923E;
+    --serif:'Newsreader',Georgia,serif; --sans:'Inter',-apple-system,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;display:flex;
+    align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;display:flex;flex-direction:column;
+    box-shadow:0 30px 80px rgba(0,0,0,.32)}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  .status .dots{display:flex;gap:5px}
+
+  .scroll{flex:1;padding:6px 24px 0;overflow:hidden}
+  .greet{font-family:var(--serif);font-size:30px;line-height:1.22;
+    color:var(--ink);margin:14px 0 4px;letter-spacing:-.01em}
+  .greet em{font-style:italic;color:var(--mute)}
+  .sub{font-size:14px;color:var(--mute);margin-bottom:26px}
+  .lbl{font-size:12px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;
+    color:var(--mute);margin-bottom:12px}
+
+  /* the freshly-caught item — mid-settle */
+  .landed{position:relative;display:flex;gap:13px;padding:17px 16px;
+    border-radius:16px;background:#fff;border:1px solid var(--line);
+    margin-bottom:6px;animation:settle .32s cubic-bezier(.22,1,.36,1)}
+  @keyframes settle{from{transform:translateY(-14px);opacity:0}
+    to{transform:translateY(0);opacity:1}}
+  .landed::after{content:"";position:absolute;inset:-3px;border-radius:19px;
+    pointer-events:none;
+    background:radial-gradient(ellipse at 12% 50%,rgba(232,115,44,.30),transparent 65%);
+    animation:glow .6s ease-out forwards}
+  @keyframes glow{from{opacity:1}to{opacity:.18}}
+  .edge{width:4px;border-radius:3px;background:var(--t-finance);flex:none}
+  .landed .txt{font-size:17px;color:var(--ink);line-height:1.4}
+  .landed .receipt{font-size:13px;color:var(--amber);font-weight:600;
+    margin-top:9px;display:flex;align-items:center;gap:6px}
+  .landed .chip{font-size:11px;font-weight:600;padding:3px 9px;border-radius:7px;
+    color:#fff;background:var(--t-finance);margin-top:8px;display:inline-block}
+
+  /* the confirmation toast — the app's voice */
+  .toast{margin:22px 0 0;background:#F2EEDF;border:1px solid var(--line);
+    border-radius:16px;padding:16px 18px;display:flex;gap:12px;align-items:flex-start}
+  .check{width:26px;height:26px;border-radius:50%;background:var(--sage);
+    color:#fff;display:flex;align-items:center;justify-content:center;
+    font-size:14px;flex:none}
+  .toast .msg{font-family:var(--serif);font-size:16px;line-height:1.45;color:var(--ink)}
+  .toast .undo{font-size:13px;color:var(--mute);margin-top:6px;text-decoration:underline}
+
+  .dim{margin-top:30px;font-size:14px;color:var(--mute);line-height:1.55}
+
+  .dock{position:absolute;left:0;right:0;bottom:84px;padding:0 18px}
+  .dock-bar{background:#fff;border:1.5px solid var(--line);border-radius:20px;
+    height:56px;display:flex;align-items:center;padding:0 8px 0 18px;
+    box-shadow:0 10px 28px rgba(42,38,34,.12)}
+  .dock-bar .ph{flex:1;font-size:15px;color:var(--mute)}
+  .dock-bar .ico{width:40px;height:40px;border-radius:50%;display:flex;
+    align-items:center;justify-content:center;font-size:17px}
+  .ico.mic{background:var(--amber);color:#fff;box-shadow:0 4px 14px rgba(232,115,44,.45)}
+  .ico.kbd{color:var(--mute)}
+  .tabs{position:absolute;left:0;right:0;bottom:0;height:84px;background:#FBF7F0EE;
+    backdrop-filter:blur(14px);border-top:1px solid var(--line);
+    display:flex;padding:8px 12px 26px}
+  .tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;
+    font-size:11px;font-weight:600;color:var(--mute)}
+  .tab.on{color:var(--ink)} .tab .gl{font-size:18px}
+  .tab.on .gl{color:var(--amber)}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span class="dots">􀙇 􀛨 􀋲</span></div>
+
+  <div class="scroll">
+    <div class="greet">good evening, serra.</div>
+    <div class="sub">that's caught. you can let go of it now.</div>
+
+    <div class="lbl">caught today</div>
+
+    <div class="landed">
+      <div class="edge"></div>
+      <div>
+        <div class="txt">netflix charged me again, thought i cancelled this</div>
+        <div class="receipt">⌁ landed in finance — flagged as a subscription</div>
+        <span class="chip">finance · subscription</span>
+      </div>
+    </div>
+
+    <div class="toast">
+      <div class="check">✓</div>
+      <div>
+        <div class="msg">got it. that's in finance now, tagged as a subscription you wanted to cancel. i'll watch for the next charge.</div>
+        <div class="undo">wrong drawer? move it</div>
+      </div>
+    </div>
+
+    <div class="dim">it's off your mind and into the right place. nothing else to do.</div>
+  </div>
+
+  <div class="dock">
+    <div class="dock-bar">
+      <div class="ph">throw another thought…</div>
+      <div class="ico kbd">⌨</div>
+      <div class="ico mic">􀊱</div>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab on"><div class="gl">●</div>now</div>
+    <div class="tab"><div class="gl">◇</div>noticed</div>
+    <div class="tab"><div class="gl">􀝣</div>safe</div>
+  </div>
+</div>
+</body>
+</html>

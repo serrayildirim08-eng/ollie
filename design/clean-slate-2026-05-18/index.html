@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ollie — Clean-Slate Design Exploration</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#FBF7F0; --ink:#2A2622; --mute:#7C736B; --line:#E9E1D4;
+    --amber:#E8732C; --sage:#5B8C7E;
+    --serif:'Newsreader',Georgia,serif; --sans:'Inter',-apple-system,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:var(--sans);background:#1E1B18;color:var(--paper);
+    padding:56px 40px 80px}
+  .head{max-width:880px;margin:0 auto 14px}
+  .kicker{font-size:12px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--amber)}
+  h1{font-family:var(--serif);font-size:46px;font-weight:400;line-height:1.1;
+    margin-top:16px;letter-spacing:-.02em}
+  h1 em{font-style:italic;color:var(--sage)}
+  .lede{font-size:16px;color:#C9C0B4;margin-top:18px;line-height:1.65;max-width:660px}
+  .meta{font-size:13px;color:var(--mute);margin-top:20px;line-height:1.7}
+  .meta b{color:#C9C0B4}
+
+  .thesis{max-width:880px;margin:34px auto 0;background:#262220;
+    border:1px solid #38322D;border-radius:16px;padding:24px 26px}
+  .thesis .tl{font-size:12px;font-weight:600;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--sage);margin-bottom:10px}
+  .thesis p{font-family:var(--serif);font-size:19px;line-height:1.5;color:var(--paper)}
+
+  .gallery{max-width:1280px;margin:54px auto 0;display:flex;flex-wrap:wrap;
+    gap:48px 36px;justify-content:center}
+  .frame{display:flex;flex-direction:column;align-items:center;width:390px}
+  .frame .cap{margin-bottom:16px;text-align:center}
+  .frame .num{display:inline-flex;width:26px;height:26px;border-radius:50%;
+    background:var(--amber);color:#1E1B18;font-size:13px;font-weight:700;
+    align-items:center;justify-content:center;margin-bottom:10px}
+  .frame .name{font-family:var(--serif);font-size:22px;color:var(--paper)}
+  .frame .desc{font-size:13px;color:var(--mute);margin-top:6px;line-height:1.5;
+    max-width:330px}
+  .frame iframe{width:390px;height:844px;border:none;border-radius:30px;
+    box-shadow:0 24px 60px rgba(0,0,0,.5);background:#000}
+  .frame .openlink{margin-top:14px;font-size:12px;color:var(--amber);
+    text-decoration:none;font-weight:600;letter-spacing:.03em}
+
+  .legend{max-width:880px;margin:70px auto 0;border-top:1px solid #38322D;
+    padding-top:36px}
+  .legend h2{font-family:var(--serif);font-size:24px;font-weight:400;margin-bottom:20px}
+  .swatches{display:flex;flex-wrap:wrap;gap:14px}
+  .sw{display:flex;align-items:center;gap:10px;font-size:13px;color:#C9C0B4}
+  .sw .chip{width:34px;height:34px;border-radius:9px;border:1px solid #ffffff20}
+  .typ{margin-top:26px;font-size:14px;color:#C9C0B4;line-height:1.8}
+  .typ b{color:var(--paper)}
+  .foot{max-width:880px;margin:48px auto 0;font-size:13px;color:var(--mute);
+    line-height:1.7}
+</style>
+</head>
+<body>
+  <div class="head">
+    <div class="kicker">Clean-Slate Design Exploration · 2026-05-18</div>
+    <h1>Ollie, redrawn from a <em>blank slate.</em></h1>
+    <p class="lede">A blindfolded redesign of Ollie's iOS app — driven only by what the
+      code says the app <em>does</em>, not by a single pixel of how it currently looks.
+      No existing palette, type, layout, naming, or "design DNA" was consulted.</p>
+    <p class="meta">
+      <b>Method:</b> codebase read for behavior only — routes, 12 modules, ~100 logic
+      detectors, orchestrators, the notification constitution, the event registry.<br>
+      <b>Read the full rationale:</b> <code>DIRECTION.md</code> &nbsp;·&nbsp;
+      7 screens below, each a standalone iPhone-sized HTML file (390×844).
+    </p>
+  </div>
+
+  <div class="thesis">
+    <div class="tl">The core design bet</div>
+    <p>For a mid-spiral ADHD brain, the thought is gone in 8 seconds — so capture
+      is not a feature you navigate to, it is the <em>floor you stand on</em>.
+      A persistent catch-dock on every screen, a 3-tab nav (Now · Noticed · Safe),
+      and the 12 life domains demoted from a front-page grid to a quiet drill-down.
+      A calm warm-paper notebook, not a productivity cockpit.</p>
+  </div>
+
+  <div class="gallery">
+    <div class="frame">
+      <div class="cap"><div class="num">1</div>
+        <div class="name">Now</div>
+        <div class="desc">The landing surface — a calm stream of what got caught + what's ahead, with the capture dock on the floor.</div>
+      </div>
+      <iframe src="mockups/now.html"></iframe>
+      <a class="openlink" href="mockups/now.html" target="_blank">open full screen ↗</a>
+    </div>
+
+    <div class="frame">
+      <div class="cap"><div class="num">2</div>
+        <div class="name">Catch</div>
+        <div class="desc">Full-bleed capture. Type messy or speak — the breathing ring says "take your time," live routing preview shows where it'll land.</div>
+      </div>
+      <iframe src="mockups/catch.html"></iframe>
+      <a class="openlink" href="mockups/catch.html" target="_blank">open full screen ↗</a>
+    </div>
+
+    <div class="frame">
+      <div class="cap"><div class="num">3</div>
+        <div class="name">Caught — the settle</div>
+        <div class="desc">The trust-earning micro-moment: a thrown thought lands in Now with an amber underglow and a checkable receipt.</div>
+      </div>
+      <iframe src="mockups/capture-confirm.html"></iframe>
+      <a class="openlink" href="mockups/capture-confirm.html" target="_blank">open full screen ↗</a>
+    </div>
+
+    <div class="frame">
+      <div class="cap"><div class="num">4</div>
+        <div class="name">Noticed</div>
+        <div class="desc">The reward layer — cross-module patterns the app found on its own, plus the garden folded in as quiet proof of showing up.</div>
+      </div>
+      <iframe src="mockups/noticed.html"></iframe>
+      <a class="openlink" href="mockups/noticed.html" target="_blank">open full screen ↗</a>
+    </div>
+
+    <div class="frame">
+      <div class="cap"><div class="num">5</div>
+        <div class="name">Domain — Finance</div>
+        <div class="desc">A drawer, reached <em>through</em> a caught thought. Deep per-domain logic — bills, subs, ADHD-tax — but never the front door.</div>
+      </div>
+      <iframe src="mockups/domain.html"></iframe>
+      <a class="openlink" href="mockups/domain.html" target="_blank">open full screen ↗</a>
+    </div>
+
+    <div class="frame">
+      <div class="cap"><div class="num">6</div>
+        <div class="name">Safe</div>
+        <div class="desc">The escape hatch — a permanent tab, calm dim slate not alarm-red, localized hotlines one tap away. Zero data entry.</div>
+      </div>
+      <iframe src="mockups/safe.html"></iframe>
+      <a class="openlink" href="mockups/safe.html" target="_blank">open full screen ↗</a>
+    </div>
+
+    <div class="frame">
+      <div class="cap"><div class="num">7</div>
+        <div class="name">Welcome</div>
+        <div class="desc">First run — 7 skippable questions, one per screen, establishing the calm two-voice tone before a single thought is thrown.</div>
+      </div>
+      <iframe src="mockups/onboarding.html"></iframe>
+      <a class="openlink" href="mockups/onboarding.html" target="_blank">open full screen ↗</a>
+    </div>
+  </div>
+
+  <div class="legend">
+    <h2>The system, in brief</h2>
+    <div class="swatches">
+      <div class="sw"><div class="chip" style="background:#FBF7F0"></div>paper · ground</div>
+      <div class="sw"><div class="chip" style="background:#2A2622"></div>ink · warm near-black</div>
+      <div class="sw"><div class="chip" style="background:#E8732C"></div>amber · "it landed"</div>
+      <div class="sw"><div class="chip" style="background:#5B8C7E"></div>sage · "you're okay"</div>
+      <div class="sw"><div class="chip" style="background:#21262B"></div>slate · safe surface</div>
+      <div class="sw"><div class="chip" style="background:#C9923E"></div>domain tint (×12)</div>
+    </div>
+    <div class="typ">
+      <b>Two voices.</b> Newsreader (humanist serif) for the app's own voice —
+      greetings, cues, patterns — so it reads as a notebook, not a tool.
+      Inter for functional body, lists, tabular numbers.<br>
+      <b>Motion.</b> Settle, don't bounce — a 320ms ease + 600ms amber glow on
+      capture; a 4s breathing ring on voice; 160ms tab cross-fades.<br>
+      <b>Voice.</b> Lowercase, factual, never chirpy, never guilt-tripping —
+      "got it, that's in finance now" over "Great job! 🎉".
+    </div>
+  </div>
+
+  <div class="foot">
+    This is an <b>exploration</b>, not a migration plan. Its value is the contrast —
+    see <code>DIRECTION.md §7 "What this differs from the current app"</code> for
+    the honest list of bets and demotions.
+  </div>
+</body>
+</html>

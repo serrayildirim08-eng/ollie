@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Cycle — worth a look</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;
+    padding:0 26px 40px}
+
+  /* the framing line — this is a "when you have a moment" surface.
+     calm, never an alarm. it sets the whole tone of the screen. */
+  .intro{margin-top:116px}
+  .ititle{font-size:22px;font-weight:300;color:var(--ink);letter-spacing:-.02em;
+    line-height:1.3}
+  .ititle b{font-weight:500}
+  .isub{margin-top:10px;font-size:14px;color:var(--mute);font-weight:400;
+    line-height:1.5}
+
+  /* the flags — each is ONE calm line. a sage dot, the observation, a
+     quiet source tag, and a soft watch/discuss framing underneath.
+     sage and ink only. NEVER red. never a diagnosis, never a count
+     badge, never urgency tinting. it reads like a margin note. */
+  .flags{margin-top:30px;display:flex;flex-direction:column}
+  .flag{border-top:1px solid var(--line);padding:18px 0}
+  .flag:last-child{border-bottom:1px solid var(--line)}
+  .fhead{display:flex;align-items:flex-start;gap:11px}
+  .fdot{width:7px;height:7px;border-radius:50%;background:var(--sage);
+    flex-shrink:0;margin-top:6px}
+  .ftext{flex:1}
+  .fline{font-size:15px;color:var(--ink);font-weight:500;letter-spacing:-.01em;
+    line-height:1.4}
+  .fframe{margin-top:5px;font-size:13px;color:var(--mute);font-weight:400;
+    line-height:1.45}
+  /* the source tag — a quiet outlined pill, sage text. the only
+     "authority" mark, and it's deliberately small. */
+  .src{display:inline-flex;align-items:center;margin-left:8px;
+    border:1px solid var(--line);border-radius:6px;padding:1.5px 6px;
+    font-size:10px;font-weight:600;color:var(--sage);letter-spacing:.05em;
+    text-transform:uppercase;vertical-align:1px}
+
+  /* the closing note — restates that none of this is a diagnosis */
+  .foot{margin-top:26px;display:flex;gap:10px;align-items:flex-start}
+  .foot svg{stroke:var(--mute);flex-shrink:0;margin-top:1px}
+  .foot span{font-size:12px;color:var(--mute);font-weight:400;line-height:1.5}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+
+  <div class="who">
+    <span>worth a look</span>
+  </div>
+
+  <div class="scroll">
+    <div class="intro">
+      <div class="ititle"><b>a few things</b> ollie noticed in your cycles</div>
+      <div class="isub">nothing here needs doing today. when you have a
+        moment, these are worth raising with a clinician.</div>
+    </div>
+
+    <div class="flags">
+      <!-- oligomenorrhea — ACOG-referenced flag -->
+      <div class="flag">
+        <div class="fhead">
+          <span class="fdot"></span>
+          <div class="ftext">
+            <div class="fline">3 cycles in a row ran 35 days or longer<span class="src">ACOG</span></div>
+            <div class="fframe">long cycles can have many causes. worth mentioning at a check-up.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- dysmenorrhea — ACOG-referenced flag -->
+      <div class="flag">
+        <div class="fhead">
+          <span class="fdot"></span>
+          <div class="ftext">
+            <div class="fline">severe cramps logged across 3 recent cycles<span class="src">ACOG</span></div>
+            <div class="fframe">pain that disrupts your day is worth describing to a doctor.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- prolonged bleed — ACOG-referenced flag -->
+      <div class="flag">
+        <div class="fhead">
+          <span class="fdot"></span>
+          <div class="ftext">
+            <div class="fline">2 periods lasted longer than 8 days<span class="src">ACOG</span></div>
+            <div class="fframe">a longer-than-usual bleed is something to track and discuss.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- pcos-pattern — softer syndrome-pattern, watch/discuss framing -->
+      <div class="flag">
+        <div class="fhead">
+          <span class="fdot"></span>
+          <div class="ftext">
+            <div class="fline">long, variable cycles with cramps — a pattern, not a label</div>
+            <div class="fframe">some of what ollie sees can overlap with PCOS. only a
+              clinician can say. worth a conversation.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="foot">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="1.8">
+        <circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>
+      </svg>
+      <span>ollie observes patterns — it does not diagnose. these notes
+        are never sent to you as a notification; they wait here for
+        when you want them.</span>
+    </div>
+  </div>
+</div>
+</body>
+</html>

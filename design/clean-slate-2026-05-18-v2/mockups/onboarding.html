@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Onboarding</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --sage:#5B8C7E;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+
+  /* skip = a glyph, top-right, no shouting */
+  .skip{position:absolute;top:62px;right:24px;font-size:14px;color:var(--mute);
+    font-weight:500}
+
+  /* tiny progress, dots not text */
+  .prog{position:absolute;top:66px;left:24px;display:flex;gap:6px}
+  .prog i{width:6px;height:6px;border-radius:50%;background:var(--line);display:block}
+  .prog i.on{background:var(--ink)}
+
+  .stage{flex:1;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;padding:0 44px}
+
+  /* one glyph */
+  .glyph{width:62px;height:62px;border-radius:50%;background:#F2EEDF;
+    display:flex;align-items:center;justify-content:center;margin-bottom:38px}
+  .glyph svg{stroke:var(--sage)}
+
+  /* one question — the only sentence on screen */
+  .q{font-size:27px;line-height:1.4;color:var(--ink);text-align:center;
+    letter-spacing:-.012em;font-weight:400;margin-bottom:40px}
+
+  /* one input */
+  .field{width:100%;height:64px;background:#fff;border:1px solid var(--line);
+    border-radius:20px;display:flex;align-items:center;padding:0 22px;
+    box-shadow:0 10px 26px rgba(42,38,34,.05)}
+  .field span{font-size:19px;color:var(--mute)}
+
+  /* one forward target */
+  .next{position:absolute;bottom:46px;right:38px;width:64px;height:64px;
+    border-radius:50%;background:var(--ink);display:flex;align-items:center;
+    justify-content:center;box-shadow:0 12px 28px rgba(42,38,34,.22)}
+  .next svg{stroke:var(--paper)}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="prog"><i class="on"></i><i></i><i></i><i></i></div>
+  <div class="skip">skip</div>
+
+  <div class="stage">
+    <div class="glyph">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke-width="1.7">
+        <circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/>
+      </svg>
+    </div>
+    <div class="q">what should I call you?</div>
+    <div class="field"><span>your name</span></div>
+  </div>
+
+  <div class="next">
+    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <path d="M5 12h14M13 6l6 6-6 6"/>
+    </svg>
+  </div>
+</div>
+</body>
+</html>

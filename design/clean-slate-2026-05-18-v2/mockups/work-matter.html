@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Yılmaz</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E; --umber:#A8703C;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  .safe{position:absolute;top:62px;right:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .safe svg{stroke:var(--mute)}
+  .find{position:absolute;top:62px;left:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .find svg{stroke:var(--mute)}
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  /* a single matter = THE SECRETARY BRIEFING. opening a matter hands
+     the user the file the way a good secretary would. the matter name
+     is the .who header; the briefing is the one focus — real content,
+     stays v2-calm, never a cluttered dashboard. */
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;
+    padding:0 26px 36px}
+
+  /* the matter header — the name, large, as the page's hero.
+     margin-top clears the absolutely-positioned .who label. */
+  .head{margin-top:116px;display:flex;flex-direction:column;align-items:center;
+    gap:5px;margin-bottom:6px}
+  .mname{font-size:30px;font-weight:400;color:var(--ink);letter-spacing:-.022em}
+  .mkind{font-size:13px;color:var(--mute);font-weight:500;letter-spacing:.02em}
+
+  /* WHERE IT STANDS — one calm line at the top, the situation.
+     the briefing's opening sentence, set a touch larger, the way a
+     secretary leads with the headline. */
+  .stands{margin-top:22px;font-size:15.5px;color:var(--ink);font-weight:500;
+    letter-spacing:-.012em;line-height:1.55;text-align:center;
+    padding:0 4px}
+  .stands .warm{color:var(--umber);font-weight:600}
+
+  /* the briefing sections — each is a quiet titled block on a hairline
+     rule. a small caps label, then the content. generous air between. */
+  .section{border-top:1px solid var(--line);padding:20px 2px}
+  .section:first-of-type{margin-top:26px}
+  .stitle{font-size:11px;color:var(--mute);font-weight:600;letter-spacing:.07em;
+    text-transform:uppercase;margin-bottom:13px}
+
+  /* LATEST — the most recent movement. a when + the activity, one line. */
+  .latest{display:flex;align-items:baseline;gap:10px}
+  .lwhen{font-size:13px;color:var(--mute);font-weight:600;flex-shrink:0;
+    letter-spacing:.01em}
+  .lsep{color:var(--line);font-size:13px}
+  .lwhat{font-size:14.5px;color:var(--ink);font-weight:500;letter-spacing:-.01em;
+    flex:1;line-height:1.45}
+
+  /* DONE — completed items, calm sage ticks. a quiet list. */
+  .list{display:flex;flex-direction:column;gap:11px}
+  .item{display:flex;align-items:flex-start;gap:11px}
+  .item .tick{width:16px;height:16px;border-radius:50%;flex-shrink:0;
+    display:flex;align-items:center;justify-content:center;margin-top:1px}
+  .item .label{font-size:14px;color:var(--ink);font-weight:500;
+    letter-spacing:-.01em;line-height:1.45;flex:1}
+
+  /* a done item — sage tick disc, the label calm */
+  .item.done .tick{background:var(--sage)}
+  .item.done .tick svg{stroke:#fff}
+
+  /* an open / missing item — a hollow ink-outline ring */
+  .item.open .tick{border:1.6px solid var(--mute)}
+  .item.open .label{color:#5A524A}
+
+  /* an item OLLIE INFERRED from the learned matter-shape — marked
+     distinctly from items the user dumped. a small sage "ollie noticed"
+     tag rides under the label. the ring is sage-tinted, not ink. */
+  .item.inferred .tick{border-color:var(--sage)}
+  .noticed{display:inline-flex;align-items:center;gap:5px;margin-top:4px}
+  .noticed .ndot{width:5px;height:5px;border-radius:50%;background:var(--sage);
+    flex-shrink:0}
+  .noticed span{font-size:11.5px;color:var(--sage);font-weight:600;
+    letter-spacing:.01em}
+
+  /* NEXT — what needs doing. the next action sits warm; the rest quiet.
+     each a soft row with a leading mark. */
+  .nextrow{display:flex;align-items:flex-start;gap:11px;padding:3px 0}
+  .nextrow .nmk{width:7px;height:7px;border-radius:2px;
+    border:1.5px solid var(--mute);flex-shrink:0;margin-top:5px}
+  .nextrow .ntext{font-size:14px;color:var(--ink);font-weight:500;
+    letter-spacing:-.01em;line-height:1.45;flex:1}
+  .nextrow .nwhen{font-size:12.5px;color:var(--mute);font-weight:600;
+    flex-shrink:0;margin-top:1px}
+  /* the next action — drawn warm */
+  .nextrow.due .nmk{border-color:var(--umber);background:var(--umber)}
+  .nextrow.due .ntext{font-weight:600}
+  .nextrow.due .nwhen{color:var(--umber)}
+
+  /* the dump stream — a quiet "everything you've thrown here" entry at
+     the bottom. a calm drill row, not a wall of dumps. */
+  .stream{border-top:1px solid var(--line);border-bottom:1px solid var(--line);
+    margin-top:6px;padding:19px 2px;display:flex;align-items:center}
+  .stream .sk{font-size:13px;color:var(--mute);font-weight:600;flex-shrink:0;
+    letter-spacing:.01em}
+  .stream .ssep{color:var(--line);margin:0 8px;font-size:13px}
+  .stream .sv{font-size:14px;color:var(--ink);font-weight:500;
+    letter-spacing:-.01em;flex:1}
+  .stream .schev{stroke:var(--mute);flex-shrink:0;margin-left:8px}
+
+  /* the closing note — how this briefing was made. a quiet sage line:
+     ollie reconstructed it from the scatter, the user didn't. */
+  .built{margin-top:24px;display:flex;align-items:flex-start;gap:9px;
+    padding:0 2px}
+  .built .bdot{width:6px;height:6px;border-radius:50%;background:var(--sage);
+    flex-shrink:0;margin-top:4px}
+  .built span{font-size:13px;color:var(--ink);font-weight:500;
+    letter-spacing:-.01em;line-height:1.5}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+  <div class="find">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/>
+    </svg>
+  </div>
+  <div class="safe">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.5-7 10-7 10z"/>
+    </svg>
+  </div>
+
+  <div class="who">
+    <span>matter</span>
+  </div>
+
+  <div class="scroll">
+    <!-- the matter header — the name as the hero -->
+    <div class="head">
+      <div class="mname">Yılmaz &middot; E-2</div>
+      <div class="mkind">investor visa &middot; opened Mar 4</div>
+    </div>
+
+    <!-- WHERE IT STANDS — one calm line, the situation -->
+    <div class="stands">
+      Almost ready to file. The packet is built; it's
+      <span class="warm">waiting on one signed lease</span> before it can
+      go out Thursday.
+    </div>
+
+    <!-- LATEST — the most recent movement -->
+    <div class="section">
+      <div class="stitle">latest</div>
+      <div class="latest">
+        <span class="lwhen">2 days ago</span><span class="lsep">·</span>
+        <span class="lwhat">called USCIS to confirm the filing window — Thursday
+          is firm.</span>
+      </div>
+    </div>
+
+    <!-- DONE — completed items, calm sage ticks -->
+    <div class="section">
+      <div class="stitle">done</div>
+      <div class="list">
+        <div class="item done">
+          <span class="tick">
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke-width="3.4">
+              <path d="M5 13l4 4 10-10"/>
+            </svg>
+          </span>
+          <span class="label">business plan finalized and reviewed</span>
+        </div>
+        <div class="item done">
+          <span class="tick">
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke-width="3.4">
+              <path d="M5 13l4 4 10-10"/>
+            </svg>
+          </span>
+          <span class="label">source-of-funds documentation collected</span>
+        </div>
+        <div class="item done">
+          <span class="tick">
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke-width="3.4">
+              <path d="M5 13l4 4 10-10"/>
+            </svg>
+          </span>
+          <span class="label">DS-160 drafted and confirmed with the client</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- MISSING / OPEN — what's incomplete. items ollie INFERRED from
+         the learned matter-shape are marked distinctly from items the
+         user dumped — a small sage "ollie noticed" tag. -->
+    <div class="section">
+      <div class="stitle">missing &middot; open</div>
+      <div class="list">
+        <!-- user-dumped — a plain ink-outline ring -->
+        <div class="item open">
+          <span class="tick"></span>
+          <span class="label">signed commercial lease — landlord hasn't
+            returned it yet</span>
+        </div>
+        <!-- ollie inferred from the shape of past E-2 matters -->
+        <div class="item open inferred">
+          <span class="tick"></span>
+          <div style="flex:1">
+            <div class="label">marketing materials / website screenshots
+              for the business</div>
+            <div class="noticed">
+              <span class="ndot"></span>
+              <span>ollie noticed — E-2 matters usually have this by now</span>
+            </div>
+          </div>
+        </div>
+        <div class="item open inferred">
+          <span class="tick"></span>
+          <div style="flex:1">
+            <div class="label">five recent payroll records for the US hires</div>
+            <div class="noticed">
+              <span class="ndot"></span>
+              <span>ollie noticed — missing vs your past E-2 cases</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- NEXT — what needs doing. the next action sits warm. -->
+    <div class="section">
+      <div class="stitle">next</div>
+      <div class="list" style="gap:2px">
+        <div class="nextrow due">
+          <span class="nmk"></span>
+          <span class="ntext">chase the signed lease from the landlord</span>
+          <span class="nwhen">today</span>
+        </div>
+        <div class="nextrow">
+          <span class="nmk"></span>
+          <span class="ntext">ask the client for the marketing materials</span>
+          <span class="nwhen">this week</span>
+        </div>
+        <div class="nextrow">
+          <span class="nmk"></span>
+          <span class="ntext">assemble and file the full packet</span>
+          <span class="nwhen">Thu</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- the dump stream — a quiet "everything you've thrown here" drill -->
+    <div class="stream">
+      <span class="sk">the stream</span><span class="ssep">·</span>
+      <span class="sv">everything you've thrown at this matter — 23 dumps</span>
+      <svg class="schev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+    </div>
+
+    <!-- how this briefing was built — a quiet sage line -->
+    <div class="built">
+      <span class="bdot"></span>
+      <span>you never filed any of this — ollie pieced the briefing together
+        from 23 scattered dumps.</span>
+    </div>
+
+  </div>
+</div>
+</body>
+</html>

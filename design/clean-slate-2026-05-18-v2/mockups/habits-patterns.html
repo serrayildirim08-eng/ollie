@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Habits — see the rest</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;
+    padding:0 26px 40px}
+
+  /* the framing line — this is a "see the rest" reflective surface for
+     the 24 habit detectors. calm reading, never a charts wall, never a
+     scoreboard. it sets the whole supportive tone. */
+  .intro{margin-top:116px}
+  .ititle{font-size:22px;font-weight:300;color:var(--ink);letter-spacing:-.02em;
+    line-height:1.3}
+  .ititle b{font-weight:500}
+  .isub{margin-top:10px;font-size:14px;color:var(--mute);font-weight:400;
+    line-height:1.5}
+
+  /* the patterns — grouped quietly under small section labels. each
+     group is a calm cluster of ONE-LINE observations. a sage dot rides
+     each line. NO charts, NO badges, NO counts, NO red. it reads like a
+     journal — habits don't die, they cycle. */
+  .group{margin-top:30px}
+  .gk{font-size:11px;color:var(--mute);font-weight:600;letter-spacing:.08em;
+    text-transform:uppercase;margin-bottom:4px}
+
+  .pat{border-top:1px solid var(--line);padding:16px 0}
+  .group .pat:last-child{border-bottom:1px solid var(--line)}
+  .phead{display:flex;align-items:flex-start;gap:11px}
+  .pdot{width:7px;height:7px;border-radius:50%;background:var(--sage);
+    flex-shrink:0;margin-top:6px}
+  .ptext{flex:1}
+  .pline{font-size:15px;color:var(--ink);font-weight:500;letter-spacing:-.01em;
+    line-height:1.4}
+  /* the soft sub-line — the gentle reframe, never a verdict, never shame */
+  .pframe{margin-top:4px;font-size:13px;color:var(--mute);font-weight:400;
+    line-height:1.45}
+
+  /* the closing note — restates this surface is screen-only, never pushed */
+  .foot{margin-top:26px;display:flex;gap:10px;align-items:flex-start}
+  .foot svg{stroke:var(--mute);flex-shrink:0;margin-top:1px}
+  .foot span{font-size:12px;color:var(--mute);font-weight:400;line-height:1.5}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+
+  <div class="who">
+    <span>see the rest</span>
+  </div>
+
+  <div class="scroll">
+    <div class="intro">
+      <div class="ititle"><b>what ollie noticed</b> in how your habits run</div>
+      <div class="isub">none of this needs doing today. it's here to read
+        when you're curious — quiet patterns, not instructions. a gap is
+        never a verdict.</div>
+    </div>
+
+    <!-- GROUP 1 — what makes them stick: externalization, keystone, friction -->
+    <div class="group">
+      <div class="gk">what makes them stick</div>
+
+      <div class="pat">
+        <div class="phead">
+          <span class="pdot"></span>
+          <div class="ptext">
+            <div class="pline">your cued habits land far more often than the un-cued ones</div>
+            <div class="pframe">a habit hanging off something that already happens does the remembering for you — that's not willpower, it's design.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pat">
+        <div class="phead">
+          <span class="pdot"></span>
+          <div class="ptext">
+            <div class="pline">on days "drink water" happens, four other habits happen more</div>
+            <div class="pframe">that one looks like a keystone — the anchor the rest of the day hangs off.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pat">
+        <div class="phead">
+          <span class="pdot"></span>
+          <div class="ptext">
+            <div class="pline">"wind down" tends to stall on tuesdays</div>
+            <div class="pframe">friction has a shape — and one weekday wearing it is easier to plan around than to push through.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pat">
+        <div class="phead">
+          <span class="pdot"></span>
+          <div class="ptext">
+            <div class="pline">your body habits land more easily than the thinking ones</div>
+            <div class="pframe">brush teeth, move, water — the body is the anchor; cognitive habits can borrow its momentum.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- GROUP 2 — when your week is different: luteal, stress, sleep -->
+    <div class="group">
+      <div class="gk">when your week is different</div>
+
+      <div class="pat">
+        <div class="phead">
+          <span class="pdot"></span>
+          <div class="ptext">
+            <div class="pline">in your luteal phase, fewer habits land — and that's expected</div>
+            <div class="pframe">your brain really is different that week. this is scaling expectations, not standards — the bar can move with you.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pat">
+        <div class="phead">
+          <span class="pdot"></span>
+          <div class="ptext">
+            <div class="pline">deadline weeks pull your habit count down</div>
+            <div class="pframe">stress crowds the small things out. on a week like this, a "stress mode" of body-only habits is enough.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pat">
+        <div class="phead">
+          <span class="pdot"></span>
+          <div class="ptext">
+            <div class="pline">after nights under 6 hours, fewer habits get checked off</div>
+            <div class="pframe">sleep × habits — a tired day asks for a lighter list, not a harder push. a prosthetic environment beats willpower.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pat">
+        <div class="phead">
+          <span class="pdot"></span>
+          <div class="ptext">
+            <div class="pline">long deep-focus days cost some of the next day's habits</div>
+            <div class="pframe">hyperfocus × habits — the dip after is crash and recovery, not failure.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pat">
+        <div class="phead">
+          <span class="pdot"></span>
+          <div class="ptext">
+            <div class="pline">on days you mention meds, your habits run a little higher</div>
+            <div class="pframe">habits × medication — worth knowing, not a rule. the meds aren't doing the habits; they're clearing the runway.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- GROUP 3 — how a habit lives and returns: rebirth, drift, fresh-start -->
+    <div class="group">
+      <div class="gk">how a habit lives and returns</div>
+
+      <div class="pat">
+        <div class="phead">
+          <span class="pdot"></span>
+          <div class="ptext">
+            <div class="pline">three of your habits came back after a long pause</div>
+            <div class="pframe">habits don't die for you — they cycle. a restart isn't starting over, it's the habit returning.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pat">
+        <div class="phead">
+          <span class="pdot"></span>
+          <div class="ptext">
+            <div class="pline">your habit count this fortnight sits below the two before it</div>
+            <div class="pframe">a data point, not a data trend — fortnights move, and one quiet one doesn't mean anything yet.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pat">
+        <div class="phead">
+          <span class="pdot"></span>
+          <div class="ptext">
+            <div class="pline">habits you started on a monday or the 1st tend to go quiet first</div>
+            <div class="pframe">the landmark is a fine doorway in — the leverage point is the re-entry, not the launch date.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pat">
+        <div class="phead">
+          <span class="pdot"></span>
+          <div class="ptext">
+            <div class="pline">a few of your habits paused together when a new interest arrived</div>
+            <div class="pframe">interest hijack — not a collapse. ollie can pause them officially so they're waiting, not failing.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- GROUP 4 — what you tell yourself: identity, self-talk, sensory -->
+    <div class="group">
+      <div class="gk">what you tell yourself</div>
+
+      <div class="pat">
+        <div class="phead">
+          <span class="pdot"></span>
+          <div class="ptext">
+            <div class="pline">you've written about not being "a morning person" more than doing the habit</div>
+            <div class="pframe">identity framing — the story can run ahead of the evidence. the habit gets to write its own.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pat">
+        <div class="phead">
+          <span class="pdot"></span>
+          <div class="ptext">
+            <div class="pline">after a hard-on-yourself note, your habits dip for a couple of days</div>
+            <div class="pframe">self-talk × habits — the harsh voice costs more than it corrects. softer tends to land better.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pat">
+        <div class="phead">
+          <span class="pdot"></span>
+          <div class="ptext">
+            <div class="pline">skip days cluster with mentions of noise, bright light or feeling "too much"</div>
+            <div class="pframe">before prescribing the habit, prescribe the conditions — the room can be the thing in the way.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="foot">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="1.8">
+        <circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>
+      </svg>
+      <span>ollie notices patterns — it never scores you, and none of this
+        is ever sent as a notification. it waits here for when you want it.</span>
+    </div>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Body — episode</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;
+    padding:0 26px 36px}
+
+  /* the episode head — its name + the day-N counter. calm, factual. */
+  .head{margin-top:116px}
+  .ename{font-size:30px;font-weight:300;color:var(--ink);letter-spacing:-.025em}
+  .eday{margin-top:8px;font-size:13px;color:var(--mute);font-weight:500;
+    letter-spacing:.01em}
+  .eday b{color:var(--ink);font-weight:600}
+
+  /* THE SEVERITY ARC — the check-ins logged so far (1–5) as a calm
+     sparkline on a baseline. an ink line, last point amber. a soft 5/1
+     gridline pair frames it without grades. */
+  .arcwrap{margin-top:32px;background:#fff;border:1px solid var(--line);
+    border-radius:20px;padding:20px 18px 16px;box-shadow:0 6px 16px rgba(42,38,34,.04)}
+  .arck{font-size:11px;color:var(--mute);font-weight:600;letter-spacing:.07em;
+    text-transform:uppercase}
+  .arc{margin-top:12px;width:100%;height:96px}
+  .arc svg{display:block;width:100%}
+  /* the small day labels under the arc */
+  .arcdays{margin-top:8px;display:flex;justify-content:space-between;
+    padding:0 4px}
+  .arcdays span{font-size:10px;color:var(--mute);font-weight:600;
+    letter-spacing:.04em;text-transform:uppercase}
+
+  /* meds logged on the episode — a calm list under a quiet label */
+  .sect{margin-top:32px;font-size:11px;color:var(--mute);font-weight:600;
+    letter-spacing:.08em;text-transform:uppercase;margin-bottom:2px}
+  .med{border-top:1px solid var(--line);padding:14px 2px;display:flex;
+    align-items:baseline;gap:0}
+  .list .med:last-child{border-bottom:1px solid var(--line)}
+  .mname{flex:1;font-size:14px;color:var(--ink);font-weight:500;
+    letter-spacing:-.01em}
+  .mname b{font-weight:600}
+  .mwhen{font-size:12px;color:var(--mute);font-weight:500}
+
+  /* two calm actions — a quiet "log a med" ghost row, then the amber
+     resolve. resolve shows a recap before confirming (see the recap card). */
+  .logmed{border-top:1px solid var(--line);padding:14px 2px;display:flex;
+    align-items:center;gap:11px}
+  .list .logmed{border-bottom:1px solid var(--line)}
+  .logmed .pl{width:22px;height:22px;border-radius:50%;border:1.5px dashed var(--line);
+    display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .logmed .pl svg{stroke:var(--mute)}
+  .logmed span{font-size:14px;color:var(--mute);font-weight:500;letter-spacing:-.01em}
+
+  /* the resolve action — calm, NOT amber-loud. a quiet sage-outlined
+     button: closing an episode is a gentle act, not a win. */
+  .resolve{margin-top:30px;height:50px;border-radius:25px;background:#fff;
+    border:1.5px solid var(--sage);display:flex;align-items:center;
+    justify-content:center;gap:8px}
+  .resolve svg{stroke:var(--sage)}
+  .resolve span{font-size:15px;font-weight:600;color:var(--sage);
+    letter-spacing:-.01em}
+
+  /* the recap — shown BEFORE confirming a close. a calm card, plain
+     facts, no congratulation. "close it" is the only commit here. */
+  .recap{margin-top:18px;background:#FCF6EA;border:1px solid #E7D4AC;
+    border-radius:20px;padding:18px}
+  .recaph{font-size:13px;color:var(--ink);font-weight:600;letter-spacing:-.01em}
+  .recapl{margin-top:13px;display:flex;flex-direction:column;gap:9px}
+  .rl{display:flex;align-items:baseline;justify-content:space-between;
+    font-size:13px}
+  .rl .k{color:var(--mute);font-weight:500}
+  .rl .v{color:var(--ink);font-weight:600}
+  .confirm{margin-top:16px;height:46px;border-radius:23px;background:var(--accent);
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:0 10px 24px rgba(201,146,62,.3)}
+  .confirm span{font-size:15px;font-weight:600;color:#fff;letter-spacing:-.01em}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+
+  <div class="who">
+    <span>episode</span>
+  </div>
+
+  <div class="scroll">
+    <div class="head">
+      <div class="ename">headache</div>
+      <div class="eday"><b>day 2</b> · started monday · acute</div>
+    </div>
+
+    <!-- the severity arc — 4 check-ins so far, 1–5 -->
+    <div class="arcwrap">
+      <div class="arck">severity, check-in by check-in</div>
+      <div class="arc">
+        <svg viewBox="0 0 300 96" preserveAspectRatio="none">
+          <!-- two faint reference lines: 5 (top) and 1 (bottom). no grade. -->
+          <line x1="6" y1="14" x2="294" y2="14" stroke="#EAE2D4" stroke-width="1"/>
+          <line x1="6" y1="82" x2="294" y2="82" stroke="#EAE2D4" stroke-width="1"/>
+          <!-- the severity path — sev 3,4,4,2 over 4 check-ins.
+               y: 1→82 ... 5→14 (17px per step). x: 4 points spread. -->
+          <polyline points="40,48 122,31 204,31 264,65" fill="none"
+            stroke="#2A2622" stroke-width="2.4" stroke-linecap="round"
+            stroke-linejoin="round" opacity=".6"/>
+          <circle cx="40" cy="48" r="4" fill="#2A2622" opacity=".6"/>
+          <circle cx="122" cy="31" r="4" fill="#2A2622" opacity=".6"/>
+          <circle cx="204" cy="31" r="4" fill="#2A2622" opacity=".6"/>
+          <!-- the latest check-in — amber -->
+          <circle cx="264" cy="65" r="5.5" fill="#C9923E"/>
+        </svg>
+      </div>
+      <div class="arcdays">
+        <span>mon am</span>
+        <span>mon pm</span>
+        <span>tue am</span>
+        <span>now</span>
+      </div>
+    </div>
+
+    <!-- meds logged on the episode -->
+    <div class="sect">meds logged</div>
+    <div class="list">
+      <div class="med">
+        <span class="mname"><b>ibuprofen</b> · 400mg</span>
+        <span class="mwhen">mon · 2:10pm</span>
+      </div>
+      <div class="med">
+        <span class="mname"><b>ibuprofen</b> · 400mg</span>
+        <span class="mwhen">tue · 9:30am</span>
+      </div>
+      <div class="logmed">
+        <div class="pl">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>
+        </div>
+        <span>log a med taken</span>
+      </div>
+    </div>
+
+    <!-- the calm resolve action -->
+    <div class="resolve">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="2.2">
+        <path d="M5 13l4 4 10-11"/>
+      </svg>
+      <span>this one's over</span>
+    </div>
+
+    <!-- the recap shown before confirming the close -->
+    <div class="recap">
+      <div class="recaph">before you close it — here's what was tracked</div>
+      <div class="recapl">
+        <div class="rl"><span class="k">tracked for</span><span class="v">2 days</span></div>
+        <div class="rl"><span class="k">check-ins</span><span class="v">4</span></div>
+        <div class="rl"><span class="k">severity peak</span><span class="v">4 of 5</span></div>
+        <div class="rl"><span class="k">meds logged</span><span class="v">2</span></div>
+      </div>
+      <div class="confirm">
+        <span>close it</span>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

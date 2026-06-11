@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Work</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E; --umber:#A8703C;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  .safe{position:absolute;top:62px;right:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .safe svg{stroke:var(--mute)}
+  .find{position:absolute;top:62px;left:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .find svg{stroke:var(--mute)}
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  /* work has only 2 submodules — like home (3 cards) it would read barren
+     as thin rows. so each card is a TALL, RICH preview block: a tailored
+     gutter visual, a glance line, and 2-3 lines of REAL previewed content
+     at rest. opening work feels like a full notebook page. */
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;
+    padding:0 26px 36px}
+
+  /* the 2 cards — generous tall preview blocks. margin-top clears the
+     absolutely-positioned .who label. cards sit on hairline rules. */
+  .rows{margin-top:116px;display:flex;flex-direction:column}
+  .row{border-top:1px solid var(--line);padding:24px 2px 26px}
+  .row:last-child{border-bottom:1px solid var(--line)}
+
+  /* card head — bigger visual on the left, glance line on the right. */
+  .rhead{display:flex;align-items:center;gap:16px}
+  .viz{width:62px;flex-shrink:0;display:flex;align-items:center;
+    justify-content:center}
+  .rtext{flex:1;display:flex;flex-direction:column;gap:4px;min-width:0}
+  .rk{font-size:11px;color:var(--mute);font-weight:600;letter-spacing:.06em;
+    text-transform:uppercase}
+  .rv{font-size:15px;color:var(--ink);font-weight:500;letter-spacing:-.01em}
+  .rv b{font-weight:600}
+  .rv .warm{color:var(--umber);font-weight:600}
+  .chev{stroke:var(--mute);flex-shrink:0;margin-left:6px;align-self:center}
+
+  /* ---- the at-rest preview body — real data under the glance line,
+          aligned under the text column so the visual stays a clean
+          margin. calm: real content, near-zero labels. ---- */
+  .preview{margin-top:15px;margin-left:78px;display:flex;
+    flex-direction:column}
+
+  /* work — the matters preview. each matter on its own line: a small
+     matter mark, the matter name, then a one-line status on the right.
+     the top matter is the one that needs you — drawn warm, mark umber. */
+  .matrow{display:flex;align-items:baseline;gap:11px;padding:9px 0;
+    border-top:1px solid var(--line)}
+  .matrow:first-child{border-top:none;padding-top:2px}
+  .matmk{width:7px;height:7px;border-radius:2px;border:1.5px solid var(--mute);
+    flex-shrink:0;align-self:center}
+  .matname{font-size:14px;color:var(--ink);font-weight:600;flex-shrink:0;
+    letter-spacing:-.01em}
+  .matstat{flex:1;font-size:12.5px;color:var(--mute);font-weight:500;
+    text-align:right;letter-spacing:-.01em}
+  /* the matter that needs you — drawn warm, mark filled umber */
+  .matrow.due .matmk{border-color:var(--umber);background:var(--umber)}
+  .matrow.due .matstat{color:var(--umber);font-weight:600}
+
+  /* goals — kept calm + correct, not over-built. each goal: a soft
+     progress arc dot, the goal name, then its % on the right. */
+  .goalrow{display:flex;align-items:center;gap:12px;padding:10px 0;
+    border-top:1px solid var(--line)}
+  .goalrow:first-child{border-top:none;padding-top:2px}
+  .goalname{flex:1;font-size:14px;color:var(--ink);font-weight:500;
+    letter-spacing:-.01em}
+  .goalpct{font-size:13px;color:var(--mute);font-weight:600;flex-shrink:0}
+  /* a tiny inline progress bar per goal — soft, never loud */
+  .gbar{width:54px;height:4px;border-radius:3px;background:var(--line);
+    position:relative;overflow:hidden;flex-shrink:0}
+  .gbar div{position:absolute;left:0;top:0;bottom:0;border-radius:3px;
+    background:var(--accent)}
+
+  /* ---- micro-visuals — real little data objects: ink + one accent.
+          never generic dots. ---- */
+
+  /* work — a calm stack of matter marks. four overlapping file-tabs,
+     the front one (the matter that needs you) drawn warm in umber.
+     reads as "a few matters, one is hot" instantly. */
+  .stack{position:relative;width:50px;height:46px}
+  .stack svg{position:absolute;inset:0}
+  .stack .file{fill:none;stroke-width:1.7;stroke-linejoin:round}
+
+  /* goals — an open progress gauge, body.html's gauge grammar. a 270°
+     arc filled to ~40% (learn spanish) in ink on a line-color track. */
+  .gauge{position:relative;width:46px;height:46px}
+  .gauge svg{display:block}
+  .gauge .gtrack{stroke:var(--line);stroke-width:3.5;fill:none;
+    stroke-linecap:round}
+  .gauge .gfill{stroke:var(--ink);stroke-width:3.5;fill:none;
+    stroke-linecap:round}
+
+  /* the open cue — a quiet route into the submodule. */
+  .open{margin-top:16px;margin-left:78px;font-size:12px;color:var(--accent);
+    font-weight:600;letter-spacing:.02em}
+
+  /* the observed-pattern note — sage mark + one quiet line under the cards. */
+  .note{margin-top:24px;display:flex;align-items:center;gap:8px}
+  .note .ndot{width:6px;height:6px;border-radius:50%;background:var(--sage);
+    flex-shrink:0}
+  .note span{font-size:13px;color:var(--ink);font-weight:500;
+    letter-spacing:-.01em}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+  <div class="find">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/>
+    </svg>
+  </div>
+  <div class="safe">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.5-7 10-7 10z"/>
+    </svg>
+  </div>
+
+  <div class="who">
+    <span>work</span>
+  </div>
+
+  <div class="scroll">
+    <div class="rows">
+
+      <!-- work — a tall preview block. the glance LEADS WITH MATTERS:
+           how many need you + the nearest deadline across all of them.
+           the visual is a stack of matter file-tabs, the front one warm.
+           at rest: the top 3 matters by name + their one-line status,
+           the most urgent drawn warm. -->
+      <div class="row">
+        <div class="rhead">
+          <div class="viz">
+            <div class="stack">
+              <svg width="50" height="46" viewBox="0 0 50 46">
+                <!-- back tabs — calm matters, quiet ink lines -->
+                <path class="file" stroke="var(--mute)"
+                  d="M12 13h14l3 3h13v22a2 2 0 0 1-2 2H12a2 2 0 0 1-2-2V15a2 2 0 0 1 2-2z"/>
+                <path class="file" stroke="var(--mute)"
+                  d="M9 19h14l3 3h13v22a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2V21a2 2 0 0 1 2-2z"/>
+                <!-- front tab — the matter that needs you, warm umber,
+                     a soft umber wash so it reads as the live one -->
+                <path class="file" stroke="var(--umber)" fill="#F3E4D3"
+                  d="M6 25h14l3 3h13v15a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V27a2 2 0 0 1 2-2z"/>
+              </svg>
+            </div>
+          </div>
+          <div class="rtext">
+            <span class="rk">work</span>
+            <span class="rv"><b>3 matters</b> need you · <span class="warm">Yılmaz files Thu</span></span>
+          </div>
+          <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+        </div>
+        <!-- at rest: the top 3 matters, each name + where it stands -->
+        <div class="preview">
+          <div class="matrow due">
+            <span class="matmk"></span>
+            <span class="matname">Yılmaz · E-2</span>
+            <span class="matstat">waiting on lease · files Thu</span>
+          </div>
+          <div class="matrow">
+            <span class="matmk"></span>
+            <span class="matname">Okafor · H-1B</span>
+            <span class="matstat">RFE drafted · review next</span>
+          </div>
+          <div class="matrow">
+            <span class="matmk"></span>
+            <span class="matname">Reyes · green card</span>
+            <span class="matstat">quiet · nothing due</span>
+          </div>
+        </div>
+        <div class="open">open work &rarr;</div>
+      </div>
+
+      <!-- goals — kept calm. the glance is the lead goal + its %.
+           at rest: a couple goals as quiet rows with a soft progress
+           bar. not over-built — goals isn't the focus today. -->
+      <div class="row">
+        <div class="rhead">
+          <div class="viz">
+            <div class="gauge">
+              <svg width="46" height="46" viewBox="0 0 46 46">
+                <!-- 270° open gauge, gap centred downward. r=17,
+                     circ≈106.8; 270° ≈ 80.1. start at 135°. -->
+                <circle class="gtrack" cx="23" cy="23" r="17"
+                  stroke-dasharray="80.1 26.7"
+                  transform="rotate(135 23 23)"/>
+                <!-- fill 40% of the 270° arc → 32.0 of 80.1 -->
+                <circle class="gfill" cx="23" cy="23" r="17"
+                  stroke-dasharray="32 74.8"
+                  transform="rotate(135 23 23)"/>
+              </svg>
+            </div>
+          </div>
+          <div class="rtext">
+            <span class="rk">goals</span>
+            <span class="rv"><b>learn spanish</b> · 40%</span>
+          </div>
+          <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+        </div>
+        <!-- at rest: a couple goals, quiet rows -->
+        <div class="preview">
+          <div class="goalrow">
+            <div class="gbar"><div style="width:40%"></div></div>
+            <span class="goalname">learn spanish</span>
+            <span class="goalpct">40%</span>
+          </div>
+          <div class="goalrow">
+            <div class="gbar"><div style="width:65%"></div></div>
+            <span class="goalname">run a half marathon</span>
+            <span class="goalpct">65%</span>
+          </div>
+        </div>
+        <div class="open">open goals &rarr;</div>
+      </div>
+
+    </div>
+
+    <!-- the observed-pattern note — sage mark + one quiet line. -->
+    <div class="note">
+      <span class="ndot"></span>
+      <span>you tend to file matters the day they're due</span>
+    </div>
+
+  </div>
+</div>
+</body>
+</html>

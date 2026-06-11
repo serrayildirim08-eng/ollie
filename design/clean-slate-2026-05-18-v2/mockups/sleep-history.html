@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Sleep — history</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;
+    padding:0 26px 36px}
+
+  /* the mean — one line, the headline number. no grade, no judgement. */
+  .mean{margin-top:116px;display:flex;flex-direction:column;align-items:center}
+  .mlead{font-size:13px;color:var(--mute);font-weight:500;letter-spacing:.02em}
+  .mnum{margin-top:6px;font-size:54px;font-weight:300;color:var(--ink);
+    letter-spacing:-.03em;line-height:1}
+  .mnum .u{font-size:20px;color:var(--mute);font-weight:400;margin-left:4px;
+    letter-spacing:0}
+
+  /* THE ONE THING — last 14 nights as a confident bar chart. body.html's
+     bar grammar, scaled up: 14 calm ink bars on a baseline rule, last
+     night in amber. a faint dashed target line marks 8h so the dip is
+     visible without a grade. weekends sit a touch muted — read at a glance. */
+  .chart{margin-top:44px;position:relative}
+  .bars{display:flex;align-items:flex-end;gap:5px;height:172px;
+    padding-bottom:8px;position:relative}
+  /* baseline rule */
+  .bars::after{content:"";position:absolute;left:0;right:0;bottom:6px;
+    height:1.5px;border-radius:1px;background:var(--line)}
+  .bars i{flex:1;background:var(--mute);border-radius:3px;display:block;
+    position:relative;z-index:1}
+  .bars i.now{background:var(--accent)}
+  /* the faint 8h target line — a calm reference, never a pass/fail mark */
+  .target{position:absolute;left:0;right:0;height:1px;border-top:1px dashed var(--line)}
+  .tlbl{position:absolute;right:0;font-size:10px;color:var(--mute);
+    font-weight:600;letter-spacing:.04em;background:var(--paper);
+    padding:0 4px;transform:translateY(-50%)}
+
+  /* the day axis — quiet ticks, only the ends + today labelled */
+  .axis{display:flex;justify-content:space-between;margin-top:9px}
+  .axis span{font-size:10px;color:var(--mute);font-weight:600;
+    letter-spacing:.04em;text-transform:uppercase}
+
+  /* two calm lines — the 14-day average + the sleep debt. one each,
+     stated quietly. no grades. */
+  .lines{margin-top:38px;display:flex;flex-direction:column}
+  .ln{border-top:1px solid var(--line);padding:17px 2px;display:flex;
+    align-items:baseline;justify-content:space-between}
+  .ln:last-child{border-bottom:1px solid var(--line)}
+  .lk{font-size:13px;color:var(--mute);font-weight:500}
+  .lv{font-size:15px;color:var(--ink);font-weight:600;letter-spacing:-.01em}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+
+  <div class="who">
+    <span>history</span>
+  </div>
+
+  <div class="scroll">
+    <div class="mean">
+      <div class="mlead">14-night average</div>
+      <div class="mnum">6h 50m</div>
+    </div>
+
+    <!-- last 14 nights — confident bar chart, last night amber.
+         bar heights read hours of sleep (~4h..~9h span). -->
+    <div class="chart">
+      <div class="target" style="bottom:135px"><span class="tlbl">8h</span></div>
+      <div class="bars">
+        <i style="height:58%"></i>
+        <i style="height:74%"></i>
+        <i style="height:46%"></i>
+        <i style="height:69%"></i>
+        <i style="height:88%"></i>
+        <i style="height:52%"></i>
+        <i style="height:63%"></i>
+        <i style="height:41%"></i>
+        <i style="height:78%"></i>
+        <i style="height:55%"></i>
+        <i style="height:71%"></i>
+        <i style="height:84%"></i>
+        <i style="height:48%"></i>
+        <i class="now" style="height:67%"></i>
+      </div>
+      <div class="axis">
+        <span>2 wks ago</span>
+        <span>last night</span>
+      </div>
+    </div>
+
+    <!-- two calm lines — average + debt, no grades -->
+    <div class="lines">
+      <div class="ln">
+        <span class="lk">shortest night</span>
+        <span class="lv">4h 30m</span>
+      </div>
+      <div class="ln">
+        <span class="lk">sleep debt · 14 days</span>
+        <span class="lv">3h 40m short</span>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

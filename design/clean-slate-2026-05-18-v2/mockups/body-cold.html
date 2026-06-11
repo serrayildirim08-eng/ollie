@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Body — first run</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  .safe{position:absolute;top:62px;right:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .safe svg{stroke:var(--mute)}
+  .find{position:absolute;top:62px;left:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .find svg{stroke:var(--mute)}
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;
+    padding:0 26px 36px}
+
+  /* the cold state — the body FACE is still present, never blank.
+     no episode is open, so the focus falls to water — the filling glass,
+     here at 0/8: an empty vessel, an outline waiting to fill. a calm
+     invitation, not a deficit. */
+  .hero{margin-top:116px;display:flex;flex-direction:column;align-items:center}
+
+  /* the big glass — empty: just the ink outline, a clear cavity. it
+     reads "waiting to fill", never broken. */
+  .bigglass{width:118px;height:160px}
+  .bigglass svg{display:block}
+
+  .count{margin-top:20px;font-size:46px;font-weight:300;color:var(--ink);
+    letter-spacing:-.03em;line-height:1}
+  .count .of{font-size:20px;color:var(--mute);font-weight:300;letter-spacing:-.01em}
+  .lead{margin-top:5px;font-size:13px;color:var(--mute);font-weight:500;
+    letter-spacing:.02em}
+
+  /* the calm invitation — a sage dot marks it as a gentle "start here"
+     note. honest, warm, never a nag. */
+  .invite{margin-top:24px;display:flex;align-items:flex-start;gap:9px;
+    max-width:294px}
+  .invite .idot{width:7px;height:7px;border-radius:50%;background:var(--sage);
+    flex-shrink:0;margin-top:6px}
+  .invite span{font-size:14px;color:var(--ink);font-weight:500;letter-spacing:-.01em;
+    line-height:1.45;text-align:left}
+  .invite b{font-weight:600}
+
+  /* one amber button — add the first glass */
+  .add{margin:26px auto 0;height:50px;border-radius:25px;background:var(--accent);
+    display:flex;align-items:center;justify-content:center;gap:8px;padding:0 26px;
+    box-shadow:0 12px 28px rgba(201,146,62,.32)}
+  .add svg{stroke:#fff}
+  .add span{font-size:16px;font-weight:600;color:#fff;letter-spacing:-.01em}
+
+  /* the drill rows — present but calm-cold. intake works from day one;
+     symptoms / conditions / doctor summary read their cold invitation
+     form. no pattern row yet — ollie hasn't noticed anything. */
+  .rows{margin-top:46px;display:flex;flex-direction:column}
+  .row{border-top:1px solid var(--line);padding:18px 2px;display:flex;
+    align-items:center}
+  .row:last-child{border-bottom:1px solid var(--line)}
+  .rk{font-size:13px;color:var(--mute);font-weight:600;letter-spacing:.01em;
+    flex-shrink:0}
+  .rsep{color:var(--line);margin:0 8px;font-size:13px}
+  .rv{font-size:14px;color:var(--ink);font-weight:500;letter-spacing:-.01em;flex:1}
+  /* a cold row — the value is a quiet invitation, muted */
+  .row.cold .rv{color:var(--mute);font-weight:400}
+  .row.cold .chev{stroke:var(--line)}
+  .chev{stroke:var(--mute);flex-shrink:0;margin-left:8px}
+
+  /* the posture toggle — present, calm, off by default (a switch left) */
+  .row.tog{justify-content:space-between}
+  .switch{width:42px;height:25px;border-radius:13px;background:var(--line);
+    position:relative;flex-shrink:0}
+  .switch i{position:absolute;top:3px;left:3px;width:19px;height:19px;
+    border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.18)}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+  <div class="find">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/>
+    </svg>
+  </div>
+  <div class="safe">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.5-7 10-7 10z"/>
+    </svg>
+  </div>
+
+  <div class="who">
+    <span>body</span>
+  </div>
+
+  <div class="scroll">
+    <div class="hero">
+      <!-- the big glass — empty: just the ink outline, no water -->
+      <div class="bigglass">
+        <svg width="118" height="160" viewBox="0 0 118 160">
+          <path d="M24 14 L94 14 L87.5 122 Q86 145 59 145 Q32 145 30.5 122 Z"
+            fill="none" stroke="#2A2622" stroke-width="2.4" stroke-linejoin="round"/>
+          <!-- a faint half-line ghost, so the empty glass still reads as a scale -->
+          <line x1="33" y1="80" x2="86" y2="80" stroke="#EAE2D4" stroke-width="1.6"
+            stroke-dasharray="3 4"/>
+        </svg>
+      </div>
+
+      <div class="count">0<span class="of"> of 8</span></div>
+      <div class="lead">glasses today</div>
+
+      <div class="invite">
+        <span class="idot"></span>
+        <span><b>this is body — water, supplements, anything the body does.</b>
+          a glass of water is the easiest first thing to put down.</span>
+      </div>
+
+      <div class="add">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="2.4">
+          <path d="M12 5v14M5 12h14"/>
+        </svg>
+        <span>first glass</span>
+      </div>
+    </div>
+
+    <div class="rows">
+      <!-- intake works from day one -->
+      <div class="row">
+        <span class="rk">intake</span><span class="rsep">·</span>
+        <span class="rv">water &amp; supplements today</span>
+        <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+
+      <!-- symptoms — cold form, an honest invitation -->
+      <div class="row cold">
+        <span class="rk">symptoms</span><span class="rsep">·</span>
+        <span class="rv">nothing logged — start one when something turns up</span>
+        <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+
+      <!-- conditions — cold form -->
+      <div class="row cold">
+        <span class="rk">conditions</span><span class="rsep">·</span>
+        <span class="rv">none tracked yet</span>
+        <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+
+      <!-- doctor summary — cold form, honest -->
+      <div class="row cold">
+        <span class="rk">doctor summary</span><span class="rsep">·</span>
+        <span class="rv">builds itself once an episode has been logged</span>
+        <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+
+      <!-- posture — present, off by default -->
+      <div class="row tog">
+        <span class="rk">posture reminder</span>
+        <div class="switch"><i></i></div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

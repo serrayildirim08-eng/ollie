@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Body — doctor summary</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+    --mono:'SF Mono',ui-monospace,'Roboto Mono',Menlo,monospace;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;
+    padding:0 26px 36px}
+
+  /* the framing line — this is a thing to BRING to a doctor. calm,
+     factual, plainly stated. NO diagnosis language anywhere. */
+  .intro{margin-top:116px}
+  .ititle{font-size:22px;font-weight:300;color:var(--ink);letter-spacing:-.02em;
+    line-height:1.3}
+  .ititle b{font-weight:500}
+  .isub{margin-top:10px;font-size:13px;color:var(--mute);font-weight:400;
+    line-height:1.5}
+
+  /* THE BRIEF — a calm document card. paper-white, hairline-ruled
+     sections. it reads like a typed page, not an app screen. */
+  .brief{margin-top:24px;background:#fff;border:1px solid var(--line);
+    border-radius:20px;overflow:hidden;box-shadow:0 6px 16px rgba(42,38,34,.05)}
+  .bsect{padding:18px 20px;border-top:1px solid var(--line)}
+  .bsect:first-child{border-top:0}
+  .blabel{font-size:10px;color:var(--mute);font-weight:700;letter-spacing:.1em;
+    text-transform:uppercase;margin-bottom:8px}
+
+  /* tldr — one plain paragraph, factual */
+  .tldr{font-size:14px;color:var(--ink);font-weight:400;line-height:1.55;
+    letter-spacing:-.005em}
+  .tldr b{font-weight:600}
+
+  /* the severity-arc sparkline — same arc as the episode, in the brief.
+     a calm rising line on a baseline, no grade marks. */
+  .arc{margin-top:4px;width:100%;height:78px}
+  .arc svg{display:block;width:100%}
+  .arcdays{margin-top:7px;display:flex;justify-content:space-between;padding:0 2px}
+  .arcdays span{font-size:9.5px;color:var(--mute);font-weight:600;
+    letter-spacing:.04em;text-transform:uppercase}
+
+  /* meds + context — quiet key/value lines */
+  .kv{display:flex;flex-direction:column;gap:8px}
+  .kvl{display:flex;align-items:baseline;justify-content:space-between;
+    font-size:13px}
+  .kvl .k{color:var(--mute);font-weight:500}
+  .kvl .v{color:var(--ink);font-weight:600;text-align:right;max-width:62%}
+
+  /* the 7-day context — plain factual lines, not a chart */
+  .ctx{font-size:13px;color:var(--ink);font-weight:400;line-height:1.6}
+  .ctx .row{display:flex;gap:8px;align-items:flex-start}
+  .ctx .row+.row{margin-top:6px}
+  .ctx .dot{width:4px;height:4px;border-radius:50%;background:var(--mute);
+    flex-shrink:0;margin-top:8px}
+
+  /* copy / download — two calm pills, side by side. amber copy = the act. */
+  .acts{margin-top:22px;display:flex;gap:11px}
+  .act{flex:1;height:50px;border-radius:25px;display:flex;align-items:center;
+    justify-content:center;gap:8px}
+  .act.copy{background:var(--accent);box-shadow:0 12px 28px rgba(201,146,62,.3)}
+  .act.copy svg{stroke:#fff}
+  .act.copy span{font-size:15px;font-weight:600;color:#fff;letter-spacing:-.01em}
+  .act.dl{background:#fff;border:1.5px solid var(--line)}
+  .act.dl svg{stroke:var(--ink)}
+  .act.dl span{font-size:15px;font-weight:600;color:var(--ink);letter-spacing:-.01em}
+
+  /* the closing note — restates: ollie records, it does not diagnose */
+  .foot{margin-top:20px;display:flex;gap:10px;align-items:flex-start}
+  .foot svg{stroke:var(--mute);flex-shrink:0;margin-top:1px}
+  .foot span{font-size:12px;color:var(--mute);font-weight:400;line-height:1.5}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+
+  <div class="who">
+    <span>doctor summary</span>
+  </div>
+
+  <div class="scroll">
+    <div class="intro">
+      <div class="ititle"><b>the headache episode</b>, written out plainly</div>
+      <div class="isub">a record of what you logged — facts and dates, nothing
+        interpreted. something to read out, or hand over, at an appointment.</div>
+    </div>
+
+    <!-- THE BRIEF — a calm typed document -->
+    <div class="brief">
+      <!-- tldr -->
+      <div class="bsect">
+        <div class="blabel">tldr</div>
+        <div class="tldr">A <b>headache episode</b> ran <b>2 days</b>
+          (mon 12 may &ndash; tue 13 may), logged <b>4 times</b>. Severity moved
+          3 &rarr; 4 &rarr; 4 &rarr; 2 on a self-rated 1&ndash;5 scale; it
+          peaked at <b>4 of 5</b>. Two doses of ibuprofen 400mg were taken.</div>
+      </div>
+
+      <!-- severity arc -->
+      <div class="bsect">
+        <div class="blabel">severity, by check-in</div>
+        <div class="arc">
+          <svg viewBox="0 0 320 78" preserveAspectRatio="none">
+            <line x1="6" y1="12" x2="314" y2="12" stroke="#EAE2D4" stroke-width="1"/>
+            <line x1="6" y1="66" x2="314" y2="66" stroke="#EAE2D4" stroke-width="1"/>
+            <polyline points="42,39 134,25 226,25 282,52" fill="none"
+              stroke="#2A2622" stroke-width="2.2" stroke-linecap="round"
+              stroke-linejoin="round" opacity=".6"/>
+            <circle cx="42" cy="39" r="3.6" fill="#2A2622" opacity=".6"/>
+            <circle cx="134" cy="25" r="3.6" fill="#2A2622" opacity=".6"/>
+            <circle cx="226" cy="25" r="3.6" fill="#2A2622" opacity=".6"/>
+            <circle cx="282" cy="52" r="4.8" fill="#C9923E"/>
+          </svg>
+        </div>
+        <div class="arcdays">
+          <span>mon am</span><span>mon pm</span><span>tue am</span><span>tue pm</span>
+        </div>
+      </div>
+
+      <!-- meds -->
+      <div class="bsect">
+        <div class="blabel">medication taken</div>
+        <div class="kv">
+          <div class="kvl"><span class="k">mon · 2:10pm</span><span class="v">ibuprofen 400mg</span></div>
+          <div class="kvl"><span class="k">tue · 9:30am</span><span class="v">ibuprofen 400mg</span></div>
+        </div>
+      </div>
+
+      <!-- 7-day context -->
+      <div class="bsect">
+        <div class="blabel">the 7 days around it</div>
+        <div class="ctx">
+          <div class="row"><span class="dot"></span><span>Water averaged 4 of 8 glasses; two days under 3.</span></div>
+          <div class="row"><span class="dot"></span><span>Sleep averaged 6h 20m; the night before onset was 5h 10m.</span></div>
+          <div class="row"><span class="dot"></span><span>Cycle was in the luteal phase throughout.</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- copy / download -->
+    <div class="acts">
+      <div class="act copy">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke-width="2">
+          <rect x="9" y="9" width="11" height="11" rx="2"/>
+          <path d="M5 15V5a2 2 0 0 1 2-2h10"/>
+        </svg>
+        <span>copy</span>
+      </div>
+      <div class="act dl">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke-width="2">
+          <path d="M12 4v11M7 11l5 5 5-5M5 20h14"/>
+        </svg>
+        <span>.md file</span>
+      </div>
+    </div>
+
+    <div class="foot">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="1.8">
+        <circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>
+      </svg>
+      <span>ollie records what you logged — it does not diagnose or interpret.
+        the reading of this is your doctor's.</span>
+    </div>
+  </div>
+</div>
+</body>
+</html>

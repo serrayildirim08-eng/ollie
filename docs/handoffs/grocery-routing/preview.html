@@ -1,0 +1,532 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>SortedToast · 9 fixtures · preview</title>
+<style>
+  /* ─── tokens copied from apps/web/src/design/tokens.css ─── */
+  :root {
+    --bone:        #FAFAF7;
+    --paper:       #F4F1E8;
+    --paper-2:     #EFEBE0;
+    --ink:         #14140F;
+    --ink-soft:    #5A574E;
+    --ink-faint:   #9C9890;
+    --accent:      #2E5D43;
+    --umber:       #8A4B2C;
+    --rule:        rgba(20, 20, 15, 0.10);
+    --rule-soft:   rgba(20, 20, 15, 0.05);
+
+    --font-system: 'DM Sans', system-ui, -apple-system, sans-serif;
+    --font-editor: 'DM Serif Display', Georgia, serif;
+    --font-mono:   'DM Mono', Menlo, Consolas, monospace;
+
+    --ls-caps:       0.16em;
+    --ls-caps-small: 0.20em;
+
+    --d-flick:  220ms;
+    --d-tap:    120ms;
+    --e-calm-out: cubic-bezier(0.18, 0, 0.22, 1);
+
+    --r-sm: 4px;
+    --sh-md: 0 4px 16px rgba(20, 20, 15, 0.06);
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    background: var(--bone);
+    font-family: var(--font-system);
+    color: var(--ink);
+  }
+
+  /* import the Google fallback for offline preview — DM Serif Display + DM Sans + DM Mono */
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;700&family=DM+Serif+Display:ital@0;1&display=swap');
+
+  /* ─── page chrome ─── */
+  header {
+    padding: 56px 24px 16px;
+    max-width: 720px;
+    margin: 0 auto;
+  }
+  header h1 {
+    font-family: var(--font-editor);
+    font-weight: 400;
+    font-size: 42px;
+    letter-spacing: -0.018em;
+    line-height: 1.10;
+    margin: 0 0 12px;
+  }
+  header p {
+    font-family: var(--font-system);
+    color: var(--ink-soft);
+    font-size: 17px;
+    line-height: 1.55;
+    margin: 0;
+    max-width: 56ch;
+  }
+
+  .grid {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 32px 24px 120px;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 56px;
+  }
+
+  .fixture { padding-top: 8px; }
+  .fixture .label {
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: var(--ls-caps);
+    font-size: 11px;
+    color: var(--ink-faint);
+    margin-bottom: 20px;
+  }
+  .fixture .note {
+    font-family: var(--font-system);
+    font-style: italic;
+    font-size: 13px;
+    color: var(--ink-soft);
+    margin-top: 16px;
+    max-width: 56ch;
+  }
+
+  /* ─── the toast ─── */
+  .toast {
+    background: var(--paper);
+    border: 1px solid var(--rule);
+    border-radius: var(--r-sm);
+    box-shadow: var(--sh-md);
+    padding: 16px 20px;
+    max-width: 520px;
+    margin: 0 auto;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .toast .lede {
+    font-family: var(--font-editor);
+    font-style: italic;
+    font-size: 17px;
+    line-height: 1.30;
+    color: var(--ink-soft);
+    margin: 0 0 14px;
+  }
+
+  .eyebrow {
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: var(--ls-caps);
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--ink-soft);
+    margin-bottom: 8px;
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+  .eyebrow .count { color: var(--ink-faint); }
+
+  .row {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    padding: 3px 0;
+  }
+  .row + .row { margin-top: 0; }
+  .row .tick { flex: 0 0 12px; color: var(--accent); transform: translateY(1px); }
+  .row.pantry .tick { color: var(--umber); }
+  .row.fallback .tick { color: var(--ink-faint); }
+  .row .name {
+    flex: 1;
+    font-family: var(--font-editor);
+    font-size: 22px;
+    line-height: 1.30;
+    letter-spacing: -0.012em;
+    color: var(--ink);
+  }
+  .row .qty {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--ink-soft);
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+  }
+
+  .overflow-name { font-size: 18px !important; letter-spacing: -0.010em !important; }
+  .overflow-more {
+    margin-top: 4px;
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: var(--ls-caps);
+    font-size: 11px;
+    color: var(--ink-faint);
+    padding-left: 22px; /* aligns with names past the tick */
+  }
+
+  .split-divider {
+    border: 0;
+    border-top: 1px solid var(--rule-soft);
+    margin: 14px 0 14px;
+  }
+
+  .footer {
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid var(--rule-soft);
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 16px;
+  }
+  .footer .hint {
+    font-family: var(--font-system);
+    font-style: italic;
+    font-size: 11px;
+    color: var(--ink-faint);
+  }
+  .footer .meta {
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: var(--ls-caps-small);
+    font-size: 9px;
+    color: var(--ink-faint);
+    white-space: nowrap;
+  }
+
+  /* ─── single-line variant (state 5) ─── */
+  .single-line {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--ink-soft);
+    letter-spacing: 0.02em;
+    padding-left: 22px;
+  }
+  .single-line .accent { color: var(--accent); }
+  .single-line .umber { color: var(--umber); }
+
+  /* ─── pending shimmer ─── */
+  .pending-rail {
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    height: 2px;
+    background: var(--paper-2);
+    overflow: hidden;
+  }
+  .pending-rail::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg,
+      transparent 0%,
+      rgba(46, 93, 67, 0.22) 50%,
+      transparent 100%);
+    width: 30%;
+    transform: translateX(-100%);
+    animation: sweep 1400ms var(--e-calm-out) infinite;
+  }
+  @keyframes sweep {
+    from { transform: translateX(-100%); }
+    to   { transform: translateX(1000%); }
+  }
+  .pending-text {
+    font-family: var(--font-mono);
+    font-style: italic;
+    font-size: 13px;
+    color: var(--ink-faint);
+    letter-spacing: 0.02em;
+    padding-left: 22px;
+  }
+
+  /* ─── error state ─── */
+  .error-line {
+    font-family: var(--font-system);
+    font-size: 13px;
+    color: var(--ink);
+    line-height: 1.40;
+    margin: 0;
+    padding-left: 22px;
+  }
+  .error-link {
+    font-family: var(--font-system);
+    font-style: italic;
+    font-size: 11px;
+    color: var(--ink-soft);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  /* ─── reduce motion respect ─── */
+  @media (prefers-reduced-motion: reduce) {
+    .pending-rail::after { animation: none; transform: none; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>SortedToast.</h1>
+  <p>nine fixtures · grocery routing AI dispatch receipt · static preview for review before code. drop a fixture into the dump composer's success branch; the toast lives 3.5s and exits.</p>
+</header>
+
+<main class="grid">
+
+  <!-- ───────────────────── state 1 ───────────────────── -->
+  <section class="fixture">
+    <div class="label">state 1 · single item · cache hit</div>
+    <div class="toast">
+      <div class="eyebrow">the shop <span class="count">· 1</span></div>
+      <div class="row">
+        <svg class="tick" viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6.5 L5 9 L10 3"/></svg>
+        <div class="name">ketchup</div>
+        <div class="qty">1 bottle</div>
+      </div>
+      <div class="footer">
+        <span class="hint">tap to undo · or swipe</span>
+        <span class="meta">via cache · 0ms</span>
+      </div>
+    </div>
+    <p class="note">the baseline. one serif word, one quiet sage tick. the receipt slides in, sits, leaves.</p>
+  </section>
+
+  <!-- ───────────────────── state 2 ───────────────────── -->
+  <section class="fixture">
+    <div class="label">state 2 · two items · cache hit</div>
+    <div class="toast">
+      <div class="eyebrow">the shop <span class="count">· 2</span></div>
+      <div class="row">
+        <svg class="tick" viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6.5 L5 9 L10 3"/></svg>
+        <div class="name">ketchup</div>
+        <div class="qty">1 bottle</div>
+      </div>
+      <div class="row">
+        <svg class="tick" viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6.5 L5 9 L10 3"/></svg>
+        <div class="name">parsley</div>
+        <div class="qty">1 bunch</div>
+      </div>
+      <div class="footer">
+        <span class="hint">tap to undo · or swipe</span>
+        <span class="meta">via cache · 2ms</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────────────────── state 3 ───────────────────── -->
+  <section class="fixture">
+    <div class="label">state 3 · 3+ items · overflow</div>
+    <div class="toast">
+      <div class="eyebrow">the shop <span class="count">· 6</span></div>
+      <div class="row">
+        <svg class="tick" viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6.5 L5 9 L10 3"/></svg>
+        <div class="name overflow-name">tomatoes</div>
+        <div class="qty">500 g</div>
+      </div>
+      <div class="row">
+        <svg class="tick" viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6.5 L5 9 L10 3"/></svg>
+        <div class="name overflow-name">cucumber</div>
+        <div class="qty">2</div>
+      </div>
+      <div class="row">
+        <svg class="tick" viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6.5 L5 9 L10 3"/></svg>
+        <div class="name overflow-name">bread</div>
+        <div class="qty">1 loaf</div>
+      </div>
+      <div class="overflow-more">and 3 more · tap to review</div>
+      <div class="footer">
+        <span class="hint">tap to undo · or swipe</span>
+        <span class="meta">via cache · 3ms</span>
+      </div>
+    </div>
+    <p class="note">serif drops to 18px. the fourth+ lines collapse to a single mono whisper, never a colored badge.</p>
+  </section>
+
+  <!-- ───────────────────── state 4 ───────────────────── -->
+  <section class="fixture">
+    <div class="label">state 4 · recipe expansion · two-block default</div>
+    <div class="toast">
+      <p class="lede">from "pasta with garlic, parsley, lemon"</p>
+      <div class="eyebrow">the shop <span class="count">· 4</span></div>
+      <div class="row">
+        <svg class="tick" viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6.5 L5 9 L10 3"/></svg>
+        <div class="name">spaghetti</div>
+        <div class="qty">500 g</div>
+      </div>
+      <div class="row">
+        <svg class="tick" viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6.5 L5 9 L10 3"/></svg>
+        <div class="name">garlic</div>
+        <div class="qty">1 head</div>
+      </div>
+      <div class="row">
+        <svg class="tick" viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6.5 L5 9 L10 3"/></svg>
+        <div class="name">parsley</div>
+        <div class="qty">1 bunch</div>
+      </div>
+      <div class="row">
+        <svg class="tick" viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6.5 L5 9 L10 3"/></svg>
+        <div class="name">lemon</div>
+        <div class="qty">1</div>
+      </div>
+      <hr class="split-divider" />
+      <div class="eyebrow">the pantry <span class="count">· 2</span></div>
+      <div class="row pantry">
+        <svg class="tick" viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6.5 L5 9 L10 3"/></svg>
+        <div class="name">olive oil</div>
+        <div class="qty">reserve</div>
+      </div>
+      <div class="row pantry">
+        <svg class="tick" viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6.5 L5 9 L10 3"/></svg>
+        <div class="name">salt</div>
+        <div class="qty">reserve</div>
+      </div>
+      <div class="footer">
+        <span class="hint">tap to undo · or swipe</span>
+        <span class="meta">via gemini · 410ms</span>
+      </div>
+    </div>
+    <p class="note">the menu case. italic lede tells the story, hairline divides intent. sage above the rule, umber below. no badges.</p>
+  </section>
+
+  <!-- ───────────────────── state 5 ───────────────────── -->
+  <section class="fixture">
+    <div class="label">state 5 · recipe expansion · single-line variant</div>
+    <div class="toast">
+      <p class="lede">from "pasta with garlic, parsley, lemon"</p>
+      <div class="eyebrow">sorted <span class="count">· 6</span></div>
+      <div class="single-line">
+        <span class="accent">4 to shop</span> · <span class="umber">2 to pantry</span> · tap to review
+      </div>
+      <div class="footer">
+        <span class="hint">tap to undo · or swipe</span>
+        <span class="meta">via gemini · 410ms</span>
+      </div>
+    </div>
+    <p class="note">density: tight. used when a second toast is queued or accessibility prefs are dense. same data, four times less paper.</p>
+  </section>
+
+  <!-- ───────────────────── state 6 ───────────────────── -->
+  <section class="fixture">
+    <div class="label">state 6 · cache miss · pending then resolves</div>
+    <div class="toast">
+      <p class="lede">from "tonight: shakshuka with tomatoes and feta"</p>
+      <div class="eyebrow">understanding <span class="count">·</span></div>
+      <div class="pending-text">routing through the recipe…</div>
+      <div class="footer">
+        <span class="hint">a moment</span>
+        <span class="meta">via gemini</span>
+      </div>
+      <div class="pending-rail"></div>
+    </div>
+    <p class="note">the hairline at the bottom carries a 2px sage sweep — 1400ms, calm-out, infinite. when the response arrives the rail fades, the rows fade in via receipt-fadein. no spinner.</p>
+  </section>
+
+  <!-- ───────────────────── state 7 ───────────────────── -->
+  <section class="fixture">
+    <div class="label">state 7 · fallback keyword · AI did not run</div>
+    <div class="toast">
+      <div class="eyebrow">the shop <span class="count">· 1</span></div>
+      <div class="row fallback">
+        <svg class="tick" viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6.5 L5 9 L10 3"/></svg>
+        <div class="name">milk</div>
+        <div class="qty">1 carton</div>
+      </div>
+      <div class="footer">
+        <span class="hint">tap to undo · or swipe</span>
+        <span class="meta">via keywords</span>
+      </div>
+    </div>
+    <p class="note">the muted tick is the only tell. no warning, no "ai is off" banner. quiet by design.</p>
+  </section>
+
+  <!-- ───────────────────── state 8 ───────────────────── -->
+  <section class="fixture">
+    <div class="label">state 8 · mixed pantry + shopping · non-recipe</div>
+    <div class="toast">
+      <div class="eyebrow">the shop <span class="count">· 1</span></div>
+      <div class="row">
+        <svg class="tick" viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6.5 L5 9 L10 3"/></svg>
+        <div class="name">bread</div>
+        <div class="qty">1 loaf</div>
+      </div>
+      <hr class="split-divider" />
+      <div class="eyebrow">the pantry <span class="count">· 1</span></div>
+      <div class="row pantry">
+        <svg class="tick" viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6.5 L5 9 L10 3"/></svg>
+        <div class="name">olive oil</div>
+        <div class="qty">running low</div>
+      </div>
+      <div class="footer">
+        <span class="hint">tap to undo · or swipe</span>
+        <span class="meta">via gemini · 380ms</span>
+      </div>
+    </div>
+    <p class="note">same divider as state 4 but no italic lede — the dump wasn't a recipe, it was an errand.</p>
+  </section>
+
+  <!-- ───────────────────── state 9 ───────────────────── -->
+  <section class="fixture">
+    <div class="label">state 9 · error · timeout</div>
+    <div class="toast">
+      <div class="eyebrow">could not sort</div>
+      <p class="error-line">the dump is saved · sort it by hand from the inbox</p>
+      <div class="footer">
+        <a href="#" class="error-link">open the inbox</a>
+        <span class="meta">timed out · 8s</span>
+      </div>
+    </div>
+    <p class="note">no red, no alarm. the dash glyph would replace the tick if we drew a row — we don't, because there are no items. the inbox link is a quiet underline, never a button.</p>
+  </section>
+
+  <!-- ───────────────────── edge: long name ───────────────────── -->
+  <section class="fixture">
+    <div class="label">edge · long item name · wrap to 2 lines</div>
+    <div class="toast">
+      <div class="eyebrow">the shop <span class="count">· 1</span></div>
+      <div class="row">
+        <svg class="tick" viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6.5 L5 9 L10 3"/></svg>
+        <div class="name">organic stone-ground sourdough rye loaf</div>
+        <div class="qty">1</div>
+      </div>
+      <div class="footer">
+        <span class="hint">tap to undo · or swipe</span>
+        <span class="meta">via cache · 1ms</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────────────────── edge: turkish ───────────────────── -->
+  <section class="fixture">
+    <div class="label">edge · turkish diacritics</div>
+    <div class="toast">
+      <p class="lede">"akşam menemen yapacağım, biber, soğan, domates lazım"</p>
+      <div class="eyebrow">the shop <span class="count">· 3</span></div>
+      <div class="row">
+        <svg class="tick" viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6.5 L5 9 L10 3"/></svg>
+        <div class="name">biber</div>
+        <div class="qty">3</div>
+      </div>
+      <div class="row">
+        <svg class="tick" viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6.5 L5 9 L10 3"/></svg>
+        <div class="name">soğan</div>
+        <div class="qty">2</div>
+      </div>
+      <div class="row">
+        <svg class="tick" viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6.5 L5 9 L10 3"/></svg>
+        <div class="name">domates</div>
+        <div class="qty">500 g</div>
+      </div>
+      <div class="footer">
+        <span class="hint">tap to undo · or swipe</span>
+        <span class="meta">via gemini · 380ms</span>
+      </div>
+    </div>
+    <p class="note">DM Serif Display covers Latin Extended — şçğöü render correctly. eyebrows stay English (Ollie ships EN + ES).</p>
+  </section>
+
+</main>
+
+</body>
+</html>
