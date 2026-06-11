@@ -1,0 +1,1214 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Feed Me v2 — Visual Preview</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  /* ─── tokens (mirror of apps/web/src/design/tokens.css) ─── */
+  :root {
+    --bone:        #FAFAF7;
+    --paper:       #F4F1E8;
+    --paper-2:     #EFEBE0;
+    --ink:         #14140F;
+    --ink-soft:    #5A574E;
+    --ink-faint:   #9C9890;
+    --ink-ghost:   #C8C4BA;
+    --accent:      #2E5D43;
+    --umber:       #8A4B2C;
+    --water:       #5B8FB5;
+    --warn:        #C9974C;
+    --rule:        rgba(20, 20, 15, 0.10);
+    --rule-soft:   rgba(20, 20, 15, 0.05);
+    --d-tap:        120ms;
+    --d-flick:      220ms;
+    --d-slide:      400ms;
+    --d-flight:     600ms;
+    --e-calm-out:   cubic-bezier(0.18, 0, 0.22, 1);
+    --e-breathe:    cubic-bezier(0.45, 0, 0.55, 1);
+    --e-step:       linear;
+  }
+
+  /* fonts via google for the preview only — real app uses local DM */
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display:ital@0;1&display=swap');
+
+  html, body {
+    background: var(--bone);
+    color: var(--ink);
+    font-family: 'DM Sans', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  .serif { font-family: 'DM Serif Display', Georgia, serif; }
+  .mono  { font-family: 'DM Mono', Menlo, monospace; }
+
+  /* ─── 375px iphone frame ─── */
+  .phone {
+    width: 375px;
+    min-height: 700px;
+    background: var(--bone);
+    border: 1px solid var(--rule);
+    box-shadow: 0 1px 0 rgba(20,20,15,0.04);
+  }
+
+  .phone-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.20em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin-bottom: 12px;
+  }
+
+  .phone-caption {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    color: var(--ink-soft);
+    margin-top: 12px;
+    max-width: 375px;
+    line-height: 1.5;
+  }
+
+  /* ─── pill / chip ─── */
+  .chip {
+    border: 1px solid var(--rule);
+    background: var(--paper);
+    color: var(--ink);
+    border-radius: 999px;
+    padding: 7px 13px;
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    cursor: pointer;
+    line-height: 1.3;
+    transition: background var(--d-tap) var(--e-calm-out),
+                border-color var(--d-tap) var(--e-calm-out),
+                color var(--d-tap) var(--e-calm-out);
+  }
+  .chip.active {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: #fff;
+    font-weight: 600;
+  }
+  .chip:hover { border-color: rgba(20,20,15,0.18); }
+  .chip.active:hover { border-color: var(--accent); }
+
+  /* ─── card ─── */
+  .card {
+    background: var(--paper);
+    border-top: 1px solid var(--rule);
+    border-bottom: 1px solid var(--rule);
+    padding: 24px 22px;
+    position: relative;
+    transition: transform var(--d-tap) var(--e-calm-out),
+                opacity var(--d-flick) var(--e-calm-out);
+  }
+  .card-hover { transform: translateY(-1px); border-color: rgba(20,20,15,0.14); }
+  .card-cooked { background: rgba(46, 93, 67, 0.06); }
+  .card-rejecting { opacity: 0.35; transform: translateX(-12px); }
+
+  .dish-name {
+    font-family: 'DM Serif Display', Georgia, serif;
+    font-size: 28px;
+    font-weight: 400;
+    letter-spacing: -0.025em;
+    line-height: 1.10;
+    color: var(--ink);
+  }
+  .cuisine {
+    font-size: 13px;
+    color: var(--ink-soft);
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    line-height: 1.3;
+    margin-top: 6px;
+  }
+
+  /* source indicator */
+  .source {
+    position: absolute;
+    top: 24px;
+    right: 22px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .source-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+  }
+  .source-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: 0.20em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    line-height: 1.3;
+  }
+
+  /* pip row */
+  .pip-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 18px;
+  }
+  .pips {
+    display: flex;
+    gap: 6px;
+  }
+  .pip {
+    width: 13px;
+    height: 13px;
+    border-radius: 50%;
+    box-sizing: border-box;
+  }
+  .pip.on  { background: var(--accent); }
+  .pip.off { background: transparent; border: 1.8px solid var(--rule); }
+
+  /* reason */
+  .reason {
+    margin-top: 14px;
+    display: flex;
+    gap: 9px;
+    align-items: flex-start;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--ink);
+    letter-spacing: -0.01em;
+  }
+  .reason-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--accent);
+    flex-shrink: 0; margin-top: 5px;
+  }
+
+  /* ingredient list */
+  .ing-label {
+    font-size: 11px;
+    color: var(--ink-soft);
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 2px;
+  }
+  .ing-row {
+    border-top: 1px solid var(--rule);
+    padding: 12px 2px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .ing-row.last { border-bottom: 1px solid var(--rule); }
+  .ing-check {
+    width: 16px; height: 16px; border-radius: 50%;
+    flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    box-sizing: border-box;
+  }
+  .ing-check.have { background: var(--accent); }
+  .ing-check.miss { background: transparent; border: 1.8px solid var(--rule); }
+  .ing-name {
+    flex: 1;
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+  }
+  .ing-name.have { color: var(--ink); }
+  .ing-name.miss { color: var(--ink-soft); }
+
+  /* amber button */
+  .amber {
+    margin-top: 22px;
+    height: 50px;
+    border-radius: 25px;
+    background: var(--warn);
+    color: var(--ink);
+    border: none;
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    width: 100%;
+    cursor: pointer;
+  }
+
+  /* action row */
+  .action-row {
+    margin-top: 18px;
+    display: flex; align-items: center; gap: 12px;
+    font-size: 14px;
+    font-weight: 500;
+  }
+  .action-row .sep { color: var(--ink-ghost); }
+  .action-row .cook { color: var(--ink); cursor: pointer; }
+  .action-row .pass { color: var(--ink-soft); cursor: pointer; margin-left: auto; }
+
+  /* cooked badge */
+  .cooked-badge {
+    position: absolute;
+    top: 24px;
+    right: 22px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .cooked-check {
+    width: 14px; height: 14px; border-radius: 50%;
+    background: var(--accent);
+    display: flex; align-items: center; justify-content: center;
+    color: #fff;
+    font-size: 9px;
+  }
+  .cooked-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px; font-weight: 500;
+    letter-spacing: 0.20em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+  .cooked-msg {
+    margin-top: 14px;
+    font-size: 13px;
+    color: var(--ink-soft);
+    letter-spacing: -0.01em;
+  }
+
+  /* search */
+  .search {
+    display: flex; align-items: center; gap: 9px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--rule);
+  }
+  .search-input {
+    border: none; outline: none; background: transparent;
+    font-size: 14px;
+    color: var(--ink);
+    font-weight: 400;
+    letter-spacing: -0.01em;
+    width: 100%;
+  }
+  .search-input::placeholder { color: var(--ink-faint); }
+
+  /* pet kicker */
+  .pet-row {
+    display: flex; align-items: center; gap: 8px;
+    flex-wrap: wrap;
+  }
+  .pet-kicker {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--ink-faint);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-right: 4px;
+  }
+
+  /* pet active context line */
+  .pet-context {
+    font-size: 13px;
+    color: var(--ink-soft);
+    letter-spacing: -0.01em;
+    margin-top: 6px;
+  }
+
+  /* modal */
+  .modal-backdrop {
+    position: relative;
+    background: rgba(20, 20, 15, 0.40);
+    width: 375px;
+    min-height: 700px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .modal {
+    width: 320px;
+    background: var(--paper-2);
+    padding: 28px;
+  }
+  .modal-title {
+    font-family: 'DM Serif Display', Georgia, serif;
+    font-size: 22px;
+    font-weight: 400;
+    letter-spacing: -0.018em;
+    line-height: 1.20;
+    color: var(--ink);
+  }
+  .modal-sub {
+    font-size: 13px;
+    color: var(--ink-soft);
+    margin-top: 4px;
+    letter-spacing: -0.01em;
+  }
+  .modal-options {
+    margin-top: 18px;
+    border-top: 1px solid var(--rule);
+  }
+  .modal-opt {
+    height: 48px;
+    display: flex; align-items: center;
+    border-bottom: 1px solid var(--rule);
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--ink);
+    cursor: pointer;
+    letter-spacing: -0.01em;
+    padding: 0 2px;
+    transition: background var(--d-tap) var(--e-calm-out);
+  }
+  .modal-opt:hover { background: rgba(46,93,67,0.06); }
+  .modal-opt.focused { background: rgba(46,93,67,0.06); }
+  .modal-cancel {
+    margin-top: 18px;
+    text-align: right;
+    font-size: 13px;
+    color: var(--ink-soft);
+    cursor: pointer;
+  }
+
+  /* skeleton */
+  .skel {
+    background: var(--paper-2);
+    position: relative;
+    overflow: hidden;
+  }
+  .skel::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      transparent 30%,
+      rgba(46, 93, 67, 0.18) 50%,
+      transparent 70%,
+      transparent 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1600ms infinite var(--e-breathe);
+  }
+  @keyframes shimmer {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -100% 0; }
+  }
+
+  /* empty state */
+  .empty-title {
+    font-family: 'DM Serif Display', Georgia, serif;
+    font-size: 22px;
+    font-weight: 400;
+    letter-spacing: -0.02em;
+    line-height: 1.30;
+    color: var(--ink);
+    max-width: 280px;
+  }
+  .empty-hint {
+    margin-top: 14px;
+    display: flex; gap: 12px;
+    font-size: 13px;
+    color: var(--ink-soft);
+    line-height: 1.5;
+    max-width: 300px;
+  }
+  .empty-rail {
+    width: 1px; background: var(--rule); flex-shrink: 0;
+  }
+
+  /* divider between state showcases */
+  .state-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, 375px);
+    gap: 48px;
+    padding: 48px;
+    justify-content: center;
+  }
+
+  .doc-header {
+    border-bottom: 1px solid var(--rule);
+    padding: 48px 48px 32px;
+    background: var(--bone);
+  }
+  .doc-title {
+    font-family: 'DM Serif Display', Georgia, serif;
+    font-size: 42px;
+    letter-spacing: -0.018em;
+    line-height: 1.10;
+    color: var(--ink);
+  }
+  .doc-sub {
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--ink-soft);
+    letter-spacing: -0.01em;
+  }
+  .doc-meta {
+    margin-top: 8px;
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.20em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+
+  /* reduced motion */
+  @media (prefers-reduced-motion: reduce) {
+    .skel::after { animation: none; background: transparent; }
+    .card { transition: none; }
+  }
+</style>
+</head>
+<body>
+
+<header class="doc-header">
+  <div class="doc-title">Feed Me v2 — visual preview</div>
+  <div class="doc-sub">10 states · 375px iphone width · cream / sage / sky / umber DNA</div>
+  <div class="doc-meta">v1.0 · 2026-05-22 · ship-ready</div>
+</header>
+
+<main class="state-grid">
+
+  <!-- ─── STATE 1 — 3-card default ─── -->
+  <div>
+    <div class="phone-label">01 · default · 3 cards · diet=all · for me</div>
+    <div class="phone">
+      <div style="padding: 24px 18px;">
+
+        <!-- search -->
+        <label class="search">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#9C9890" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input class="search-input" placeholder="look up a dish — shakshuka, mercimek çorbası…" />
+        </label>
+
+        <!-- diet pills -->
+        <div style="margin-top: 16px; display: flex; flex-wrap: wrap; gap: 8px;">
+          <button class="chip active">all</button>
+          <button class="chip">vegetarian</button>
+          <button class="chip">vegan</button>
+          <button class="chip">mediterranean</button>
+          <button class="chip">turkish</button>
+        </div>
+
+        <!-- pet toggle -->
+        <div style="margin-top: 12px;" class="pet-row">
+          <span class="pet-kicker">for</span>
+          <button class="chip active">me</button>
+          <button class="chip">tontin</button>
+          <button class="chip">pinpon</button>
+          <button class="chip">the pigs</button>
+        </div>
+
+        <!-- cards -->
+        <div style="margin-top: 30px; display: flex; flex-direction: column; gap: 16px;">
+
+          <!-- card 1 -->
+          <div class="card">
+            <div class="source">
+              <span class="source-dot" style="background: var(--accent);"></span>
+              <span class="source-label">ai suggestion</span>
+            </div>
+            <div class="dish-name" style="padding-right: 110px;">Shakshuka</div>
+            <div class="cuisine">levantine breakfast</div>
+
+            <div class="pip-row">
+              <div class="pips">
+                <span class="pip on"></span><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span><span class="pip off"></span><span class="pip off"></span>
+              </div>
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: -0.01em;">4 of 6</span>
+            </div>
+
+            <div class="reason">
+              <span class="reason-dot"></span>
+              <span>tomatoes turning soon — <span style="color: var(--umber); font-weight: 600;">it's the calm reason to cook this one tonight.</span></span>
+            </div>
+
+            <div style="margin-top: 18px;">
+              <div class="ing-label">in your pantry</div>
+              <div class="ing-row">
+                <span class="ing-check have"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                <span class="ing-name have">tomato</span>
+              </div>
+              <div class="ing-row">
+                <span class="ing-check have"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                <span class="ing-name have">onion</span>
+              </div>
+              <div class="ing-row">
+                <span class="ing-check have"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                <span class="ing-name have">egg</span>
+              </div>
+              <div class="ing-row last">
+                <span class="ing-check have"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                <span class="ing-name have">paprika</span>
+              </div>
+            </div>
+
+            <div style="margin-top: 16px;">
+              <div class="ing-label">you'd need</div>
+              <div class="ing-row">
+                <span class="ing-check miss"></span>
+                <span class="ing-name miss">cumin</span>
+              </div>
+              <div class="ing-row last">
+                <span class="ing-check miss"></span>
+                <span class="ing-name miss">parsley</span>
+              </div>
+            </div>
+
+            <button class="amber">add the 2 missing to the list</button>
+
+            <div class="action-row">
+              <span class="cook">i cooked this</span>
+              <span class="pass">pass</span>
+            </div>
+          </div>
+
+          <!-- card 2 -->
+          <div class="card">
+            <div class="source">
+              <span class="source-dot" style="background: var(--accent);"></span>
+              <span class="source-label">ai suggestion</span>
+            </div>
+            <div class="dish-name" style="padding-right: 110px;">Mercimek Çorbası</div>
+            <div class="cuisine">turkish · lentil soup</div>
+
+            <div class="pip-row">
+              <div class="pips">
+                <span class="pip on"></span><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span>
+              </div>
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: -0.01em;">5 of 5</span>
+            </div>
+
+            <div class="reason">
+              <span class="reason-dot"></span>
+              <span>everything is in the pantry — <span style="color: var(--umber); font-weight: 600;">a quiet weeknight bowl.</span></span>
+            </div>
+
+            <div style="margin-top: 18px;">
+              <div class="ing-label">in your pantry</div>
+              <div class="ing-row">
+                <span class="ing-check have"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                <span class="ing-name have">red lentil</span>
+              </div>
+              <div class="ing-row">
+                <span class="ing-check have"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                <span class="ing-name have">onion</span>
+              </div>
+              <div class="ing-row">
+                <span class="ing-check have"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                <span class="ing-name have">carrot</span>
+              </div>
+              <div class="ing-row">
+                <span class="ing-check have"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                <span class="ing-name have">mint</span>
+              </div>
+              <div class="ing-row last">
+                <span class="ing-check have"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                <span class="ing-name have">lemon</span>
+              </div>
+            </div>
+
+            <div class="action-row">
+              <span class="cook">i cooked this</span>
+              <span class="pass">pass</span>
+            </div>
+          </div>
+
+          <!-- card 3 -->
+          <div class="card">
+            <div class="source">
+              <span class="source-dot" style="background: var(--water);"></span>
+              <span class="source-label">from your kitchen</span>
+            </div>
+            <div class="dish-name" style="padding-right: 130px;">Pasta al Limone</div>
+            <div class="cuisine">italian · 20 minutes</div>
+
+            <div class="pip-row">
+              <div class="pips">
+                <span class="pip on"></span><span class="pip on"></span><span class="pip on"></span><span class="pip off"></span>
+              </div>
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: -0.01em;">3 of 4</span>
+            </div>
+
+            <div style="margin-top: 18px;">
+              <div class="ing-label">in your pantry</div>
+              <div class="ing-row">
+                <span class="ing-check have"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                <span class="ing-name have">spaghetti</span>
+              </div>
+              <div class="ing-row">
+                <span class="ing-check have"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                <span class="ing-name have">lemon</span>
+              </div>
+              <div class="ing-row last">
+                <span class="ing-check have"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                <span class="ing-name have">butter</span>
+              </div>
+            </div>
+
+            <div style="margin-top: 16px;">
+              <div class="ing-label">you'd need</div>
+              <div class="ing-row last">
+                <span class="ing-check miss"></span>
+                <span class="ing-name miss">parmesan</span>
+              </div>
+            </div>
+
+            <button class="amber">add the 1 missing to the list</button>
+
+            <div class="action-row">
+              <span class="cook">i cooked this</span>
+              <span class="pass">pass</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+    <div class="phone-caption">three stacked cards · vertical only, never grid · each carries a full dish name + ingredient split + action row · source dots use sage for fresh AI, sky blue for cache.</div>
+  </div>
+
+  <!-- ─── STATE 2 — recently cooked badge ─── -->
+  <div>
+    <div class="phone-label">02 · card · recently cooked</div>
+    <div class="phone">
+      <div style="padding: 24px 18px;">
+        <div class="card card-cooked">
+          <div class="cooked-badge">
+            <span class="cooked-check">
+              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </span>
+            <span class="cooked-label">cooked · 6:42 pm</span>
+          </div>
+          <div class="dish-name" style="padding-right: 130px;">Shakshuka</div>
+          <div class="cuisine">levantine breakfast</div>
+
+          <div class="pip-row">
+            <div class="pips">
+              <span class="pip on"></span><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span>
+            </div>
+            <span style="font-size: 13px; font-weight: 600; letter-spacing: -0.01em;">6 of 6</span>
+          </div>
+
+          <div class="cooked-msg">thanks, ollie remembered.</div>
+
+          <div style="margin-top: 18px;">
+            <div class="ing-label">in your pantry</div>
+            <div class="ing-row">
+              <span class="ing-check have"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+              <span class="ing-name have">tomato</span>
+            </div>
+            <div class="ing-row">
+              <span class="ing-check have"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+              <span class="ing-name have">onion</span>
+            </div>
+            <div class="ing-row last">
+              <span class="ing-check have"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+              <span class="ing-name have">egg</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+    <div class="phone-caption">cooked state · bg shifts to sage 6% · source dot replaced by check + cooked timestamp · action row hides, replaced by quiet "thanks, ollie remembered."</div>
+  </div>
+
+  <!-- ─── STATE 3 — hover ─── -->
+  <div>
+    <div class="phone-label">03 · card · hover (desktop)</div>
+    <div class="phone">
+      <div style="padding: 24px 18px;">
+        <div class="card card-hover" style="border-top: 1px solid rgba(20,20,15,0.14); border-bottom: 1px solid rgba(20,20,15,0.14);">
+          <div class="source">
+            <span class="source-dot" style="background: var(--accent);"></span>
+            <span class="source-label">ai suggestion</span>
+          </div>
+          <div class="dish-name" style="padding-right: 110px;">Shakshuka</div>
+          <div class="cuisine">levantine breakfast</div>
+
+          <div class="pip-row">
+            <div class="pips">
+              <span class="pip on"></span><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span><span class="pip off"></span><span class="pip off"></span>
+            </div>
+            <span style="font-size: 13px; font-weight: 600; letter-spacing: -0.01em;">4 of 6</span>
+          </div>
+
+          <div class="reason">
+            <span class="reason-dot"></span>
+            <span>tomatoes turning soon — <span style="color: var(--umber); font-weight: 600;">it's the calm reason to cook this one tonight.</span></span>
+          </div>
+
+          <div style="margin-top: 18px;">
+            <div class="ing-label">in your pantry</div>
+            <div class="ing-row">
+              <span class="ing-check have"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+              <span class="ing-name have">tomato</span>
+            </div>
+            <div class="ing-row last">
+              <span class="ing-check have"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+              <span class="ing-name have">onion</span>
+            </div>
+          </div>
+
+          <div class="action-row">
+            <span class="cook">i cooked this</span>
+            <span class="pass">pass</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="phone-caption">hover · translateY −1px + hairline bumps to 14% alpha · no shadow loud · cursor stays default (card not clickable, buttons are).</div>
+  </div>
+
+  <!-- ─── STATE 4 — modal ─── -->
+  <div>
+    <div class="phone-label">04 · cook rating modal · open</div>
+    <div class="modal-backdrop">
+      <div class="modal" role="dialog" aria-modal="true">
+        <div class="modal-title">Shakshuka</div>
+        <div class="modal-sub">how was it?</div>
+        <div class="modal-options">
+          <div class="modal-opt">didn't love it</div>
+          <div class="modal-opt focused">cooked it</div>
+          <div class="modal-opt">loved it</div>
+        </div>
+        <div class="modal-cancel">cancel</div>
+      </div>
+    </div>
+    <div class="phone-caption">centered sheet · 320px wide · no emoji · default focus on "cooked it" (Enter = neutral log) · esc + backdrop close.</div>
+  </div>
+
+  <!-- ─── STATE 5 — pet mode active ─── -->
+  <div>
+    <div class="phone-label">05 · pet mode active · for tontin</div>
+    <div class="phone">
+      <div style="padding: 24px 18px;">
+
+        <label class="search">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#9C9890" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input class="search-input" placeholder="look up a dish — shakshuka, mercimek çorbası…" />
+        </label>
+
+        <!-- pet toggle (diet pills hidden) -->
+        <div style="margin-top: 16px;" class="pet-row">
+          <span class="pet-kicker">for</span>
+          <button class="chip">me</button>
+          <button class="chip active">tontin</button>
+          <button class="chip">pinpon</button>
+          <button class="chip">the pigs</button>
+        </div>
+        <div class="pet-context">feeding tontin — species-aware suggestions</div>
+
+        <div style="margin-top: 30px; display: flex; flex-direction: column; gap: 16px;">
+
+          <div class="card">
+            <div class="source">
+              <span class="source-dot" style="background: var(--accent);"></span>
+              <span class="source-label">ai suggestion</span>
+            </div>
+            <div class="dish-name" style="padding-right: 110px;">Morning Ration</div>
+            <div class="cuisine">cat · taurine-safe</div>
+
+            <div class="pip-row">
+              <div class="pips">
+                <span class="pip on"></span><span class="pip on"></span><span class="pip on"></span><span class="pip off"></span>
+              </div>
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: -0.01em;">3 of 4</span>
+            </div>
+
+            <div class="reason">
+              <span class="reason-dot"></span>
+              <span>chicken from yesterday — <span style="color: var(--umber); font-weight: 600;">cut small, no onion, no garlic.</span></span>
+            </div>
+
+            <div style="margin-top: 18px;">
+              <div class="ing-label">on the shelf</div>
+              <div class="ing-row">
+                <span class="ing-check have"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                <span class="ing-name have">cooked chicken</span>
+              </div>
+              <div class="ing-row">
+                <span class="ing-check have"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                <span class="ing-name have">dry kibble</span>
+              </div>
+              <div class="ing-row last">
+                <span class="ing-check have"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                <span class="ing-name have">water</span>
+              </div>
+            </div>
+
+            <div style="margin-top: 16px;">
+              <div class="ing-label">you'd need</div>
+              <div class="ing-row last">
+                <span class="ing-check miss"></span>
+                <span class="ing-name miss">taurine supplement</span>
+              </div>
+            </div>
+
+            <button class="amber">add the 1 missing to the list</button>
+
+            <div class="action-row">
+              <span class="cook">fed tontin</span>
+              <span class="pass">pass</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+    <div class="phone-caption">pet mode · diet pills hidden (species-aware implicit) · pet-context kicker line · "i cooked this" becomes "fed tontin" · ingredient label shifts to "on the shelf."</div>
+  </div>
+
+  <!-- ─── STATE 6 — diet vegan active ─── -->
+  <div>
+    <div class="phone-label">06 · diet=vegan active</div>
+    <div class="phone">
+      <div style="padding: 24px 18px;">
+
+        <label class="search">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#9C9890" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input class="search-input" placeholder="look up a dish — shakshuka, mercimek çorbası…" />
+        </label>
+
+        <div style="margin-top: 16px; display: flex; flex-wrap: wrap; gap: 8px;">
+          <button class="chip">all</button>
+          <button class="chip">vegetarian</button>
+          <button class="chip active">vegan</button>
+          <button class="chip">mediterranean</button>
+          <button class="chip">turkish</button>
+        </div>
+
+        <div style="margin-top: 12px;" class="pet-row">
+          <span class="pet-kicker">for</span>
+          <button class="chip active">me</button>
+          <button class="chip">tontin</button>
+          <button class="chip">pinpon</button>
+          <button class="chip">the pigs</button>
+        </div>
+
+        <div style="margin-top: 30px;">
+          <div class="card">
+            <div class="source">
+              <span class="source-dot" style="background: var(--accent);"></span>
+              <span class="source-label">ai suggestion</span>
+            </div>
+            <div class="dish-name" style="padding-right: 110px;">Chickpea Stew</div>
+            <div class="cuisine">north african · vegan</div>
+
+            <div class="pip-row">
+              <div class="pips">
+                <span class="pip on"></span><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span>
+              </div>
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: -0.01em;">5 of 5</span>
+            </div>
+
+            <div class="reason">
+              <span class="reason-dot"></span>
+              <span>everything is in the pantry — <span style="color: var(--umber); font-weight: 600;">a one-pot weeknight.</span></span>
+            </div>
+
+            <div style="margin-top: 18px;">
+              <div class="ing-label">in your pantry</div>
+              <div class="ing-row">
+                <span class="ing-check have"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                <span class="ing-name have">chickpeas</span>
+              </div>
+              <div class="ing-row">
+                <span class="ing-check have"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                <span class="ing-name have">tomato</span>
+              </div>
+              <div class="ing-row">
+                <span class="ing-check have"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                <span class="ing-name have">cumin</span>
+              </div>
+              <div class="ing-row">
+                <span class="ing-check have"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                <span class="ing-name have">paprika</span>
+              </div>
+              <div class="ing-row last">
+                <span class="ing-check have"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                <span class="ing-name have">spinach</span>
+              </div>
+            </div>
+
+            <div class="action-row">
+              <span class="cook">i cooked this</span>
+              <span class="pass">pass</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="phone-caption">vegan diet active · pill fills sage · switching diet refetches the full stack · this card came back from a vegan-filtered Gemini call.</div>
+  </div>
+
+  <!-- ─── STATE 7 — loading skeleton ─── -->
+  <div>
+    <div class="phone-label">07 · loading · 3-card skeleton · pendinghair shimmer</div>
+    <div class="phone">
+      <div style="padding: 24px 18px;">
+
+        <label class="search">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#9C9890" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input class="search-input" placeholder="look up a dish — shakshuka, mercimek çorbası…" />
+        </label>
+
+        <div style="margin-top: 16px; display: flex; flex-wrap: wrap; gap: 8px;">
+          <button class="chip">all</button>
+          <button class="chip active">vegetarian</button>
+          <button class="chip">vegan</button>
+          <button class="chip">mediterranean</button>
+          <button class="chip">turkish</button>
+        </div>
+
+        <div style="margin-top: 30px; display: flex; flex-direction: column; gap: 16px;">
+
+          <!-- skel card 1 -->
+          <div class="card">
+            <div class="source">
+              <span class="source-dot" style="background: var(--ink-ghost);"></span>
+            </div>
+            <div class="skel" style="height: 32px; width: 60%;"></div>
+            <div class="skel" style="margin-top: 10px; height: 14px; width: 30%;"></div>
+
+            <div class="pip-row">
+              <div class="pips">
+                <span class="pip off"></span><span class="pip off"></span><span class="pip off"></span><span class="pip off"></span><span class="pip off"></span><span class="pip off"></span>
+              </div>
+            </div>
+
+            <div style="margin-top: 18px; display: flex; flex-direction: column; gap: 12px;">
+              <div class="skel" style="height: 18px; width: 100%;"></div>
+              <div class="skel" style="height: 18px; width: 100%;"></div>
+              <div class="skel" style="height: 18px; width: 100%;"></div>
+              <div class="skel" style="height: 18px; width: 80%;"></div>
+            </div>
+          </div>
+
+          <!-- skel card 2 -->
+          <div class="card" style="opacity: 0.85;">
+            <div class="source">
+              <span class="source-dot" style="background: var(--ink-ghost);"></span>
+            </div>
+            <div class="skel" style="height: 32px; width: 50%;"></div>
+            <div class="skel" style="margin-top: 10px; height: 14px; width: 40%;"></div>
+
+            <div class="pip-row">
+              <div class="pips">
+                <span class="pip off"></span><span class="pip off"></span><span class="pip off"></span><span class="pip off"></span><span class="pip off"></span>
+              </div>
+            </div>
+
+            <div style="margin-top: 18px; display: flex; flex-direction: column; gap: 12px;">
+              <div class="skel" style="height: 18px; width: 100%;"></div>
+              <div class="skel" style="height: 18px; width: 90%;"></div>
+              <div class="skel" style="height: 18px; width: 100%;"></div>
+            </div>
+          </div>
+
+          <!-- skel card 3 -->
+          <div class="card" style="opacity: 0.7;">
+            <div class="source">
+              <span class="source-dot" style="background: var(--ink-ghost);"></span>
+            </div>
+            <div class="skel" style="height: 32px; width: 65%;"></div>
+            <div class="skel" style="margin-top: 10px; height: 14px; width: 25%;"></div>
+
+            <div class="pip-row">
+              <div class="pips">
+                <span class="pip off"></span><span class="pip off"></span><span class="pip off"></span><span class="pip off"></span>
+              </div>
+            </div>
+
+            <div style="margin-top: 18px; display: flex; flex-direction: column; gap: 12px;">
+              <div class="skel" style="height: 18px; width: 100%;"></div>
+              <div class="skel" style="height: 18px; width: 75%;"></div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+    <div class="phone-caption">3 skeleton cards · pendinghair 6px sage shimmer at 1600ms ease · cards stagger opacity 1 / 0.85 / 0.7 so shimmer feels alive but desynced · minimum 240ms to prevent flicker.</div>
+  </div>
+
+  <!-- ─── STATE 8 — empty / fallback ─── -->
+  <div>
+    <div class="phone-label">08 · empty · offline fallback exhausted</div>
+    <div class="phone">
+      <div style="padding: 24px 18px;">
+
+        <label class="search">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#9C9890" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input class="search-input" placeholder="look up a dish — shakshuka, mercimek çorbası…" />
+        </label>
+
+        <div style="margin-top: 16px; display: flex; flex-wrap: wrap; gap: 8px;">
+          <button class="chip active">all</button>
+          <button class="chip">vegetarian</button>
+          <button class="chip">vegan</button>
+          <button class="chip">mediterranean</button>
+          <button class="chip">turkish</button>
+        </div>
+
+        <div style="margin-top: 80px;">
+          <!-- source dot for offline state -->
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 20px;">
+            <span class="source-dot" style="background: var(--ink-faint);"></span>
+            <span class="source-label">offline</span>
+          </div>
+
+          <div class="empty-title">ollie can't reach the kitchen.</div>
+          <div class="empty-hint">
+            <div class="empty-rail"></div>
+            <div>try again in a moment — your pantry is still here.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="phone-caption">empty / offline · no cards · serif lede + ink-soft hint + marginalia rail · offline source dot above the absent stack tells user this is a network state, not a content state · no cta button — honest stillness.</div>
+  </div>
+
+  <!-- ─── STATE 9 — reject mid-flight ─── -->
+  <div>
+    <div class="phone-label">09 · reject animation · mid-flight</div>
+    <div class="phone">
+      <div style="padding: 24px 18px;">
+
+        <div style="margin-top: 30px; display: flex; flex-direction: column; gap: 16px;">
+
+          <!-- card being rejected -->
+          <div class="card card-rejecting">
+            <div class="source">
+              <span class="source-dot" style="background: var(--accent);"></span>
+              <span class="source-label">ai suggestion</span>
+            </div>
+            <div class="dish-name" style="padding-right: 110px;">Pasta al Limone</div>
+            <div class="cuisine">italian · 20 minutes</div>
+
+            <div class="pip-row">
+              <div class="pips">
+                <span class="pip on"></span><span class="pip on"></span><span class="pip on"></span><span class="pip off"></span>
+              </div>
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: -0.01em;">3 of 4</span>
+            </div>
+
+            <div style="margin-top: 18px;">
+              <div class="ing-label">in your pantry</div>
+              <div class="ing-row last">
+                <span class="ing-check have"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                <span class="ing-name have">spaghetti</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- next card sitting below -->
+          <div class="card">
+            <div class="source">
+              <span class="source-dot" style="background: var(--accent);"></span>
+              <span class="source-label">ai suggestion</span>
+            </div>
+            <div class="dish-name" style="padding-right: 110px;">Mercimek Çorbası</div>
+            <div class="cuisine">turkish · lentil soup</div>
+
+            <div class="pip-row">
+              <div class="pips">
+                <span class="pip on"></span><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span>
+              </div>
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: -0.01em;">5 of 5</span>
+            </div>
+
+            <div style="margin-top: 18px;">
+              <div class="ing-label">in your pantry</div>
+              <div class="ing-row last">
+                <span class="ing-check have"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                <span class="ing-name have">red lentil</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+    <div class="phone-caption">reject mid-flight · opacity 0.35 · translateX −12px · pointer-events: none · 280ms total to opacity 0 + translateX −24px · then removed and new card animates in at stack bottom.</div>
+  </div>
+
+  <!-- ─── STATE 10 — long name overflow ─── -->
+  <div>
+    <div class="phone-label">10 · long dish name · 2-line clamp</div>
+    <div class="phone">
+      <div style="padding: 24px 18px;">
+        <div class="card">
+          <div class="source">
+            <span class="source-dot" style="background: var(--accent);"></span>
+            <span class="source-label">ai suggestion</span>
+          </div>
+          <div class="dish-name" style="padding-right: 110px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis;">Slow-Braised Lamb Shank with Preserved Lemon and White Beans</div>
+          <div class="cuisine" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">moroccan-inflected · 3 hours</div>
+
+          <div class="pip-row">
+            <div class="pips">
+              <span class="pip on"></span><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span><span class="pip off"></span><span class="pip off"></span><span class="pip off"></span>
+            </div>
+            <span style="font-size: 13px; font-weight: 600; letter-spacing: -0.01em;">4 of 7</span>
+          </div>
+
+          <div class="reason">
+            <span class="reason-dot"></span>
+            <span>preserved lemon on its last week — <span style="color: var(--umber); font-weight: 600;">a slow sunday.</span></span>
+          </div>
+
+          <div style="margin-top: 18px;">
+            <div class="ing-label">in your pantry</div>
+            <div class="ing-row">
+              <span class="ing-check have"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+              <span class="ing-name have">lamb shank</span>
+            </div>
+            <div class="ing-row">
+              <span class="ing-check have"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+              <span class="ing-name have">preserved lemon</span>
+            </div>
+            <div class="ing-row">
+              <span class="ing-check have"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+              <span class="ing-name have">white beans</span>
+            </div>
+            <div class="ing-row last">
+              <span class="ing-check have"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+              <span class="ing-name have">stock</span>
+            </div>
+          </div>
+
+          <div style="margin-top: 16px;">
+            <div class="ing-label">you'd need</div>
+            <div class="ing-row">
+              <span class="ing-check miss"></span>
+              <span class="ing-name miss">cinnamon stick</span>
+            </div>
+            <div class="ing-row">
+              <span class="ing-check miss"></span>
+              <span class="ing-name miss">fresh thyme</span>
+            </div>
+            <div class="ing-row last">
+              <span class="ing-check miss"></span>
+              <span class="ing-name miss">olive oil</span>
+            </div>
+          </div>
+
+          <button class="amber">add the 3 missing to the list</button>
+
+          <div class="action-row">
+            <span class="cook">i cooked this</span>
+            <span class="pass">pass</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="phone-caption">long name · serif wraps to max 2 lines via -webkit-line-clamp · cuisine kicker single-line ellipsis · padding-right 110px keeps name out from under the source indicator.</div>
+  </div>
+
+</main>
+
+<footer style="border-top: 1px solid var(--rule); padding: 32px 48px; font-family: 'DM Mono', monospace; font-size: 9px; letter-spacing: 0.20em; text-transform: uppercase; color: var(--ink-faint);">
+  feed me v2 · visual preview · companion to 01-visual-spec.md · open in browser, debate in browser, code in code review
+</footer>
+
+</body>
+</html>

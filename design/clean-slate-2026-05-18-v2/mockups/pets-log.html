@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Pets — log care</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E; --umber:#A8703C;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  /* swipe-down handle dismisses — same return gesture everywhere */
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;
+    padding:0 26px 36px}
+
+  /* the lead — one calm line */
+  .lead{margin-top:116px;font-size:22px;font-weight:300;color:var(--ink);
+    letter-spacing:-.02em}
+  .lead b{font-weight:500}
+
+  /* a section label */
+  .sect{margin-top:30px;font-size:11px;color:var(--mute);font-weight:600;
+    letter-spacing:.08em;text-transform:uppercase}
+
+  /* which pet — a calm 2-up of soft tiles, a paw-disc + name. one tap.
+     selected = amber edge. */
+  .pets{margin-top:14px;display:grid;grid-template-columns:1fr 1fr;gap:9px}
+  .pt{height:62px;border-radius:16px;border:1px solid var(--line);
+    background:#fff;display:flex;align-items:center;gap:10px;padding:0 14px;
+    box-shadow:0 6px 16px rgba(42,38,34,.04)}
+  .pt .pd{width:32px;height:32px;border-radius:50%;background:#F2EEDF;
+    display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .pt .pd span{font-size:13px;font-weight:700;color:var(--ink)}
+  .pt .pn{display:flex;flex-direction:column;gap:2px}
+  .pt .pnm{font-size:14px;color:var(--ink);font-weight:500;letter-spacing:-.01em}
+  .pt .psp{font-size:11px;color:var(--mute);font-weight:500}
+  .pt.on{border-color:var(--accent);background:#FCF6EA}
+  .pt.on .pnm{font-weight:600}
+
+  /* the per-species quick-pick care buttons — a calm wrap of soft pills,
+     each with a tiny line glyph. the set adapts to the picked pet's
+     species (guinea pig here: hay refill, cage clean, vet, feed, floor
+     time, water, weigh-in). one is pre-selected amber. */
+  .care{margin-top:14px;display:flex;flex-wrap:wrap;gap:9px}
+  .cb{border:1px solid var(--line);background:#fff;border-radius:15px;
+    padding:11px 14px 11px 12px;display:flex;align-items:center;gap:8px;
+    box-shadow:0 6px 16px rgba(42,38,34,.04)}
+  .cb svg{stroke:var(--ink);fill:none;stroke-width:1.7;stroke-linecap:round;
+    stroke-linejoin:round;flex-shrink:0}
+  .cb span{font-size:14px;font-weight:500;color:var(--ink);letter-spacing:-.01em}
+  .cb.on{border-color:var(--accent);background:var(--accent)}
+  .cb.on svg{stroke:#fff}
+  .cb.on span{color:#fff;font-weight:600}
+
+  /* the species-adaptive note — a calm sage line */
+  .cue{margin-top:16px;display:flex;align-items:flex-start;gap:9px}
+  .cue .cdot{width:7px;height:7px;border-radius:50%;background:var(--sage);
+    flex-shrink:0;margin-top:5px}
+  .cue span{font-size:13px;color:var(--mute);font-weight:400;line-height:1.5}
+  .cue b{color:var(--ink);font-weight:600}
+
+  /* an optional quiet note line */
+  .line{margin-top:24px;border-bottom:1px solid var(--line);padding-bottom:11px;
+    display:flex;align-items:baseline;gap:2px}
+  .line span.ph{font-size:15px;color:var(--mute);font-weight:400}
+  .line span{font-size:15px;color:var(--ink);font-weight:500;letter-spacing:-.01em}
+  .line .caret{width:2px;height:16px;background:var(--accent);
+    display:inline-block;margin-left:1px;border-radius:1px}
+
+  /* save — full-width amber */
+  .save{margin-top:34px;height:52px;border-radius:26px;background:var(--accent);
+    display:flex;align-items:center;justify-content:center;gap:8px;
+    box-shadow:0 12px 28px rgba(201,146,62,.32)}
+  .save svg{stroke:#fff}
+  .save span{font-size:16px;font-weight:600;color:#fff;letter-spacing:-.01em}
+  .saved{margin-top:16px;text-align:center;font-size:13px;color:var(--sage);
+    font-weight:600;letter-spacing:.01em}
+  /* the toggle-undo note — same pet+task within 60s undoes */
+  .undo{margin-top:8px;text-align:center;font-size:11px;color:var(--mute);
+    font-weight:400}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+
+  <div class="who">
+    <span>log care</span>
+  </div>
+
+  <div class="scroll">
+    <div class="lead"><b>what did you do</b></div>
+
+    <!-- which pet -->
+    <div class="sect">for</div>
+    <div class="pets">
+      <div class="pt on">
+        <div class="pd"><span>M</span></div>
+        <div class="pn">
+          <span class="pnm">Mango</span>
+          <span class="psp">guinea pig</span>
+        </div>
+      </div>
+      <div class="pt">
+        <div class="pd"><span>T</span></div>
+        <div class="pn">
+          <span class="pnm">Tonti</span>
+          <span class="psp">rabbit</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- per-species quick-pick care buttons — guinea-pig set -->
+    <div class="sect">the care task</div>
+    <div class="care">
+      <div class="cb on">
+        <svg width="17" height="17" viewBox="0 0 24 24"><path d="M4 20l6-14M20 20l-6-14M8 20l4-9 4 9"/></svg>
+        <span>hay refill</span>
+      </div>
+      <div class="cb">
+        <svg width="17" height="17" viewBox="0 0 24 24"><path d="M5 11h14l-1.5 8h-11z"/><path d="M9 11V6h6v5"/><path d="M9 15h6"/></svg>
+        <span>cage clean</span>
+      </div>
+      <div class="cb">
+        <svg width="17" height="17" viewBox="0 0 24 24"><path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.5-7 10-7 10z"/><path d="M9 11h6M12 8v6"/></svg>
+        <span>vet checkup</span>
+      </div>
+      <div class="cb">
+        <svg width="17" height="17" viewBox="0 0 24 24"><path d="M6 4v6a3 3 0 0 0 3 3v7M9 4v6M12 4v6"/><path d="M16 4c2 1 3 4 3 7 0 2-1 3-2 3v6"/></svg>
+        <span>feed</span>
+      </div>
+      <div class="cb">
+        <svg width="17" height="17" viewBox="0 0 24 24"><rect x="4" y="9" width="16" height="9" rx="1.5"/><path d="M8 9V6M12 9V6M16 9V6"/></svg>
+        <span>floor time</span>
+      </div>
+      <div class="cb">
+        <svg width="17" height="17" viewBox="0 0 24 24"><path d="M12 3c4 5 6 8 6 11a6 6 0 0 1-12 0c0-3 2-6 6-11z"/></svg>
+        <span>fresh water</span>
+      </div>
+      <div class="cb">
+        <svg width="17" height="17" viewBox="0 0 24 24"><path d="M12 4v6M5 14h14M7 14l1 6M17 14l-1 6"/><circle cx="12" cy="12" r="2"/></svg>
+        <span>weigh-in</span>
+      </div>
+      <div class="cb">
+        <svg width="17" height="17" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+        <span>something else</span>
+      </div>
+    </div>
+
+    <div class="cue">
+      <span class="cdot"></span>
+      <span>these are the <b>guinea-pig tasks</b> ollie tracks for Mango.
+        pick another pet and the set changes to fit its species.</span>
+    </div>
+
+    <!-- an optional quiet note -->
+    <div class="line">
+      <span class="ph">a note &mdash; optional</span><span class="caret"></span>
+    </div>
+
+    <div class="save">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.4"><path d="M5 13l4 4 10-11"/></svg>
+      <span>log it</span>
+    </div>
+    <div class="saved">noted.</div>
+    <div class="undo">tap the same task again within a minute to undo it.</div>
+  </div>
+</div>
+</body>
+</html>

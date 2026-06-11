@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · A goal</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E; --umber:#A8703C;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  .safe{position:absolute;top:62px;right:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .safe svg{stroke:var(--mute)}
+  .find{position:absolute;top:62px;left:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .find svg{stroke:var(--mute)}
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  /* a single goal at rest. the goal name is the .who header; the progress
+     is the focus. milestones below recompute the progress as they tick.
+     goals + ADHD is a shame minefield, so this page is forward and kind:
+     the progress is shown, never the time since you last touched it; an
+     unfinished milestone is just open, never a reproach. centred .who, v2. */
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;
+    padding:0 26px 36px}
+
+  /* the goal header — the name as the page's hero, calm.
+     margin-top clears the absolutely-positioned .who label. */
+  .head{margin-top:116px;display:flex;flex-direction:column;align-items:center;
+    gap:6px}
+  .gname{font-size:29px;font-weight:400;color:var(--ink);letter-spacing:-.022em;
+    text-align:center}
+  .gmeta{font-size:13px;color:var(--mute);font-weight:500;letter-spacing:.02em}
+
+  /* the progress bar — soft, calm, ink fill on a line track. computed
+     from milestones. never a streak, never a number to beat. */
+  .progress{margin-top:22px;display:flex;flex-direction:column;gap:9px}
+  .pbar{height:7px;border-radius:4px;background:var(--line);position:relative;
+    overflow:hidden}
+  .pbar div{position:absolute;left:0;top:0;bottom:0;border-radius:4px;
+    background:var(--ink);opacity:.82}
+  .pcap{display:flex;justify-content:space-between;align-items:baseline}
+  .ppct{font-size:14px;color:var(--ink);font-weight:600;letter-spacing:-.01em}
+  .pfrom{font-size:12.5px;color:var(--mute);font-weight:500}
+
+  /* the briefing sections — each a quiet titled block on a hairline rule.
+     a small caps label, then the content. generous air between. */
+  .section{border-top:1px solid var(--line);padding:20px 2px}
+  .section:first-of-type{margin-top:28px}
+  .stitle{font-size:11px;color:var(--mute);font-weight:600;letter-spacing:.07em;
+    text-transform:uppercase;margin-bottom:14px}
+
+  /* MILESTONES — tap a ring to mark done; progress auto-recomputes.
+     done = sage tick disc, open = hollow ink-outline ring. calm list. */
+  .list{display:flex;flex-direction:column;gap:13px}
+  .mile{display:flex;align-items:flex-start;gap:12px}
+  .mile .tick{width:18px;height:18px;border-radius:50%;flex-shrink:0;
+    display:flex;align-items:center;justify-content:center;margin-top:1px}
+  .mile.done .tick{background:var(--sage)}
+  .mile.done .tick svg{stroke:#fff}
+  .mile.open .tick{border:1.7px solid var(--mute)}
+  .mile .mtext{flex:1}
+  .mile .mlabel{font-size:14.5px;color:var(--ink);font-weight:500;
+    letter-spacing:-.01em;line-height:1.4}
+  .mile.done .mlabel{color:#7A726A}
+  .mile .mwhen{margin-top:3px;font-size:12px;color:var(--mute);font-weight:500}
+  /* the next milestone — drawn a touch warmer, the one in front of you */
+  .mile.next .tick{border-color:var(--umber)}
+  .mile.next .mlabel{font-weight:600}
+  .mile.next .mwhen{color:var(--umber);font-weight:600}
+
+  /* the AI step-breakdown — one calm sage action, never loud. a soft
+     bordered row, a sage spark mark, the offer in plain words. */
+  .ai{margin-top:16px;border:1px solid var(--line);border-radius:16px;
+    background:#fff;padding:15px 16px;display:flex;align-items:center;gap:12px;
+    box-shadow:0 6px 16px rgba(42,38,34,.04)}
+  .ai .aimk{width:30px;height:30px;border-radius:9px;background:#EEF2EF;
+    display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .ai .aimk svg{stroke:var(--sage)}
+  .ai .aitext{flex:1}
+  .ai .ailine{font-size:14px;color:var(--ink);font-weight:600;
+    letter-spacing:-.01em}
+  .ai .aisub{margin-top:2px;font-size:12px;color:var(--mute);font-weight:400}
+  .ai .aichev{stroke:var(--mute);flex-shrink:0}
+
+  /* THE BLOCK YOU SAW COMING — the obstacle / premortem the user wrote
+     at goal-set. shown back to them in their own words, calm, in a soft
+     paper-toned quote block. their past self, not a verdict. */
+  .quote{background:#F3EEE3;border-radius:14px;padding:15px 16px}
+  .qmark{font-size:11px;color:var(--mute);font-weight:600;letter-spacing:.05em;
+    text-transform:uppercase;margin-bottom:8px}
+  .qtext{font-size:14.5px;color:var(--ink);font-weight:500;line-height:1.5;
+    letter-spacing:-.01em;font-style:italic}
+
+  /* THE CONTRACT — a Ulysses contract the user set: a note from their
+     future self, surfaced if they ever try to drop the goal. shown calm
+     at rest, an umber-marked soft block. */
+  .contract{display:flex;gap:11px;align-items:flex-start}
+  .contract .cmk{width:22px;height:22px;border-radius:7px;background:#F3E4D3;
+    display:flex;align-items:center;justify-content:center;flex-shrink:0;
+    margin-top:1px}
+  .contract .cmk svg{stroke:var(--umber)}
+  .contract .ctext{flex:1}
+  .contract .cline{font-size:14px;color:var(--ink);font-weight:500;
+    line-height:1.5;letter-spacing:-.01em}
+  .contract .cwhen{margin-top:5px;font-size:12px;color:var(--mute);
+    font-weight:500}
+
+  /* the soft footer actions — calm text routes, never loud buttons.
+     "let it go" is given the same calm weight as "review" — dropping a
+     goal is a valid, unshamed move, never hidden in a menu. */
+  .foot{margin-top:24px;display:flex;flex-direction:column;gap:0}
+  .frow{border-top:1px solid var(--line);padding:15px 2px;display:flex;
+    align-items:center}
+  .frow:last-child{border-bottom:1px solid var(--line)}
+  .frow .fk{font-size:14px;color:var(--ink);font-weight:500;
+    letter-spacing:-.01em;flex:1}
+  .frow .fsub{font-size:12px;color:var(--mute);font-weight:400;margin-left:9px}
+  .frow .fchev{stroke:var(--mute);flex-shrink:0;margin-left:8px}
+  /* the let-it-go row — sage, calm, permission-giving, not a danger zone */
+  .frow.drop .fk{color:var(--sage)}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+  <div class="find">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/>
+    </svg>
+  </div>
+  <div class="safe">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.5-7 10-7 10z"/>
+    </svg>
+  </div>
+
+  <div class="who">
+    <span>a goal</span>
+  </div>
+
+  <div class="scroll">
+    <!-- the goal header — the name as the hero -->
+    <div class="head">
+      <div class="gname">learn spanish</div>
+      <div class="gmeta">learning &middot; marathon pace</div>
+    </div>
+
+    <!-- the progress bar — computed from the milestones -->
+    <div class="progress">
+      <div class="pbar"><div style="width:40%"></div></div>
+      <div class="pcap">
+        <span class="ppct">40%</span>
+        <span class="pfrom">2 of 5 milestones done</span>
+      </div>
+    </div>
+
+    <!-- MILESTONES — tap a ring to mark done, progress recomputes -->
+    <div class="section">
+      <div class="stitle">milestones</div>
+      <div class="list">
+        <div class="mile done">
+          <span class="tick">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke-width="3.4">
+              <path d="M5 13l4 4 10-10"/>
+            </svg>
+          </span>
+          <div class="mtext">
+            <div class="mlabel">finish the first 10 lessons</div>
+          </div>
+        </div>
+        <div class="mile done">
+          <span class="tick">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke-width="3.4">
+              <path d="M5 13l4 4 10-10"/>
+            </svg>
+          </span>
+          <div class="mtext">
+            <div class="mlabel">learn 200 everyday words</div>
+          </div>
+        </div>
+        <div class="mile open next">
+          <span class="tick"></span>
+          <div class="mtext">
+            <div class="mlabel">hold a 5-minute conversation</div>
+            <div class="mwhen">the next one &mdash; whenever it's ready</div>
+          </div>
+        </div>
+        <div class="mile open">
+          <span class="tick"></span>
+          <div class="mtext">
+            <div class="mlabel">watch a film without subtitles</div>
+          </div>
+        </div>
+        <div class="mile open">
+          <span class="tick"></span>
+          <div class="mtext">
+            <div class="mlabel">read a short story end to end</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- the AI step-breakdown — one calm sage action -->
+      <div class="ai">
+        <div class="aimk">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke-width="2">
+            <path d="M12 3v4M12 17v4M5 12H1M23 12h-4M6 6l2 2M18 6l-2 2M6 18l2-2M18 18l-2-2"/>
+            <circle cx="12" cy="12" r="3.2"/>
+          </svg>
+        </div>
+        <div class="aitext">
+          <div class="ailine">ask ollie to break this into steps</div>
+          <div class="aisub">a calm 3&ndash;7 small moves &mdash; no pressure to do them</div>
+        </div>
+        <svg class="aichev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+    </div>
+
+    <!-- THE BLOCK YOU SAW COMING — the user's own obstacle / premortem -->
+    <div class="section">
+      <div class="stitle">the block you saw coming</div>
+      <div class="quote">
+        <div class="qmark">in your words, when you set this</div>
+        <div class="qtext">&ldquo;i'll do the easy lessons over and over and
+          never push into actually speaking &mdash; the speaking part scares
+          me.&rdquo;</div>
+      </div>
+    </div>
+
+    <!-- THE CONTRACT — a Ulysses contract the user set -->
+    <div class="section">
+      <div class="stitle">a note to your future self</div>
+      <div class="contract">
+        <div class="cmk">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke-width="2">
+            <path d="M5 4h11l3 3v13H5zM9 4v6h6"/>
+          </svg>
+        </div>
+        <div class="ctext">
+          <div class="cline">&ldquo;if i want to quit, it's probably the
+            speaking fear talking &mdash; give it one more honest week before
+            deciding.&rdquo;</div>
+          <div class="cwhen">a contract you wrote &middot; march 2</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- the soft footer — calm routes. dropping a goal is unshamed. -->
+    <div class="foot">
+      <div class="frow">
+        <span class="fk">a soft check-in</span>
+        <span class="fsub">sit with it for a minute</span>
+        <svg class="fchev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+      <div class="frow">
+        <span class="fk">park it for a while</span>
+        <span class="fsub">come back when it fits</span>
+        <svg class="fchev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+      <div class="frow drop">
+        <span class="fk">let this goal go</span>
+        <span class="fsub">no explaining, no verdict</span>
+        <svg class="fchev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2" style="stroke:#5B8C7E"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+    </div>
+
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Grocery — see the rest</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;
+    padding:0 26px 40px}
+
+  /* the framing line — a "see the rest" reflective surface. calm reading,
+     never a charts wall. sets the whole tone. */
+  .intro{margin-top:116px}
+  .ititle{font-size:22px;font-weight:300;color:var(--ink);letter-spacing:-.02em;
+    line-height:1.3}
+  .ititle b{font-weight:500}
+  .isub{margin-top:10px;font-size:14px;color:var(--mute);font-weight:400;
+    line-height:1.5}
+
+  /* the patterns — grouped quietly under small section labels. each
+     group is a calm cluster of ONE-LINE observations. a sage dot rides
+     each line. NO charts, NO badges, NO counts. it reads like a journal. */
+  .group{margin-top:30px}
+  .gk{font-size:11px;color:var(--mute);font-weight:600;letter-spacing:.08em;
+    text-transform:uppercase;margin-bottom:4px}
+
+  .pat{border-top:1px solid var(--line);padding:16px 0}
+  .group .pat:last-child{border-bottom:1px solid var(--line)}
+  .phead{display:flex;align-items:flex-start;gap:11px}
+  .pdot{width:7px;height:7px;border-radius:50%;background:var(--sage);
+    flex-shrink:0;margin-top:6px}
+  .ptext{flex:1}
+  .pline{font-size:15px;color:var(--ink);font-weight:500;letter-spacing:-.01em;
+    line-height:1.4}
+  /* the soft sub-line — the gentle reframe, never a verdict */
+  .pframe{margin-top:4px;font-size:13px;color:var(--mute);font-weight:400;
+    line-height:1.45}
+  /* a quiet italic citation tag — same idiom as body/admin/pets patterns */
+  .pcite{margin-top:6px;font-size:11px;color:var(--mute);font-weight:500;
+    font-style:italic;letter-spacing:.01em}
+
+  /* the closing note — restates this surface is screen-only, never pushed */
+  .foot{margin-top:26px;display:flex;gap:10px;align-items:flex-start}
+  .foot svg{stroke:var(--mute);flex-shrink:0;margin-top:1px}
+  .foot span{font-size:12px;color:var(--mute);font-weight:400;line-height:1.5}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+
+  <div class="who">
+    <span>see the rest</span>
+  </div>
+
+  <div class="scroll">
+    <div class="intro">
+      <div class="ititle"><b>what ollie noticed</b> about your shopping</div>
+      <div class="isub">none of this needs doing today. it's here to read
+        when you're curious &mdash; quiet patterns, not instructions.</div>
+    </div>
+
+    <!-- GROUP 1 — what you keep getting drawn to (interest-capture, E8) -->
+    <div class="group">
+      <div class="gk">what you keep getting drawn to</div>
+
+      <div class="pat">
+        <div class="phead">
+          <span class="pdot"></span>
+          <div class="ptext">
+            <div class="pline">3 keyboards in 3 weeks &mdash; a pattern, not a medical thing</div>
+            <div class="pframe">a burst of interest in one corner of the world. worth knowing it's
+              novelty pulling, before a fourth tab opens &mdash; it tends to pass on its own.</div>
+            <div class="pcite">Wood &amp; Neal 2007 &middot; habit &amp; novelty</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pat">
+        <div class="phead">
+          <span class="pdot"></span>
+          <div class="ptext">
+            <div class="pline">desk and plant things have crept onto the list lately</div>
+            <div class="pframe">a slow interest taking shape, not a slip &mdash; naming it makes it a choice
+              rather than a drift.</div>
+            <div class="pcite">Kasper et al. 2010 &middot; interest pursuit</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- GROUP 2 — your shopping cadence -->
+    <div class="group">
+      <div class="gk">your shopping rhythm</div>
+
+      <div class="pat">
+        <div class="phead">
+          <span class="pdot"></span>
+          <div class="ptext">
+            <div class="pline">about 6 days between grocery trips, on average</div>
+            <div class="pframe">a steadier cadence than it feels like &mdash; the list can be timed to it
+              instead of done in a panic.</div>
+            <div class="pcite">Altgassen 2014 &middot; prospective memory</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pat">
+        <div class="phead">
+          <span class="pdot"></span>
+          <div class="ptext">
+            <div class="pline">milk runs out roughly every 5 days, ahead of most trips</div>
+            <div class="pframe">a consumable on a clock &mdash; this is the kind of thing that's easier
+              as a standing item than a thing to remember.</div>
+            <div class="pcite">Barkley &amp; Murphy 2010 &middot; time blindness</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pat">
+        <div class="phead">
+          <span class="pdot"></span>
+          <div class="ptext">
+            <div class="pline">a few things have sat unbought on the list for over 2 weeks</div>
+            <div class="pframe">wishlist drift &mdash; if you don't actually want them, clearing them
+              makes the real list easier to see.</div>
+            <div class="pcite">Gollwitzer 1999 &middot; intention follow-through</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- GROUP 3 — where you shop -->
+    <div class="group">
+      <div class="gk">where you shop</div>
+
+      <div class="pat">
+        <div class="phead">
+          <span class="pdot"></span>
+          <div class="ptext">
+            <div class="pline">ollie's learned 3 stores you visit &mdash; the corner one, the big one, the market</div>
+            <div class="pframe">noticed quietly from where the trips happen &mdash; nothing entered, nothing
+              shared. it just helps time a reminder to a place you actually go.</div>
+            <div class="pcite">Wood &amp; Neal 2007 &middot; context-cued routine</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- GROUP 4 — across your modules -->
+    <div class="group">
+      <div class="gk">across your modules</div>
+
+      <div class="pat">
+        <div class="phead">
+          <span class="pdot"></span>
+          <div class="ptext">
+            <div class="pline">on low-sleep days, the list tends to grow faster than it shrinks</div>
+            <div class="pframe">grocery &times; sleep &mdash; capturing more and finishing less on a tired
+              day is the energy, not a failure of will.</div>
+            <div class="pcite">Barkley 2012 &middot; executive load</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pat">
+        <div class="phead">
+          <span class="pdot"></span>
+          <div class="ptext">
+            <div class="pline">period products land on the list on their own when a period's logged</div>
+            <div class="pframe">grocery &times; cycle &mdash; one less thing to remember at the worst time
+              to remember it; there's always a few minutes to undo it.</div>
+            <div class="pcite">cross-module reflection</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="foot">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="1.8">
+        <circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>
+      </svg>
+      <span>ollie notices patterns &mdash; it does not judge a basket. none of
+        this is ever sent as a notification; it waits here for when you want it.</span>
+    </div>
+  </div>
+</div>
+</body>
+</html>

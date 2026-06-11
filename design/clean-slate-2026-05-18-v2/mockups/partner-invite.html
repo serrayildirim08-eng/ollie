@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Link your partner</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  .safe{position:absolute;top:62px;right:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .safe svg{stroke:var(--mute)}
+  .find{position:absolute;top:62px;left:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .find svg{stroke:var(--mute)}
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  /* partner-invite — link your partner. ONE focus: one invite code.
+     reached the first time my-partner is opened with no link. v2. */
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;
+    padding:0 26px 36px}
+
+  /* the lead — one calm line. margin-top clears the .who label. */
+  .lead{margin-top:116px;font-size:22px;font-weight:300;color:var(--ink);
+    letter-spacing:-.02em;line-height:1.32}
+  .lead b{font-weight:500}
+  .sub{margin-top:10px;font-size:13px;color:var(--mute);font-weight:400;
+    line-height:1.6}
+
+  /* THE HERO — the invite code. one focus object, in air. a calm tile
+     with the code spaced wide; the share row sits under it. */
+  .codewrap{margin-top:38px;display:flex;flex-direction:column;align-items:center}
+  .code{width:100%;border:1.5px solid var(--line);border-radius:18px;
+    background:#fff;padding:26px 20px;display:flex;flex-direction:column;
+    align-items:center;gap:6px}
+  .clabel{font-size:11px;color:var(--mute);font-weight:600;letter-spacing:.08em;
+    text-transform:uppercase}
+  .cval{font-size:34px;font-weight:300;color:var(--ink);letter-spacing:.14em;
+    line-height:1}
+  .cval b{font-weight:500;color:var(--sage)}
+
+  /* two quiet share affordances under the code — copy link · share.
+     calm outlined pills, no fill; sharing is not the loud thing. */
+  .acts{margin-top:14px;display:flex;gap:10px;width:100%}
+  .act{flex:1;height:46px;border:1.5px solid var(--line);border-radius:23px;
+    background:var(--paper);display:flex;align-items:center;justify-content:center;
+    gap:8px}
+  .act svg{stroke:var(--ink)}
+  .act span{font-size:14px;font-weight:600;color:var(--ink);letter-spacing:-.01em}
+
+  /* the calm explainer — what happens once they join. a few quiet
+     numbered steps, mute, no boxes. just the honest sequence. */
+  .steps{margin-top:38px;display:flex;flex-direction:column}
+  .step{display:flex;align-items:flex-start;gap:13px;padding:14px 2px;
+    border-top:1px solid var(--line)}
+  .step:last-child{border-bottom:1px solid var(--line)}
+  .snum{width:22px;height:22px;border-radius:50%;border:1.5px solid var(--line);
+    display:flex;align-items:center;justify-content:center;flex-shrink:0;
+    margin-top:1px}
+  .snum span{font-size:12px;font-weight:600;color:var(--sage)}
+  .stext{font-size:14px;color:var(--ink);font-weight:500;letter-spacing:-.01em;
+    line-height:1.45}
+  .stext em{font-style:normal;color:var(--mute);font-weight:400}
+
+  /* the honesty note — both of you need Ollie for shared patterns.
+     a sage-marked calm line, never a warning, just true. */
+  .honest{margin-top:26px;display:flex;align-items:flex-start;gap:11px;
+    padding:16px 16px;background:#F2EEDF;border-radius:14px}
+  .hdot{width:6px;height:6px;border-radius:50%;background:var(--sage);
+    flex-shrink:0;margin-top:6px}
+  .htext{font-size:13px;color:var(--ink);font-weight:500;letter-spacing:-.005em;
+    line-height:1.55}
+  .htext em{font-style:normal;color:var(--mute);font-weight:400}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+  <div class="find">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/>
+    </svg>
+  </div>
+  <div class="safe">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.5-7 10-7 10z"/>
+    </svg>
+  </div>
+
+  <div class="who">
+    <span>link a partner</span>
+  </div>
+
+  <div class="scroll">
+    <div class="lead"><b>share this</b> with your partner</div>
+    <div class="sub">once they join, you each choose what the other sees.
+      nothing is shared until you both turn it on.</div>
+
+    <!-- the invite code — one focus, in air -->
+    <div class="codewrap">
+      <div class="code">
+        <span class="clabel">your invite code</span>
+        <span class="cval">OLLIE&middot;<b>K4M9</b></span>
+      </div>
+      <div class="acts">
+        <div class="act">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke-width="1.9">
+            <path d="M9 9h10v10H9zM5 15H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v1"/>
+          </svg>
+          <span>copy link</span>
+        </div>
+        <div class="act">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke-width="1.9">
+            <path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7M16 6l-4-4-4 4M12 2v13"/>
+          </svg>
+          <span>share</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- the calm sequence — what happens next -->
+    <div class="steps">
+      <div class="step">
+        <div class="snum"><span>1</span></div>
+        <div class="stext">they open the link <em>&mdash; and join with their own Ollie</em></div>
+      </div>
+      <div class="step">
+        <div class="snum"><span>2</span></div>
+        <div class="stext">you're linked <em>&mdash; quietly, just the two of you</em></div>
+      </div>
+      <div class="step">
+        <div class="snum"><span>3</span></div>
+        <div class="stext">each of you picks what to share <em>&mdash; everything starts off</em></div>
+      </div>
+    </div>
+
+    <!-- the honest note — both need Ollie for patterns; the ask is open -->
+    <div class="honest">
+      <span class="hdot"></span>
+      <span class="htext">shared patterns need Ollie on both sides.
+        <em>an ask can still go to anyone &mdash; it sends as a plain
+        message, no app required.</em></span>
+    </div>
+  </div>
+</div>
+</body>
+</html>

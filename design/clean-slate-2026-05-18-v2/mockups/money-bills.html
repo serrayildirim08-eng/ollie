@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Bills</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  .safe{position:absolute;top:62px;right:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .safe svg{stroke:var(--mute)}
+  .find{position:absolute;top:62px;left:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .find svg{stroke:var(--mute)}
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  .who{position:absolute;top:96px;left:26px;display:flex;align-items:center;gap:10px}
+  .who .g{width:34px;height:34px;border-radius:11px;background:#F2EEDF;
+    display:flex;align-items:center;justify-content:center}
+  .who .g svg{stroke:var(--accent)}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .stage{flex:1;display:flex;flex-direction:column;
+    justify-content:center;padding:0 40px}
+
+  /* THE ONE THING — upcoming bills, quiet dated list. plain rows,
+     no cards, no chips. it reads like a torn page from a ledger. */
+  .lead{font-size:13px;color:var(--mute);font-weight:500;letter-spacing:.02em;
+    margin-bottom:28px;text-align:center}
+  .list{display:flex;flex-direction:column}
+  .row{display:flex;align-items:baseline;gap:14px;padding:17px 2px;
+    border-bottom:1px solid var(--line)}
+  .row:first-child{border-top:1px solid var(--line)}
+  .name{font-size:20px;color:var(--ink);font-weight:400;letter-spacing:-.012em;flex:1}
+  .amt{font-size:20px;color:var(--ink);font-weight:500;letter-spacing:-.02em}
+  .when{font-size:13px;color:var(--mute);font-weight:500;width:54px;text-align:right}
+  /* the soonest bill carries a faint amber when-tint, not red */
+  .row.soon .when{color:var(--accent);font-weight:600}
+
+  /* two add targets — bill or subscription */
+  .adds{margin-top:34px;display:flex;gap:12px;justify-content:center}
+  .add{height:46px;border-radius:23px;display:flex;align-items:center;
+    justify-content:center;gap:7px;padding:0 20px;border:1px solid var(--line);
+    background:#fff;box-shadow:0 8px 22px rgba(42,38,34,.05)}
+  .add svg{stroke:var(--accent)}
+  .add span{font-size:14px;font-weight:600;color:var(--ink);letter-spacing:-.01em}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+  <div class="find">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/>
+    </svg>
+  </div>
+  <div class="safe">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.5-7 10-7 10z"/>
+    </svg>
+  </div>
+
+  <div class="who">
+    <div class="g">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="1.7">
+        <path d="M5 21V5a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v16l-3-2-3 2-3-2-3 2-2-1.3"/>
+        <path d="M9 9h6M9 13h6"/>
+      </svg>
+    </div>
+    <span>bills</span>
+  </div>
+
+  <div class="stage">
+    <div class="lead">what's coming up</div>
+    <div class="list">
+      <div class="row soon">
+        <span class="name">rent</span>
+        <span class="amt">$1,200</span>
+        <span class="when">fri</span>
+      </div>
+      <div class="row">
+        <span class="name">phone</span>
+        <span class="amt">$40</span>
+        <span class="when">may 24</span>
+      </div>
+      <div class="row">
+        <span class="name">car insurance</span>
+        <span class="amt">$240</span>
+        <span class="when">may 30</span>
+      </div>
+      <div class="row">
+        <span class="name">electric</span>
+        <span class="amt">~$85</span>
+        <span class="when">jun 3</span>
+      </div>
+      <div class="row">
+        <span class="name">internet</span>
+        <span class="amt">$60</span>
+        <span class="when">jun 8</span>
+      </div>
+    </div>
+    <div class="adds">
+      <div class="add">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>
+        <span>a bill</span>
+      </div>
+      <div class="add">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>
+        <span>a subscription</span>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

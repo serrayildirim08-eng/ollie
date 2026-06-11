@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Sleep</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  .safe{position:absolute;top:62px;right:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .safe svg{stroke:var(--mute)}
+  .find{position:absolute;top:62px;left:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .find svg{stroke:var(--mute)}
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  /* sleep is a submodule reached by drilling the body page's sleep card.
+     the face: ONE focus = last night's DURATION as the hero. centred
+     .who label, v2. everything else is air. */
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;
+    padding:0 26px 36px}
+
+  /* THE HERO — last night's duration. the big number, the rest is air.
+     above the number, a small tailored visual — body.html's 7-night
+     bar feel, scaled up: a calm week of sleep, last night in amber.
+     margin-top clears the absolutely-positioned .who label. */
+  .hero{margin-top:116px;display:flex;flex-direction:column;align-items:center}
+
+  /* the 7-night bar — body.html's bars grammar, scaled up. 6 calm ink
+     bars on a baseline rule, last night amber. a quiet week at a glance
+     sitting just above the hero number. */
+  .week{display:flex;align-items:flex-end;gap:9px;height:54px;
+    padding-bottom:6px;position:relative;margin-bottom:22px}
+  .week::after{content:"";position:absolute;left:0;right:0;bottom:4px;
+    height:1.5px;border-radius:1px;background:var(--line)}
+  .week i{width:11px;background:var(--mute);border-radius:3px;display:block;
+    position:relative;z-index:1}
+  .week i.now{background:var(--accent)}
+
+  .lead{font-size:13px;color:var(--mute);font-weight:500;letter-spacing:.02em}
+  .dur{font-size:74px;font-weight:300;color:var(--ink);letter-spacing:-.04em;
+    line-height:1;margin-top:8px}
+  .dur .u{font-size:30px;color:var(--mute);font-weight:300;letter-spacing:-.02em}
+
+  /* two calm lines under the number — sleep debt + tonight's forecast.
+     stated quietly, never a grade. */
+  .lines{margin-top:24px;display:flex;flex-direction:column;gap:8px;
+    align-items:center}
+  .ln{font-size:14px;color:var(--ink);font-weight:500;letter-spacing:-.01em}
+  .ln .k{color:var(--mute);font-weight:500}
+  .ln .s{color:var(--line);margin:0 7px}
+  .ln b{font-weight:600}
+
+  /* one amber button — log last night */
+  .log{margin:28px auto 0;height:50px;border-radius:25px;background:var(--accent);
+    display:flex;align-items:center;justify-content:center;gap:8px;padding:0 24px;
+    box-shadow:0 12px 28px rgba(201,146,62,.32)}
+  .log svg{stroke:#fff}
+  .log span{font-size:16px;font-weight:600;color:#fff;letter-spacing:-.01em}
+
+  /* below the hero, with air — calm drill rows. each = one tailored line.
+     tap a row → its screen. no chevron clutter, just a quiet caret. */
+  .rows{margin-top:50px;display:flex;flex-direction:column}
+  .row{border-top:1px solid var(--line);padding:18px 2px;display:flex;
+    align-items:center}
+  .row:last-child{border-bottom:1px solid var(--line)}
+  .rk{font-size:13px;color:var(--mute);font-weight:600;letter-spacing:.01em;
+    flex-shrink:0}
+  .rsep{color:var(--line);margin:0 8px;font-size:13px}
+  .rv{font-size:14px;color:var(--ink);font-weight:500;letter-spacing:-.01em;flex:1}
+  .chev{stroke:var(--mute);flex-shrink:0;margin-left:8px}
+
+  /* the observed-pattern row — sage, calm, only present when a pattern
+     is live. a small sage dot rides the line. routes to sleep-patterns.
+     NEVER loud, never a badge. */
+  .row.obs .rdot{width:6px;height:6px;border-radius:50%;background:var(--sage);
+    flex-shrink:0;margin-right:11px}
+  .row.obs .rv{color:var(--ink)}
+  .row.obs .rk{color:var(--sage)}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+  <div class="find">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/>
+    </svg>
+  </div>
+  <div class="safe">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.5-7 10-7 10z"/>
+    </svg>
+  </div>
+
+  <div class="who">
+    <span>sleep</span>
+  </div>
+
+  <div class="scroll">
+    <div class="hero">
+      <!-- the tailored visual — body.html's 7-night bar chart, scaled up.
+           6 calm ink bars on a baseline, last night amber. -->
+      <div class="week">
+        <i style="height:28px"></i>
+        <i style="height:38px"></i>
+        <i style="height:22px"></i>
+        <i style="height:34px"></i>
+        <i style="height:44px"></i>
+        <i style="height:26px"></i>
+        <i class="now" style="height:36px"></i>
+      </div>
+
+      <div class="lead">last night</div>
+      <div class="dur">7h<span class="u"> </span>20m</div>
+
+      <div class="lines">
+        <div class="ln"><span class="k">this week</span><span class="s">·</span><b>1h 10m short</b></div>
+        <div class="ln"><span class="k">tonight</span><span class="s">·</span><b>~7h likely</b></div>
+      </div>
+
+      <div class="log">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="2.4">
+          <path d="M12 5v14M5 12h14"/>
+        </svg>
+        <span>log last night</span>
+      </div>
+    </div>
+
+    <div class="rows">
+      <!-- wind-down -->
+      <div class="row">
+        <span class="rk">wind-down</span><span class="rsep">·</span>
+        <span class="rv">6 small steps before bed</span>
+        <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+
+      <!-- history -->
+      <div class="row">
+        <span class="rk">history</span><span class="rsep">·</span>
+        <span class="rv">last 14 nights · 6h 50m mean</span>
+        <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+
+      <!-- sounds -->
+      <div class="row">
+        <span class="rk">sounds</span><span class="rsep">·</span>
+        <span class="rv">brown noise · soft sleep timer</span>
+        <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+
+      <!-- go deeper — the surveys -->
+      <div class="row">
+        <span class="rk">go deeper</span><span class="rsep">·</span>
+        <span class="rv">two short sleep check-ins</span>
+        <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+
+      <!-- a pattern is live — ONE calm sage observation row.
+           only ever shown when a pattern exists; routes to sleep-patterns. -->
+      <div class="row obs">
+        <span class="rdot"></span>
+        <span class="rk">see the rest</span><span class="rsep">·</span>
+        <span class="rv">a few sleep patterns ollie noticed</span>
+        <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

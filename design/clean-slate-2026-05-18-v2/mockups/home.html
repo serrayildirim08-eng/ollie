@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Home</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E; --umber:#A8703C;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  .safe{position:absolute;top:62px;right:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .safe svg{stroke:var(--mute)}
+  /* find — calm second affordance, mirrors Safe on the left */
+  .find{position:absolute;top:62px;left:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .find svg{stroke:var(--mute)}
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  /* home has only 3 submodules — so where body (5 cards) can stay thin,
+     home would read barren with 3 one-line rows. the fix: each of the 3
+     cards is a TALL, RICH preview block (~220-260px). few cards ⇒ each
+     card carries more — a bigger tailored visual, the glance line, AND
+     2-3 lines of REAL previewed content at rest. you see real life
+     without expanding. opening home feels like a full notebook page. */
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;
+    padding:0 26px 36px}
+
+  /* the 3 cards — generous, tall preview blocks. margin-top clears the
+     absolutely-positioned .who label. cards sit on hairline rules. */
+  .rows{margin-top:116px;display:flex;flex-direction:column}
+  .row{border-top:1px solid var(--line);padding:22px 2px 24px}
+  .row:last-child{border-bottom:1px solid var(--line)}
+
+  /* card head — bigger visual on the left, glance line on the right.
+     the visual gutter is wider here than body's so the visual reads
+     substantial, not decorative. */
+  .rhead{display:flex;align-items:center;gap:16px}
+  .viz{width:62px;flex-shrink:0;display:flex;align-items:center;
+    justify-content:center}
+  .rtext{flex:1;display:flex;flex-direction:column;gap:4px;min-width:0}
+  .rk{font-size:11px;color:var(--mute);font-weight:600;letter-spacing:.06em;
+    text-transform:uppercase}
+  .rv{font-size:15px;color:var(--ink);font-weight:500;letter-spacing:-.01em}
+  .rv b{font-weight:600}
+  .rv .warm{color:var(--umber);font-weight:600}
+  .chev{stroke:var(--mute);flex-shrink:0;margin-left:6px;align-self:center}
+
+  /* the observed-pattern mark — a small sage dot that rides the glance
+     line. NEVER a badge, never loud. sage is the v2 "observed" color.
+     when a pattern is hot the glance line BECOMES the observation. */
+  .obs{display:inline-flex;align-items:center;gap:7px}
+  .obs .odot{width:6px;height:6px;border-radius:50%;background:var(--sage);
+    flex-shrink:0}
+  .obs .otext{color:var(--ink);font-weight:500}
+  .obs .otext em{font-style:normal;font-weight:600}
+
+  /* ---- the at-rest preview body — 2-3 lines of REAL data sitting
+          right under the glance line. aligned under the text column,
+          not the visual gutter, so the visual stays a clean margin.
+          calm: real content, near-zero labels — never a wall of chrome. */
+  .preview{margin-top:14px;margin-left:78px;display:flex;
+    flex-direction:column}
+
+  /* admin — the upcoming items, quiet one-per-line. a small leading
+     mark, the thing, then a soft when on the right. */
+  .uprow{display:flex;align-items:baseline;gap:10px;padding:8px 0;
+    border-top:1px solid var(--line)}
+  .uprow:first-child{border-top:none;padding-top:2px}
+  .upmk{width:6px;height:6px;border-radius:2px;border:1.4px solid var(--mute);
+    flex-shrink:0;align-self:center}
+  .upname{flex:1;font-size:14px;color:var(--ink);font-weight:400;
+    letter-spacing:-.01em}
+  .upwhen{font-size:13px;color:var(--mute);font-weight:500;flex-shrink:0}
+  /* the next thing due — drawn warm, mark filled umber */
+  .uprow.due .upmk{border-color:var(--umber);background:var(--umber)}
+  .uprow.due .upname{font-weight:600}
+  .uprow.due .upwhen{color:var(--umber);font-weight:600}
+
+  /* pets — each pet on its own line: a soft initial disc, the name,
+     then its next care item or an all-current state. */
+  .petrow{display:flex;align-items:center;gap:11px;padding:9px 0;
+    border-top:1px solid var(--line)}
+  .petrow:first-child{border-top:none;padding-top:2px}
+  .petdisc{width:26px;height:26px;border-radius:50%;background:#F2EEDF;
+    display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .petdisc span{font-size:11px;font-weight:700;color:var(--ink)}
+  .petname{font-size:14px;color:var(--ink);font-weight:600;flex-shrink:0}
+  .petcare{flex:1;font-size:13px;color:var(--mute);font-weight:500;
+    text-align:right;letter-spacing:-.01em}
+  .petcare b{color:var(--ink);font-weight:600}
+  .petcare.ok{color:var(--sage);font-weight:600}
+
+  /* grocery — 3 modes (shop · feed me · pantry) as calm CONTENT ROWS.
+     NOT buttons: no fill, no border-box, no chrome. each row is a soft
+     tappable line — a quiet mode glyph, the mode name, its live stat.
+     generous calm spacing; the 3 rows + header + air fill the card to
+     the same weight as admin/pets. */
+  .modes{display:flex;flex-direction:column}
+  .moderow{display:flex;align-items:center;gap:13px;padding:13px 0;
+    border-top:1px solid var(--line)}
+  .moderow:first-child{border-top:none;padding-top:3px}
+  .moderow:last-child{padding-bottom:1px}
+  .modeglyph{width:22px;height:22px;flex-shrink:0;display:flex;
+    align-items:center;justify-content:center}
+  .modeglyph svg{stroke:var(--ink);fill:none;stroke-width:1.7;
+    stroke-linecap:round;stroke-linejoin:round}
+  .modename{font-size:14px;color:var(--ink);font-weight:600;
+    letter-spacing:-.01em;flex-shrink:0}
+  .modestat{flex:1;font-size:13px;color:var(--mute);font-weight:500;
+    text-align:right;letter-spacing:-.01em}
+  .modestat b{color:var(--ink);font-weight:600}
+  /* pantry's low stat reads warm — a quiet running-low cue */
+  .modestat.low{color:var(--umber);font-weight:600}
+
+  /* ---- micro-visuals — bigger here than body's, each a real little
+          data object: ink + one accent, never generic dots. ---- */
+
+  /* admin — a quiet stack of waiting tasks, scaled up. four task-lines
+     on a left tick-rail; the top line is the next thing due, drawn warm
+     in umber. reads as "a few things on the rail" instantly. */
+  .stack{display:flex;flex-direction:column;gap:8px;width:56px}
+  .task{display:flex;align-items:center;gap:7px}
+  .task .mk{width:8px;height:8px;border-radius:2px;border:1.6px solid var(--mute);
+    flex-shrink:0;background:none}
+  .task .ln{height:5px;border-radius:2.5px;background:var(--mute);flex:1}
+  .task.due .mk{border-color:var(--umber);background:var(--umber)}
+  .task.due .ln{background:var(--umber)}
+
+  /* pets — a per-pet care ring, scaled up. each pet is an initial in a
+     soft disc; a ring shows that pet's care state — a full sage ring =
+     cared for, a broken/partial amber ring = something waiting.
+     Mango: care due → partial amber ring. Tonti: up to date → full sage. */
+  .pets{display:flex;gap:9px}
+  .pet{position:relative;width:30px;height:30px}
+  .pet svg{position:absolute;inset:0}
+  .pet .ring{stroke-width:2.4;fill:none;stroke-linecap:round}
+  .pet .disc{fill:#F2EEDF}
+  .pet .ini{font-size:12px;font-weight:700;fill:var(--ink);
+    text-anchor:middle;dominant-baseline:central}
+
+  /* grocery — mini torn-note list lines, scaled up. five stub lines,
+     a small leading checkbox-tick; one line struck (already grabbed),
+     drawn shorter + faded — a list mid-shop, seen at a glance. */
+  .note{display:flex;flex-direction:column;gap:7px;width:58px}
+  .nline{display:flex;align-items:center;gap:7px}
+  .nline .tick{width:7px;height:7px;border-radius:1.5px;
+    border:1.6px solid var(--mute);flex-shrink:0}
+  .nline .nl{height:4px;border-radius:2px;background:var(--mute);flex:1}
+  .nline.got .tick{border-color:var(--accent);background:var(--accent)}
+  .nline.got .nl{background:var(--line);max-width:60%}
+
+  /* the open cue — a quiet route into the detail page. */
+  .row.open .chev{transform:rotate(180deg)}
+  .open{margin-top:16px;margin-left:78px;font-size:12px;color:var(--accent);
+    font-weight:600;letter-spacing:.02em}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+  <div class="find">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/>
+    </svg>
+  </div>
+  <div class="safe">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.5-7 10-7 10z"/>
+    </svg>
+  </div>
+
+  <div class="who">
+    <span>home</span>
+  </div>
+
+  <div class="scroll">
+    <div class="rows">
+
+      <!-- admin — a tall preview block. the visual is a stacked-tasks
+           mark (next due drawn warm). the glance line carries a HOT
+           pattern: schedule-drift on 'taxes', a sage dot rides it.
+           below, at rest: the next thing due + the next 2 upcoming
+           items, previewed as quiet real lines. -->
+      <div class="row">
+        <div class="rhead">
+          <div class="viz">
+            <div class="stack">
+              <div class="task due"><span class="mk"></span><span class="ln"></span></div>
+              <div class="task"><span class="mk"></span><span class="ln" style="flex:0 0 34px"></span></div>
+              <div class="task"><span class="mk"></span><span class="ln" style="flex:0 0 26px"></span></div>
+              <div class="task"><span class="mk"></span><span class="ln" style="flex:0 0 20px"></span></div>
+            </div>
+          </div>
+          <div class="rtext">
+            <span class="rk">admin</span>
+            <span class="rv obs">
+              <span class="odot"></span>
+              <span class="otext">planned <em>&lsquo;taxes&rsquo;</em> 3&times; &mdash; worth actually doing</span>
+            </span>
+          </div>
+          <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+        </div>
+        <!-- at rest: the next due + 2-3 upcoming items, real lines -->
+        <div class="preview">
+          <div class="uprow due">
+            <span class="upmk"></span>
+            <span class="upname">renew passport</span>
+            <span class="upwhen">4 days</span>
+          </div>
+          <div class="uprow">
+            <span class="upmk"></span>
+            <span class="upname">dentist cleaning</span>
+            <span class="upwhen">next week</span>
+          </div>
+          <div class="uprow">
+            <span class="upmk"></span>
+            <span class="upname">car registration</span>
+            <span class="upwhen">in 2 weeks</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- pets — a tall preview block. the visual is per-pet care rings
+           (Mango amber-partial, Tonti full sage). at rest: each pet by
+           name with its next care item — real lines, not a count. -->
+      <div class="row">
+        <div class="rhead">
+          <div class="viz">
+            <div class="pets">
+              <!-- Mango — care waiting: partial amber ring -->
+              <div class="pet">
+                <svg width="30" height="30" viewBox="0 0 30 30">
+                  <circle class="disc" cx="15" cy="15" r="12"/>
+                  <circle class="ring" cx="15" cy="15" r="13"
+                    stroke="var(--line)"/>
+                  <!-- ~62% care arc, amber, with a gap = something due.
+                       r=13 → circumference ≈ 81.7; 62% ≈ 50.7 -->
+                  <circle class="ring" cx="15" cy="15" r="13"
+                    stroke="var(--accent)" stroke-dasharray="50.7 31"
+                    transform="rotate(-90 15 15)"/>
+                  <text class="ini" x="15" y="15">M</text>
+                </svg>
+              </div>
+              <!-- Tonti — up to date: full sage ring -->
+              <div class="pet">
+                <svg width="30" height="30" viewBox="0 0 30 30">
+                  <circle class="disc" cx="15" cy="15" r="12"/>
+                  <circle class="ring" cx="15" cy="15" r="13"
+                    stroke="var(--sage)"/>
+                  <text class="ini" x="15" y="15">T</text>
+                </svg>
+              </div>
+            </div>
+          </div>
+          <div class="rtext">
+            <span class="rk">pets</span>
+            <span class="rv"><b>2</b> in the notebook &middot; 1 thing waiting</span>
+          </div>
+          <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+        </div>
+        <!-- at rest: each pet + its next care item -->
+        <div class="preview">
+          <div class="petrow">
+            <div class="petdisc"><span>M</span></div>
+            <span class="petname">Mango</span>
+            <span class="petcare">flea drops &middot; <b>tomorrow</b></span>
+          </div>
+          <div class="petrow">
+            <div class="petdisc"><span>T</span></div>
+            <span class="petname">Tonti</span>
+            <span class="petcare ok">all current</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- grocery — a tall preview block. grocery has 3 modes
+           (shop · feed me · pantry). the visual is the same torn-note
+           list mark; the glance line frames the modes. at rest, the
+           3 modes sit as calm CONTENT ROWS — no button chrome — each
+           a quiet glyph + name + its live stat, each tappable. -->
+      <div class="row">
+        <div class="rhead">
+          <div class="viz">
+            <div class="note">
+              <div class="nline"><span class="tick"></span><span class="nl"></span></div>
+              <div class="nline got"><span class="tick"></span><span class="nl"></span></div>
+              <div class="nline"><span class="tick"></span><span class="nl" style="flex:0 0 40px"></span></div>
+              <div class="nline"><span class="tick"></span><span class="nl" style="flex:0 0 30px"></span></div>
+              <div class="nline"><span class="tick"></span><span class="nl" style="flex:0 0 22px"></span></div>
+            </div>
+          </div>
+          <div class="rtext">
+            <span class="rk">grocery</span>
+            <span class="rv">3 ways in &middot; <b>shop</b>, feed me, pantry</span>
+          </div>
+          <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+        </div>
+        <!-- at rest: the 3 modes as calm tappable rows -->
+        <div class="preview">
+          <div class="modes">
+            <!-- shop — the running list -->
+            <div class="moderow">
+              <div class="modeglyph">
+                <svg width="19" height="19" viewBox="0 0 24 24">
+                  <path d="M4 8h16l-1.5 11.5a1 1 0 0 1-1 .5H6.5a1 1 0 0 1-1-.5L4 8z"/>
+                  <path d="M8.5 8V6a3.5 3.5 0 0 1 7 0v2"/>
+                </svg>
+              </div>
+              <span class="modename">shop</span>
+              <span class="modestat"><b>4</b> on the list</span>
+            </div>
+            <!-- feed me — meals from what's on hand -->
+            <div class="moderow">
+              <div class="modeglyph">
+                <svg width="19" height="19" viewBox="0 0 24 24">
+                  <circle cx="12" cy="12" r="8.5"/>
+                  <circle cx="12" cy="12" r="3.5"/>
+                </svg>
+              </div>
+              <span class="modename">feed me</span>
+              <span class="modestat"><b>3</b> meals from what you have</span>
+            </div>
+            <!-- pantry — what's in the kitchen -->
+            <div class="moderow">
+              <div class="modeglyph">
+                <svg width="19" height="19" viewBox="0 0 24 24">
+                  <path d="M7 9.5V6a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v3.5"/>
+                  <rect x="5.5" y="9.5" width="13" height="11" rx="1.5"/>
+                  <path d="M9.5 4v5.5M14.5 4v5.5"/>
+                </svg>
+              </div>
+              <span class="modename">pantry</span>
+              <span class="modestat low">olive oil running low</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- the observed-pattern note — sage mark + one quiet line.
+         a second, calmer observation sitting under the cards
+         (the admin drift rides the glance; this is the softer pets one). -->
+    <div style="margin-top:24px;display:flex;align-items:center;gap:8px">
+      <span style="width:6px;height:6px;border-radius:50%;background:var(--sage);flex-shrink:0"></span>
+      <span style="font-size:13px;color:var(--ink);font-weight:500;letter-spacing:-.01em">pet care tends to slip on your low-sleep days</span>
+    </div>
+
+  </div>
+</div>
+</body>
+</html>

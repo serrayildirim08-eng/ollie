@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Admin — calls to make</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E; --umber:#A8703C;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  .safe{position:absolute;top:62px;right:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .safe svg{stroke:var(--mute)}
+  .find{position:absolute;top:62px;left:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .find svg{stroke:var(--mute)}
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;
+    padding:0 26px 40px}
+
+  /* the framing line — calls are the one ADHD-aversive thing, surfaced
+     gently. a calm reframe up top, never a nag. */
+  .intro{margin-top:116px}
+  .ititle{font-size:22px;font-weight:300;color:var(--ink);letter-spacing:-.02em;
+    line-height:1.3}
+  .ititle b{font-weight:500}
+  .isub{margin-top:10px;font-size:14px;color:var(--mute);font-weight:400;
+    line-height:1.5}
+
+  /* the calls — each ONE calm block, oldest-waiting first. a quiet phone
+     glyph, the call, how long it's waited. each can ask ollie for a
+     script — a calm sage cue, never a button shout. */
+  .calls{margin-top:26px}
+  .call{border-top:1px solid var(--line);padding:18px 2px}
+  .calls .call:last-child{border-bottom:1px solid var(--line)}
+  .chead{display:flex;align-items:flex-start;gap:13px}
+  .cglyph{width:30px;height:30px;border-radius:9px;background:#F2EEDF;
+    display:flex;align-items:center;justify-content:center;flex-shrink:0;
+    margin-top:1px}
+  .cglyph svg{stroke:var(--ink)}
+  .cmid{flex:1;min-width:0}
+  .cname{font-size:15px;color:var(--ink);font-weight:500;letter-spacing:-.012em;
+    line-height:1.35}
+  .cwait{margin-top:4px;font-size:12px;color:var(--mute);font-weight:500;
+    letter-spacing:.01em}
+  /* the oldest call wears a warm umber wait — gently surfaced, not alarmed */
+  .call.oldest .cwait{color:var(--umber);font-weight:600}
+
+  /* the script offer — a calm sage line under the call. asking ollie to
+     write the opening lines so the call has a shape before it starts. */
+  .script{margin-top:13px;margin-left:43px;display:flex;align-items:center;
+    gap:9px}
+  .script .sdot{width:7px;height:7px;border-radius:50%;background:var(--sage);
+    flex-shrink:0}
+  .script span{font-size:13px;color:var(--sage);font-weight:600;
+    letter-spacing:.01em}
+
+  /* the closing note — restates the calm posture */
+  .foot{margin-top:26px;display:flex;gap:10px;align-items:flex-start}
+  .foot svg{stroke:var(--mute);flex-shrink:0;margin-top:1px}
+  .foot span{font-size:12px;color:var(--mute);font-weight:400;line-height:1.5}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+  <div class="find">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/>
+    </svg>
+  </div>
+  <div class="safe">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.5-7 10-7 10z"/>
+    </svg>
+  </div>
+
+  <div class="who">
+    <span>calls to make</span>
+  </div>
+
+  <div class="scroll">
+    <div class="intro">
+      <div class="ititle"><b>the calls.</b> gathered in one place</div>
+      <div class="isub">a phone call asks a lot at once — initiation,
+        a script, holding the thread. that's why they wait. ollie can
+        write the opening lines for any of them.</div>
+    </div>
+
+    <div class="calls">
+      <!-- oldest waiting — surfaced first, warm wait -->
+      <div class="call oldest">
+        <div class="chead">
+          <div class="cglyph">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="1.9">
+              <path d="M5 4h4l2 5-3 2a12 12 0 0 0 5 5l2-3 5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/>
+            </svg>
+          </div>
+          <div class="cmid">
+            <div class="cname">call the passport office about the delay</div>
+            <div class="cwait">waiting · 11 days</div>
+          </div>
+        </div>
+        <div class="script">
+          <span class="sdot"></span>
+          <span>ask ollie for a call script</span>
+        </div>
+      </div>
+
+      <div class="call">
+        <div class="chead">
+          <div class="cglyph">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="1.9">
+              <path d="M5 4h4l2 5-3 2a12 12 0 0 0 5 5l2-3 5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/>
+            </svg>
+          </div>
+          <div class="cmid">
+            <div class="cname">book the dentist cleaning</div>
+            <div class="cwait">waiting · 6 days</div>
+          </div>
+        </div>
+        <div class="script">
+          <span class="sdot"></span>
+          <span>ask ollie for a call script</span>
+        </div>
+      </div>
+
+      <div class="call">
+        <div class="chead">
+          <div class="cglyph">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="1.9">
+              <path d="M5 4h4l2 5-3 2a12 12 0 0 0 5 5l2-3 5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/>
+            </svg>
+          </div>
+          <div class="cmid">
+            <div class="cname">cancel the old gym membership</div>
+            <div class="cwait">waiting · 2 days</div>
+          </div>
+        </div>
+        <div class="script">
+          <span class="sdot"></span>
+          <span>ask ollie for a call script</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="foot">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="1.8">
+        <circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>
+      </svg>
+      <span>a call bundles every part that's hard at once — that's
+        neurology, not avoidance. one a day is plenty.</span>
+    </div>
+  </div>
+</div>
+</body>
+</html>

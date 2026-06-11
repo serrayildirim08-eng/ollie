@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · What Sam sees</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  .safe{position:absolute;top:62px;right:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .safe svg{stroke:var(--mute)}
+  .find{position:absolute;top:62px;left:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .find svg{stroke:var(--mute)}
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  /* partner-sharing — the granular opt-in control. reached from
+     my-partner's "what Sam sees from you" footer link. every toggle
+     defaults OFF; the user picks exactly what their partner sees. v2. */
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;
+    padding:0 26px 36px}
+
+  /* the lead — one calm line. margin-top clears the .who label. */
+  .lead{margin-top:116px;font-size:22px;font-weight:300;color:var(--ink);
+    letter-spacing:-.02em;line-height:1.32}
+  .lead b{font-weight:500}
+  .sub{margin-top:9px;font-size:13px;color:var(--mute);font-weight:400;
+    line-height:1.6}
+
+  /* section caption — tiny uppercase mute */
+  .cap{margin-top:34px;font-size:11px;color:var(--mute);font-weight:600;
+    letter-spacing:.08em;text-transform:uppercase}
+
+  /* the toggle rows — each = one soft pattern type. calm hairline rows.
+     the toggle is a quiet pill: OFF = line track, ON = sage fill.
+     a small mute sub-line states what the partner would see if on. */
+  .toggles{margin-top:13px;display:flex;flex-direction:column}
+  .tg{border-top:1px solid var(--line);padding:15px 2px;display:flex;
+    align-items:center;gap:14px}
+  .tg:last-child{border-bottom:1px solid var(--line)}
+  .ttext{flex:1;display:flex;flex-direction:column;gap:3px;min-width:0}
+  .tk{font-size:14px;color:var(--ink);font-weight:600;letter-spacing:-.01em}
+  .tv{font-size:12px;color:var(--mute);font-weight:400;letter-spacing:.005em;
+    line-height:1.4}
+  /* the switch — 44×26, line-color track + paper knob. */
+  .sw{width:44px;height:26px;border-radius:13px;background:var(--line);
+    position:relative;flex-shrink:0;transition:background .18s}
+  .sw::after{content:"";position:absolute;top:3px;left:3px;width:20px;
+    height:20px;border-radius:50%;background:#fff;
+    box-shadow:0 1px 3px rgba(42,38,34,.25);transition:left .18s}
+  .sw.on{background:var(--sage)}
+  .sw.on::after{left:21px}
+
+  /* the clinical boundary — NOT a toggle. a stated, fixed line. a small
+     locked-mark sits with it; sage + ink only, never red, never alarm.
+     this is the one thing the user can never expose, even on purpose. */
+  .lock{margin-top:16px;display:flex;align-items:flex-start;gap:12px;
+    padding:16px 16px;background:#F2EEDF;border-radius:14px}
+  .lglyph{width:24px;height:24px;border-radius:50%;border:1.5px solid var(--sage);
+    display:flex;align-items:center;justify-content:center;flex-shrink:0;
+    margin-top:1px}
+  .lglyph svg{stroke:var(--sage)}
+  .ltext{font-size:13px;color:var(--ink);font-weight:500;letter-spacing:-.005em;
+    line-height:1.55}
+  .ltext em{font-style:normal;color:var(--mute);font-weight:400}
+
+  /* the preview card — "this is what Sam sees right now". the body.html
+     observation grammar, so the user sees exactly what's exposed. only
+     the lines whose toggle is ON appear here. */
+  .pv{margin-top:34px;border:1.5px solid var(--line);border-radius:16px;
+    background:#fff;padding:18px 18px 16px}
+  .pvhead{display:flex;align-items:center;gap:8px}
+  .pveye{stroke:var(--mute)}
+  .pvlabel{font-size:11px;color:var(--mute);font-weight:600;letter-spacing:.07em;
+    text-transform:uppercase}
+  .pvlines{margin-top:13px;display:flex;flex-direction:column;gap:11px}
+  .pvl{display:flex;align-items:flex-start;gap:11px}
+  .pvdot{width:6px;height:6px;border-radius:50%;background:var(--sage);
+    flex-shrink:0;margin-top:6px}
+  .pvtext{font-size:14px;color:var(--ink);font-weight:500;letter-spacing:-.01em;
+    line-height:1.45}
+  .pvtext em{font-style:normal;color:var(--mute)}
+  /* the empty hint inside the preview — when a toggle is off, its line
+     simply isn't here; one mute line says so, calmly. */
+  .pvnote{margin-top:14px;padding-top:13px;border-top:1px solid var(--line);
+    font-size:12px;color:var(--mute);font-weight:400;line-height:1.5}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+  <div class="find">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/>
+    </svg>
+  </div>
+  <div class="safe">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.5-7 10-7 10z"/>
+    </svg>
+  </div>
+
+  <div class="who">
+    <span>what Sam sees</span>
+  </div>
+
+  <div class="scroll">
+    <div class="lead"><b>you choose</b> what Sam sees</div>
+    <div class="sub">everything starts off. turn on only the soft states
+      you want Sam to know &mdash; change it any time.</div>
+
+    <!-- the toggle rows — soft pattern types, default OFF -->
+    <div class="cap">soft states</div>
+    <div class="toggles">
+      <div class="tg">
+        <div class="ttext">
+          <span class="tk">cycle phase</span>
+          <span class="tv">Sam sees "in luteal &mdash; be gentle". never a date, never a flag.</span>
+        </div>
+        <div class="sw on"></div>
+      </div>
+      <div class="tg">
+        <div class="ttext">
+          <span class="tk">sleep</span>
+          <span class="tv">Sam sees "low on sleep this week". no hours, no log.</span>
+        </div>
+        <div class="sw on"></div>
+      </div>
+      <div class="tg">
+        <div class="ttext">
+          <span class="tk">stress</span>
+          <span class="tv">Sam sees "a stretch of stress". the feeling, not the cause.</span>
+        </div>
+        <div class="sw on"></div>
+      </div>
+      <div class="tg">
+        <div class="ttext">
+          <span class="tk">energy</span>
+          <span class="tv">Sam sees "running low" or "good energy". off right now.</span>
+        </div>
+        <div class="sw"></div>
+      </div>
+      <div class="tg">
+        <div class="ttext">
+          <span class="tk">mood</span>
+          <span class="tv">Sam sees "a tender few days". off right now.</span>
+        </div>
+        <div class="sw"></div>
+      </div>
+    </div>
+
+    <!-- the clinical boundary — stated, not a toggle. never shareable. -->
+    <div class="lock">
+      <div class="lglyph">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke-width="2">
+          <rect x="5" y="11" width="14" height="9" rx="2"/>
+          <path d="M8 11V8a4 4 0 0 1 8 0v3"/>
+        </svg>
+      </div>
+      <span class="ltext">medical flags are never shared &mdash; not even
+        with a toggle. <em>PCOS, endometriosis, PMDD, any clinical pattern
+        ollie tracks stays only with you. Sam only ever sees a soft
+        state.</em></span>
+    </div>
+
+    <!-- the preview — exactly what Sam sees right now -->
+    <div class="pv">
+      <div class="pvhead">
+        <svg class="pveye" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="1.7">
+          <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/>
+          <circle cx="12" cy="12" r="3"/>
+        </svg>
+        <span class="pvlabel">what Sam sees right now</span>
+      </div>
+      <div class="pvlines">
+        <div class="pvl">
+          <span class="pvdot"></span>
+          <span class="pvtext">in luteal <em>&mdash; be gentle</em></span>
+        </div>
+        <div class="pvl">
+          <span class="pvdot"></span>
+          <span class="pvtext">low on sleep this week</span>
+        </div>
+        <div class="pvl">
+          <span class="pvdot"></span>
+          <span class="pvtext">a stretch of stress</span>
+        </div>
+      </div>
+      <div class="pvnote">energy and mood are off &mdash; Sam doesn't see them.
+        turn one on and its line appears here.</div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

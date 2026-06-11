@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Listening</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:-apple-system,'Segoe UI',Roboto,sans-serif;background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:#15130F;position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:#FAF6EF}
+
+  .stage{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center}
+
+  /* one breathing ring — the only thing */
+  .ringwrap{position:relative;width:200px;height:200px;display:flex;
+    align-items:center;justify-content:center}
+  .ring{position:absolute;border-radius:50%;border:1.5px solid rgba(91,140,126,.6);
+    width:120px;height:120px;animation:breathe 4s ease-in-out infinite}
+  .ring.r2{animation-delay:.5s;opacity:.5}
+  .ring.r3{animation-delay:1s;opacity:.25}
+  @keyframes breathe{0%,100%{transform:scale(.78)}50%{transform:scale(1.32)}}
+  .core{width:96px;height:96px;border-radius:50%;background:#5B8C7E;
+    box-shadow:0 0 60px rgba(91,140,126,.55)}
+
+  /* live waveform — wordless feedback */
+  .wave{margin-top:80px;display:flex;gap:5px;align-items:center;height:40px}
+  .wave i{width:4px;border-radius:2px;background:rgba(250,246,239,.7);display:block}
+  .wave i:nth-child(1){height:14px;animation:w 1.1s ease-in-out infinite}
+  .wave i:nth-child(2){height:30px;animation:w .9s ease-in-out infinite .1s}
+  .wave i:nth-child(3){height:20px;animation:w 1.3s ease-in-out infinite .2s}
+  .wave i:nth-child(4){height:38px;animation:w .8s ease-in-out infinite}
+  .wave i:nth-child(5){height:24px;animation:w 1.2s ease-in-out infinite .15s}
+  .wave i:nth-child(6){height:16px;animation:w 1s ease-in-out infinite .25s}
+  .wave i:nth-child(7){height:32px;animation:w .95s ease-in-out infinite .05s}
+  @keyframes w{0%,100%{transform:scaleY(.4)}50%{transform:scaleY(1)}}
+
+  /* dismiss — a glyph, no word */
+  .x{position:absolute;bottom:46px;left:0;right:0;display:flex;justify-content:center}
+  .x div{width:52px;height:52px;border-radius:50%;border:1px solid rgba(250,246,239,.18);
+    display:flex;align-items:center;justify-content:center}
+  .x svg{stroke:rgba(250,246,239,.55)}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="stage">
+    <div class="ringwrap">
+      <div class="ring r1"></div><div class="ring r2"></div><div class="ring r3"></div>
+      <div class="core"></div>
+    </div>
+    <div class="wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+  </div>
+  <div class="x"><div>
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <path d="M6 6l12 12M18 6L6 18"/>
+    </svg>
+  </div></div>
+</div>
+</body>
+</html>

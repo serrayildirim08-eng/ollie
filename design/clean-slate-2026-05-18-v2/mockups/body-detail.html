@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Body</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  .safe{position:absolute;top:62px;right:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .safe svg{stroke:var(--mute)}
+  .find{position:absolute;top:62px;left:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .find svg{stroke:var(--mute)}
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  /* body is a submodule reached by drilling the body-cluster page's body card.
+     LEAF-FOCUS RULE: this face shows the one thing that matters most right now.
+     here an episode is OPEN, so the EPISODE is the focus — a calm day-counter
+     hero. (the water variant of this face lives at body-cold/body-intake.)
+     centred .who label, v2. */
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;
+    padding:0 26px 36px}
+
+  /* THE HERO — the open episode. a calm day-N counter is the focus, not a
+     number-to-beat. above it, a small severity arc — the same sparkline the
+     doctor summary carries, scaled small. margin-top clears the .who label. */
+  .hero{margin-top:116px;display:flex;flex-direction:column;align-items:center}
+
+  /* the severity arc — last 4 check-ins (1–5) as a calm rising line on a
+     baseline. ink line, last point amber. small, quiet, never a chart. */
+  .arc{width:148px;height:46px;margin-bottom:20px}
+  .arc svg{display:block}
+
+  .lead{font-size:13px;color:var(--mute);font-weight:500;letter-spacing:.02em}
+  .epname{font-size:40px;font-weight:300;color:var(--ink);letter-spacing:-.03em;
+    line-height:1.05;margin-top:8px;text-align:center}
+  /* the day counter — calm, factual, not a streak */
+  .epday{margin-top:12px;font-size:14px;color:var(--ink);font-weight:500;
+    letter-spacing:-.01em}
+  .epday b{font-weight:600}
+  .epday .s{color:var(--line);margin:0 7px}
+
+  /* one amber button — log onto the open episode */
+  .log{margin:26px auto 0;height:50px;border-radius:25px;background:var(--accent);
+    display:flex;align-items:center;justify-content:center;gap:8px;padding:0 24px;
+    box-shadow:0 12px 28px rgba(201,146,62,.32)}
+  .log svg{stroke:#fff}
+  .log span{font-size:16px;font-weight:600;color:#fff;letter-spacing:-.01em}
+
+  /* the quiet background line — water, demoted while an episode runs.
+     a small filling-glass + a calm count. body never goes away, it just
+     steps back. a thin supplement-status line rides under it. */
+  .quiet{margin-top:30px;display:flex;flex-direction:column;align-items:center;
+    gap:5px}
+  .qrow{display:flex;align-items:center;gap:10px}
+  .glass{width:22px;height:30px}
+  .glass svg{display:block}
+  .qtext{font-size:13px;color:var(--mute);font-weight:500;letter-spacing:-.01em}
+  .qtext b{color:var(--ink);font-weight:600}
+  .qsupp{font-size:12px;color:var(--mute);font-weight:500;letter-spacing:.01em}
+
+  /* below the hero, with air — calm drill rows. each = one tailored line.
+     tap a row → its screen. no chevron clutter, just a quiet caret. */
+  .rows{margin-top:44px;display:flex;flex-direction:column}
+  .row{border-top:1px solid var(--line);padding:18px 2px;display:flex;
+    align-items:center}
+  .row:last-child{border-bottom:1px solid var(--line)}
+  .rk{font-size:13px;color:var(--mute);font-weight:600;letter-spacing:.01em;
+    flex-shrink:0}
+  .rsep{color:var(--line);margin:0 8px;font-size:13px}
+  .rv{font-size:14px;color:var(--ink);font-weight:500;letter-spacing:-.01em;flex:1}
+  .chev{stroke:var(--mute);flex-shrink:0;margin-left:8px}
+
+  /* the posture toggle — a calm row with a quiet pill switch, not a drill.
+     off by default; here shown on. */
+  .row.tog{justify-content:space-between}
+  .switch{width:42px;height:25px;border-radius:13px;background:var(--sage);
+    position:relative;flex-shrink:0}
+  .switch i{position:absolute;top:3px;left:20px;width:19px;height:19px;
+    border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.18)}
+
+  /* the observed-pattern row — sage, calm, only present when a pattern
+     is live. a small sage dot rides the line. routes to body-patterns. */
+  .row.obs .rdot{width:6px;height:6px;border-radius:50%;background:var(--sage);
+    flex-shrink:0;margin-right:11px}
+  .row.obs .rv{color:var(--ink)}
+  .row.obs .rk{color:var(--sage)}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+  <div class="find">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/>
+    </svg>
+  </div>
+  <div class="safe">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.5-7 10-7 10z"/>
+    </svg>
+  </div>
+
+  <div class="who">
+    <span>body</span>
+  </div>
+
+  <div class="scroll">
+    <div class="hero">
+      <!-- the severity arc — 4 check-ins logged so far, 1–5, on a baseline.
+           a calm rising-then-easing line. last point amber = today. -->
+      <div class="arc">
+        <svg width="148" height="46" viewBox="0 0 148 46">
+          <!-- baseline rule -->
+          <line x1="6" y1="40" x2="142" y2="40" stroke="#EAE2D4"
+            stroke-width="1.5" stroke-linecap="round"/>
+          <!-- the severity path — sev 3,4,4,2 across 4 days.
+               y maps 1→34 ... 5→8 (26px span). x evenly spaced. -->
+          <polyline points="20,21 61,8 102,8 132,28" fill="none"
+            stroke="#2A2622" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round" opacity=".55"/>
+          <circle cx="20" cy="21" r="3" fill="#2A2622" opacity=".55"/>
+          <circle cx="61" cy="8" r="3" fill="#2A2622" opacity=".55"/>
+          <circle cx="102" cy="8" r="3" fill="#2A2622" opacity=".55"/>
+          <!-- today's check-in — amber -->
+          <circle cx="132" cy="28" r="4.4" fill="#C9923E"/>
+        </svg>
+      </div>
+
+      <div class="lead">open episode</div>
+      <div class="epname">headache</div>
+      <div class="epday">
+        <b>day 2</b><span class="s">·</span>last check-in <b>3</b> of 5
+      </div>
+
+      <div class="log">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="2.4">
+          <path d="M12 5v14M5 12h14"/>
+        </svg>
+        <span>log onto it</span>
+      </div>
+
+      <!-- water, quietly in the background while the episode runs -->
+      <div class="quiet">
+        <div class="qrow">
+          <div class="glass">
+            <svg width="22" height="30" viewBox="0 0 34 46">
+              <clipPath id="cupd">
+                <path d="M7.5 5 L26.5 5 L24.8 35 Q24.4 41 17 41 Q9.6 41 9.2 35 Z"/>
+              </clipPath>
+              <g clip-path="url(#cupd)">
+                <rect x="6" y="23" width="22" height="20" fill="#5B8C7E" opacity=".88"/>
+                <line x1="6" y1="23.4" x2="28" y2="23.4" stroke="#fff" stroke-width="1" opacity=".45"/>
+              </g>
+              <path d="M7 4 L27 4 L25.1 35 Q24.6 42 17 42 Q9.4 42 8.9 35 Z"
+                fill="none" stroke="#2A2622" stroke-width="1.6"/>
+            </svg>
+          </div>
+          <div class="qtext"><b>4</b> of 8 glasses today</div>
+        </div>
+        <div class="qsupp">supplements · 2 of 3</div>
+      </div>
+    </div>
+
+    <div class="rows">
+      <!-- intake — water + supplements -->
+      <div class="row">
+        <span class="rk">intake</span><span class="rsep">·</span>
+        <span class="rv">water &amp; supplements today</span>
+        <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+
+      <!-- symptoms — log / episode list -->
+      <div class="row">
+        <span class="rk">symptoms</span><span class="rsep">·</span>
+        <span class="rv">1 open · log a new one</span>
+        <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+
+      <!-- conditions & treatment -->
+      <div class="row">
+        <span class="rk">conditions</span><span class="rsep">·</span>
+        <span class="rv">2 tracked · 1 treatment running</span>
+        <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+
+      <!-- doctor summary -->
+      <div class="row">
+        <span class="rk">doctor summary</span><span class="rsep">·</span>
+        <span class="rv">headache episode · ready to bring in</span>
+        <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+
+      <!-- posture — a calm toggle line, not a drill -->
+      <div class="row tog">
+        <span class="rk">posture reminder</span>
+        <div class="switch"><i></i></div>
+      </div>
+
+      <!-- a pattern is live — ONE calm sage observation row.
+           only ever shown when a pattern exists; routes to body-patterns. -->
+      <div class="row obs">
+        <span class="rdot"></span>
+        <span class="rk">see the rest</span><span class="rsep">·</span>
+        <span class="rv">a few things ollie noticed about your body</span>
+        <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

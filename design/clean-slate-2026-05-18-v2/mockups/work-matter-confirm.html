@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · A matter?</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E; --umber:#A8703C;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  .safe{position:absolute;top:62px;right:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .safe svg{stroke:var(--mute)}
+  .find{position:absolute;top:62px;left:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .find svg{stroke:var(--mute)}
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  /* the auto-detect + confirm moment. ollie noticed a recurring name in
+     dumps and asks if it's a matter. AUTO-DETECT, USER-CONFIRM — the
+     user never builds a matter from a blank form. low-key, one focus,
+     the v2 voice. the work page sits dimmed behind a calm sheet. */
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  /* a faint, dimmed glimpse of the work page behind the sheet — just
+     enough to read as "you're on work, ollie is asking". */
+  .behind{flex:1;padding:116px 26px 0;opacity:.32;pointer-events:none}
+  .ghostcard{border-top:1px solid var(--line);padding:24px 2px;display:flex;
+    gap:16px;align-items:center}
+  .ghostviz{width:62px;height:46px;flex-shrink:0;border-radius:8px;
+    background:#F2EEDF}
+  .ghosttext{flex:1;display:flex;flex-direction:column;gap:7px}
+  .ghostline{height:9px;border-radius:4px;background:var(--line)}
+
+  /* the scrim — a soft warm wash over the whole phone */
+  .scrim{position:absolute;inset:0;background:rgba(42,38,34,.18)}
+
+  /* the confirm sheet — slides up from the bottom, calm, one focus.
+     a small handle, then the question, then the two choices. */
+  .sheet{position:absolute;left:0;right:0;bottom:0;background:var(--paper);
+    border-radius:28px 28px 0 0;box-shadow:0 -18px 50px rgba(42,38,34,.22);
+    padding:14px 28px calc(34px + env(safe-area-inset-bottom));
+    display:flex;flex-direction:column}
+  .shandle{align-self:center;width:38px;height:5px;border-radius:3px;
+    background:var(--line);margin-bottom:24px}
+
+  /* ollie's quiet attribution — a small sage dot + a near-silent label.
+     this is ollie noticing, not a system alert. */
+  .from{display:flex;align-items:center;gap:8px;margin-bottom:18px}
+  .from .fdot{width:6px;height:6px;border-radius:50%;background:var(--sage);
+    flex-shrink:0}
+  .from span{font-size:12px;color:var(--sage);font-weight:600;
+    letter-spacing:.05em;text-transform:uppercase}
+
+  /* the question — the matter name set apart, the rest calm. low-key,
+     one sentence, the v2 deadpan voice. */
+  .ask{font-size:23px;color:var(--ink);font-weight:400;letter-spacing:-.018em;
+    line-height:1.4}
+  .ask b{font-weight:600}
+
+  /* the evidence — a quiet line of WHY ollie is asking. the recurrences
+     that triggered the detection, stated plainly, never insistent. */
+  .why{margin-top:16px;font-size:14px;color:var(--mute);font-weight:500;
+    letter-spacing:-.01em;line-height:1.55}
+  .why b{color:#5A524A;font-weight:600}
+
+  /* a peek of the dumps the name showed up in — three quiet excerpt
+     lines on a soft inset, so the user sees the evidence, not just a
+     claim. each line is a clipped fragment of a real dump. */
+  .dumps{margin-top:18px;background:#F3EFE4;border-radius:16px;
+    padding:6px 16px}
+  .dump{display:flex;align-items:baseline;gap:11px;padding:11px 0;
+    border-top:1px solid var(--line)}
+  .dump:first-child{border-top:none}
+  .dwhen{font-size:11.5px;color:var(--mute);font-weight:600;flex-shrink:0;
+    width:48px;letter-spacing:.01em}
+  .dtext{flex:1;font-size:13px;color:#5A524A;font-weight:500;
+    letter-spacing:-.01em;line-height:1.4}
+  .dtext .hl{color:var(--ink);font-weight:600}
+
+  /* the two choices — confirm is the amber affordance (one per screen),
+     not-a-matter is a quiet ink-outline. calm, no alarm. */
+  .choices{margin-top:26px;display:flex;flex-direction:column;gap:11px}
+  .confirm{height:52px;border-radius:26px;background:var(--accent);
+    display:flex;align-items:center;justify-content:center;gap:9px;
+    box-shadow:0 12px 28px rgba(201,146,62,.30)}
+  .confirm svg{stroke:#fff}
+  .confirm span{font-size:16px;font-weight:600;color:#fff;letter-spacing:-.01em}
+  .dismiss{height:52px;border-radius:26px;background:none;
+    border:1.5px solid var(--line);display:flex;align-items:center;
+    justify-content:center}
+  .dismiss span{font-size:15px;font-weight:600;color:var(--mute);
+    letter-spacing:-.01em}
+
+  /* a near-silent reassurance under the choices — confirming just
+     starts a quiet briefing, nothing heavy. */
+  .reassure{margin-top:16px;text-align:center;font-size:12px;
+    color:var(--mute);font-weight:500;letter-spacing:.01em;line-height:1.5}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+  <div class="find">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/>
+    </svg>
+  </div>
+  <div class="safe">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.5-7 10-7 10z"/>
+    </svg>
+  </div>
+
+  <div class="who">
+    <span>work</span>
+  </div>
+
+  <!-- a faint glimpse of the work page sitting behind the sheet -->
+  <div class="behind">
+    <div class="ghostcard">
+      <div class="ghostviz"></div>
+      <div class="ghosttext">
+        <div class="ghostline" style="width:42%"></div>
+        <div class="ghostline" style="width:78%"></div>
+      </div>
+    </div>
+    <div class="ghostcard">
+      <div class="ghostviz"></div>
+      <div class="ghosttext">
+        <div class="ghostline" style="width:38%"></div>
+        <div class="ghostline" style="width:64%"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="scrim"></div>
+
+  <!-- the confirm sheet — low-key, one focus -->
+  <div class="sheet">
+    <div class="shandle"></div>
+
+    <div class="from">
+      <span class="fdot"></span>
+      <span>ollie noticed</span>
+    </div>
+
+    <!-- the question — the matter name set apart -->
+    <div class="ask">&ldquo;<b>Yılmaz</b>&rdquo; keeps coming up.<br>Is it a matter?</div>
+
+    <!-- why ollie is asking — the recurrences, stated plainly -->
+    <div class="why">
+      The name showed up in <b>6 dumps</b> across the last two weeks —
+      always next to visa and filing words.
+    </div>
+
+    <!-- a peek of the dumps — the evidence, not just a claim -->
+    <div class="dumps">
+      <div class="dump">
+        <span class="dwhen">2 days ago</span>
+        <span class="dtext">called USCIS about the <span class="hl">Yılmaz</span> filing window</span>
+      </div>
+      <div class="dump">
+        <span class="dwhen">last week</span>
+        <span class="dtext"><span class="hl">Yılmaz</span> lease still not signed, chase landlord</span>
+      </div>
+      <div class="dump">
+        <span class="dwhen">Apr 30</span>
+        <span class="dtext">DS-160 done for <span class="hl">Yılmaz</span>, send to client</span>
+      </div>
+    </div>
+
+    <!-- the two choices -->
+    <div class="choices">
+      <div class="confirm">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke-width="2.6">
+          <path d="M5 13l4 4 10-10"/>
+        </svg>
+        <span>yes, it's a matter</span>
+      </div>
+      <div class="dismiss">
+        <span>not a matter</span>
+      </div>
+    </div>
+
+    <div class="reassure">
+      saying yes just opens a briefing — ollie files the dumps,<br>
+      you don't have to.
+    </div>
+
+  </div>
+</div>
+</body>
+</html>
