@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Goals — a check-in</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E; --umber:#A8703C;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  /* swipe-down handle dismisses — same return gesture everywhere */
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;
+    padding:0 26px 36px}
+
+  /* the soft goal review. goals + ADHD is a shame minefield, so the
+     review is the most carefully un-graded screen in the cluster:
+     ONE reflective prompt, a free line, NO score, NO percentage, NO
+     "you're behind". it asks how the goal feels, not how it's doing. */
+
+  /* which goal — one calm line up top, never a report header */
+  .goalline{margin-top:116px;display:flex;align-items:center;gap:9px}
+  .goalline .gdot{width:7px;height:7px;border-radius:50%;background:var(--accent);
+    flex-shrink:0}
+  .goalline span{font-size:13px;color:var(--mute);font-weight:600;
+    letter-spacing:.04em}
+  .goalline b{color:var(--ink);font-weight:600}
+
+  /* THE ONE PROMPT — a single reflective question, large and light,
+     the whole focus of the page. set as a quiet serene sentence. */
+  .prompt{margin-top:30px;font-size:25px;font-weight:300;color:var(--ink);
+    letter-spacing:-.022em;line-height:1.42}
+  .prompt b{font-weight:500}
+
+  /* the calm framing under it — names this as a check-in, not a test.
+     no score is the point: this is here to notice how it feels. */
+  .frame{margin-top:14px;font-size:13.5px;color:var(--mute);font-weight:400;
+    line-height:1.55}
+
+  /* THE FREE LINE — a quiet underlined writing area, the user's own
+     words. soft placeholder, ink text. never a rating, never chips. */
+  .write{margin-top:32px}
+  .wk{font-size:11px;color:var(--mute);font-weight:600;letter-spacing:.08em;
+    text-transform:uppercase;margin-bottom:13px}
+  .wline{border-bottom:1.5px solid var(--ink);padding-bottom:11px;
+    display:flex;align-items:baseline;gap:2px;min-height:34px}
+  .wline span{font-size:17px;color:var(--ink);font-weight:500;
+    letter-spacing:-.01em;line-height:1.5}
+  .wline .ph{color:var(--mute);font-weight:400}
+  .wline .caret{width:2px;height:20px;background:var(--accent);
+    display:inline-block;margin-left:1px;border-radius:1px}
+
+  /* the two soft tags — the only structured input, and it's gentle:
+     "still want it" / "carrying it from before". no right answer; both
+     are honest, both are fine. selected = soft sage fill. */
+  .tags{margin-top:30px}
+  .tagrow{display:flex;gap:11px}
+  .tag{flex:1;border:1px solid var(--line);background:#fff;border-radius:16px;
+    padding:15px 14px;display:flex;flex-direction:column;gap:4px}
+  .tag.on{border-color:var(--sage);background:#EEF2EF}
+  .tag .tt{font-size:14px;color:var(--ink);font-weight:600;letter-spacing:-.01em}
+  .tag .ts{font-size:11.5px;color:var(--mute);font-weight:400;line-height:1.4}
+  .tag.on .tt{color:var(--sage)}
+
+  /* save — full-width amber, the one calm commit */
+  .save{margin-top:34px;height:52px;border-radius:26px;background:var(--accent);
+    display:flex;align-items:center;justify-content:center;gap:8px;
+    box-shadow:0 12px 28px rgba(201,146,62,.32)}
+  .save svg{stroke:#fff}
+  .save span{font-size:16px;font-weight:600;color:#fff;letter-spacing:-.01em}
+  .saved{margin-top:16px;text-align:center;font-size:13px;color:var(--sage);
+    font-weight:600;letter-spacing:.01em}
+
+  /* the closing note — restates that the check-in is never scored, and
+     that the goal can change shape because of what was just written. */
+  .foot{margin-top:26px;display:flex;gap:10px;align-items:flex-start}
+  .foot .fdot{width:6px;height:6px;border-radius:50%;background:var(--sage);
+    flex-shrink:0;margin-top:5px}
+  .foot span{font-size:12.5px;color:var(--ink);font-weight:500;line-height:1.55;
+    letter-spacing:-.01em}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+
+  <div class="who">
+    <span>a check-in</span>
+  </div>
+
+  <div class="scroll">
+    <!-- which goal — one calm line, never a report header -->
+    <div class="goalline">
+      <span class="gdot"></span>
+      <span>a minute with <b>learn spanish</b></span>
+    </div>
+
+    <!-- THE ONE PROMPT — a single reflective question -->
+    <div class="prompt">
+      <b>when you picture this goal,</b> does it still feel like yours?
+    </div>
+    <div class="frame">
+      no score here, nothing to get right &mdash; just a moment to notice
+      how it sits with you right now.
+    </div>
+
+    <!-- the free line — the user's own words -->
+    <div class="write">
+      <div class="wk">say it however it comes</div>
+      <div class="wline">
+        <span class="ph">a word, a sentence &mdash; whatever's true</span><span class="caret"></span>
+      </div>
+    </div>
+
+    <!-- the two soft tags — both honest, neither wrong -->
+    <div class="tags">
+      <div class="tagrow">
+        <div class="tag on">
+          <span class="tt">still want it</span>
+          <span class="ts">it still pulls at you</span>
+        </div>
+        <div class="tag">
+          <span class="tt">carrying it from before</span>
+          <span class="ts">it's habit now, not pull</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="save">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.4"><path d="M5 13l4 4 10-11"/></svg>
+      <span>that's my check-in</span>
+    </div>
+    <div class="saved">noted. nothing else needed.</div>
+
+    <!-- the closing note — never scored, the goal can change shape -->
+    <div class="foot">
+      <span class="fdot"></span>
+      <span>a check-in is never graded. if &ldquo;carrying it from before&rdquo;
+        keeps coming up, ollie will gently ask &mdash; quietly, on this
+        screen &mdash; whether it's time to let the goal rest.</span>
+    </div>
+  </div>
+</div>
+</body>
+</html>

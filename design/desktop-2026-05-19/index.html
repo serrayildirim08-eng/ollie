@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>ollie · desktop layout · 2026-05-19</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --card:#FFFFFF; --tile:#F2EEDF;
+    --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+    --mono:ui-monospace,'SF Mono',Menlo,monospace;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{background:var(--paper);font-family:var(--sans);color:var(--ink);
+    -webkit-font-smoothing:antialiased;padding:88px 64px 110px;}
+  header{max-width:1120px;margin:0 auto 72px;}
+  .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.20em;
+    text-transform:uppercase;color:var(--mute);margin-bottom:20px;}
+  .masthead{font-family:var(--sans);font-size:40px;font-weight:300;
+    letter-spacing:-.025em;margin-bottom:16px;}
+  .lede{font-family:var(--sans);font-size:15.5px;font-weight:300;
+    line-height:1.7;color:var(--ink);max-width:620px;}
+  .grid{display:flex;flex-wrap:wrap;gap:56px;max-width:1120px;
+    margin:0 auto;justify-content:center;}
+  .frame{width:512px;}
+  .frame-no{font-family:var(--mono);font-size:10px;letter-spacing:.16em;
+    color:var(--mute);text-transform:uppercase;margin-bottom:8px;}
+  .frame-title{font-family:var(--sans);font-size:19px;font-weight:400;
+    letter-spacing:-.01em;margin-bottom:4px;}
+  .frame-desc{font-family:var(--sans);font-size:13px;font-weight:300;
+    color:var(--mute);margin-bottom:14px;}
+  .shot{width:512px;height:320px;border:1px solid var(--line);
+    background:var(--paper);overflow:hidden;}
+  .shot iframe{width:1600px;height:1000px;border:0;
+    transform:scale(0.32);transform-origin:top left;}
+  footer{max-width:1120px;margin:80px auto 0;
+    border-top:1px solid var(--line);padding-top:26px;
+    font-family:var(--mono);font-size:10px;letter-spacing:.06em;
+    color:var(--mute);}
+</style>
+</head>
+<body>
+<header>
+  <div class="eyebrow">ollie · desktop layout study · may 2026</div>
+  <div class="masthead">the thin spine</div>
+  <p class="lede">the macOS app gives the notebook a whole quiet page. a
+    whisper-thin left spine — four glyphs, no words — is all the navigation
+    there is. the canvas holds one focus at a calm measure, with wide warm
+    margins. emptiness is the design. seven screens, the real v2 palette.
+    every screen is fluid — it fills the window at any size and scales up
+    on larger displays, so it never sits small in the middle.</p>
+</header>
+
+<div class="grid">
+
+  <div class="frame">
+    <div class="frame-no">01</div>
+    <div class="frame-title">throw — the home</div>
+    <div class="frame-desc">one prompt, one capture field. nothing else.</div>
+    <div class="shot"><iframe src="mockups/01-throw-home.html"></iframe></div>
+  </div>
+
+  <div class="frame">
+    <div class="frame-no">02</div>
+    <div class="frame-title">modules</div>
+    <div class="frame-desc">twelve modules as an airy grid under three room words.</div>
+    <div class="shot"><iframe src="mockups/02-modules.html"></iframe></div>
+  </div>
+
+  <div class="frame">
+    <div class="frame-no">03</div>
+    <div class="frame-title">money — the module</div>
+    <div class="frame-desc">one big calm figure, two quiet rows below it.</div>
+    <div class="shot"><iframe src="mockups/03-module-money.html"></iframe></div>
+  </div>
+
+  <div class="frame">
+    <div class="frame-no">04</div>
+    <div class="frame-title">noticed — the patterns</div>
+    <div class="frame-desc">three gentle cross-module observations, well spaced.</div>
+    <div class="shot"><iframe src="mockups/04-noticed.html"></iframe></div>
+  </div>
+
+  <div class="frame">
+    <div class="frame-no">05</div>
+    <div class="frame-title">find — the ⌘K palette</div>
+    <div class="frame-desc">the one rounded element, centered over a dimmed home.</div>
+    <div class="shot"><iframe src="mockups/05-find-palette.html"></iframe></div>
+  </div>
+
+  <div class="frame">
+    <div class="frame-no">06</div>
+    <div class="frame-title">settings</div>
+    <div class="frame-desc">five quiet hairline rows, no boxes.</div>
+    <div class="shot"><iframe src="mockups/06-settings.html"></iframe></div>
+  </div>
+
+  <div class="frame">
+    <div class="frame-no">07</div>
+    <div class="frame-title">safe — the crisis surface</div>
+    <div class="frame-desc">almost empty. one gentle sentence, one quiet way to reach help.</div>
+    <div class="shot"><iframe src="mockups/07-safe.html"></iframe></div>
+  </div>
+
+</div>
+
+<footer>ollie desktop layout · design-direction study · 2026-05-19 · v2 — "the thin spine", rebuilt after v1 ("the desk") was rejected for crowding</footer>
+</body>
+</html>

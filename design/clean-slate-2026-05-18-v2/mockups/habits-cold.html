@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Habits — first run</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  .safe{position:absolute;top:62px;right:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .safe svg{stroke:var(--mute)}
+  .find{position:absolute;top:62px;left:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .find svg{stroke:var(--mute)}
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;
+    padding:0 26px 36px}
+
+  /* the cold state — the habits FACE is still present, never blank, and
+     never a guilt-zero. ollie seeds 6 default habits, so the day already
+     has a shape. the first one is held up as the single next check-in,
+     just like the live face — it's an invitation, not a backlog.
+     margin-top clears the absolutely-positioned .who label. */
+  .hero{margin-top:116px;display:flex;flex-direction:column;align-items:center}
+  .lead{font-size:13px;color:var(--mute);font-weight:500;letter-spacing:.02em}
+
+  /* the tap-circle — the act of checking one habit in. soft, generous,
+     a quiet ink check inside. cold is the SAME warm circle as the live
+     face — first run is a real, usable face, not a placeholder. */
+  .tap{margin-top:30px;width:150px;height:150px;border-radius:50%;
+    border:2px solid var(--line);background:#fff;display:flex;
+    align-items:center;justify-content:center;
+    box-shadow:0 16px 38px rgba(42,38,34,.07)}
+  .tap svg{stroke:var(--accent)}
+
+  /* the habit name + cue — the first seeded habit, ready to check in */
+  .name{margin-top:34px;font-size:30px;font-weight:400;color:var(--ink);
+    letter-spacing:-.015em;line-height:1.1;text-align:center}
+  .cue{margin-top:9px;font-size:14px;color:var(--mute);font-weight:500;
+    letter-spacing:.01em}
+  .cue b{color:var(--ink);font-weight:600}
+
+  /* the progress arc — cold: a 270° open arc, but ZERO filled (none done
+     yet). the track is the calm line; no ink fill. the centre reads "0"
+     in MUTE, not ink — a calm "the day is just starting", never a score
+     to climb out of. */
+  .progress{margin-top:34px;display:flex;flex-direction:column;
+    align-items:center;gap:14px}
+  .gauge{position:relative;width:112px;height:112px}
+  .gauge svg{display:block}
+  .gauge .gtrack{stroke:var(--line);stroke-width:6;fill:none;
+    stroke-linecap:round}
+  .gcentre{position:absolute;inset:0;display:flex;flex-direction:column;
+    align-items:center;justify-content:center}
+  /* the centre — cold: 0 in mute, a calm "the day's ahead of you" */
+  .gnum{font-size:34px;font-weight:200;color:var(--mute);letter-spacing:-.03em;
+    line-height:1}
+  .glbl{margin-top:3px;font-size:11px;color:var(--mute);font-weight:600;
+    letter-spacing:.06em;text-transform:uppercase}
+
+  /* the waiting-dot row — cold: the first one now (ink), 5 still waiting
+     (line). none done. it counts what waits, never what was missed. */
+  .rest{display:flex;gap:9px;align-items:center}
+  .rest i{width:9px;height:9px;border-radius:50%;background:var(--line);
+    display:block}
+  .rest i.now{background:var(--ink)}
+  .restlbl{margin-top:2px;font-size:13px;color:var(--mute);font-weight:500;
+    letter-spacing:-.01em}
+
+  /* the cold invitation — sage dot + one calm sentence. it names the 6
+     seeded habits as a starting shape, not a to-do list. */
+  .invite{margin-top:22px;display:flex;align-items:flex-start;gap:9px;
+    max-width:294px}
+  .invite .idot{width:7px;height:7px;border-radius:50%;background:var(--sage);
+    flex-shrink:0;margin-top:6px}
+  .invite span{font-size:14px;color:var(--ink);font-weight:500;letter-spacing:-.01em;
+    line-height:1.45;text-align:left}
+  .invite b{font-weight:600}
+
+  /* one amber button — add a habit */
+  .add{margin:30px auto 0;height:50px;border-radius:25px;background:var(--accent);
+    display:flex;align-items:center;justify-content:center;gap:8px;padding:0 24px;
+    box-shadow:0 12px 28px rgba(201,146,62,.32)}
+  .add svg{stroke:#fff}
+  .add span{font-size:16px;font-weight:600;color:#fff;letter-spacing:-.01em}
+
+  /* the drill rows — cold form. all habits shows the 6 seeded; no
+     pattern row yet (ollie needs a few days first). */
+  .rows{margin-top:48px;display:flex;flex-direction:column}
+  .row{border-top:1px solid var(--line);padding:18px 2px;display:flex;
+    align-items:center}
+  .row:last-child{border-bottom:1px solid var(--line)}
+  .rk{font-size:13px;color:var(--mute);font-weight:600;letter-spacing:.01em;
+    flex-shrink:0}
+  .rsep{color:var(--line);margin:0 8px;font-size:13px}
+  .rv{font-size:14px;color:var(--ink);font-weight:500;letter-spacing:-.01em;flex:1}
+  .chev{stroke:var(--mute);flex-shrink:0;margin-left:8px}
+  /* a cold row — the value is a quiet invitation, muted */
+  .row.cold .rv{color:var(--mute);font-weight:400}
+  .row.cold .chev{stroke:var(--line)}
+
+  /* a closing reassurance — no streak waits for any of this */
+  .foot{margin-top:24px;text-align:center;font-size:12px;color:var(--mute);
+    font-weight:400;line-height:1.55}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+  <div class="find">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/>
+    </svg>
+  </div>
+  <div class="safe">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.5-7 10-7 10z"/>
+    </svg>
+  </div>
+
+  <div class="who">
+    <span>habits</span>
+  </div>
+
+  <div class="scroll">
+    <div class="hero">
+      <div class="lead">first up, when you can</div>
+
+      <!-- the one tap-circle — the first seeded habit, ready to check in -->
+      <div class="tap">
+        <svg width="50" height="50" viewBox="0 0 24 24" fill="none" stroke-width="2.1">
+          <path d="M5 13l4 4 10-11"/>
+        </svg>
+      </div>
+
+      <!-- the first of the 6 seeded habits — and its cue -->
+      <div class="name">brush teeth</div>
+      <div class="cue">after <b>getting up</b></div>
+
+      <!-- the progress — cold: a 270° open arc, ZERO filled. centre
+           reads 0 in mute, never a score to dig out of. -->
+      <div class="progress">
+        <div class="gauge">
+          <svg width="112" height="112" viewBox="0 0 112 112">
+            <!-- the gauge opens at the bottom: a 270° arc, gap centred
+                 downward. r=46, circumference≈289.0; 270° ≈ 216.8.
+                 cold: only the track — no gfill, none done yet. -->
+            <circle class="gtrack" cx="56" cy="56" r="46"
+              stroke-dasharray="216.8 72.2"
+              transform="rotate(135 56 56)"/>
+          </svg>
+          <div class="gcentre">
+            <div class="gnum">0</div>
+            <div class="glbl">the day's ahead</div>
+          </div>
+        </div>
+
+        <!-- the waiting row — first one now (ink), 5 still waiting (line) -->
+        <div class="rest">
+          <i class="now"></i>
+          <i></i><i></i><i></i><i></i><i></i>
+        </div>
+        <div class="restlbl">6 waiting · no rush, no order</div>
+      </div>
+
+      <!-- the cold invitation — sage dot, one calm sentence -->
+      <div class="invite">
+        <span class="idot"></span>
+        <span>ollie's left you <b>6 small habits to start with</b> —
+          brush teeth, water, vitamin d, move, evening meds, wind down.
+          keep what fits, change the rest, add your own.</span>
+      </div>
+
+      <div class="add">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="2.4">
+          <path d="M12 5v14M5 12h14"/>
+        </svg>
+        <span>add a habit</span>
+      </div>
+    </div>
+
+    <div class="rows">
+      <!-- all habits — the 6 seeded defaults -->
+      <div class="row">
+        <span class="rk">all habits</span><span class="rsep">·</span>
+        <span class="rv">6 to start with · morning to evening</span>
+        <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+
+      <!-- see the rest — cold form: no pattern yet, ollie needs days -->
+      <div class="row cold">
+        <span class="rk">see the rest</span><span class="rsep">·</span>
+        <span class="rv">patterns warm up after a few days</span>
+        <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+    </div>
+
+    <div class="foot">none of these have a streak waiting on them.<br>a habit just waits, calmly, for its cue.</div>
+  </div>
+</div>
+</body>
+</html>

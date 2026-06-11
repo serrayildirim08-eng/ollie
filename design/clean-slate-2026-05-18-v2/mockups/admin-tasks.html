@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Admin — all tasks</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E; --umber:#A8703C;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  .safe{position:absolute;top:62px;right:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .safe svg{stroke:var(--mute)}
+  .find{position:absolute;top:62px;left:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .find svg{stroke:var(--mute)}
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;
+    padding:0 26px 36px}
+
+  /* the full task list — calm, every task ONE quiet row. ordered by
+     days-left. the filter sits at the top as 3 calm text segments with
+     live counts; the active one carries an amber underline.
+     margin-top clears the absolutely-positioned .who label. */
+  .body{margin-top:116px}
+
+  /* the filter — 3 calm text segments, near-zero chrome. counts ride
+     each one. the active segment underlined amber. */
+  .filter{display:flex;gap:22px;padding-bottom:4px}
+  .seg{font-size:14px;color:var(--mute);font-weight:500;letter-spacing:-.01em;
+    padding-bottom:7px;border-bottom:2px solid transparent}
+  .seg b{font-weight:600}
+  .seg.on{color:var(--ink);border-bottom-color:var(--accent)}
+  .seg.on b{color:var(--accent)}
+
+  /* one task — a calm row, hairline-divided. no card, no shadow.
+     a quiet ball-state mark on the left, the title, the days-left right. */
+  .task{border-top:1px solid var(--line);padding:17px 2px;display:flex;
+    align-items:center;gap:13px}
+  .body .task:last-of-type{border-bottom:1px solid var(--line)}
+
+  /* the ball-state mark — a small quiet tag, not a badge. three states:
+     MINE  = a filled ink square — the ball is in your court.
+     THEIRS= an open umber square — you're waiting on someone else.
+     WAITING = an open mute square — waiting on a date / a thing to land.
+     near-zero, calm — a glance tells you whose move it is. */
+  .ball{width:11px;height:11px;border-radius:3px;flex-shrink:0}
+  .ball.mine{background:var(--ink)}
+  .ball.theirs{background:none;border:1.8px solid var(--umber)}
+  .ball.waiting{background:none;border:1.8px solid var(--mute)}
+
+  .tmid{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+  .tname{font-size:15px;color:var(--ink);font-weight:500;letter-spacing:-.012em}
+  /* the quiet sub-line — the ball state in words + category, mute */
+  .tsub{font-size:12px;color:var(--mute);font-weight:500;letter-spacing:.01em}
+
+  /* the days-left — calm, right-aligned. warm umber when due-soon. */
+  .tdays{font-size:13px;color:var(--mute);font-weight:600;flex-shrink:0;
+    letter-spacing:-.01em}
+  .tdays.soon{color:var(--umber)}
+
+  /* a done task — struck calm, the row demoted. shown under 'all'. */
+  .task.done .tname{color:var(--mute);font-weight:400}
+  .task.done .ball{background:var(--sage);border:none}
+  .task.done .tdays{color:var(--sage);font-weight:500}
+
+  /* one amber add — floats calm at the bottom of the list */
+  .add{margin-top:30px;height:50px;border-radius:25px;background:var(--accent);
+    display:flex;align-items:center;justify-content:center;gap:8px;
+    box-shadow:0 12px 28px rgba(201,146,62,.32)}
+  .add svg{stroke:#fff}
+  .add span{font-size:16px;font-weight:600;color:#fff;letter-spacing:-.01em}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+  <div class="find">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/>
+    </svg>
+  </div>
+  <div class="safe">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.5-7 10-7 10z"/>
+    </svg>
+  </div>
+
+  <div class="who">
+    <span>all tasks</span>
+  </div>
+
+  <div class="scroll">
+    <div class="body">
+
+      <!-- the filter — active selected, live counts -->
+      <div class="filter">
+        <span class="seg on">active <b>9</b></span>
+        <span class="seg">done <b>14</b></span>
+        <span class="seg">all <b>23</b></span>
+      </div>
+
+      <!-- the active tasks — ordered by days-left -->
+      <div class="task">
+        <span class="ball mine"></span>
+        <div class="tmid">
+          <span class="tname">renew passport</span>
+          <span class="tsub">yours to move · renewal</span>
+        </div>
+        <span class="tdays soon">30 days</span>
+      </div>
+
+      <div class="task">
+        <span class="ball theirs"></span>
+        <div class="tmid">
+          <span class="tname">the lawyer's reviewing the lease</span>
+          <span class="tsub">with them · 16 days · waiting</span>
+        </div>
+        <span class="tdays soon">their move</span>
+      </div>
+
+      <div class="task">
+        <span class="ball mine"></span>
+        <div class="tmid">
+          <span class="tname">book dentist cleaning</span>
+          <span class="tsub">yours to move · appointment</span>
+        </div>
+        <span class="tdays soon">this week</span>
+      </div>
+
+      <div class="task">
+        <span class="ball waiting"></span>
+        <div class="tmid">
+          <span class="tname">passport photos in the mail</span>
+          <span class="tsub">on its way · waiting</span>
+        </div>
+        <span class="tdays">~5 days</span>
+      </div>
+
+      <div class="task">
+        <span class="ball mine"></span>
+        <div class="tmid">
+          <span class="tname">car registration</span>
+          <span class="tsub">yours to move · renewal</span>
+        </div>
+        <span class="tdays">12 days</span>
+      </div>
+
+      <div class="task">
+        <span class="ball mine"></span>
+        <div class="tmid">
+          <span class="tname">file taxes</span>
+          <span class="tsub">yours to move · financial</span>
+        </div>
+        <span class="tdays">3 weeks</span>
+      </div>
+
+      <div class="task">
+        <span class="ball theirs"></span>
+        <div class="tmid">
+          <span class="tname">accountant has the receipts</span>
+          <span class="tsub">with them · 9 days · waiting</span>
+        </div>
+        <span class="tdays">their move</span>
+      </div>
+
+      <div class="task">
+        <span class="ball mine"></span>
+        <div class="tmid">
+          <span class="tname">cancel the old gym membership</span>
+          <span class="tsub">yours to move · financial</span>
+        </div>
+        <span class="tdays">no date</span>
+      </div>
+
+      <div class="task">
+        <span class="ball mine"></span>
+        <div class="tmid">
+          <span class="tname">update address with the bank</span>
+          <span class="tsub">yours to move · other</span>
+        </div>
+        <span class="tdays">no date</span>
+      </div>
+
+      <!-- one done task peeking — calm, struck, demoted -->
+      <div class="task done">
+        <span class="ball"></span>
+        <div class="tmid">
+          <span class="tname">renew library card</span>
+          <span class="tsub">done · 2 days ago</span>
+        </div>
+        <span class="tdays">done</span>
+      </div>
+
+    </div>
+
+    <div class="add">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>
+      <span>add a task</span>
+    </div>
+  </div>
+</div>
+</body>
+</html>

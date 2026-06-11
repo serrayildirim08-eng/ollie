@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Pets — observe</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E; --umber:#A8703C;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  /* swipe-down handle dismisses — same return gesture everywhere */
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;
+    padding:0 26px 36px}
+
+  /* the lead — one calm line */
+  .lead{margin-top:116px;font-size:22px;font-weight:300;color:var(--ink);
+    letter-spacing:-.02em}
+  .lead b{font-weight:500}
+
+  /* a section label */
+  .sect{margin-top:30px;font-size:11px;color:var(--mute);font-weight:600;
+    letter-spacing:.08em;text-transform:uppercase}
+  .sect .opt{color:var(--line);font-weight:500;text-transform:none;
+    letter-spacing:.01em;margin-left:7px}
+
+  /* which pet — a calm 2-up of soft tiles */
+  .pets{margin-top:14px;display:grid;grid-template-columns:1fr 1fr;gap:9px}
+  .pt{height:62px;border-radius:16px;border:1px solid var(--line);
+    background:#fff;display:flex;align-items:center;gap:10px;padding:0 14px;
+    box-shadow:0 6px 16px rgba(42,38,34,.04)}
+  .pt .pd{width:32px;height:32px;border-radius:50%;background:#F2EEDF;
+    display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .pt .pd span{font-size:13px;font-weight:700;color:var(--ink)}
+  .pt .pnm{font-size:14px;color:var(--ink);font-weight:500;letter-spacing:-.01em}
+  .pt.on{border-color:var(--accent);background:#FCF6EA}
+  .pt.on .pnm{font-weight:600}
+
+  /* weight — a quiet underlined number line with a unit */
+  .weight{margin-top:14px;border-bottom:1px solid var(--line);padding-bottom:11px;
+    display:flex;align-items:baseline;gap:6px}
+  .weight .num{font-size:24px;color:var(--ink);font-weight:500;
+    letter-spacing:-.02em}
+  .weight .caret{width:2px;height:22px;background:var(--accent);
+    display:inline-block;border-radius:1px}
+  .weight .unit{font-size:15px;color:var(--mute);font-weight:500}
+  .weight .last{margin-left:auto;font-size:12px;color:var(--mute);font-weight:500}
+
+  /* the free-text "what you noticed" — a soft note area, calm. THIS is
+     the text the health-flag engine reads. */
+  .notes{margin-top:14px;border-bottom:1px solid var(--line);padding-bottom:13px}
+  .notes p{font-size:15px;color:var(--ink);font-weight:400;line-height:1.55;
+    letter-spacing:-.005em}
+  .notes p .caret{width:2px;height:16px;background:var(--accent);
+    display:inline-block;margin-left:1px;border-radius:1px;vertical-align:-2px}
+
+  /* the species behaviour quick-tags — a calm wrap of soft pills, the
+     guinea-pig set. multi-select. selected = sage fill. */
+  .tags{margin-top:14px;display:flex;flex-wrap:wrap;gap:8px}
+  .tag{border:1px solid var(--line);background:#fff;border-radius:14px;
+    padding:8px 13px;font-size:13px;font-weight:500;color:var(--ink);
+    letter-spacing:-.01em}
+  .tag.on{border-color:var(--sage);background:var(--sage);color:#fff;
+    font-weight:600}
+
+  /* the quiet note about where the text goes — calm, honest, not a
+     warning. sage line. */
+  .cue{margin-top:16px;display:flex;align-items:flex-start;gap:9px}
+  .cue .cdot{width:7px;height:7px;border-radius:50%;background:var(--sage);
+    flex-shrink:0;margin-top:5px}
+  .cue span{font-size:13px;color:var(--mute);font-weight:400;line-height:1.5}
+  .cue b{color:var(--ink);font-weight:600}
+
+  /* save — full-width amber */
+  .save{margin-top:30px;height:52px;border-radius:26px;background:var(--accent);
+    display:flex;align-items:center;justify-content:center;gap:8px;
+    box-shadow:0 12px 28px rgba(201,146,62,.32)}
+  .save svg{stroke:#fff}
+  .save span{font-size:16px;font-weight:600;color:#fff;letter-spacing:-.01em}
+  .saved{margin-top:16px;text-align:center;font-size:13px;color:var(--sage);
+    font-weight:600;letter-spacing:.01em}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+
+  <div class="who">
+    <span>observe</span>
+  </div>
+
+  <div class="scroll">
+    <div class="lead"><b>what you noticed</b></div>
+
+    <!-- which pet -->
+    <div class="sect">for</div>
+    <div class="pets">
+      <div class="pt on">
+        <div class="pd"><span>M</span></div>
+        <span class="pnm">Mango</span>
+      </div>
+      <div class="pt">
+        <div class="pd"><span>T</span></div>
+        <span class="pnm">Tonti</span>
+      </div>
+    </div>
+
+    <!-- weight -->
+    <div class="sect">weight<span class="opt">— optional</span></div>
+    <div class="weight">
+      <span class="num">1.04</span><span class="caret"></span>
+      <span class="unit">kg</span>
+      <span class="last">last &middot; 1.06 kg</span>
+    </div>
+
+    <!-- the free-text "what you noticed" — feeds the health-flag engine -->
+    <div class="sect">what you saw</div>
+    <div class="notes">
+      <p>quieter than usual at feed time, didn't come up for parsley. ate
+        some hay later.<span class="caret"></span></p>
+    </div>
+
+    <!-- species behaviour quick-tags — guinea-pig set -->
+    <div class="sect">behaviour<span class="opt">— tap any that fit</span></div>
+    <div class="tags">
+      <span class="tag on">low appetite</span>
+      <span class="tag">hiding</span>
+      <span class="tag on">quiet</span>
+      <span class="tag">vocal</span>
+      <span class="tag">playful</span>
+      <span class="tag">popcorning</span>
+      <span class="tag">teeth grinding</span>
+      <span class="tag">limping</span>
+      <span class="tag">drinking lots</span>
+    </div>
+
+    <div class="cue">
+      <span class="cdot"></span>
+      <span>ollie reads this note quietly over time &mdash; <b>if the same
+        thing shows up across a few days</b>, it'll sit in health for you
+        to look at. one quiet day is just a day.</span>
+    </div>
+
+    <div class="save">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.4"><path d="M5 13l4 4 10-11"/></svg>
+      <span>save it</span>
+    </div>
+    <div class="saved">noted.</div>
+  </div>
+</div>
+</body>
+</html>

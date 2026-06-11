@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Goals — add</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E; --umber:#A8703C;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  /* swipe-down handle dismisses — same return gesture everywhere */
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;
+    padding:0 26px 36px}
+
+  /* the lead — one calm line. goals + ADHD is a shame minefield, so the
+     ask is small and forgiving: a goal can be changed, paused, dropped
+     any time. nothing here is a promise carved in stone. */
+  .lead{margin-top:116px;font-size:22px;font-weight:300;color:var(--ink);
+    letter-spacing:-.02em;line-height:1.35}
+  .lead b{font-weight:500}
+
+  /* THE NAME FIELD — one quiet underlined line, never a box. ink. */
+  .field{margin-top:30px;border-bottom:1.5px solid var(--ink);padding-bottom:11px;
+    display:flex;align-items:baseline;gap:2px}
+  .field span{font-size:21px;color:var(--ink);font-weight:500;letter-spacing:-.01em}
+  .field .caret{width:2px;height:22px;background:var(--accent);
+    display:inline-block;margin-left:1px;border-radius:1px}
+  .fhint{margin-top:9px;font-size:12.5px;color:var(--mute);font-weight:400;
+    letter-spacing:.01em}
+
+  /* THE CATEGORY PICKER — a calm wrap of soft pills, one tap, selected
+     amber. six categories, the same six the goals logic carries. */
+  .seck{margin-top:34px;font-size:11px;color:var(--mute);font-weight:600;
+    letter-spacing:.08em;text-transform:uppercase}
+  .cats{margin-top:13px;display:flex;flex-wrap:wrap;gap:9px}
+  .cat{border:1px solid var(--line);background:#fff;border-radius:15px;
+    padding:9px 15px;font-size:13.5px;font-weight:500;color:var(--ink);
+    letter-spacing:-.01em;display:flex;align-items:center;gap:7px}
+  .cat svg{stroke:var(--mute);flex-shrink:0}
+  .cat.on{border-color:var(--accent);background:var(--accent);color:#fff;
+    font-weight:600}
+  .cat.on svg{stroke:#fff}
+
+  /* the soft permission note — sage-led. states plainly that a goal
+     isn't a contract: it can be parked or let go without a verdict. */
+  .perm{margin-top:30px;display:flex;gap:10px;align-items:flex-start}
+  .perm .pdot{width:7px;height:7px;border-radius:50%;background:var(--sage);
+    flex-shrink:0;margin-top:5px}
+  .perm span{font-size:13px;color:var(--ink);font-weight:500;line-height:1.55;
+    letter-spacing:-.01em}
+  .perm b{font-weight:600}
+
+  /* save — full-width amber, the one commit */
+  .save{margin-top:34px;height:52px;border-radius:26px;background:var(--accent);
+    display:flex;align-items:center;justify-content:center;gap:8px;
+    box-shadow:0 12px 28px rgba(201,146,62,.32)}
+  .save svg{stroke:#fff}
+  .save span{font-size:16px;font-weight:600;color:#fff;letter-spacing:-.01em}
+  /* the saved confirmation — dry, lowercase, period */
+  .saved{margin-top:16px;text-align:center;font-size:13px;color:var(--sage);
+    font-weight:600;letter-spacing:.01em}
+
+  /* a quiet later-line — the deeper fields (why, the obstacle you see
+     coming, a target) can be added later, on the goal itself. */
+  .later{margin-top:28px;display:flex;gap:10px;align-items:flex-start}
+  .later .ldot{width:6px;height:6px;border-radius:50%;background:var(--line);
+    flex-shrink:0;margin-top:5px}
+  .later span{font-size:12px;color:var(--mute);font-weight:400;line-height:1.6}
+  .later i{font-style:italic;color:var(--ink)}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+
+  <div class="who">
+    <span>add a goal</span>
+  </div>
+
+  <div class="scroll">
+    <div class="lead"><b>name one thing</b> you'd like to move toward</div>
+
+    <!-- the name field — one quiet underlined line -->
+    <div class="field">
+      <span>learn spanish</span><span class="caret"></span>
+    </div>
+    <div class="fhint">keep it short. it doesn't have to be the final wording.</div>
+
+    <!-- the category picker — six soft pills, one tap -->
+    <div class="seck">a category</div>
+    <div class="cats">
+      <span class="cat on">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke-width="2">
+          <path d="M4 19V8l8-4 8 4v11M9 19v-6h6v6"/>
+        </svg>
+        learning
+      </span>
+      <span class="cat">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke-width="2">
+          <path d="M3 7h18v12H3zM8 7V4h8v3"/>
+        </svg>
+        career
+      </span>
+      <span class="cat">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke-width="2">
+          <path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.5-7 10-7 10z"/>
+        </svg>
+        health
+      </span>
+      <span class="cat">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke-width="2">
+          <path d="M12 3v18M5 8h14M7 13h10"/>
+        </svg>
+        finance
+      </span>
+      <span class="cat">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke-width="2">
+          <circle cx="9" cy="8" r="3"/><circle cx="16" cy="10" r="2.4"/>
+          <path d="M3 20c0-3.3 2.7-5 6-5s6 1.7 6 5M14 20c0-2 1-3.4 3-3.8"/>
+        </svg>
+        relationship
+      </span>
+      <span class="cat">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke-width="2">
+          <path d="M5 21l3-9 8-8 5 5-8 8zM14 5l5 5"/>
+        </svg>
+        creative
+      </span>
+    </div>
+
+    <!-- the soft permission note — a goal isn't a contract -->
+    <div class="perm">
+      <span class="pdot"></span>
+      <span>that's all ollie needs. a goal isn't a promise &mdash; you can
+        <b>change it, park it, or let it go</b> any time, no explaining.</span>
+    </div>
+
+    <div class="save">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.4"><path d="M5 13l4 4 10-11"/></svg>
+      <span>add it</span>
+    </div>
+    <div class="saved">noted.</div>
+
+    <!-- a quiet later line — the deeper fields can come later -->
+    <div class="later">
+      <span class="ldot"></span>
+      <span>on the goal itself you can add <i>why it matters</i>,
+        <i>a block you see coming</i>, or <i>a target date</i> &mdash; only
+        if and when you want to. none of it is required.</span>
+    </div>
+  </div>
+</div>
+</body>
+</html>
