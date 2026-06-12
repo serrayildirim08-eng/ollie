@@ -24,6 +24,7 @@ tauri-plugin-sql = { version = "2", features = ["sqlite"] }
 tauri-plugin-store = "2"
 tauri-plugin-notification = "2"
 tauri-plugin-localhost = "2"
+tauri-plugin-deep-link = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
@@ -39,6 +40,12 @@ objc2-foundation = { version = "0.3", default-features = false, features = [
     "NSDate",
     "NSError",
     "NSPredicate",
+    "NSSet",
+    "NSDictionary",
+    "NSEnumerator",
+    "NSFileManager",
+    "NSURL",
+    "NSData",
     # Apple Reminders need a due-date as date *components* (year/month/day/hour/
     # minute) rather than an absolute NSDate; NSCalendar builds those from a date.
     "NSCalendar",
@@ -66,6 +73,11 @@ objc2-user-notifications = { version = "0.3", default-features = false, features
     "UNNotificationTrigger",
     "UNNotificationSound",
     "UNUserNotificationCenter",
+    # A3: custom action buttons on macOS via native categories + delegate.
+    "UNNotificationAction",
+    "UNNotificationCategory",
+    "UNNotificationResponse",
+    "UNNotification",
 ] }
 block2 = "0.6"
 

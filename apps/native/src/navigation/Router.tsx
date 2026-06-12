@@ -10,9 +10,19 @@
  *   /box/<module>  — per-module box screens
  */
 
+import { useEffect } from "react";
 import { BrowserRouter, Link, Route, Routes } from "react-router";
-import { useUser, useClerk } from "@clerk/clerk-react";
+import { useUser, useClerk, useAuth } from "@clerk/clerk-react";
 import { Layout } from "./Layout";
+import { useDeepLinks } from "./useDeepLinks";
+import {
+  registerOllieNotificationActions,
+  initNotificationActionRouter,
+  type ReminderActionMeta,
+} from "../notify/notificationActions";
+import { tasks as adminTasksRepo } from "../modules/admin";
+import { tasks as workTasksRepo } from "../modules/work";
+import { pullGroceryPantry } from "../sync/groceryPull";
 import { useFeature } from "../settings/features";
 import { Stack, Row } from "../layout";
 import { Text } from "../ui";
@@ -39,6 +49,43 @@ const SMCP_STYLE: React.CSSProperties = {
   letterSpacing: "0.08em",
 };
 
+/** Wires ollie:// deep links to navigation; must live inside <BrowserRouter>. */
+function DeepLinkBridge(): null {
+  useDeepLinks();
+  return null;
+}
+
+/** A6b: pull server-applied grocery rows on open/focus (no-op unless flagged). */
+function GrocerySyncBridge(): null {
+  const { getToken } = useAuth();
+  useEffect(() => {
+    const run = () => void pullGroceryPantry(() => getToken());
+    run();
+    const onVis = () => { if (document.visibilityState === 'visible') run(); };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, [getToken]);
+  return null;
+}
+
+/** Maps a reminder's "got it ✓" tap to the source module's completion write. */
+async function completeReminderTarget(meta: ReminderActionMeta): Promise<void> {
+  if (meta.module === 'admin') {
+    await adminTasksRepo.markComplete(meta.refId);
+  } else {
+    await workTasksRepo.markComplete(meta.refId);
+  }
+}
+
+/** Registers notification action buttons + routes taps to completion/snooze (A3). */
+function NotificationActionBridge(): null {
+  useEffect(() => {
+    void registerOllieNotificationActions();
+    void initNotificationActionRouter(completeReminderTarget);
+  }, []);
+  return null;
+}
+
 export function Router() {
   // Wire the durable app-closed reminder path (Supabase scheduled_jobs →
   // cron → APNs). Mounted here under <SignedIn> so it always has a Clerk
@@ -49,6 +96,9 @@ export function Router() {
   const partnerEnabled = useFeature('partner');
   return (
     <BrowserRouter>
+      <DeepLinkBridge />
+      <NotificationActionBridge />
+      <GrocerySyncBridge />
       <Routes>
         <Route element={<Layout />}>
           <Route index element={<DumpScreen />} />

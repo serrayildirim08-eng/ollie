@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>ollie — single screen</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,340;9..144,420;9..144,500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    /* palette — warm paper / ceramic */
+    --paper:        #F4F0E9;   /* page */
+    --paper-raised: #FBF8F2;   /* card */
+    --paper-sunk:   #EDE7DC;   /* input well */
+    --ink:          #2B2723;   /* primary text */
+    --ink-soft:     #6E665C;   /* secondary */
+    --ink-faint:    #A49B8D;   /* meta / placeholder */
+    --rule:         rgba(43,39,35,0.09);
+    --accent:       #B5613B;   /* terracotta — the ONE accent */
+    --accent-soft:  rgba(181,97,59,0.10);
+    --shadow:       0 1px 2px rgba(43,39,35,0.04), 0 8px 24px rgba(43,39,35,0.05);
+
+    --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", system-ui, sans-serif;
+    --serif: "Fraunces", Georgia, serif;
+  }
+
+  *{ box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+  html,body{ height:100%; }
+  body{
+    background:#D9D1C4;            /* desktop matte behind the phone */
+    font-family:var(--sans);
+    color:var(--ink);
+    display:flex; align-items:center; justify-content:center;
+    min-height:100vh; padding:32px 0;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  /* phone frame (desktop centering) */
+  .phone{
+    width:430px; height:932px;
+    background:var(--paper);
+    border-radius:54px;
+    box-shadow:0 40px 80px rgba(0,0,0,0.22), 0 0 0 11px #1a1714, 0 0 0 12px #2c2824;
+    overflow:hidden; position:relative;
+    display:flex; flex-direction:column;
+  }
+  @media (max-width:480px){
+    body{ background:var(--paper); padding:0; }
+    .phone{ width:100vw; height:100vh; border-radius:0; box-shadow:none; }
+  }
+
+  /* safe areas */
+  .safe-top{ height:54px; flex:none; }
+  .safe-bottom{ height:34px; flex:none; }
+
+  .screen{
+    flex:1; display:flex; flex-direction:column;
+    padding:0 30px;
+    overflow:hidden;
+  }
+
+  /* ── top bar ── */
+  .topbar{
+    display:flex; align-items:center; justify-content:space-between;
+    padding-top:8px; margin-bottom:38px;
+  }
+  .wordmark{
+    display:flex; align-items:center; gap:9px;
+  }
+  .wordmark svg{ width:21px; height:21px; }
+  .wordmark .name{
+    font-family:var(--serif); font-weight:420; font-size:21px;
+    letter-spacing:-0.01em; color:var(--ink);
+  }
+  .icons{ display:flex; gap:6px; }
+  .iconbtn{
+    width:40px; height:40px; border:none; background:transparent;
+    display:flex; align-items:center; justify-content:center;
+    color:var(--ink-soft); border-radius:12px; cursor:pointer;
+  }
+  .iconbtn:active{ background:var(--paper-sunk); }
+  .iconbtn svg{ width:21px; height:21px; }
+
+  /* ── greeting ── */
+  .greeting{
+    font-family:var(--serif); font-weight:340;
+    font-size:30px; line-height:1.18; letter-spacing:-0.015em;
+    color:var(--ink); margin-bottom:4px;
+  }
+  .greeting em{ font-style:italic; font-weight:420; color:var(--accent); }
+  .subgreet{
+    font-size:14.5px; color:var(--ink-faint); margin-bottom:30px;
+    letter-spacing:0.005em;
+  }
+
+  /* ── dump input ── */
+  .dump{
+    background:var(--paper-sunk);
+    border-radius:20px;
+    padding:17px 18px;
+    display:flex; align-items:center; gap:13px;
+    margin-bottom:42px;
+    border:1px solid transparent;
+    transition:border-color .18s ease;
+  }
+  .dump:focus-within{ border-color:rgba(181,97,59,0.35); }
+  .dump .field{
+    flex:1; border:none; background:transparent; outline:none;
+    font-family:var(--sans); font-size:16px; color:var(--ink);
+  }
+  .dump .field::placeholder{ color:var(--ink-faint); }
+  .dump .mic{
+    width:38px; height:38px; flex:none; border-radius:50%;
+    background:var(--paper-raised); color:var(--accent);
+    display:flex; align-items:center; justify-content:center;
+    box-shadow:0 1px 2px rgba(43,39,35,0.06);
+  }
+  .dump .mic svg{ width:18px; height:18px; }
+
+  /* ── brain picks ── */
+  .picks-label{
+    font-size:11.5px; text-transform:lowercase; letter-spacing:0.14em;
+    color:var(--ink-faint); margin-bottom:16px; padding-left:2px;
+    font-variant:small-caps; text-transform:none;
+  }
+  .picks{ display:flex; flex-direction:column; gap:12px; }
+
+  .pick{
+    background:var(--paper-raised);
+    border-radius:18px;
+    padding:18px 20px;
+    box-shadow:var(--shadow);
+    display:flex; align-items:center; gap:16px;
+    cursor:pointer;
+    transition:transform .16s ease;
+  }
+  .pick:active{ transform:scale(0.985); }
+
+  .pick .glyph{
+    width:30px; height:30px; flex:none;
+    display:flex; align-items:center; justify-content:center;
+    color:var(--ink-soft);
+  }
+  .pick .glyph svg{ width:22px; height:22px; }
+  .pick .body{ flex:1; min-width:0; }
+  .pick .title{
+    font-size:16.5px; font-weight:500; color:var(--ink);
+    letter-spacing:-0.005em; line-height:1.3;
+  }
+  .pick .meta{
+    font-size:13.5px; color:var(--ink-faint); margin-top:3px;
+    line-height:1.35;
+  }
+  .pick .meta.due{ color:var(--accent); }
+
+  /* one quiet action affordance */
+  .action{
+    flex:none; font-size:13.5px; font-weight:500;
+    color:var(--accent); letter-spacing:0.005em;
+    padding:7px 13px; border-radius:11px;
+    background:var(--accent-soft);
+    white-space:nowrap;
+  }
+  .chevron{ flex:none; color:var(--ink-faint); }
+  .chevron svg{ width:18px; height:18px; }
+
+  /* breathing room at bottom of the list */
+  .picks{ padding-bottom:8px; }
+</style>
+</head>
+<body>
+  <div class="phone">
+    <div class="safe-top"></div>
+    <div class="screen">
+
+      <!-- top bar -->
+      <div class="topbar">
+        <div class="wordmark">
+          <!-- tree icon -->
+          <svg viewBox="0 0 24 24" fill="none" stroke="#B5613B" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22v-6"/>
+            <path d="M12 16c-3.3 0-6-2.4-6-5.6C6 7 8.7 4 12 4s6 3 6 6.4c0 3.2-2.7 5.6-6 5.6Z"/>
+            <path d="M12 16c1.4-1.3 2.2-3 2.2-4.8M12 16c-1.4-1.3-2.2-3-2.2-4.8"/>
+          </svg>
+          <span class="name">ollie</span>
+        </div>
+        <div class="icons">
+          <button class="iconbtn" aria-label="ayarlar">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3.2"/>
+              <path d="M19.4 13.5a7.8 7.8 0 0 0 0-3l1.6-1.2-1.6-2.8-1.9.7a7.7 7.7 0 0 0-2.6-1.5L14 3h-4l-.3 2.2a7.7 7.7 0 0 0-2.6 1.5l-1.9-.7L3.6 8.8 5.2 10a7.8 7.8 0 0 0 0 3l-1.6 1.2 1.6 2.8 1.9-.7a7.7 7.7 0 0 0 2.6 1.5L10 21h4l.3-2.2a7.7 7.7 0 0 0 2.6-1.5l1.9.7 1.6-2.8-1.6-1.2Z"/>
+            </svg>
+          </button>
+          <button class="iconbtn" aria-label="liste">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+              <path d="M4 7h16M4 12h16M4 17h16"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- greeting -->
+      <div class="greeting">günaydın, <em>serra</em></div>
+      <div class="subgreet">çarşamba · birkaç şey gözüme çarptı</div>
+
+      <!-- dump -->
+      <div class="dump">
+        <input class="field" placeholder="aklında ne var?" />
+        <div class="mic" aria-label="sesle ekle">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="9" y="3" width="6" height="11" rx="3"/>
+            <path d="M6 11a6 6 0 0 0 12 0M12 17v4"/>
+          </svg>
+        </div>
+      </div>
+
+      <!-- brain picks -->
+      <div class="picks-label">bugün</div>
+      <div class="picks">
+
+        <!-- due / deadline pick -->
+        <div class="pick">
+          <div class="glyph">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="4" y="5" width="16" height="16" rx="3"/>
+              <path d="M4 9h16M8 3v4M16 3v4"/>
+            </svg>
+          </div>
+          <div class="body">
+            <div class="title">vize teslimi</div>
+            <div class="meta due">yarın, 14:00 · martinez dosyası</div>
+          </div>
+          <div class="chevron">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>
+          </div>
+        </div>
+
+        <!-- grocery / replenish pick with action -->
+        <div class="pick">
+          <div class="glyph">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M6 8h12l-1 11H7L6 8Z"/>
+              <path d="M9 8V6a3 3 0 0 1 6 0v2"/>
+            </svg>
+          </div>
+          <div class="body">
+            <div class="title">süt bitmek üzere</div>
+            <div class="meta">genelde perşembe alıyorsun</div>
+          </div>
+          <div class="action">listeye</div>
+        </div>
+
+        <!-- gentle / energy pick -->
+        <div class="pick">
+          <div class="glyph">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 3a6 6 0 0 0-4 10.5c.6.6 1 1.4 1 2.3V17h6v-1.2c0-.9.4-1.7 1-2.3A6 6 0 0 0 12 3Z"/>
+              <path d="M9 21h6"/>
+            </svg>
+          </div>
+          <div class="body">
+            <div class="title">anne'yi aramadın</div>
+            <div class="meta">8 gün oldu — kısa bir mesaj yeter</div>
+          </div>
+          <div class="chevron">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+    <div class="safe-bottom"></div>
+  </div>
+</body>
+</html>

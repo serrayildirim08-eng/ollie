@@ -59,6 +59,8 @@ import {
 } from './invites';
 import { handleRoute, type RouteEnv } from './router/route';
 import { handleDumpRoute, type DumpRouteEnv } from './router/dump';
+import { handleBrainCopy } from './router/brain-copy';
+import { handleApplyInbox, handleSyncGroceryPantry } from './router/server-apply-routes';
 import { handlePurchase, type PurchaseEnv } from './router/purchase';
 import { handleCookHistory, type CookHistoryEnv } from './router/cook-history';
 import { handleReplenishment, type ReplenishmentEnv } from './router/replenishment';
@@ -106,6 +108,9 @@ export interface Env
   // falls back to the legacy KV counter.
   AI_RATE_LIMITER?: RateLimiter;
   TELEM_RATE_LIMITER?: RateLimiter;
+  // A6b server-apply pilot.
+  ENVELOPE_KEK?: string;
+  SERVER_APPLY_ENABLED?: string;
 }
 
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
@@ -302,6 +307,15 @@ export default {
       return withCors(json({ error: 'not_found' }, 404));
     }
 
+    // ── A6b server-apply pilot — MUST be above the POST-only guard below,
+    //    because /sync/grocery-pantry is a GET. ─────────────────────────────
+    if (url.pathname === '/apply-inbox') {
+      return withCors(await handleApplyInbox(req, env));
+    }
+    if (url.pathname === '/sync/grocery-pantry') {
+      return withCors(await handleSyncGroceryPantry(req, env));
+    }
+
     if (req.method !== 'POST') {
       return withCors(json({ error: 'method_not_allowed' }, 405));
     }
@@ -349,6 +363,14 @@ export default {
     }
     if (url.pathname === '/claim-invite') {
       return withCors(await handleClaimInvite(req, env));
+    }
+
+    // ── /brain-copy — Sprint 3 noticing sentence generation (A1) ─────────────
+    // Client caches per noticing/day/lang and falls back to a trilingual
+    // static sentence on any non-ok, so this route is never load-bearing.
+    // Auth: Clerk JWT required (same policy as /route/dump).
+    if (url.pathname === '/brain-copy' && req.method === 'POST') {
+      return withCors(await handleBrainCopy(req, env));
     }
 
     // ── /route/dump — brain-dump universal router (Decision-locked v2) ───────

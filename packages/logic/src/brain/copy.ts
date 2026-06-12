@@ -119,6 +119,8 @@ export function buildCopyPrompt(facts: CopyFacts, lang: AppLang): { system: stri
     `Voice: a quiet assistant stating a fact and, if there is an action, offering it once.`,
     `NOT warm-gushy, NOT jokey, NOT salesy, NOT cheerful. Never nag, never shame,`,
     `never mention streaks, never scold, never use urgency words like "must" or "now".`,
+    `Translate any item / product name into ${langName} (e.g. milk / leche / süt).`,
+    `EXCEPTION: keep brand names and proper nouns whose translation is unclear exactly as given.`,
     offer
       ? `If it helps, ${offer} — phrase it as a soft question (e.g. "want it back on the list?").`
       : `Do not invent an action; just note the situation in one calm sentence.`,

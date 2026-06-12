@@ -32,6 +32,7 @@ import { colors, fontSizes, lineHeights, space, radii, letterSpacings } from '..
 import { store } from '../../store';
 import { useAppLang } from '../../settings/appLang';
 import { selectTodaysNoticings, postponeNoticing, dismissNoticing } from './noticings';
+import { writeSnapshot } from '../../snapshot/writeSnapshot';
 import { resolveNoticingCopy, actionForNoticing } from './copy';
 import { executeAction } from './actions';
 
@@ -82,8 +83,14 @@ function useTodaysNoticings(getBearer: () => Promise<string | null>): {
           })),
         );
         setItems(resolved);
+        // A7: mirror today's picks + canned answers into the App Group snapshot
+        // for the widget / Siri (best-effort, fire-and-forget).
+        void writeSnapshot(
+          resolved.map((r) => ({ text: r.copy, hasAction: Boolean(r.action) })),
+        );
       } catch {
         setItems([]);
+        void writeSnapshot([]);
       }
     })();
   }, [getBearer, lang]);

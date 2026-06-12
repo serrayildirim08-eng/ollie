@@ -61,7 +61,7 @@ function workerUrl(key: string, fallback?: string): string {
 }
 
 // Lazy getters so missing env only throws when the function is actually called.
-const urls = {
+export const urls = {
   get aiProxy() { return workerUrl('VITE_AI_PROXY_URL', 'https://ollie-api.ollieapp.workers.dev'); },
   get routeDump() {
     const override = import.meta.env.VITE_ROUTE_DUMP_URL as string | undefined;

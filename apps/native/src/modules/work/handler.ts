@@ -14,6 +14,7 @@ import { migrateBody } from '../body/migrate';
 import { events as bodyEvents } from '../body/repo';
 import { scheduleAt, sendSystemNotification } from '../../notify/systemNotify';
 import { scheduleServerReminder } from '../../notify/serverReminder';
+import { OLLIE_REMINDER_CATEGORY } from '../../notify/notificationActions';
 
 export const workHandler: ModuleHandler<'work'> = {
   module: 'work',
@@ -183,9 +184,18 @@ function scheduleReminderIfPresent(
   // Same stable id across all three paths (OS local notification, in-process
   // timer, server-push job) so the dispatcher / cron dedupe to one ping.
   const id = `reminder:${taskId}`;
-  scheduleAt(remindIn.scheduledAtMs, { title, body }, id);
+  // actionTypeId + extra → "Got it ✓ / Snooze" buttons (A3).
+  scheduleAt(
+    remindIn.scheduledAtMs,
+    { title, body, actionTypeId: OLLIE_REMINDER_CATEGORY, extra: { module: 'work', refId: taskId } },
+    id,
+  );
+  // action_url deep-links the tap to the work box (A2).
   scheduleServerReminder(
-    { title, body, category: 'REMINDER', dedupe_key: id },
+    {
+      title, body, category: 'REMINDER', dedupe_key: id,
+      action_url: 'ollie://box/work', notification_category: OLLIE_REMINDER_CATEGORY,
+    },
     remindIn.scheduledAtMs,
   );
 }

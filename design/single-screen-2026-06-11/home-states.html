@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>ollie — single screen · 4 states</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,ital,wght@9..144,0,340;9..144,0,420;9..144,0,500;9..144,1,420&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#F4F0E9; --paper-raised:#FBF8F2; --paper-sunk:#EDE7DC;
+    --ink:#2B2723; --ink-soft:#6E665C; --ink-faint:#A49B8D;
+    --rule:rgba(43,39,35,0.09);
+    --accent:#B5613B; --accent-soft:rgba(181,97,59,0.10);
+    --shadow:0 1px 2px rgba(43,39,35,0.04), 0 8px 24px rgba(43,39,35,0.05);
+    --sans:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",system-ui,sans-serif;
+    --serif:"Fraunces",Georgia,serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+  body{
+    background:#D9D1C4; font-family:var(--sans); color:var(--ink);
+    -webkit-font-smoothing:antialiased; padding:40px 24px 56px;
+  }
+  .caption{
+    text-align:center; font-family:var(--serif); font-weight:340;
+    font-size:24px; color:#4a443c; margin-bottom:6px;
+  }
+  .sub{ text-align:center; color:#8a8174; font-size:13.5px; margin-bottom:40px; }
+  .row{
+    display:flex; gap:42px; justify-content:center; flex-wrap:wrap;
+    align-items:flex-start;
+  }
+  .cell{ display:flex; flex-direction:column; align-items:center; gap:16px; }
+  .cell .tag{
+    font-size:12px; letter-spacing:0.04em; color:#5a5249;
+    background:var(--paper-raised); padding:6px 14px; border-radius:999px;
+    box-shadow:var(--shadow);
+  }
+  .cell .tag b{ color:var(--accent); font-weight:600; }
+
+  .phone{
+    width:344px; height:746px;          /* 430x932 scaled ~0.8 */
+    background:var(--paper); border-radius:44px;
+    box-shadow:0 30px 60px rgba(0,0,0,0.20), 0 0 0 9px #1a1714, 0 0 0 10px #2c2824;
+    overflow:hidden; position:relative; display:flex; flex-direction:column;
+  }
+  .safe-top{ height:42px; flex:none; }
+  .safe-bottom{ height:26px; flex:none; }
+  .screen{ flex:1; display:flex; flex-direction:column; padding:0 24px; overflow:hidden; }
+
+  .topbar{ display:flex; align-items:center; justify-content:space-between; padding-top:6px; margin-bottom:30px; }
+  .wordmark{ display:flex; align-items:center; gap:7px; }
+  .wordmark svg{ width:17px; height:17px; }
+  .wordmark .name{ font-family:var(--serif); font-weight:420; font-size:17px; letter-spacing:-0.01em; }
+  .icons{ display:flex; gap:4px; }
+  .iconbtn{ width:32px; height:32px; border:none; background:transparent; display:flex; align-items:center; justify-content:center; color:var(--ink-soft); border-radius:10px; }
+  .iconbtn svg{ width:17px; height:17px; }
+
+  .greeting{ font-family:var(--serif); font-weight:340; font-size:25px; line-height:1.18; letter-spacing:-0.015em; }
+  .greeting em{ font-style:italic; font-weight:420; color:var(--accent); }
+  .subgreet{ font-size:12.5px; color:var(--ink-faint); margin-top:3px; margin-bottom:24px; }
+
+  .dump{ background:var(--paper-sunk); border-radius:17px; padding:14px 15px; display:flex; align-items:center; gap:11px; margin-bottom:34px; border:1px solid transparent; }
+  .dump.active{ border-color:rgba(181,97,59,0.35); }
+  .dump .field{ flex:1; font-size:14px; color:var(--ink-faint); }
+  .dump .field.typed{ color:var(--ink); }
+  .dump .mic{ width:32px; height:32px; flex:none; border-radius:50%; background:var(--paper-raised); color:var(--accent); display:flex; align-items:center; justify-content:center; box-shadow:0 1px 2px rgba(43,39,35,0.06); }
+  .dump .mic svg{ width:15px; height:15px; }
+
+  .picks-label{ font-size:13px; color:var(--ink-faint); margin-bottom:14px; padding-left:2px; }
+  .picks{ display:flex; flex-direction:column; gap:11px; }
+  .pick{ background:var(--paper-raised); border-radius:16px; padding:15px 17px; box-shadow:var(--shadow); display:flex; align-items:center; gap:13px; }
+  .pick .glyph{ width:26px; height:26px; flex:none; display:flex; align-items:center; justify-content:center; color:var(--ink-soft); }
+  .pick .glyph svg{ width:19px; height:19px; }
+  .pick .body{ flex:1; min-width:0; }
+  .pick .title{ font-size:14.5px; font-weight:500; letter-spacing:-0.005em; line-height:1.3; }
+  .pick .meta{ font-size:12px; color:var(--ink-faint); margin-top:2px; line-height:1.35; }
+  .pick .meta.due{ color:var(--accent); }
+  .action{ flex:none; font-size:12px; font-weight:500; color:var(--accent); padding:6px 11px; border-radius:10px; background:var(--accent-soft); white-space:nowrap; }
+  .chevron{ flex:none; color:var(--ink-faint); }
+  .chevron svg{ width:16px; height:16px; }
+
+  /* quiet / empty state */
+  .quiet{ flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding-bottom:60px; gap:14px; }
+  .quiet .leaf{ color:var(--accent); opacity:0.85; }
+  .quiet .leaf svg{ width:40px; height:40px; }
+  .quiet .line{ font-family:var(--serif); font-weight:340; font-size:21px; color:var(--ink); letter-spacing:-0.01em; }
+  .quiet .hint{ font-size:13px; color:var(--ink-faint); max-width:200px; line-height:1.45; }
+
+  /* okay ack */
+  .ack{ display:flex; align-items:center; gap:9px; padding:13px 16px; margin-bottom:34px;
+        background:var(--accent-soft); border-radius:14px; color:var(--accent);
+        font-size:14px; font-weight:500; animation:fadeup .28s cubic-bezier(.2,.8,.2,1); }
+  .ack svg{ width:18px; height:18px; }
+  @keyframes fadeup{ from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:none;} }
+  .ack-quiet{ color:var(--ink-faint); font-size:12.5px; text-align:center; margin-top:18px; }
+</style>
+</head>
+<body>
+  <div class="caption">tek ekran — dört hâli</div>
+  <div class="sub">aynı ekran, günün ritmine göre nasıl nefes alıyor</div>
+
+  <div class="row">
+
+    <!-- (a) MORNING — 3 picks -->
+    <div class="cell">
+      <span class="tag"><b>a</b> &nbsp;sabah · üç şey gözüne çarptı</span>
+      <div class="phone">
+        <div class="safe-top"></div>
+        <div class="screen">
+          <div class="topbar">
+            <div class="wordmark">
+              <svg viewBox="0 0 24 24" fill="none" stroke="#B5613B" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22v-6"/><path d="M12 16c-3.3 0-6-2.4-6-5.6C6 7 8.7 4 12 4s6 3 6 6.4c0 3.2-2.7 5.6-6 5.6Z"/><path d="M12 16c1.4-1.3 2.2-3 2.2-4.8M12 16c-1.4-1.3-2.2-3-2.2-4.8"/></svg>
+              <span class="name">ollie</span>
+            </div>
+            <div class="icons">
+              <button class="iconbtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 13.5a7.8 7.8 0 0 0 0-3l1.6-1.2-1.6-2.8-1.9.7a7.7 7.7 0 0 0-2.6-1.5L14 3h-4l-.3 2.2a7.7 7.7 0 0 0-2.6 1.5l-1.9-.7L3.6 8.8 5.2 10a7.8 7.8 0 0 0 0 3l-1.6 1.2 1.6 2.8 1.9-.7a7.7 7.7 0 0 0 2.6 1.5L10 21h4l.3-2.2a7.7 7.7 0 0 0 2.6-1.5l1.9.7 1.6-2.8-1.6-1.2Z"/></svg></button>
+              <button class="iconbtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+            </div>
+          </div>
+          <div class="greeting">günaydın, <em>serra</em></div>
+          <div class="subgreet">çarşamba · birkaç şey gözüme çarptı</div>
+          <div class="dump"><span class="field">aklında ne var?</span>
+            <div class="mic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M6 11a6 6 0 0 0 12 0M12 17v4"/></svg></div>
+          </div>
+          <div class="picks-label">bugün</div>
+          <div class="picks">
+            <div class="pick">
+              <div class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="16" rx="3"/><path d="M4 9h16M8 3v4M16 3v4"/></svg></div>
+              <div class="body"><div class="title">vize teslimi</div><div class="meta due">yarın, 14:00 · martinez dosyası</div></div>
+              <div class="chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></div>
+            </div>
+            <div class="pick">
+              <div class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8h12l-1 11H7L6 8Z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg></div>
+              <div class="body"><div class="title">süt bitmek üzere</div><div class="meta">genelde perşembe alıyorsun</div></div>
+              <div class="action">listeye</div>
+            </div>
+            <div class="pick">
+              <div class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.6 1 1.4 1 2.3V17h6v-1.2c0-.9.4-1.7 1-2.3A6 6 0 0 0 12 3Z"/><path d="M9 21h6"/></svg></div>
+              <div class="body"><div class="title">anne'yi aramadın</div><div class="meta">8 gün oldu — kısa bir mesaj yeter</div></div>
+              <div class="chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></div>
+            </div>
+          </div>
+        </div>
+        <div class="safe-bottom"></div>
+      </div>
+    </div>
+
+    <!-- (b) QUIET / EMPTY -->
+    <div class="cell">
+      <span class="tag"><b>b</b> &nbsp;sessiz gün · hepsi sessiz</span>
+      <div class="phone">
+        <div class="safe-top"></div>
+        <div class="screen">
+          <div class="topbar">
+            <div class="wordmark">
+              <svg viewBox="0 0 24 24" fill="none" stroke="#B5613B" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22v-6"/><path d="M12 16c-3.3 0-6-2.4-6-5.6C6 7 8.7 4 12 4s6 3 6 6.4c0 3.2-2.7 5.6-6 5.6Z"/><path d="M12 16c1.4-1.3 2.2-3 2.2-4.8M12 16c-1.4-1.3-2.2-3-2.2-4.8"/></svg>
+              <span class="name">ollie</span>
+            </div>
+            <div class="icons">
+              <button class="iconbtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 13.5a7.8 7.8 0 0 0 0-3l1.6-1.2-1.6-2.8-1.9.7a7.7 7.7 0 0 0-2.6-1.5L14 3h-4l-.3 2.2a7.7 7.7 0 0 0-2.6 1.5l-1.9-.7L3.6 8.8 5.2 10a7.8 7.8 0 0 0 0 3l-1.6 1.2 1.6 2.8 1.9-.7a7.7 7.7 0 0 0 2.6 1.5L10 21h4l.3-2.2a7.7 7.7 0 0 0 2.6-1.5l1.9.7 1.6-2.8-1.6-1.2Z"/></svg></button>
+              <button class="iconbtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+            </div>
+          </div>
+          <div class="greeting">merhaba, <em>serra</em></div>
+          <div class="subgreet">çarşamba</div>
+          <div class="dump"><span class="field">aklında ne var?</span>
+            <div class="mic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M6 11a6 6 0 0 0 12 0M12 17v4"/></svg></div>
+          </div>
+          <div class="quiet">
+            <div class="leaf"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21c0-7 4-12 14-13-1 9-6 13-13 13Z"/><path d="M5 21c2-4 5-6 9-7"/></svg></div>
+            <div class="line">hepsi sessiz</div>
+            <div class="hint">bugün dikkat isteyen bir şey yok. dinlenebilirsin.</div>
+          </div>
+        </div>
+        <div class="safe-bottom"></div>
+      </div>
+    </div>
+
+    <!-- (c) AFTER DUMP — okay ack -->
+    <div class="cell">
+      <span class="tag"><b>c</b> &nbsp;dump sonrası · tiny "okay!"</span>
+      <div class="phone">
+        <div class="safe-top"></div>
+        <div class="screen">
+          <div class="topbar">
+            <div class="wordmark">
+              <svg viewBox="0 0 24 24" fill="none" stroke="#B5613B" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22v-6"/><path d="M12 16c-3.3 0-6-2.4-6-5.6C6 7 8.7 4 12 4s6 3 6 6.4c0 3.2-2.7 5.6-6 5.6Z"/><path d="M12 16c1.4-1.3 2.2-3 2.2-4.8M12 16c-1.4-1.3-2.2-3-2.2-4.8"/></svg>
+              <span class="name">ollie</span>
+            </div>
+            <div class="icons">
+              <button class="iconbtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 13.5a7.8 7.8 0 0 0 0-3l1.6-1.2-1.6-2.8-1.9.7a7.7 7.7 0 0 0-2.6-1.5L14 3h-4l-.3 2.2a7.7 7.7 0 0 0-2.6 1.5l-1.9-.7L3.6 8.8 5.2 10a7.8 7.8 0 0 0 0 3l-1.6 1.2 1.6 2.8 1.9-.7a7.7 7.7 0 0 0 2.6 1.5L10 21h4l.3-2.2a7.7 7.7 0 0 0 2.6-1.5l1.9.7 1.6-2.8-1.6-1.2Z"/></svg></button>
+              <button class="iconbtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+            </div>
+          </div>
+          <div class="greeting">tamam, <em>aldım</em></div>
+          <div class="subgreet">çarşamba</div>
+          <div class="dump active"><span class="field typed">yarın diş randevusu var 11'de</span>
+            <div class="mic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M6 11a6 6 0 0 0 12 0M12 17v4"/></svg></div>
+          </div>
+          <div class="ack">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5 10 17l9-10"/></svg>
+            okay!
+          </div>
+          <div class="picks-label">bugün</div>
+          <div class="picks">
+            <div class="pick">
+              <div class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="16" rx="3"/><path d="M4 9h16M8 3v4M16 3v4"/></svg></div>
+              <div class="body"><div class="title">vize teslimi</div><div class="meta due">yarın, 14:00 · martinez dosyası</div></div>
+              <div class="chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></div>
+            </div>
+            <div class="pick">
+              <div class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8h12l-1 11H7L6 8Z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg></div>
+              <div class="body"><div class="title">süt bitmek üzere</div><div class="meta">genelde perşembe alıyorsun</div></div>
+              <div class="action">listeye</div>
+            </div>
+          </div>
+          <div class="ack-quiet">geçmiş döküm görünmez — sadece sakladım</div>
+        </div>
+        <div class="safe-bottom"></div>
+      </div>
+    </div>
+
+    <!-- (d) LOW CAPACITY — 1 gentle item -->
+    <div class="cell">
+      <span class="tag"><b>d</b> &nbsp;düşük kapasite · tek nazik şey</span>
+      <div class="phone">
+        <div class="safe-top"></div>
+        <div class="screen">
+          <div class="topbar">
+            <div class="wordmark">
+              <svg viewBox="0 0 24 24" fill="none" stroke="#B5613B" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22v-6"/><path d="M12 16c-3.3 0-6-2.4-6-5.6C6 7 8.7 4 12 4s6 3 6 6.4c0 3.2-2.7 5.6-6 5.6Z"/><path d="M12 16c1.4-1.3 2.2-3 2.2-4.8M12 16c-1.4-1.3-2.2-3-2.2-4.8"/></svg>
+              <span class="name">ollie</span>
+            </div>
+            <div class="icons">
+              <button class="iconbtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 13.5a7.8 7.8 0 0 0 0-3l1.6-1.2-1.6-2.8-1.9.7a7.7 7.7 0 0 0-2.6-1.5L14 3h-4l-.3 2.2a7.7 7.7 0 0 0-2.6 1.5l-1.9-.7L3.6 8.8 5.2 10a7.8 7.8 0 0 0 0 3l-1.6 1.2 1.6 2.8 1.9-.7a7.7 7.7 0 0 0 2.6 1.5L10 21h4l.3-2.2a7.7 7.7 0 0 0 2.6-1.5l1.9.7 1.6-2.8-1.6-1.2Z"/></svg></button>
+              <button class="iconbtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+            </div>
+          </div>
+          <div class="greeting">yavaş bir gün, <em>serra</em></div>
+          <div class="subgreet">çarşamba · bugün sadece bir şey</div>
+          <div class="dump"><span class="field">aklında ne var?</span>
+            <div class="mic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M6 11a6 6 0 0 0 12 0M12 17v4"/></svg></div>
+          </div>
+          <div class="picks-label">yeter</div>
+          <div class="picks">
+            <div class="pick">
+              <div class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7 10v11M2 12.5 7 10h6.5a2 2 0 0 1 2 2.3l-1 6a2 2 0 0 1-2 1.7H7"/><path d="M7 10 9.5 3.5A1.5 1.5 0 0 1 12.5 4v4"/></svg></div>
+              <div class="body"><div class="title">su içmeyi unutma</div><div class="meta">başka her şey bekleyebilir</div></div>
+            </div>
+          </div>
+        </div>
+        <div class="safe-bottom"></div>
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>

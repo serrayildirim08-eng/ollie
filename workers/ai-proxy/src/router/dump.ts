@@ -41,6 +41,7 @@ import { pass2Split } from './segmentation-llm';
 import { detectFragmentLanguage } from './lang-detect';
 import { classifyBatch, type ClassifyResult } from './dump-classify';
 import { injectScheduledAt } from './remindIn';
+import { writeInbox } from './server-apply';
 import {
   type Fragment,
   type FragmentLanguage,
@@ -89,6 +90,11 @@ export interface DumpRouteEnv {
   /** Cloudflare Workers AI binding — same-platform classify fallback (no key).
    *  Optional so the worker still boots if the binding is absent. */
   AI?: CfAiBinding;
+  /** A6b server-apply (dump_inbox). */
+  SUPABASE_URL?: string;
+  SUPABASE_SERVICE_ROLE?: string;
+  ENVELOPE_KEK?: string;
+  SERVER_APPLY_ENABLED?: string;
 }
 
 const STAGING_TEST_USER_ID = 'staging-test-user';
@@ -415,6 +421,19 @@ export async function handleDumpRoute(
       pass2Triggered,
     },
   };
+
+  // A6b: server-side durability. Mirror routed fragments into the encrypted
+  // dump_inbox so a dump that arrived while the app was CLOSED (Siri TELL, a
+  // future server brain) survives. Shadow/dual-write — gated by
+  // SERVER_APPLY_ENABLED, fire-and-forget so it never slows the response.
+  keepAlive(
+    writeInbox(
+      env,
+      uid,
+      dumpId,
+      fragments.map((f) => ({ module: f.module, payload: f.payload })),
+    ).catch((err) => console.warn('[route/dump] writeInbox failed (non-fatal)', err)),
+  );
 
   return json(output);
 }

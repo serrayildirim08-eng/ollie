@@ -40,6 +40,10 @@ import type { NotificationSpec } from '@ollie/notifications';
 export interface NotifyEventDetail {
   title: string;
   body?: string;
+  /** Registered category id → shows action buttons (A3). */
+  actionTypeId?: string;
+  /** Carried back to onAction so it knows what row to act on (A3). */
+  extra?: Record<string, unknown>;
 }
 
 /** Public custom-event name. Stable contract — do not rename. */
@@ -63,6 +67,8 @@ interface PluginApi {
     body?: string;
     icon?: string;
     sound?: string;
+    actionTypeId?: string;
+    extra?: Record<string, unknown>;
   }) => void;
 }
 
@@ -164,7 +170,7 @@ export async function checkNotificationPermission(): Promise<'granted' | 'denied
  * in-app log; this function is the *additional* native OS ping that
  * surfaces even when the app window is minimised.
  */
-export async function sendSystemNotification({ title, body }: NotifyEventDetail): Promise<void> {
+export async function sendSystemNotification({ title, body, actionTypeId, extra }: NotifyEventDetail): Promise<void> {
   const plugin = await loadNotificationPlugin();
   if (!plugin) {
     // Web preview / vitest fallback — visible in the dev console.
@@ -188,6 +194,8 @@ export async function sendSystemNotification({ title, body }: NotifyEventDetail)
       body,
       icon: 'icons/128x128.png',
       sound: 'default',
+      actionTypeId,
+      extra,
     });
   } catch (err) {
     console.warn('[systemNotify] sendNotification failed', err);
@@ -279,14 +287,21 @@ export function scheduleAt(
       return;
     }
     try {
-      const { invoke } = await import('@tauri-apps/api/core');
-      // Tauri v2 maps the Rust snake_case param `fire_at_ms` to camelCase
-      // `fireAtMs` in this args object.
-      await invoke('schedule_local_notification', {
+      // The app is served over http://localhost, so the webview is a "remote"
+      // origin and the ACL blocks direct invoke() of our app commands. Events
+      // are permitted (core:event:default), so we EMIT and the Rust setup
+      // listener schedules. This is the path that survives app-quit.
+      const { emit } = await import('@tauri-apps/api/event');
+      await emit('ollie-schedule-notif', {
         id,
         title: payload.title,
         body: payload.body,
-        fireAtMs: at,
+        // Rust deserializes snake_case fields.
+        fire_at_ms: at,
+        // A3: native action buttons (macOS) — category + extra carried through
+        // so the Rust delegate can route a button tap back to JS.
+        category_id: payload.actionTypeId ?? null,
+        extra_json: payload.extra ? JSON.stringify(payload.extra) : null,
       });
       nativeScheduled = true;
     } catch (err) {
@@ -304,10 +319,10 @@ export function scheduleAt(
         timerId = null;
       }
       if (nativeScheduled) {
-        void import('@tauri-apps/api/core')
-          .then(({ invoke }) => invoke('cancel_local_notification', { id }))
+        void import('@tauri-apps/api/event')
+          .then(({ emit }) => emit('ollie-cancel-notif', id))
           .catch((err) => {
-            console.warn('[systemNotify] cancel_local_notification failed', err);
+            console.warn('[systemNotify] cancel emit failed', err);
           });
       }
     },

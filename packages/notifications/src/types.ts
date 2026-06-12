@@ -28,6 +28,12 @@ export interface NotificationSpec {
   /** Optional deep link the notification opens on tap. */
   action_url?: string;
   /**
+   * Optional registered action-category id (A3). When set, APNs delivers it as
+   * `aps.category` so the device shows the matching action buttons (the device
+   * must have registered the category via registerActionTypes at boot).
+   */
+  notification_category?: string;
+  /**
    * Optional schedule. If set, the notification fires at this ts.
    * If omitted, fires immediately. ISO date string or ms epoch.
    */

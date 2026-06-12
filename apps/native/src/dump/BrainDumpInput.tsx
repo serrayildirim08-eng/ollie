@@ -35,6 +35,7 @@ import type { RouterOutput, CrisisSignal } from '../router/schema';
 import { usePhotoIntake, PhotoIntakeBar } from './PhotoIntake';
 import { MicButton } from './MicButton';
 import { NotifyPrimeLine } from '../notify/NotifyPrimeLine';
+import { DUMP_INPUT_ID } from '../navigation/useDeepLinks';
 import styles from './BrainDumpInput.module.css';
 
 /**
@@ -285,6 +286,7 @@ export function BrainDumpInput({
     >
       <Stack gap="md">
         <Textarea
+          id={DUMP_INPUT_ID}
           value={text}
           onChange={setText}
           placeholder={placeholder}
