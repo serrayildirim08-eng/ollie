@@ -15,7 +15,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@clerk/clerk-react';
 import { Stack } from '../layout';
 import { Text } from '../ui';
-import { colors } from '../theme/tokens';
+import { colors, space } from '../theme/tokens';
 import { BrainDumpInput } from './BrainDumpInput';
 import { dumpArchive } from './archive';
 import { tagDumpMood } from './mood-lexicon';
@@ -229,11 +229,13 @@ export function DumpScreen(): JSX.Element {
 
   return (
     <Stack gap={32}>
-      <Stack gap={8}>
-        <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
-          dump
+      {/* Home is the COVER, not a registry: one centered serif question, no
+          kicker. This is the one screen allowed to center — every Box stays
+          left-aligned editorial, so the two never read as the same template. */}
+      <Stack gap={8} align="center" style={{ paddingTop: space[6] }}>
+        <Text scale="display" style={{ textAlign: "center" }}>
+          What's in your head?
         </Text>
-        <Text scale="display">What's in your head?</Text>
       </Stack>
 
       <BrainDumpInput
