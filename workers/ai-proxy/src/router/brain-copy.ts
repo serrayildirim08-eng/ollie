@@ -39,6 +39,7 @@ export async function handleBrainCopy(
     GROQ_API_KEY: string;
     CLERK_ISSUER?: string;
     STAGING_TEST_BEARER?: string;
+    ENVIRONMENT?: string;
   },
 ): Promise<Response> {
   if (req.method !== 'POST') return json({ error: 'method_not_allowed' }, 405);
@@ -46,7 +47,10 @@ export async function handleBrainCopy(
   const auth = req.headers.get('authorization') ?? '';
   if (!auth.startsWith('Bearer ')) return json({ error: 'missing_bearer' }, 401);
   const bearer = auth.slice('Bearer '.length);
-  if (!(env.STAGING_TEST_BEARER && bearer === env.STAGING_TEST_BEARER)) {
+  // Staging test bearer honored only off production (audit #24, mirrors #43).
+  const stagingDoor =
+    env.ENVIRONMENT !== 'production' && !!env.STAGING_TEST_BEARER && bearer === env.STAGING_TEST_BEARER;
+  if (!stagingDoor) {
     let userId: string | null = null;
     try {
       userId = await verifyClerkJwt(bearer, { CLERK_ISSUER: env.CLERK_ISSUER });

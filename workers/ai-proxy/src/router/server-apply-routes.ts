@@ -12,6 +12,8 @@ import { applyInbox, pullGroceryPantry, type ServerApplyEnv } from './server-app
 interface RoutesEnv extends ServerApplyEnv {
   CLERK_ISSUER?: string;
   STAGING_TEST_BEARER?: string;
+  /** 'production' on prod — disables the staging test bearer there (audit #24). */
+  ENVIRONMENT?: string;
 }
 
 const STAGING_TEST_USER_ID = 'staging-test-user';
@@ -27,7 +29,9 @@ async function authUser(req: Request, env: RoutesEnv): Promise<string | null> {
   const auth = req.headers.get('authorization') ?? '';
   if (!auth.startsWith('Bearer ')) return null;
   const bearer = auth.slice('Bearer '.length);
-  if (env.STAGING_TEST_BEARER && bearer === env.STAGING_TEST_BEARER) return STAGING_TEST_USER_ID;
+  // Staging test bearer honored only off production (audit #24, mirrors #43).
+  if (env.ENVIRONMENT !== 'production' && env.STAGING_TEST_BEARER && bearer === env.STAGING_TEST_BEARER)
+    return STAGING_TEST_USER_ID;
   try {
     return await verifyClerkJwt(bearer, { CLERK_ISSUER: env.CLERK_ISSUER });
   } catch {

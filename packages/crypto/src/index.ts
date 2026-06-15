@@ -203,7 +203,14 @@ export async function decryptData<T = unknown>(
     payload.ciphertext as BufferSource,
   );
   const text = new TextDecoder().decode(plaintext);
-  return JSON.parse(text) as T;
+  // Guard the parse (audit #15): a corrupted/tampered ciphertext that still
+  // decrypts to non-JSON bytes would otherwise throw an opaque SyntaxError.
+  // Surface a clear, catchable decryption error instead.
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new Error('decryptData: decrypted payload is not valid JSON');
+  }
 }
 
 // ──────────────────────────────────────────────────────────────────────────

@@ -458,6 +458,12 @@ async function sendApns(
   deviceToken: string,
   spec: NotificationSpec,
 ): Promise<ApnsResult> {
+  // Validate the device token before interpolating it into the request URL
+  // (audit #2). APNs tokens are hex; reject anything else so a malformed/hostile
+  // token cannot inject path segments or headers into the APNs request.
+  if (!/^[0-9a-fA-F]{32,200}$/.test(deviceToken)) {
+    return { ok: false, status: 400, reason: 'invalid_device_token' };
+  }
   const host = env.APNS_USE_SANDBOX === '1'
     ? 'api.sandbox.push.apple.com'
     : 'api.push.apple.com';
