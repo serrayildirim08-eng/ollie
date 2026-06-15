@@ -90,6 +90,58 @@ function Sidebar({ items }: ListProps) {
   );
 }
 
+// Hand-rolled stroke icons — no icon dependency, matches the app's existing
+// inline-SVG idiom (GoalArc, SeedGlyph). Keyed by route.icon name.
+function NavIcon({ name }: { name?: string }): JSX.Element | null {
+  const common = {
+    width: 22,
+    height: 22,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.6,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    "aria-hidden": true,
+  };
+  switch (name) {
+    case "House":
+      return (
+        <svg {...common}>
+          <path d="M4 11.5 12 4l8 7.5" />
+          <path d="M6 10v9h12v-9" />
+        </svg>
+      );
+    case "ListChecks":
+      return (
+        <svg {...common}>
+          <path d="M10 6h10M10 12h10M10 18h10" />
+          <path d="m3 6 1.4 1.4L7 5" />
+          <path d="m3 12 1.4 1.4L7 11" />
+          <path d="m3 18 1.4 1.4L7 17" />
+        </svg>
+      );
+    case "SquaresFour":
+      return (
+        <svg {...common}>
+          <rect x="4" y="4" width="6.5" height="6.5" rx="1" />
+          <rect x="13.5" y="4" width="6.5" height="6.5" rx="1" />
+          <rect x="4" y="13.5" width="6.5" height="6.5" rx="1" />
+          <rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1" />
+        </svg>
+      );
+    case "Gear":
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="12" r="3" />
+          <path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2" />
+        </svg>
+      );
+    default:
+      return null;
+  }
+}
+
 function BottomBar({ items }: ListProps) {
   const capped = items.slice(0, 4);
   return (
@@ -119,21 +171,27 @@ function BottomBar({ items }: ListProps) {
         }}
       >
         {capped.map((item) => (
-          <li key={item.id} style={{ flex: 1, textAlign: "center" }}>
+          <li key={item.id} style={{ flex: 1, height: "100%" }}>
+            {/* The WHOLE cell is the tap target (>=48px), not just the text —
+                fixes the sub-44px hit area the audit flagged. Icon over label. */}
             <NavLink
               to={item.path}
               end={item.path === "/"}
               style={({ isActive }) => ({
-                display: "inline-flex",
+                display: "flex",
                 flexDirection: "column",
                 alignItems: "center",
-                gap: 2,
-                padding: `${space[2]} 0`,
+                justifyContent: "center",
+                gap: 3,
+                width: "100%",
+                height: "100%",
+                minHeight: 48,
                 color: isActive ? colors.ink : colors.inkFaint,
                 textDecoration: "none",
                 fontWeight: isActive ? 500 : 400,
               })}
             >
+              <NavIcon name={item.icon} />
               <Text scale="caption" style={SMCP_STYLE}>{item.label}</Text>
             </NavLink>
           </li>

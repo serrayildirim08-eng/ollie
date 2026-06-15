@@ -51,15 +51,16 @@ Tam-ekran 2.4sn ack her dump'ta patlıyordu; `dump-ux-silent` kararıyla çeliş
 Dosya: `dump/DumpScreen.tsx`, `dump/DumpScreen.module.css` — DONE 2026-06-15
 Not: "milestone'da da sel" tetikleyicisi şimdilik yok — sadece güne-ilk. İstenirse eklenir.
 
-## Faz 4 — Mobil (iPhone) — ⬜
-Tip küçülmüyor, alt menüde ikon yok, parmak hedefi < 44px.
+## Faz 4 — Mobil (iPhone) — ✅
+Tip küçülmüyordu, alt menüde ikon yoktu, parmak hedefi < 44px'di.
 
-- [ ] iPhone başlık tek/iki satır (3'e sarmıyor) — `clamp()`
-- [ ] Alt menüde ikon + label
-- [ ] Her sekme hücresi tıklanabilir, ≥48px
-- [ ] 375px simülatörde taşma yok
+- [x] Büyük başlıklar `clamp()` ile akışkan: display 36→64, hero 48→96, h1 30→42, h2 24→28 (üst sınır=masaüstü, masaüstü değişmez)
+- [x] Alt menüde el-yapımı SVG ikon + label (yeni bağımlılık yok)
+- [x] Her sekme hücresi tam tıklanabilir, ≥48px
+- [x] body/caption/kicker sabit kaldı (küçük metin daha da küçülmesin)
 
-Dosya: `theme/tokens.ts`, `navigation/TabBar.tsx`, `navigation/Layout.tsx`
+Dosya: `theme/tokens.ts`, `navigation/TabBar.tsx` — DONE 2026-06-15
+Not: typecheck + 404 test ile doğrulandı; canlı iPhone simülatör görsel kontrolü Serra'da.
 
 ## Faz 5 — Desktop (Mac) — ⬜
 220 rail + 720 ortalı kolon → geniş ekranda iki yan okyanus boşluk.
