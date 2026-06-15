@@ -186,6 +186,13 @@ describe('/route/dump — smoke', () => {
     expect(res.status).toBe(400);
   });
 
+  it('returns 413 when text exceeds the max length (audit #47)', async () => {
+    const env = makeEnv();
+    const res = await handleDumpRoute(makeReq({ text: 'a'.repeat(10_001) }), env);
+    expect(res.status).toBe(413);
+    expect(fetchSpy).not.toHaveBeenCalled(); // rejected before any AI/embed call
+  });
+
   it('injects scheduledAtMs into payload when Layer 1 emits a remindIn hint', async () => {
     const env = makeEnv();
 

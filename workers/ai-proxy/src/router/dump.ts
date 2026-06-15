@@ -63,6 +63,10 @@ import type { CfAiBinding } from '../cloudflare-ai';
  *  hit the multi-MB range. Cap chosen to fit a multi-page receipt PDF
  *  or scanned form while still bounding worker memory + Gemini upload. */
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+/** Upper bound on a single dump's typed text (audit #47). A brain dump is short
+ *  by nature; 10k chars is far above any real dump but blocks an abusive payload
+ *  from reaching the segmenter / embedder / AI cascade. */
+const MAX_TEXT_CHARS = 10_000;
 
 const VOYAGE_MODEL = 'voyage-multilingual-2';
 const VOYAGE_EMBED_DIM = 1024;
@@ -160,6 +164,10 @@ export async function handleDumpRoute(
 
   if (!userText && !hasImage) {
     return json({ error: 'missing_text' }, 400);
+  }
+
+  if (userText.length > MAX_TEXT_CHARS) {
+    return json({ error: 'text_too_large' }, 413);
   }
 
   if (hasImage && base64ByteSize((body.image as VisionImage).data) > MAX_IMAGE_BYTES) {
@@ -414,16 +422,18 @@ export async function handleDumpRoute(
     moduleCount[f.module] = (moduleCount[f.module] ?? 0) + 1;
   }
 
+  // Telemetry log carries STRUCTURE ONLY, never user content (audit #44). The
+  // previous version logged combinedDump.slice(0,120) + each fragment's text,
+  // which dropped unscrubbed PII into Worker logs. We log lengths/shape instead.
   console.log(
     '[route/dump]',
     JSON.stringify({
-      input: combinedDump.slice(0, 120),
+      inputLen: combinedDump.length,
       visionUsed,
       fragments: fragments.map((f) => ({
-        text: f.text.slice(0, 60),
+        textLen: f.text.length,
         module: f.module,
         action: (f.payload as { action?: string }).action,
-        price: (f.payload as { price?: number }).price,
         confidence: f.confidence,
       })),
       aiCalls,
