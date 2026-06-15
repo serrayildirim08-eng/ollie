@@ -82,6 +82,12 @@ export default {
     if (!body.deviceToken || typeof body.deviceToken !== 'string') {
       return json({ error: 'missing_deviceToken' }, 400);
     }
+    // Validate the token shape before interpolating it into the APNs URL
+    // (audit #2). APNs tokens are hex; reject anything else so a malformed or
+    // hostile token cannot inject path segments into the request.
+    if (!/^[0-9a-fA-F]{32,200}$/.test(body.deviceToken)) {
+      return json({ error: 'invalid_deviceToken' }, 400);
+    }
     if (!body.payload || typeof body.payload !== 'object') {
       return json({ error: 'missing_payload' }, 400);
     }
