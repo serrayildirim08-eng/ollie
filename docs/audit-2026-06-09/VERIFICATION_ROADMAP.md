@@ -14,13 +14,13 @@ _Source: docs/audit-2026-06-09/FINAL_AUDIT.md · 274 findings · Branch feat/bra
 > | #3 | Telemetry IDOR | ✅ FIXED | `e435ce6` |
 > | #4 | remindIn hint lost on demotion | ✅ FIXED | `e435ce6` (AI data-loss) |
 > | #5 | Crisis lexicon `PENDING_SERRA_APPROVAL` | 🔴 **OPEN — HUMAN (Serra)** | still PENDING in en/es/tr `lexicon.*.json` · alpha-blocker |
-> | #6 | Gemini API key in URL query string | 🟠 **OPEN** | `gemini.ts:39`, `feed-me.ts:933`, `vision.ts:55` — still `?key=${apiKey}` |
+> | #6 | Gemini API key in URL query string | ✅ FIXED (2026-06-15) | `feb5a67` — moved to `x-goog-api-key` header in gemini/feed-me/vision (both retry paths); 1144 tests green |
 > | #7 | flush-notifications Promise.all no boundary | ✅ OK | `pushOne` returns `{ok}`, never throws → batch not aborted (`flush-notifications.ts:223`) |
 > | #8 | Non-numeric confidence coerced to 0 | ✅ FIXED | `e435ce6` (AI data-loss) |
-> | #9 | grocery_purchase_history `user_id uuid` vs text Clerk ID | 🟠 **OPEN** | column still `uuid` (`20260522000001_…sql:13`); Clerk IDs are text |
+> | #9 | grocery_purchase_history `user_id uuid` vs text Clerk ID | ✅ FIXED in code (2026-06-15) | `6a7b374` — migration `20260615000001` flips column+RLS+RPC to text. ⚠️ NOT yet applied to live DB (apply at deploy) |
 > | #10 | push_tokens trigger `=` vs `:=` | ⚪ FALSE | PL/pgSQL accepts `=` as assignment; trigger works — not a bug |
 >
-> **Net:** of the 10 roadmap criticals — **6 closed** (#1-4, #7, #8), **1 false** (#10), **3 still open** (#5 needs Serra, #6, #9).
+> **Net (upd. 2026-06-15):** of the 10 roadmap criticals — **8 closed** (#1-4, #6, #7, #8, #9*), **1 false** (#10), **1 open** (#5 needs Serra). *#9 fixed in code, DB apply pending at deploy.
 > Also shipped beyond this list (via plan top-10): SQLite migration runner, admin due-dates + ball_state resurfacing, draft-first 0.60-0.79, Partner behind a flag.
 >
 > **Phases 2-4 (findings #11+): NOT STARTED.** Checkboxes there are accurate (all open).
