@@ -73,14 +73,20 @@ Not: typecheck + 404 test ile doğrulandı; canlı iPhone simülatör görsel ko
 Dosya: `navigation/Layout.tsx`, `navigation/TabBar.tsx` — DONE 2026-06-15
 Not: tek başına büyük yeniden-yerleşim; canlı geniş-ekran görsel kontrolü Serra'da.
 
-## Faz 6 — Hijyen + dark mode — ⬜
-Ölü `App.tsx`; inline `colors.*` dark'ta dönmüyor; crisis rengi hardcode.
+## Faz 6a — Hijyen (güvenli kısım) — ✅
+- [x] Ölü `App.tsx`/`App.css` silindi (main.tsx Router'ı render ediyor, App'i değil) — 404 test yeşil, typecheck temiz
 
-- [ ] `App.tsx`/`App.css` silindi, build yeşil
+Dosya: `App.tsx` + `App.css` (silindi) — DONE 2026-06-15 · PR #40
+
+### Faz 6b — dark mode + crisis token (AYRI PR) — ⬜
+Riskli: inline `colors.*` (lightPalette JS alias) dark'ta dönmüyor; çok
+bileşene dokunur. Crisis rengi de aynı konu (hardcode rgba). Ayrı PR'da.
+
+- [ ] Inline `colors.*` → CSS-var / theme-aware (TabBar/Layout/GoalsBox/TodayNoticings/…)
 - [ ] Dark mode açınca açık-renk parça kalmıyor
-- [ ] Hiçbir yerde hardcode renk yok (token'dan)
+- [ ] Crisis rengi token'dan (hardcode rgba yok)
 
-Dosya: `App.tsx` (sil), inline `colors` kullanan bileşenler, `theme/tokens.ts`
+Dosya: inline `colors` kullanan tüm bileşenler, `theme/tokens.ts`, `dump/DumpScreen.tsx`
 
 ---
 
