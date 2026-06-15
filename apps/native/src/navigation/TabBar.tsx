@@ -58,7 +58,9 @@ function Sidebar({ items }: ListProps) {
       }}
     >
       <Stack gap={space[4]}>
-        <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
+        {/* Real masthead — serif wordmark in ink, not a faint smcp eyebrow.
+            The thin spine deserves a brand moment, not a label. */}
+        <Text scale="heading" color={colors.ink}>
           Ollie
         </Text>
         <Stack gap={space[2]} as="ul" style={{ listStyle: "none", margin: 0, padding: 0 }}>
