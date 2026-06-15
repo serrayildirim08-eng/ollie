@@ -31,7 +31,6 @@ import { type CadenceEstimate } from '@ollie/cadence';
 import { Stack, Row } from '../../layout';
 import { Text } from '../../ui';
 import {
-  colors,
   fontSizes,
   fontWeights,
   letterSpacings,
@@ -184,14 +183,14 @@ export function MedicationBox(): JSX.Element {
   return (
     <Stack gap={48}>
       <Stack gap={8}>
-        <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
+        <Text scale="caption" color="var(--ollie-color-ink-faint)" style={SMCP_STYLE}>
           box
         </Text>
         <Text scale="display">Medication</Text>
       </Stack>
 
       {!ready ? (
-        <Text scale="caption" color={colors.inkFaint}>
+        <Text scale="caption" color="var(--ollie-color-ink-faint)">
           loading…
         </Text>
       ) : (
@@ -219,14 +218,14 @@ export function MedicationBox(): JSX.Element {
             label="missed doses"
             empty="none recent"
             items={state.recentMissed}
-            accent={colors.amber}
+            accent="var(--ollie-color-amber)"
             renderItem={(ev) => (
               <EventRow
                 key={ev.id}
                 title={ev.medName}
                 detail={null}
                 whenMs={ev.loggedAt}
-                accentDot={colors.amber}
+                accentDot="var(--ollie-color-amber)"
                 onRemove={() => void handleRemoveEvent(ev.id)}
               />
             )}
@@ -250,7 +249,7 @@ export function MedicationBox(): JSX.Element {
           {isCold && (
             <Text
               scale="caption"
-              color={colors.inkFaint}
+              color="var(--ollie-color-ink-faint)"
               style={{ textAlign: 'center', lineHeight: 1.55 }}
             >
               no streaks, no scoring — just what you take, and when, kept for
@@ -297,7 +296,7 @@ function DoseHero({
       <div
         style={{
           fontSize: fontSizes.caption,
-          color: colors.inkFaint,
+          color: 'var(--ollie-color-ink-faint)',
           fontWeight: fontWeights.medium,
           letterSpacing: letterSpacings.capsTight,
           ...SMCP_STYLE,
@@ -311,7 +310,7 @@ function DoseHero({
           fontFamily: 'var(--ollie-font-serif)',
           fontSize: 34,
           fontWeight: fontWeights.light,
-          color: colors.ink,
+          color: 'var(--ollie-color-ink)',
           letterSpacing: letterSpacings.display,
           lineHeight: 1.1,
           textAlign: 'center',
@@ -328,17 +327,17 @@ function DoseHero({
         <div
           style={{
             fontSize: fontSizes.small,
-            color: colors.ink,
+            color: 'var(--ollie-color-ink)',
             fontWeight: fontWeights.medium,
             letterSpacing: '-0.01em',
           }}
         >
-          <span style={{ color: colors.inkFaint }}>today —</span>{' '}
+          <span style={{ color: 'var(--ollie-color-ink-faint)' }}>today —</span>{' '}
           {dosesTaken} {dosesTaken === 1 ? 'dose' : 'doses'} taken
           {dosesMissed > 0 && (
             <>
-              <span style={{ color: colors.inkFaint }}>, </span>
-              <span style={{ color: colors.amber }}>{dosesMissed} missed</span>
+              <span style={{ color: 'var(--ollie-color-ink-faint)' }}>, </span>
+              <span style={{ color: 'var(--ollie-color-amber)' }}>{dosesMissed} missed</span>
             </>
           )}
         </div>
@@ -352,7 +351,7 @@ function DoseHero({
               width: 7,
               height: 7,
               borderRadius: '50%',
-              background: colors.sageDeep,
+              background: 'var(--ollie-color-sage-deep)',
               flexShrink: 0,
               marginTop: 6,
             }}
@@ -384,8 +383,8 @@ function DoseRing({ time, cold }: { time: string; cold: boolean }): JSX.Element 
         width: 164,
         height: 164,
         borderRadius: '50%',
-        border: `2px solid ${colors.hairline}`,
-        background: colors.paper,
+        border: `2px solid var(--ollie-color-hairline)`,
+        background: 'var(--ollie-color-paper)',
         boxShadow: '0 14px 34px rgba(20, 20, 15, 0.06)',
         display: 'flex',
         alignItems: 'center',
@@ -397,7 +396,7 @@ function DoseRing({ time, cold }: { time: string; cold: boolean }): JSX.Element 
           fontFamily: 'var(--ollie-font-serif)',
           fontSize: cold ? 56 : 34,
           fontWeight: cold ? 200 : 300,
-          color: cold ? colors.inkFaint : colors.ink,
+          color: cold ? 'var(--ollie-color-ink-faint)' : 'var(--ollie-color-ink)',
           letterSpacing: '-0.02em',
           lineHeight: 1,
         }}
@@ -442,7 +441,7 @@ function DoseDots({
             style={{
               ...baseStyle,
               background: 'transparent',
-              border: `1.5px dashed ${colors.hairline}`,
+              border: `1.5px dashed var(--ollie-color-hairline)`,
             }}
           />
         ))}
@@ -475,7 +474,7 @@ function DoseDots({
           return (
             <span
               key={i}
-              style={{ ...baseStyle, background: colors.sageDeep }}
+              style={{ ...baseStyle, background: 'var(--ollie-color-sage-deep)' }}
             />
           );
         }
@@ -484,7 +483,7 @@ function DoseDots({
             key={i}
             style={{
               ...baseStyle,
-              border: `2.2px solid ${colors.amber}`,
+              border: `2.2px solid var(--ollie-color-amber)`,
               boxShadow: '0 4px 12px rgba(201, 146, 62, 0.24)',
             }}
           />
@@ -494,7 +493,7 @@ function DoseDots({
         <span
           style={{
             fontSize: fontSizes.caption,
-            color: colors.inkFaint,
+            color: 'var(--ollie-color-ink-faint)',
             fontWeight: fontWeights.medium,
             letterSpacing: '0.02em',
             marginLeft: 2,
@@ -531,8 +530,8 @@ function NotebookList({
         // cold — one quiet placeholder line in the notebook grammar
         <div
           style={{
-            borderTop: `1px solid ${colors.hairline}`,
-            borderBottom: `1px solid ${colors.hairline}`,
+            borderTop: `1px solid var(--ollie-color-hairline)`,
+            borderBottom: `1px solid var(--ollie-color-hairline)`,
             padding: '18px 2px',
             display: 'flex',
             alignItems: 'center',
@@ -546,11 +545,11 @@ function NotebookList({
               width: 9,
               height: 9,
               borderRadius: '50%',
-              border: `1.5px dashed ${colors.hairline}`,
+              border: `1.5px dashed var(--ollie-color-hairline)`,
               flexShrink: 0,
             }}
           />
-          <Text scale="body" color={colors.inkFaint}>
+          <Text scale="body" color="var(--ollie-color-ink-faint)">
             no medications yet — your list will gather here
           </Text>
         </div>
@@ -597,7 +596,7 @@ function MedListRow({
   return (
     <div
       style={{
-        borderTop: `1px solid ${colors.hairline}`,
+        borderTop: `1px solid var(--ollie-color-hairline)`,
         borderBottom: first ? 'none' : 'none',
         padding: '16px 2px',
         display: 'flex',
@@ -612,7 +611,7 @@ function MedListRow({
             width: 9,
             height: 9,
             borderRadius: '50%',
-            background: colors.sageDeep,
+            background: 'var(--ollie-color-sage-deep)',
             flexShrink: 0,
           }}
         />
@@ -628,7 +627,7 @@ function MedListRow({
           <div
             style={{
               fontSize: fontSizes.small,
-              color: colors.ink,
+              color: 'var(--ollie-color-ink)',
               fontWeight: fontWeights.medium,
               letterSpacing: '-0.01em',
             }}
@@ -636,7 +635,7 @@ function MedListRow({
             {med.name}
             <span
               style={{
-                color: colors.inkFaint,
+                color: 'var(--ollie-color-ink-faint)',
                 fontWeight: fontWeights.regular,
                 marginLeft: 8,
                 ...SMCP_STYLE,
@@ -648,7 +647,7 @@ function MedListRow({
           <div
             style={{
               fontSize: fontSizes.caption,
-              color: colors.inkFaint,
+              color: 'var(--ollie-color-ink-faint)',
               fontWeight: fontWeights.medium,
               letterSpacing: '0.01em',
             }}
@@ -667,7 +666,7 @@ function MedListRow({
             background: 'none',
             border: 'none',
             padding: '4px 8px',
-            color: colors.inkFaint,
+            color: 'var(--ollie-color-ink-faint)',
             cursor: 'pointer',
             fontVariantCaps: 'all-small-caps',
             letterSpacing: '0.08em',
@@ -737,9 +736,9 @@ function MedProfileEditor({
                 onClick={() => setKind(k)}
                 style={{
                   ...SMCP_STYLE,
-                  border: `1px solid ${active ? colors.sageDeep : colors.hairline}`,
-                  background: active ? colors.sageDeep : 'transparent',
-                  color: active ? colors.paper : colors.ink,
+                  border: `1px solid ${active ? 'var(--ollie-color-sage-deep)' : 'var(--ollie-color-hairline)'}`,
+                  background: active ? 'var(--ollie-color-sage-deep)' : 'transparent',
+                  color: active ? 'var(--ollie-color-paper)' : 'var(--ollie-color-ink)',
                   borderRadius: 999,
                   padding: '6px 14px',
                   fontSize: 12,
@@ -758,7 +757,7 @@ function MedProfileEditor({
       <Stack gap={8}>
         <SectionLabel>daily schedule</SectionLabel>
         {slots.length === 0 ? (
-          <Text scale="caption" color={colors.inkFaint}>
+          <Text scale="caption" color="var(--ollie-color-ink-faint)">
             no times yet — add one below, or leave empty to log by hand
           </Text>
         ) : (
@@ -770,11 +769,11 @@ function MedProfileEditor({
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: 6,
-                  border: `1px solid ${colors.hairline}`,
+                  border: `1px solid var(--ollie-color-hairline)`,
                   borderRadius: 999,
                   padding: '5px 6px 5px 12px',
                   fontSize: fontSizes.caption,
-                  color: colors.ink,
+                  color: 'var(--ollie-color-ink)',
                   fontWeight: fontWeights.medium,
                 }}
               >
@@ -786,7 +785,7 @@ function MedProfileEditor({
                     background: 'none',
                     border: 'none',
                     padding: '0 4px',
-                    color: colors.inkFaint,
+                    color: 'var(--ollie-color-ink-faint)',
                     cursor: 'pointer',
                     fontSize: 14,
                     lineHeight: 1,
@@ -809,12 +808,12 @@ function MedProfileEditor({
             }}
             aria-label="add a time"
             style={{
-              border: `1px solid ${colors.hairline}`,
+              border: `1px solid var(--ollie-color-hairline)`,
               borderRadius: 8,
               padding: '7px 10px',
               fontSize: fontSizes.small,
-              color: colors.ink,
-              background: colors.paper,
+              color: 'var(--ollie-color-ink)',
+              background: 'var(--ollie-color-paper)',
               fontFamily: 'inherit',
             }}
           />
@@ -822,9 +821,9 @@ function MedProfileEditor({
             onClick={addSlot}
             style={{
               ...SMCP_STYLE,
-              border: `1px solid ${colors.hairline}`,
+              border: `1px solid var(--ollie-color-hairline)`,
               background: 'transparent',
-              color: colors.ink,
+              color: 'var(--ollie-color-ink)',
               borderRadius: 8,
               padding: '7px 14px',
               fontSize: 12,
@@ -843,8 +842,8 @@ function MedProfileEditor({
           style={{
             ...SMCP_STYLE,
             border: 'none',
-            background: colors.ink,
-            color: colors.paper,
+            background: 'var(--ollie-color-ink)',
+            color: 'var(--ollie-color-paper)',
             borderRadius: 8,
             padding: '9px 18px',
             fontSize: 12,
@@ -891,12 +890,12 @@ function ListSection<T>({
       {items.length === 0 ? (
         <div
           style={{
-            borderTop: `1px solid ${colors.hairline}`,
-            borderBottom: `1px solid ${colors.hairline}`,
+            borderTop: `1px solid var(--ollie-color-hairline)`,
+            borderBottom: `1px solid var(--ollie-color-hairline)`,
             padding: '14px 2px',
           }}
         >
-          <Text scale="body" color={colors.inkFaint}>
+          <Text scale="body" color="var(--ollie-color-ink-faint)">
             {empty}
           </Text>
         </div>
@@ -923,7 +922,7 @@ function EventRow({
   return (
     <div
       style={{
-        borderTop: `1px solid ${colors.hairline}`,
+        borderTop: `1px solid var(--ollie-color-hairline)`,
         padding: '14px 2px',
         display: 'flex',
         alignItems: 'center',
@@ -938,7 +937,7 @@ function EventRow({
           height: 9,
           borderRadius: '50%',
           border: accentDot ? `2px solid ${accentDot}` : 'none',
-          background: accentDot ? 'transparent' : colors.inkFaint,
+          background: accentDot ? 'transparent' : 'var(--ollie-color-ink-faint)',
           flexShrink: 0,
         }}
       />
@@ -954,7 +953,7 @@ function EventRow({
         <div
           style={{
             fontSize: fontSizes.small,
-            color: colors.ink,
+            color: 'var(--ollie-color-ink)',
             fontWeight: fontWeights.medium,
             letterSpacing: '-0.01em',
           }}
@@ -963,7 +962,7 @@ function EventRow({
           {detail && (
             <span
               style={{
-                color: colors.inkFaint,
+                color: 'var(--ollie-color-ink-faint)',
                 fontWeight: fontWeights.regular,
                 marginLeft: 8,
               }}
@@ -975,7 +974,7 @@ function EventRow({
         <div
           style={{
             fontSize: fontSizes.caption,
-            color: colors.inkFaint,
+            color: 'var(--ollie-color-ink-faint)',
             fontWeight: fontWeights.medium,
             letterSpacing: '0.01em',
           }}
@@ -1027,14 +1026,14 @@ function SectionLabel({
         />
       )}
       {lede ? (
-        <Text scale="lede" color={colors.ink}>
+        <Text scale="lede" color="var(--ollie-color-ink)">
           {children}
         </Text>
       ) : (
         <span
           style={{
             fontSize: 11,
-            color: colors.inkFaint,
+            color: 'var(--ollie-color-ink-faint)',
             fontWeight: fontWeights.bold,
             letterSpacing: '0.08em',
             textTransform: 'uppercase',
@@ -1056,7 +1055,7 @@ function RemoveButton({ onClick }: { onClick: () => void }): JSX.Element {
         background: 'none',
         border: 'none',
         padding: '4px 8px',
-        color: colors.inkFaint,
+        color: 'var(--ollie-color-ink-faint)',
         cursor: 'pointer',
         fontVariantCaps: 'all-small-caps',
         letterSpacing: '0.08em',

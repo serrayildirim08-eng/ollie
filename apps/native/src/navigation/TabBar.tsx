@@ -12,7 +12,7 @@
 import { NavLink } from "react-router";
 import { Row, Stack } from "../layout";
 import { Text } from "../ui";
-import { colors, space } from "../theme/tokens";
+import { space } from "../theme/tokens";
 import { primaryRoutes, type RouteEntry } from "./routes";
 
 const SMCP_STYLE: React.CSSProperties = {
@@ -52,15 +52,15 @@ function Sidebar({ items }: ListProps) {
         width: 220,
         height: "100dvh",
         padding: `${space[6]} ${space[5]}`,
-        borderRight: `1px solid ${colors.hairline}`,
-        background: colors.cream,
+        borderRight: `1px solid var(--ollie-color-hairline)`,
+        background: 'var(--ollie-color-cream)',
         boxSizing: "border-box",
       }}
     >
       <Stack gap={space[4]}>
         {/* Real masthead — serif wordmark in ink, not a faint smcp eyebrow.
             The thin spine deserves a brand moment, not a label. */}
-        <Text scale="heading" color={colors.ink}>
+        <Text scale="heading" color="var(--ollie-color-ink)">
           Ollie
         </Text>
         <Stack gap={space[2]} as="ul" style={{ listStyle: "none", margin: 0, padding: 0 }}>
@@ -74,11 +74,11 @@ function Sidebar({ items }: ListProps) {
                   alignItems: "center",
                   gap: space[3],
                   padding: `${space[2]} 0`,
-                  color: isActive ? colors.ink : colors.inkFaint,
+                  color: isActive ? 'var(--ollie-color-ink)' : 'var(--ollie-color-ink-faint)',
                   fontWeight: isActive ? 500 : 400,
                   textDecoration: "none",
                   borderLeft: isActive
-                    ? `2px solid ${colors.ink}`
+                    ? `2px solid var(--ollie-color-ink)`
                     : "2px solid transparent",
                   paddingLeft: space[3],
                   transition: "color 180ms ease-out",
@@ -158,8 +158,8 @@ function BottomBar({ items }: ListProps) {
         left: 0,
         right: 0,
         height: 56,
-        borderTop: `1px solid ${colors.hairline}`,
-        background: colors.cream,
+        borderTop: `1px solid var(--ollie-color-hairline)`,
+        background: 'var(--ollie-color-cream)',
         paddingBottom: "env(safe-area-inset-bottom)",
         boxSizing: "content-box",
       }}
@@ -191,7 +191,7 @@ function BottomBar({ items }: ListProps) {
                 width: "100%",
                 height: "100%",
                 minHeight: 48,
-                color: isActive ? colors.ink : colors.inkFaint,
+                color: isActive ? 'var(--ollie-color-ink)' : 'var(--ollie-color-ink-faint)',
                 textDecoration: "none",
                 fontWeight: isActive ? 500 : 400,
               })}

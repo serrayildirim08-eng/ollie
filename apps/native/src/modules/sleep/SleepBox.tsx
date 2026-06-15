@@ -28,7 +28,7 @@ import {
 } from '@ollie/cadence';
 import { Stack, Row } from '../../layout';
 import { Text } from '../../ui';
-import { colors, fonts } from '../../theme/tokens';
+import { fonts } from '../../theme/tokens';
 import { WhenCaption } from '../../lib/WhenCaption';
 import { PatternCards } from '../../patterns/PatternCards';
 import { migrateSleep } from './migrate';
@@ -135,18 +135,18 @@ export function SleepBox(): JSX.Element {
     <Stack gap={48}>
       {/* page kicker */}
       <Stack gap={8}>
-        <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
+        <Text scale="caption" color="var(--ollie-color-ink-faint)" style={SMCP_STYLE}>
           box
         </Text>
         <Text scale="display">Sleep</Text>
       </Stack>
 
       {!ready ? (
-        <Text scale="caption" color={colors.inkFaint}>
+        <Text scale="caption" color="var(--ollie-color-ink-faint)">
           loading…
         </Text>
       ) : !anyData ? (
-        <Text scale="body" color={colors.inkFaint}>
+        <Text scale="body" color="var(--ollie-color-ink-faint)">
           no sleep logged yet — try dumping &lsquo;slept 7 hours&rsquo;
         </Text>
       ) : (
@@ -255,14 +255,14 @@ function HeroSection({
       <WeekBars bars={weekBars} />
 
       <Stack gap={8} align="center">
-        <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
+        <Text scale="caption" color="var(--ollie-color-ink-faint)" style={SMCP_STYLE}>
           last night
         </Text>
         <Duration min={totalMin} />
         {sleepLatest && <SubLine event={sleepLatest} />}
         {sleepLatest && (
           <Stack gap={8} align="center" style={{ marginTop: 4 }}>
-            <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
+            <Text scale="caption" color="var(--ollie-color-ink-faint)" style={SMCP_STYLE}>
               how it felt
             </Text>
             <FeelTags
@@ -300,9 +300,9 @@ function FeelTags({
             aria-pressed={active}
             onClick={() => onSelect(active ? null : feel)}
             style={{
-              border: `1px solid ${active ? colors.ink : colors.hairline}`,
-              background: active ? colors.ink : 'transparent',
-              color: active ? colors.paper : colors.inkSoft,
+              border: `1px solid ${active ? 'var(--ollie-color-ink)' : 'var(--ollie-color-hairline)'}`,
+              background: active ? 'var(--ollie-color-ink)' : 'transparent',
+              color: active ? 'var(--ollie-color-paper)' : 'var(--ollie-color-ink-soft)',
               borderRadius: 999,
               padding: '5px 14px',
               cursor: 'pointer',
@@ -343,7 +343,7 @@ function CadenceHint({
   return (
     <Text
       scale="caption"
-      color={colors.inkFaint}
+      color="var(--ollie-color-ink-faint)"
       style={{ fontVariantCaps: 'all-small-caps', letterSpacing: '0.06em' }}
     >
       {`last logged ${sinceLabel} ago · usually every ${everyLabel}`}
@@ -365,7 +365,7 @@ function Duration({ min }: { min: number | null }): JSX.Element {
           fontFamily: fonts.serif,
           fontSize: 26,
           fontWeight: 400,
-          color: colors.inkFaint,
+          color: 'var(--ollie-color-ink-faint)',
           letterSpacing: '-0.02em',
           lineHeight: 1,
         }}
@@ -383,7 +383,7 @@ function Duration({ min }: { min: number | null }): JSX.Element {
         fontFamily: fonts.serif,
         fontSize: 74,
         fontWeight: 300,
-        color: colors.ink,
+        color: 'var(--ollie-color-ink)',
         letterSpacing: '-0.04em',
         lineHeight: 1,
         display: 'inline-flex',
@@ -401,7 +401,7 @@ function Duration({ min }: { min: number | null }): JSX.Element {
 
 const UNIT_STYLE: React.CSSProperties = {
   fontSize: 30,
-  color: colors.inkFaint,
+  color: 'var(--ollie-color-ink-faint)',
   fontWeight: 300,
   letterSpacing: '-0.02em',
 };
@@ -427,7 +427,7 @@ function SubLine({
   }
   if (fragments.length === 0) return null;
   return (
-    <Text scale="caption" color={colors.inkSoft}>
+    <Text scale="caption" color="var(--ollie-color-ink-soft)">
       {fragments.join('  ·  ')}
     </Text>
   );
@@ -498,7 +498,7 @@ function WeekBars({ bars }: { bars: WeekBarDatum[] }): JSX.Element {
           right: 0,
           bottom: 4,
           height: 1,
-          background: colors.hairline,
+          background: 'var(--ollie-color-hairline)',
         }}
       />
       {bars.map((b) => {
@@ -511,7 +511,7 @@ function WeekBars({ bars }: { bars: WeekBarDatum[] }): JSX.Element {
                 width: BAR_WIDTH,
                 height: BAR_MIN,
                 borderRadius: 2,
-                border: `1px dashed ${colors.hairline}`,
+                border: `1px dashed var(--ollie-color-hairline)`,
                 background: 'transparent',
               }}
             />
@@ -526,7 +526,7 @@ function WeekBars({ bars }: { bars: WeekBarDatum[] }): JSX.Element {
               width: BAR_WIDTH,
               height: h,
               borderRadius: 2,
-              background: b.isLast ? colors.amber : colors.ink,
+              background: b.isLast ? 'var(--ollie-color-amber)' : 'var(--ollie-color-ink)',
               transition: 'height 220ms cubic-bezier(0.18, 0, 0.22, 1)',
             }}
           />
@@ -551,11 +551,11 @@ function ListSection<T>({
 }): JSX.Element {
   return (
     <Stack gap={16}>
-      <Text scale="lede" color={colors.ink}>
+      <Text scale="lede" color="var(--ollie-color-ink)">
         {label}
       </Text>
       {items.length === 0 ? (
-        <Text scale="body" color={colors.inkFaint}>
+        <Text scale="body" color="var(--ollie-color-ink-faint)">
           {empty}
         </Text>
       ) : (
@@ -653,7 +653,7 @@ function RemoveButton({ onClick }: { onClick: () => void }): JSX.Element {
         background: 'none',
         border: 'none',
         padding: '4px 8px',
-        color: colors.inkFaint,
+        color: 'var(--ollie-color-ink-faint)',
         cursor: 'pointer',
         fontFamily: fonts.sans,
         fontVariantCaps: 'all-small-caps',
@@ -662,10 +662,10 @@ function RemoveButton({ onClick }: { onClick: () => void }): JSX.Element {
         transition: 'color 120ms cubic-bezier(0.18, 0, 0.22, 1)',
       }}
       onMouseEnter={(e) => {
-        e.currentTarget.style.color = colors.ink;
+        e.currentTarget.style.color = 'var(--ollie-color-ink)';
       }}
       onMouseLeave={(e) => {
-        e.currentTarget.style.color = colors.inkFaint;
+        e.currentTarget.style.color = 'var(--ollie-color-ink-faint)';
       }}
     >
       remove

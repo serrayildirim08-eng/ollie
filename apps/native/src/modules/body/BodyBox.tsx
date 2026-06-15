@@ -28,7 +28,7 @@ import {
 } from '@ollie/cadence';
 import { Stack, Row } from '../../layout';
 import { Text } from '../../ui';
-import { colors, fontSizes, fontWeights, letterSpacings } from '../../theme/tokens';
+import { fontSizes, fontWeights, letterSpacings } from '../../theme/tokens';
 import { WhenCaption } from '../../lib/WhenCaption';
 import { PatternCards } from '../../patterns/PatternCards';
 import { migrateBody } from './migrate';
@@ -154,14 +154,14 @@ export function BodyBox(): JSX.Element {
   return (
     <Stack gap={48}>
       <Stack gap={8}>
-        <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
+        <Text scale="caption" color="var(--ollie-color-ink-faint)" style={SMCP_STYLE}>
           box
         </Text>
         <Text scale="display">Body</Text>
       </Stack>
 
       {!ready ? (
-        <Text scale="caption" color={colors.inkFaint}>
+        <Text scale="caption" color="var(--ollie-color-ink-faint)">
           loading…
         </Text>
       ) : (
@@ -182,7 +182,7 @@ export function BodyBox(): JSX.Element {
 
           {lastMovement && (
             <Row gap={12} align="baseline" justify="space-between">
-              <Text scale="body" color={colors.inkFaint} style={SMCP_STYLE}>
+              <Text scale="body" color="var(--ollie-color-ink-faint)" style={SMCP_STYLE}>
                 last movement
               </Text>
               <Text scale="body">{formatLastMovement(lastMovement)}</Text>
@@ -286,7 +286,7 @@ function WaterHero({
             fontFamily: 'var(--ollie-font-serif)',
             fontSize: 46,
             fontWeight: fontWeights.light,
-            color: colors.ink,
+            color: 'var(--ollie-color-ink)',
             letterSpacing: '-0.03em',
             lineHeight: 1,
           }}
@@ -295,7 +295,7 @@ function WaterHero({
           <span
             style={{
               fontSize: 20,
-              color: colors.inkFaint,
+              color: 'var(--ollie-color-ink-faint)',
               fontWeight: fontWeights.light,
               letterSpacing: '-0.01em',
             }}
@@ -307,7 +307,7 @@ function WaterHero({
         <div
           style={{
             fontSize: fontSizes.caption,
-            color: colors.inkFaint,
+            color: 'var(--ollie-color-ink-faint)',
             fontWeight: fontWeights.medium,
             letterSpacing: letterSpacings.capsTight,
             ...SMCP_STYLE,
@@ -329,12 +329,12 @@ function WaterHero({
               width: 7,
               height: 7,
               borderRadius: '50%',
-              background: colors.sageDeep,
+              background: 'var(--ollie-color-sage-deep)',
               flexShrink: 0,
               marginTop: 7,
             }}
           />
-          <Text scale="body" color={colors.ink}>
+          <Text scale="body" color="var(--ollie-color-ink)">
             <b style={{ fontWeight: fontWeights.medium }}>
               this is body — water, supplements, anything the body does.
             </b>{' '}
@@ -378,7 +378,7 @@ function AgeField({
   if (editing) {
     return (
       <Row gap={10} align="center" justify="center">
-        <label htmlFor={inputId} style={{ ...SMCP_STYLE, fontSize: 12, color: colors.inkFaint }}>
+        <label htmlFor={inputId} style={{ ...SMCP_STYLE, fontSize: 12, color: 'var(--ollie-color-ink-faint)' }}>
           age
         </label>
         <input
@@ -396,12 +396,12 @@ function AgeField({
           }}
           style={{
             width: 64,
-            border: `1px solid ${colors.hairline}`,
+            border: `1px solid var(--ollie-color-hairline)`,
             borderRadius: 8,
             padding: '6px 10px',
             fontSize: 15,
-            color: colors.ink,
-            background: colors.paper,
+            color: 'var(--ollie-color-ink)',
+            background: 'var(--ollie-color-paper)',
             fontFamily: 'var(--ollie-font-sans)',
           }}
         />
@@ -413,7 +413,7 @@ function AgeField({
 
   return (
     <Row gap={10} align="baseline" justify="center">
-      <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
+      <Text scale="caption" color="var(--ollie-color-ink-faint)" style={SMCP_STYLE}>
         {age != null
           ? `age ${age} · target ${waterTargetForAge(age)} glasses`
           : 'target 8 glasses — set your age to tune it'}
@@ -441,7 +441,7 @@ function AgeTextButton({
         border: 'none',
         padding: '2px 4px',
         cursor: 'pointer',
-        color: strong ? colors.ink : colors.inkFaint,
+        color: strong ? 'var(--ollie-color-ink)' : 'var(--ollie-color-ink-faint)',
         fontVariantCaps: 'all-small-caps',
         letterSpacing: '0.08em',
         fontSize: 12,
@@ -493,8 +493,8 @@ function Glass({
               y={waterTop}
               width={22}
               height={cavityBottom - waterTop + 6}
-              fill={colors.sky}
               opacity={0.88}
+              style={{ fill: 'var(--ollie-color-sky)' }}
             />
             <line
               x1={6}
@@ -510,8 +510,8 @@ function Glass({
         <path
           d="M7 4 L27 4 L25.1 35 Q24.6 42 17 42 Q9.4 42 8.9 35 Z"
           fill="none"
-          stroke={colors.ink}
           strokeWidth={1.6}
+          style={{ stroke: 'var(--ollie-color-ink)' }}
         />
       </svg>
     );
@@ -538,8 +538,8 @@ function Glass({
             y={waterTop}
             width={74}
             height={cavityBottom - waterTop + 18}
-            fill={colors.sky}
             opacity={0.88}
+            style={{ fill: 'var(--ollie-color-sky)' }}
           />
           <line
             x1={22}
@@ -557,17 +557,17 @@ function Glass({
           y1={80}
           x2={86}
           y2={80}
-          stroke={colors.hairline}
           strokeWidth={1.6}
           strokeDasharray="3 4"
+          style={{ stroke: 'var(--ollie-color-hairline)' }}
         />
       )}
       <path
         d="M24 14 L94 14 L87.5 122 Q86 145 59 145 Q32 145 30.5 122 Z"
         fill="none"
-        stroke={colors.ink}
         strokeWidth={2.4}
         strokeLinejoin="round"
+        style={{ stroke: 'var(--ollie-color-ink)' }}
       />
     </svg>
   );
@@ -587,7 +587,7 @@ function ListSection({
   if (items.length === 0) return null;
   return (
     <Stack gap={16}>
-      <Text scale="lede" color={colors.ink}>
+      <Text scale="lede" color="var(--ollie-color-ink)">
         {label}
       </Text>
       <Stack gap={4}>{items.map((e) => children(e))}</Stack>
@@ -654,7 +654,7 @@ function CadenceHint({
   return (
     <Text
       scale="caption"
-      color={colors.inkFaint}
+      color="var(--ollie-color-ink-faint)"
       style={{ fontVariantCaps: 'all-small-caps', letterSpacing: '0.06em' }}
     >
       {`last ${subject} ${sinceLabel} ago · usually every ${everyLabel}`}
@@ -734,7 +734,7 @@ function RemoveButton({ onClick }: { onClick: () => void }): JSX.Element {
         background: 'none',
         border: 'none',
         padding: '4px 8px',
-        color: colors.inkFaint,
+        color: 'var(--ollie-color-ink-faint)',
         cursor: 'pointer',
         fontVariantCaps: 'all-small-caps',
         letterSpacing: '0.08em',

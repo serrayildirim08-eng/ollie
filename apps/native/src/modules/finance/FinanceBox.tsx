@@ -32,7 +32,7 @@ import {
 } from '@ollie/cadence';
 import { Stack, Row } from '../../layout';
 import { Text } from '../../ui';
-import { colors, fonts } from '../../theme/tokens';
+import { fonts } from '../../theme/tokens';
 import { WhenCaption } from '../../lib/WhenCaption';
 import { PatternCards } from '../../patterns/PatternCards';
 import { migrateFinance } from './migrate';
@@ -76,14 +76,14 @@ const HERO_LEAD_STYLE: CSSProperties = {
   fontSize: 13,
   fontWeight: 500,
   letterSpacing: '0.02em',
-  color: colors.inkFaint,
+  color: 'var(--ollie-color-ink-faint)',
 };
 
 const HERO_CAPTION_STYLE: CSSProperties = {
   fontFamily: fonts.sans,
   fontSize: 13,
   fontWeight: 500,
-  color: colors.inkFaint,
+  color: 'var(--ollie-color-ink-faint)',
   textAlign: 'center',
 };
 
@@ -92,7 +92,7 @@ const AREA_KEY_STYLE: CSSProperties = {
   fontSize: 13,
   fontWeight: 600,
   letterSpacing: '0.01em',
-  color: colors.inkFaint,
+  color: 'var(--ollie-color-ink-faint)',
   flexShrink: 0,
 };
 
@@ -101,13 +101,13 @@ const AREA_VALUE_STYLE: CSSProperties = {
   fontSize: 14,
   fontWeight: 500,
   letterSpacing: '-0.01em',
-  color: colors.ink,
+  color: 'var(--ollie-color-ink)',
   flex: 1,
   minWidth: 0,
 };
 
 const AREA_DOT_STYLE: CSSProperties = {
-  color: colors.hairline,
+  color: 'var(--ollie-color-hairline)',
   margin: '0 8px',
   fontSize: 13,
 };
@@ -116,14 +116,14 @@ const DETAIL_K_STYLE: CSSProperties = {
   fontFamily: fonts.sans,
   fontSize: 13,
   fontWeight: 500,
-  color: colors.inkFaint,
+  color: 'var(--ollie-color-ink-faint)',
 };
 
 const DETAIL_V_STYLE: CSSProperties = {
   fontFamily: fonts.mono,
   fontSize: 13,
   fontWeight: 500,
-  color: colors.ink,
+  color: 'var(--ollie-color-ink)',
   fontVariantNumeric: 'tabular-nums',
 };
 
@@ -308,14 +308,14 @@ export function FinanceBox(): JSX.Element {
   return (
     <Stack gap={48}>
       <Stack gap={8}>
-        <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
+        <Text scale="caption" color="var(--ollie-color-ink-faint)" style={SMCP_STYLE}>
           box
         </Text>
         <Text scale="display">Finance</Text>
       </Stack>
 
       {!ready ? (
-        <Text scale="caption" color={colors.inkFaint}>
+        <Text scale="caption" color="var(--ollie-color-ink-faint)">
           loading…
         </Text>
       ) : (
@@ -488,7 +488,7 @@ function LogSpendForm({
           border: 'none',
           padding: '4px 2px',
           cursor: 'pointer',
-          color: colors.ink,
+          color: 'var(--ollie-color-ink)',
           fontFamily: fonts.sans,
           fontSize: 12,
           fontWeight: 600,
@@ -542,9 +542,9 @@ function LogSpendForm({
                 aria-pressed={active}
                 onClick={() => setCategory(active ? null : c)}
                 style={{
-                  background: active ? colors.ink : 'transparent',
-                  color: active ? colors.cream : colors.inkFaint,
-                  border: `1px solid ${active ? colors.ink : colors.hairline}`,
+                  background: active ? 'var(--ollie-color-ink)' : 'transparent',
+                  color: active ? 'var(--ollie-color-cream)' : 'var(--ollie-color-ink-faint)',
+                  border: `1px solid ${active ? 'var(--ollie-color-ink)' : 'var(--ollie-color-hairline)'}`,
                   borderRadius: 999,
                   padding: '6px 12px',
                   cursor: 'pointer',
@@ -571,9 +571,9 @@ function LogSpendForm({
           onClick={submit}
           disabled={!canLog}
           style={{
-            background: canLog ? colors.ink : 'transparent',
-            color: canLog ? colors.cream : colors.inkGhost,
-            border: `1px solid ${canLog ? colors.ink : colors.hairline}`,
+            background: canLog ? 'var(--ollie-color-ink)' : 'transparent',
+            color: canLog ? 'var(--ollie-color-cream)' : 'var(--ollie-color-ink-ghost)',
+            border: `1px solid ${canLog ? 'var(--ollie-color-ink)' : 'var(--ollie-color-hairline)'}`,
             borderRadius: 8,
             padding: '8px 18px',
             cursor: canLog ? 'pointer' : 'default',
@@ -598,7 +598,7 @@ function LogSpendForm({
             border: 'none',
             padding: '8px 8px',
             cursor: 'pointer',
-            color: colors.inkFaint,
+            color: 'var(--ollie-color-ink-faint)',
             fontFamily: fonts.sans,
             fontSize: 12,
             fontWeight: 500,
@@ -619,7 +619,7 @@ const FIELD_LABEL_STYLE: CSSProperties = {
   fontSize: 11,
   fontWeight: 600,
   letterSpacing: '0.08em',
-  color: colors.inkFaint,
+  color: 'var(--ollie-color-ink-faint)',
   fontVariantCaps: 'all-small-caps',
 };
 
@@ -628,12 +628,12 @@ const FIELD_INPUT_STYLE: CSSProperties = {
   width: '100%',
   background: 'transparent',
   border: 'none',
-  borderBottom: `1px solid ${colors.hairline}`,
+  borderBottom: `1px solid var(--ollie-color-hairline)`,
   padding: '6px 2px',
   fontFamily: fonts.sans,
   fontSize: 15,
   fontWeight: 500,
-  color: colors.ink,
+  color: 'var(--ollie-color-ink)',
   outline: 'none',
 };
 
@@ -673,7 +673,7 @@ function MonthHero({
             fontFamily: fonts.serif,
             fontSize: 28,
             fontWeight: 400,
-            color: colors.ink,
+            color: 'var(--ollie-color-ink)',
             letterSpacing: '-0.018em',
             textAlign: 'center',
             lineHeight: 1.35,
@@ -708,7 +708,7 @@ function MonthHero({
           fontFamily: fonts.serif,
           fontSize: 72,
           fontWeight: 400,
-          color: isUnaccounted ? UMBER : colors.ink,
+          color: isUnaccounted ? UMBER : 'var(--ollie-color-ink)',
           letterSpacing: '-0.04em',
           lineHeight: 1,
         }}
@@ -718,7 +718,7 @@ function MonthHero({
             fontFamily: fonts.mono,
             fontWeight: 400,
             fontSize: 44,
-            color: isUnaccounted ? UMBER : colors.inkFaint,
+            color: isUnaccounted ? UMBER : 'var(--ollie-color-ink-faint)',
             marginRight: 2,
           }}
         >
@@ -738,7 +738,7 @@ function MonthHero({
             fontFamily: fonts.sans,
             fontSize: 11,
             fontWeight: 500,
-            color: colors.inkFaint,
+            color: 'var(--ollie-color-ink-faint)',
             letterSpacing: '0.06em',
             fontVariantCaps: 'all-small-caps',
             textAlign: 'center',
@@ -755,7 +755,7 @@ function MonthHero({
           width: 188,
           height: 4,
           borderRadius: 3,
-          background: colors.hairlineSoft,
+          background: 'var(--ollie-color-hairline-soft)',
         }}
         aria-hidden
       />
@@ -779,7 +779,7 @@ function MonthHero({
                   fontFamily: fonts.mono,
                   fontSize: 13,
                   fontWeight: 500,
-                  color: muted ? UMBER : colors.inkFaint,
+                  color: muted ? UMBER : 'var(--ollie-color-ink-faint)',
                   fontVariantNumeric: 'tabular-nums',
                 }}
               >
@@ -818,7 +818,7 @@ function BurnBreakdown({ row }: { row: MonthlyBurn }): JSX.Element | null {
         fontFamily: fonts.mono,
         fontSize: 12,
         fontWeight: 500,
-        color: muted ? UMBER : colors.inkFaint,
+        color: muted ? UMBER : 'var(--ollie-color-ink-faint)',
         fontVariantNumeric: 'tabular-nums',
         letterSpacing: '0.01em',
         textAlign: 'center',
@@ -860,8 +860,8 @@ function AreaCard({
     <div
       style={{
         boxSizing: 'border-box',
-        borderTop: first ? `1px solid ${colors.hairline}` : undefined,
-        borderBottom: `1px solid ${colors.hairline}`,
+        borderTop: first ? `1px solid var(--ollie-color-hairline)` : undefined,
+        borderBottom: `1px solid var(--ollie-color-hairline)`,
       }}
     >
       <button
@@ -893,7 +893,7 @@ function AreaCard({
             marginLeft: 8,
             transform: open ? 'rotate(180deg)' : undefined,
             transition: 'transform 180ms ease-out',
-            color: colors.inkFaint,
+            color: 'var(--ollie-color-ink-faint)',
             fontSize: 12,
             lineHeight: 1,
           }}
@@ -926,7 +926,7 @@ function EmptyLine({ text }: { text: string }): JSX.Element {
         fontFamily: fonts.sans,
         fontSize: 13,
         fontWeight: 500,
-        color: colors.inkFaint,
+        color: 'var(--ollie-color-ink-faint)',
         letterSpacing: '0.01em',
       }}
     >
@@ -951,11 +951,11 @@ function BillDetailRow({
         <span style={DETAIL_K_STYLE}>
           {item.merchant}
           {item.cadence ? (
-            <span style={{ color: colors.inkGhost, marginLeft: 6 }}>· {item.cadence}</span>
+            <span style={{ color: 'var(--ollie-color-ink-ghost)', marginLeft: 6 }}>· {item.cadence}</span>
           ) : null}
         </span>
         <Row gap={8} align="baseline">
-          <span style={{ ...DETAIL_V_STYLE, color: muted ? UMBER : colors.ink }}>
+          <span style={{ ...DETAIL_V_STYLE, color: muted ? UMBER : 'var(--ollie-color-ink)' }}>
             {formatAmount(item.amount, item.currency)}
           </span>
           <RemoveButton onClick={onRemove} />
@@ -1000,11 +1000,11 @@ function TxDetailRow({
         <span style={DETAIL_K_STYLE}>
           {item.merchant ?? '—'}
           {item.category ? (
-            <span style={{ color: colors.inkGhost, marginLeft: 6 }}>· {item.category}</span>
+            <span style={{ color: 'var(--ollie-color-ink-ghost)', marginLeft: 6 }}>· {item.category}</span>
           ) : null}
         </span>
         <Row gap={8} align="baseline">
-          <span style={{ ...DETAIL_V_STYLE, color: muted ? UMBER : colors.ink }}>
+          <span style={{ ...DETAIL_V_STYLE, color: muted ? UMBER : 'var(--ollie-color-ink)' }}>
             {formatAmount(item.amount, item.currency)}
           </span>
           <RemoveButton onClick={onRemove} />
@@ -1044,7 +1044,7 @@ function CadenceHint({
       style={{
         fontFamily: fonts.sans,
         fontSize: 11,
-        color: colors.inkFaint,
+        color: 'var(--ollie-color-ink-faint)',
         fontWeight: 500,
         letterSpacing: '0.06em',
         fontVariantCaps: 'all-small-caps',
@@ -1070,7 +1070,7 @@ function RemoveButton({ onClick }: { onClick: () => void }): JSX.Element {
         background: 'none',
         border: 'none',
         padding: '4px 8px',
-        color: colors.inkFaint,
+        color: 'var(--ollie-color-ink-faint)',
         cursor: 'pointer',
         fontFamily: fonts.sans,
         fontVariantCaps: 'all-small-caps',
@@ -1110,7 +1110,7 @@ function RecurringList({
           fontFamily: fonts.sans,
           fontSize: 11,
           fontWeight: 600,
-          color: colors.inkFaint,
+          color: 'var(--ollie-color-ink-faint)',
           letterSpacing: '0.08em',
           fontVariantCaps: 'all-small-caps',
         }}
@@ -1142,7 +1142,7 @@ function RecurringRow({
     <Row gap={12} align="baseline" justify="space-between">
       <span style={DETAIL_K_STYLE}>
         {merchant}
-        <span style={{ color: colors.inkGhost, marginLeft: 6 }}>· {cadence}</span>
+        <span style={{ color: 'var(--ollie-color-ink-ghost)', marginLeft: 6 }}>· {cadence}</span>
       </span>
       <Row gap={8} align="baseline">
         <span style={DETAIL_V_STYLE}>
@@ -1152,7 +1152,7 @@ function RecurringRow({
           style={{
             fontFamily: fonts.sans,
             fontSize: 11,
-            color: colors.inkFaint,
+            color: 'var(--ollie-color-ink-faint)',
             fontWeight: 500,
             letterSpacing: '0.06em',
             fontVariantCaps: 'all-small-caps',
@@ -1169,7 +1169,7 @@ function RecurringRow({
             background: 'none',
             border: 'none',
             padding: '4px 8px',
-            color: colors.ink,
+            color: 'var(--ollie-color-ink)',
             cursor: 'pointer',
             fontFamily: fonts.sans,
             fontVariantCaps: 'all-small-caps',

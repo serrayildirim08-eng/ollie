@@ -31,7 +31,6 @@ import {
 } from '@ollie/cadence';
 import { Stack, Row } from '../../layout';
 import { Text, Input, Button } from '../../ui';
-import { colors } from '../../theme/tokens';
 import { WhenCaption } from '../../lib/WhenCaption';
 import { PatternCards } from '../../patterns/PatternCards';
 import { migrateWork } from './migrate';
@@ -220,7 +219,7 @@ export function WorkBox(): JSX.Element {
   return (
     <Stack gap={48}>
       <Stack gap={8}>
-        <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
+        <Text scale="caption" color="var(--ollie-color-ink-faint)" style={SMCP_STYLE}>
           box
         </Text>
         <Text scale="display">Work</Text>
@@ -233,8 +232,8 @@ export function WorkBox(): JSX.Element {
       <div
         style={{
           boxSizing: 'border-box',
-          borderTop: `1px solid ${colors.hairline}`,
-          borderBottom: `1px solid ${colors.hairline}`,
+          borderTop: '1px solid var(--ollie-color-hairline)',
+          borderBottom: '1px solid var(--ollie-color-hairline)',
           padding: '24px 2px 26px',
         }}
       >
@@ -252,7 +251,7 @@ export function WorkBox(): JSX.Element {
             <WorkStackGlyph />
           </span>
           <Stack gap={4} style={{ flex: 1, minWidth: 0 }}>
-            <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
+            <Text scale="caption" color="var(--ollie-color-ink-faint)" style={SMCP_STYLE}>
               {glance.kicker}
             </Text>
             <Text scale="body">
@@ -274,7 +273,7 @@ export function WorkBox(): JSX.Element {
             style={{
               marginTop: 32,
               paddingTop: 28,
-              borderTop: `1px solid ${colors.hairlineSoft}`,
+              borderTop: '1px solid var(--ollie-color-hairline-soft)',
             }}
           >
             <Stack gap={28}>
@@ -296,15 +295,15 @@ export function WorkBox(): JSX.Element {
             style={{
               marginTop: 32,
               paddingTop: 28,
-              borderTop: `1px solid ${colors.hairlineSoft}`,
+              borderTop: '1px solid var(--ollie-color-hairline-soft)',
             }}
           >
           {!ready ? (
-            <Text scale="caption" color={colors.inkFaint}>
+            <Text scale="caption" color="var(--ollie-color-ink-faint)">
               loading…
             </Text>
           ) : isEmpty ? (
-            <Text scale="body" color={colors.inkFaint}>
+            <Text scale="body" color="var(--ollie-color-ink-faint)">
               nothing yet — try dumping &lsquo;pomodoro done&rsquo; or
               &lsquo;send invoice&rsquo;
             </Text>
@@ -375,12 +374,12 @@ export function WorkBox(): JSX.Element {
             width: 6,
             height: 6,
             borderRadius: '50%',
-            background: colors.sage,
+            background: 'var(--ollie-color-sage)',
             flexShrink: 0,
             marginTop: 8,
           }}
         />
-        <Text scale="body" color={colors.inkSoft} style={{ lineHeight: 1.5 }}>
+        <Text scale="body" color="var(--ollie-color-ink-soft)" style={{ lineHeight: 1.5 }}>
           tasks, deadlines, and focus aren&rsquo;t logged by hand — when you
           throw something at ollie, the work box notices.
         </Text>
@@ -395,7 +394,7 @@ function TodaySection({ snapshot }: { snapshot: TodaySnapshot }): JSX.Element {
   const { focusMinutes, lastDone } = snapshot;
   return (
     <Stack gap={12}>
-      <Text scale="lede" color={colors.ink}>
+      <Text scale="lede" color="var(--ollie-color-ink)">
         today
       </Text>
       <Stack gap={4}>
@@ -404,7 +403,7 @@ function TodaySection({ snapshot }: { snapshot: TodaySnapshot }): JSX.Element {
             ? `${focusMinutes} min focused`
             : 'no focus logged yet'}
         </Text>
-        <Text scale="caption" color={colors.inkFaint}>
+        <Text scale="caption" color="var(--ollie-color-ink-faint)">
           {lastDone ? `last done · ${lastDone.text}` : 'no task closed yet'}
         </Text>
       </Stack>
@@ -425,11 +424,11 @@ function ListSection<T>({
 }): JSX.Element {
   return (
     <Stack gap={12}>
-      <Text scale="lede" color={colors.ink}>
+      <Text scale="lede" color="var(--ollie-color-ink)">
         {label}
       </Text>
       {items.length === 0 ? (
-        <Text scale="body" color={colors.inkFaint}>
+        <Text scale="body" color="var(--ollie-color-ink-faint)">
           {empty}
         </Text>
       ) : (
@@ -459,7 +458,7 @@ function TaskRow({
           <Checkbox checked={item.done} onClick={onToggle} />
           <Text
             scale="body"
-            color={item.done ? colors.inkFaint : undefined}
+            color={item.done ? 'var(--ollie-color-ink-faint)' : undefined}
             style={item.done ? { textDecoration: 'line-through' } : undefined}
           >
             {item.text}
@@ -467,7 +466,7 @@ function TaskRow({
               <Text
                 as="span"
                 scale="caption"
-                color={colors.inkFaint}
+                color="var(--ollie-color-ink-faint)"
                 style={{ marginLeft: 8 }}
               >
                 · {item.project}
@@ -507,7 +506,7 @@ function DeadlineRow({
           <Checkbox checked={item.done} onClick={onToggle} />
           <Text
             scale="body"
-            color={item.done ? colors.inkFaint : undefined}
+            color={item.done ? 'var(--ollie-color-ink-faint)' : undefined}
             style={item.done ? { textDecoration: 'line-through' } : undefined}
           >
             {item.text}
@@ -515,7 +514,7 @@ function DeadlineRow({
               <Text
                 as="span"
                 scale="caption"
-                color={colors.inkFaint}
+                color="var(--ollie-color-ink-faint)"
                 style={{ marginLeft: 8 }}
               >
                 · due {item.dueDate}
@@ -563,7 +562,7 @@ function CadenceHint({
   return (
     <Text
       scale="caption"
-      color={colors.inkFaint}
+      color="var(--ollie-color-ink-faint)"
       style={{
         fontVariantCaps: 'all-small-caps',
         letterSpacing: '0.06em',
@@ -613,8 +612,8 @@ function Checkbox({
       aria-pressed={checked}
       style={{
         appearance: 'none',
-        background: checked ? colors.sageSoft : 'transparent',
-        border: `1px solid ${colors.sageSoft}`,
+        background: checked ? 'var(--ollie-color-sage-soft)' : 'transparent',
+        border: '1px solid var(--ollie-color-sage-soft)',
         width: 14,
         height: 14,
         padding: 0,
@@ -635,7 +634,7 @@ function RemoveButton({ onClick }: { onClick: () => void }): JSX.Element {
         background: 'none',
         border: 'none',
         padding: '4px 8px',
-        color: colors.inkFaint,
+        color: 'var(--ollie-color-ink-faint)',
         cursor: 'pointer',
         fontVariantCaps: 'all-small-caps',
         letterSpacing: '0.08em',
@@ -681,7 +680,7 @@ function ScheduleBlockSection({
 
   return (
     <Stack gap={12}>
-      <Text scale="lede" color={colors.ink}>
+      <Text scale="lede" color="var(--ollie-color-ink)">
         deep-work blocks
       </Text>
       <Stack gap={10}>
@@ -703,9 +702,9 @@ function ScheduleBlockSection({
               minWidth: 0,
               background: 'transparent',
               border: 'none',
-              borderBottom: `1px solid ${colors.hairline}`,
+              borderBottom: '1px solid var(--ollie-color-hairline)',
               padding: '6px 2px',
-              color: colors.ink,
+              color: 'var(--ollie-color-ink)',
               fontSize: 14,
               fontFamily: 'inherit',
             }}
@@ -721,7 +720,7 @@ function ScheduleBlockSection({
         </Row>
       </Stack>
       {upcoming.length === 0 ? (
-        <Text scale="caption" color={colors.inkFaint}>
+        <Text scale="caption" color="var(--ollie-color-ink-faint)">
           none booked — ollie will nudge you before one starts
         </Text>
       ) : (
@@ -733,7 +732,7 @@ function ScheduleBlockSection({
                 <Text
                   as="span"
                   scale="caption"
-                  color={colors.inkFaint}
+                  color="var(--ollie-color-ink-faint)"
                   style={{ marginLeft: 8 }}
                 >
                   · {formatBlockWhen(b.startTs)}
@@ -783,7 +782,7 @@ function HandoffSection({
 
   return (
     <Stack gap={12}>
-      <Text scale="lede" color={colors.ink}>
+      <Text scale="lede" color="var(--ollie-color-ink)">
         hand-offs
       </Text>
       <Stack gap={10}>
@@ -815,7 +814,7 @@ function HandoffSection({
         </Row>
       </Stack>
       {notes.length === 0 ? (
-        <Text scale="caption" color={colors.inkFaint}>
+        <Text scale="caption" color="var(--ollie-color-ink-faint)">
           nothing waiting on anyone
         </Text>
       ) : (
@@ -831,7 +830,7 @@ function HandoffSection({
                       <Text
                         as="span"
                         scale="caption"
-                        color={colors.inkFaint}
+                        color="var(--ollie-color-ink-faint)"
                         style={{ marginLeft: 8 }}
                       >
                         · {n.project}
@@ -853,7 +852,7 @@ const GHOST_LINK_STYLE: CSSProperties = {
   background: 'none',
   border: 'none',
   padding: '4px 8px',
-  color: colors.inkFaint,
+  color: 'var(--ollie-color-ink-faint)',
   cursor: 'pointer',
   fontVariantCaps: 'all-small-caps',
   letterSpacing: '0.08em',
@@ -889,27 +888,26 @@ function formatBlockWhen(ts: number): string {
  * paper fill on the front tab). Decorative; sits in the card gutter.
  */
 function WorkStackGlyph(): JSX.Element {
-  const stroke = colors.sageSoft;
-  const fill = colors.paper;
+  const stroke = 'var(--ollie-color-sage-soft)';
+  const fill = 'var(--ollie-color-paper)';
   return (
     <svg width={50} height={46} viewBox="0 0 50 46" aria-hidden>
       <path
         fill="none"
-        stroke={stroke}
+        style={{ stroke }}
         strokeWidth={1.7}
         strokeLinejoin="round"
         d="M12 13h14l3 3h13v22a2 2 0 0 1-2 2H12a2 2 0 0 1-2-2V15a2 2 0 0 1 2-2z"
       />
       <path
         fill="none"
-        stroke={stroke}
+        style={{ stroke }}
         strokeWidth={1.7}
         strokeLinejoin="round"
         d="M9 19h14l3 3h13v22a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2V21a2 2 0 0 1 2-2z"
       />
       <path
-        fill={fill}
-        stroke={stroke}
+        style={{ fill, stroke }}
         strokeWidth={1.7}
         strokeLinejoin="round"
         d="M6 25h14l3 3h13v15a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V27a2 2 0 0 1 2-2z"
