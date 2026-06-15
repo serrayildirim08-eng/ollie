@@ -525,7 +525,7 @@ function NotebookList({
 }): JSX.Element {
   return (
     <Stack gap={4}>
-      <SectionLabel>your meds</SectionLabel>
+      <SectionLabel lede>your meds</SectionLabel>
 
       {meds.length === 0 ? (
         // cold — one quiet placeholder line in the notebook grammar
@@ -887,7 +887,7 @@ function ListSection<T>({
 }): JSX.Element {
   return (
     <Stack gap={4}>
-      <SectionLabel accent={accent}>{label}</SectionLabel>
+      <SectionLabel lede accent={accent}>{label}</SectionLabel>
       {items.length === 0 ? (
         <div
           style={{
@@ -988,12 +988,22 @@ function EventRow({
   );
 }
 
+/**
+ * SectionLabel — shared between page-section titles and card-internal form
+ * labels. The `lede` variant renders the page-section title in the UI-altitude
+ * section-header treatment (serif lede · 22 · ink) so it anchors a list of
+ * rows the way Goals/Sleep do; the default smcp eyebrow stays for the
+ * card-internal form labels (kind / daily schedule), which are NOT page
+ * sections. An accent dot still rides ahead of either variant.
+ */
 function SectionLabel({
   children,
   accent,
+  lede = false,
 }: {
   children: React.ReactNode;
   accent?: string;
+  lede?: boolean;
 }): JSX.Element {
   return (
     <div
@@ -1016,17 +1026,23 @@ function SectionLabel({
           }}
         />
       )}
-      <span
-        style={{
-          fontSize: 11,
-          color: colors.inkFaint,
-          fontWeight: fontWeights.bold,
-          letterSpacing: '0.08em',
-          textTransform: 'uppercase',
-        }}
-      >
-        {children}
-      </span>
+      {lede ? (
+        <Text scale="lede" color={colors.ink}>
+          {children}
+        </Text>
+      ) : (
+        <span
+          style={{
+            fontSize: 11,
+            color: colors.inkFaint,
+            fontWeight: fontWeights.bold,
+            letterSpacing: '0.08em',
+            textTransform: 'uppercase',
+          }}
+        >
+          {children}
+        </span>
+      )}
     </div>
   );
 }
