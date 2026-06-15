@@ -62,14 +62,16 @@ Tip küçülmüyordu, alt menüde ikon yoktu, parmak hedefi < 44px'di.
 Dosya: `theme/tokens.ts`, `navigation/TabBar.tsx` — DONE 2026-06-15
 Not: typecheck + 404 test ile doğrulandı; canlı iPhone simülatör görsel kontrolü Serra'da.
 
-## Faz 5 — Desktop (Mac) — ⬜
+## Faz 5 — Desktop (Mac) — ✅
 220 rail + 720 ortalı kolon → geniş ekranda iki yan okyanus boşluk.
 
-- [ ] 1280px+ ekranda okyanus boşluk yok
-- [ ] Sidebar'da gerçek "Ollie" masthead (soluk caption değil)
-- [ ] Dar pencerede bozulmuyor (responsive korunur)
+- [x] ≥1280px'de kolon ortada yüzmüyor: sol-çapa + editorial girinti (`clamp(40px,7vw,140px)`), sağ kenar bilinçli boşluk
+- [x] Sidebar'da gerçek serif "Ollie" masthead (28px ink, soluk caption değil)
+- [x] <1280px (laptop/mobil) ortalı kalıyor — responsive korundu
+- [x] Reading kolonu 760'a sabit (ölçü bozulmadan)
 
-Dosya: `navigation/Layout.tsx`, `navigation/TabBar.tsx`
+Dosya: `navigation/Layout.tsx`, `navigation/TabBar.tsx` — DONE 2026-06-15
+Not: tek başına büyük yeniden-yerleşim; canlı geniş-ekran görsel kontrolü Serra'da.
 
 ## Faz 6 — Hijyen + dark mode — ⬜
 Ölü `App.tsx`; inline `colors.*` dark'ta dönmüyor; crisis rengi hardcode.
