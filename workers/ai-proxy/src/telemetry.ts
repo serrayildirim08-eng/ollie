@@ -218,6 +218,12 @@ export async function handleIngestEvent(
   if (!body.row || typeof body.row !== 'object' || Array.isArray(body.row)) {
     return json({ error: 'invalid_row' }, 400);
   }
+  // Size/shape bounds (audit #31). A telemetry row is small + flat; reject an
+  // oversized object before it reaches Supabase. 64 keys / 16 KiB is generous.
+  const rowKeys = Object.keys(body.row);
+  if (rowKeys.length > 64 || JSON.stringify(body.row).length > 16 * 1024) {
+    return json({ error: 'row_too_large' }, 413);
+  }
 
   // IDOR fix: force the row's identity to the verified user. These five
   // telemetry tables are anonymized + keyed by user_hash, so we overwrite any

@@ -116,6 +116,10 @@ export interface Env
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 const CACHE_TTL_SEC = 300;          // 5 min
 const RATE_MAX = 10;                // req/min — default
+/** Max request body for the /brain-dump + /v1/messages proxy (audit #46).
+ *  1 MiB is well above any real prompt (incl. cached context) but blocks an
+ *  oversized payload from being read into memory + forwarded upstream. */
+const MAX_PROXY_BODY_BYTES = 1024 * 1024;
 const PURCHASE_RATE_MAX = 100;      // req/min — purchase ingestion can burst at checkout
 const RATE_WINDOW_SEC = 60;
 
@@ -407,9 +411,19 @@ export default {
       return withCors(json({ error: 'rate_limited' }, 429));
     }
 
+    // Body size guard (audit #46). Cheap Content-Length pre-check, then a hard
+    // cap on the actual bytes read (Content-Length can lie / be absent).
+    const declaredLen = Number(req.headers.get('content-length') ?? '0');
+    if (declaredLen > MAX_PROXY_BODY_BYTES) {
+      return withCors(json({ error: 'body_too_large' }, 413));
+    }
+
     // Read body once for hashing + forwarding.
     const bodyText = await req.text();
     if (!bodyText) return withCors(json({ error: 'empty_body' }, 400));
+    if (bodyText.length > MAX_PROXY_BODY_BYTES) {
+      return withCors(json({ error: 'body_too_large' }, 413));
+    }
 
     const cacheKey = `cache:ai:${await sha256Hex(bodyText)}`;
     const cached = await env.CACHE_KV.get(cacheKey);
