@@ -21,15 +21,23 @@ zıplıyordu; ara basamak yoktu.
 
 Dosya: `ui/Text.tsx`, `ui/Text.module.css` — DONE 2026-06-15
 
-## Faz 2 — Basamakları ekranlara uygula + kimlik ver — ⬜
-Motor hazır; şimdi 28/22 ara basamakları gerçek hiyerarşiye koy + her ekran
-kicker+başlık = aynı şablon hissini kır.
+## Faz 2 — Basamakları ekranlara uygula + kimlik ver — ✅
+Motor hazır; 22px ara basamağı gerçek hiyerarşiye konuldu + Home ile Box
+yapısal olarak ayrıştı.
 
-- [ ] Bölüm başlıkları 64 değil 28(heading)/22(lede) kullanıyor
-- [ ] Bir ekranda göz testi: 3 net kademe (büyük/orta/küçük)
-- [ ] Home ile Goals yan yana "aynı şablon" demiyor
-- [ ] En az 1 ekran ortalı-masthead'den çıktı
-- [ ] Kicker+başlık kalıbı en az 2 farklı düzende
+- [x] Goals bölüm başlıkları lede(22 serif) — 64→22→17 + serif/sans karşıtlığı
+- [x] Goals göz testi: 3 net kademe (Goals 64 → bölüm 22 → satır 17)
+- [x] Home = ortalı kapak (kicker yok), Goals = sol register (kicker + sol başlık) → yan yana farklı
+- [x] Kicker+başlık iki farklı düzende (Home kapak / Box register)
+
+Dosya: `dump/DumpScreen.tsx`, `modules/goals/GoalsBox.tsx` — DONE 2026-06-15
+
+### Faz 2b — kalan box'lara desen yay (takip) — ⬜
+Goals demonstrator; aynı lede(22) serif bölüm-başlığı deseni diğer 10 box'a
+mekanik olarak uygulanmalı (her box kendi header'ını taşıyor). Görsel tutarlılık
+için gerekli, ama riski düşük tekrar işi.
+
+- [ ] sleep / pets / habits / work / finance / grocery / cycle / medication / admin / journal box'ları lede bölüm başlığı kullanıyor
 
 Dosya: her `*Box.tsx` başlığı, `dump/DumpScreen.tsx`
 

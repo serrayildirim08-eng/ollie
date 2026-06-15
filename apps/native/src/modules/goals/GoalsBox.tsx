@@ -746,7 +746,10 @@ function ListSection<T>({
 }): JSX.Element {
   return (
     <Stack gap={16}>
-      <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
+      {/* Section heads use the mid-range rung (lede · 22 serif), not a tiny
+          smcp eyebrow — this is the anchor that was missing between the 64
+          page title and the 17 body rows. Serif-vs-sans carries the rest. */}
+      <Text scale="lede" color={colors.ink}>
         {label}
       </Text>
       {items.length === 0 ? (
