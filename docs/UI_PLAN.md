@@ -32,12 +32,17 @@ yapısal olarak ayrıştı.
 
 Dosya: `dump/DumpScreen.tsx`, `modules/goals/GoalsBox.tsx` — DONE 2026-06-15
 
-### Faz 2b — kalan box'lara desen yay (takip) — ⬜
-Goals demonstrator; aynı lede(22) serif bölüm-başlığı deseni diğer 10 box'a
-mekanik olarak uygulanmalı (her box kendi header'ını taşıyor). Görsel tutarlılık
-için gerekli, ama riski düşük tekrar işi.
+### Faz 2b — kalan box'lara desen yay — ✅ (8/12)
+Goals deseni (lede 22 serif bölüm başlığı, kicker dokunulmadan) diğer box'lara
+yayıldı. Sayfa kicker'ları her yerde korundu, 404 test yeşil, typecheck temiz.
 
-- [ ] sleep / pets / habits / work / finance / grocery / cycle / medication / admin / journal box'ları lede bölüm başlığı kullanıyor
+- [x] admin / body / cycle / habits / mood / pets / sleep / work → çevrildi
+- [ ] finance / grocery / medication / partner → ATLANDI (farklı yapı):
+      finance=AreaCard span'leri, grocery=mode-view, medication=SectionLabel
+      form-label'larla paylaşımlı, partner=pairing flow. Bunlar mekanik değil,
+      tasarım kararı gerektiriyor → ileride tek tek elden geçer.
+
+Dosya: 8× `*Box.tsx` — DONE 2026-06-16 · PR #40
 
 Dosya: her `*Box.tsx` başlığı, `dump/DumpScreen.tsx`
 

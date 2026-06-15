@@ -245,7 +245,7 @@ export function CycleBox(): JSX.Element {
 
           {/* bleeding intensity — a quiet chip row for today's flow. */}
           <Stack gap={16}>
-            <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
+            <Text scale="lede" color={colors.ink}>
               today&rsquo;s flow
             </Text>
             <BleedingChips selected={todayBleeding} onSelect={handleSetBleeding} />
@@ -615,7 +615,7 @@ function ListSection<T>({
 }): JSX.Element {
   return (
     <Stack gap={16}>
-      <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
+      <Text scale="lede" color={colors.ink}>
         {label}
       </Text>
       {items.length === 0 ? (

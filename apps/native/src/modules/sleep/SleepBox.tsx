@@ -551,7 +551,7 @@ function ListSection<T>({
 }): JSX.Element {
   return (
     <Stack gap={16}>
-      <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
+      <Text scale="lede" color={colors.ink}>
         {label}
       </Text>
       {items.length === 0 ? (
