@@ -70,7 +70,9 @@ function Sidebar({ items }: ListProps) {
                 to={item.path}
                 end={item.path === "/"}
                 style={({ isActive }) => ({
-                  display: "block",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: space[3],
                   padding: `${space[2]} 0`,
                   color: isActive ? colors.ink : colors.inkFaint,
                   fontWeight: isActive ? 500 : 400,
@@ -82,6 +84,7 @@ function Sidebar({ items }: ListProps) {
                   transition: "color 180ms ease-out",
                 })}
               >
+                <NavIcon name={item.icon} />
                 <Text>{item.label}</Text>
               </NavLink>
             </li>
