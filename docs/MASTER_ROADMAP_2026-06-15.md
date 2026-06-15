@@ -87,7 +87,7 @@
 - ⬜ Lokal branch temizliği (67 branch → ≤5). `Dev:` hepsi tag'le güvende.
 
 **Tamir (B) tarafı — güvenlik 🟠, hepsi "yabancı girmeden önce":**
-- 🔴 **`#5` KRİZ LEXİCON ONAYI (SADECE SERRA) — alpha-blocker.** Tehlike-kelime listesini onayla. `Dev:` `lexicon.{en,es,tr}.json` → `last_reviewed_by: @serra`.
+- ✅ **`#5` KRİZ SİSTEMİ — ÇÖZÜLDÜ (2026-06-15, `90349c1`).** Karar: kriz-hattı yönlendirmesi tamamen kaldırıldı; kriz cümlesinde tek yumuşak mesaj + hiçbir şey kaydedilmiyor. Artık alpha-blocker değil.
 - 🟠 `#43` STAGING_TEST_BEARER backdoor — Clerk'i atlayabilen yan kapı, prod kilidi yok. `Dev:` `env.ENVIRONMENT !== 'production'` guard.
 - 🟠 `#44` ham kullanıcı girdisi log'a yazılıyor (PII sızıntısı). `Dev:` dump.ts:390 log'u metriğe çevir.
 - 🟠 `#46/#47/#31` body/metin boyut limiti yok (DoS). `Dev:` request size + max length guard.
@@ -123,7 +123,7 @@ Bunlar alpha'yı bloke etmez — kullanıcı görmez, sadece kod sağlığı. Al
 
 ## 4. SENİ BEKLEYEN KARARLAR (sadece sen verebilirsin)
 
-1. **#5 kriz lexicon onayı** — tehlike-kelime listelerini oku + onayla. *Alpha-blocker.* (3 dil: EN/ES/TR)
+1. ~~**#5 kriz lexicon onayı**~~ ✅ ÇÖZÜLDÜ 2026-06-15 — kriz-hattı kaldırıldı, yumuşak mesaj + kayıt yok (`90349c1`).
 2. **Sprint 5/6** beyin işi — beta öncesi mi sonrası mı? "Sonra" = V1-dışı.
 3. **TestFlight** mı kablo mu — dağıtımı hangisiyle kapatıyoruz (Faz 0.5).
 
