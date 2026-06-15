@@ -13,9 +13,17 @@ settingGroups:
       PRODUCT_NAME: Ollie
       PRODUCT_BUNDLE_IDENTIFIER: app.ollie.ollie
       DEVELOPMENT_TEAM: LA5J9BSPKL
-      CODE_SIGN_STYLE: Manual
-      CODE_SIGN_IDENTITY: Apple Distribution
-      PROVISIONING_PROFILE_SPECIFIER: Ollie iOS App Store
+    configs:
+      # debug = automatic development signing so `tauri ios dev` can sideload
+      # directly onto a registered device (dev profile has get-task-allow=true).
+      debug:
+        CODE_SIGN_STYLE: Automatic
+      # release = manual App Store distribution signing for the TestFlight build
+      # (unchanged — keeps docs/RELEASE.md recipe intact).
+      release:
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: Apple Distribution
+        PROVISIONING_PROFILE_SPECIFIER: Ollie iOS App Store
 targetTemplates:
   app:
     type: application
