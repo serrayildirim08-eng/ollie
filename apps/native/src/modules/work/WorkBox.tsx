@@ -395,7 +395,7 @@ function TodaySection({ snapshot }: { snapshot: TodaySnapshot }): JSX.Element {
   const { focusMinutes, lastDone } = snapshot;
   return (
     <Stack gap={12}>
-      <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
+      <Text scale="lede" color={colors.ink}>
         today
       </Text>
       <Stack gap={4}>
@@ -425,7 +425,7 @@ function ListSection<T>({
 }): JSX.Element {
   return (
     <Stack gap={12}>
-      <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
+      <Text scale="lede" color={colors.ink}>
         {label}
       </Text>
       {items.length === 0 ? (
@@ -681,7 +681,7 @@ function ScheduleBlockSection({
 
   return (
     <Stack gap={12}>
-      <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
+      <Text scale="lede" color={colors.ink}>
         deep-work blocks
       </Text>
       <Stack gap={10}>
@@ -783,7 +783,7 @@ function HandoffSection({
 
   return (
     <Stack gap={12}>
-      <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
+      <Text scale="lede" color={colors.ink}>
         hand-offs
       </Text>
       <Stack gap={10}>

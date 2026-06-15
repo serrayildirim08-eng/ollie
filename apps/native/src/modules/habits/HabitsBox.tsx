@@ -336,7 +336,7 @@ function CueChooser({
 function Section({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <Stack gap={16}>
-      <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
+      <Text scale="lede" color={colors.ink}>
         {label}
       </Text>
       {children}

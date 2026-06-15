@@ -587,7 +587,7 @@ function ListSection({
   if (items.length === 0) return null;
   return (
     <Stack gap={16}>
-      <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
+      <Text scale="lede" color={colors.ink}>
         {label}
       </Text>
       <Stack gap={4}>{items.map((e) => children(e))}</Stack>
