@@ -10,23 +10,26 @@
 --   ALTER TABLE public.grocery_purchase_history ALTER COLUMN user_id TYPE uuid USING user_id::uuid;  -- only if all rows are valid uuids
 --   (re-create the uuid-typed policy + function from 20260522000001)
 
--- 1. Column type uuid -> text. USING ::text is a safe widening cast for any
+-- ORDER MATTERS: the policy + function reference user_id with a uuid-typed
+-- comparison, so they must be DROPPED before the ALTER (otherwise ALTER COLUMN
+-- TYPE fails on the dependency). Drop → alter → recreate.
+
+-- 1. Drop the dependents first.
+DROP POLICY IF EXISTS grocery_purchase_history_self_select ON public.grocery_purchase_history;
+DROP FUNCTION IF EXISTS grocery_replenishment_estimates(uuid);
+
+-- 2. Column type uuid -> text. USING ::text is a safe widening cast for any
 --    existing rows.
 ALTER TABLE public.grocery_purchase_history
   ALTER COLUMN user_id TYPE text USING user_id::text;
 
--- 2. Self-select policy compared auth.uid() (uuid) to user_id. With Clerk ids
---    this never matched anyway and is now a type mismatch; cast to text.
-DROP POLICY IF EXISTS grocery_purchase_history_self_select ON public.grocery_purchase_history;
+-- 3. Recreate the self-select policy (cast auth.uid() to text to match).
 CREATE POLICY grocery_purchase_history_self_select
   ON public.grocery_purchase_history
   FOR SELECT TO authenticated
   USING (auth.uid()::text = user_id);
 
--- 3. RPC parameter uuid -> text. A parameter-type change alters the function
---    signature, which CREATE OR REPLACE cannot do — must DROP the old one.
-DROP FUNCTION IF EXISTS grocery_replenishment_estimates(uuid);
-
+-- 4. Recreate the RPC with a text parameter.
 CREATE OR REPLACE FUNCTION grocery_replenishment_estimates(p_user text)
 RETURNS TABLE (
   canonical             text,
