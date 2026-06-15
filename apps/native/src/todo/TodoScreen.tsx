@@ -31,7 +31,7 @@ import {
 } from 'react';
 import { Row, Stack } from '../layout';
 import { Text } from '../ui';
-import { colors, durations, easings } from '../theme/tokens';
+import { durations, easings } from '../theme/tokens';
 import {
   migrateAdmin,
   recurringDecisions as adminDecisionsRepo,
@@ -264,21 +264,21 @@ export function TodoScreen(): JSX.Element {
   return (
     <Stack gap={48}>
       <Stack gap={12}>
-        <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
+        <Text scale="caption" color="var(--ollie-color-ink-faint)" style={SMCP_STYLE}>
           to-do
         </Text>
         <Text scale="display">Today</Text>
-        <Text scale="body" color={colors.inkSoft} style={{ maxWidth: 540 }}>
+        <Text scale="body" color="var(--ollie-color-ink-soft)" style={{ maxWidth: 540 }}>
           what's on you today.
         </Text>
       </Stack>
 
       {!ready ? (
-        <Text scale="caption" color={colors.inkFaint}>
+        <Text scale="caption" color="var(--ollie-color-ink-faint)">
           loading…
         </Text>
       ) : todayList.length === 0 ? (
-        <Text scale="body" color={colors.inkFaint} data-testid="todo-empty">
+        <Text scale="body" color="var(--ollie-color-ink-faint)" data-testid="todo-empty">
           {items.length === 0
             ? 'nothing on the list yet. brain dump something to fill it.'
             : 'nothing for today. rest easy.'}
@@ -338,8 +338,8 @@ function TodoRow({ item, first, fading, onComplete }: TodoRowProps): JSX.Element
     <li
       style={{
         ...LIST_ITEM_RESET,
-        borderTop: first ? `1px solid ${colors.hairline}` : 'none',
-        borderBottom: `1px solid ${colors.hairline}`,
+        borderTop: first ? '1px solid var(--ollie-color-hairline)' : 'none',
+        borderBottom: '1px solid var(--ollie-color-hairline)',
         opacity: fading ? 0 : 1,
         transition: `opacity ${FADE_OUT_MS}ms ${easings.calmOut}`,
       }}
@@ -366,7 +366,7 @@ function TodoRow({ item, first, fading, onComplete }: TodoRowProps): JSX.Element
               style={{
                 width: BULLET_SIZE,
                 height: BULLET_SIZE,
-                background: hover ? colors.sage : colors.ink,
+                background: hover ? 'var(--ollie-color-sage)' : 'var(--ollie-color-ink)',
                 display: 'inline-block',
                 marginTop: 8,
                 flexShrink: 0,
@@ -377,7 +377,7 @@ function TodoRow({ item, first, fading, onComplete }: TodoRowProps): JSX.Element
               scale="body"
               style={{
                 textDecoration: hover ? 'line-through' : 'none',
-                color: hover ? colors.inkFaint : colors.ink,
+                color: hover ? 'var(--ollie-color-ink-faint)' : 'var(--ollie-color-ink)',
                 transition: `color ${durations.tap} ${easings.calmOut}`,
                 wordBreak: 'break-word',
               }}
@@ -388,7 +388,7 @@ function TodoRow({ item, first, fading, onComplete }: TodoRowProps): JSX.Element
           <Row gap={12} align="baseline" style={{ flexShrink: 0 }}>
             <Text
               scale="caption"
-              color={colors.inkFaint}
+              color="var(--ollie-color-ink-faint)"
               style={SMCP_STYLE}
             >
               {sourceLabel(item.source)}
@@ -396,7 +396,7 @@ function TodoRow({ item, first, fading, onComplete }: TodoRowProps): JSX.Element
             {hover ? (
               <Text
                 scale="caption"
-                color={colors.sage}
+                color="var(--ollie-color-sage)"
                 style={SMCP_STYLE}
                 data-testid="todo-done-affordance"
               >
@@ -453,8 +453,8 @@ function DecisionRow({ item, first, fading, onDecide }: DecisionRowProps): JSX.E
     <li
       style={{
         ...LIST_ITEM_RESET,
-        borderTop: first ? `1px solid ${colors.hairline}` : 'none',
-        borderBottom: `1px solid ${colors.hairline}`,
+        borderTop: first ? '1px solid var(--ollie-color-hairline)' : 'none',
+        borderBottom: '1px solid var(--ollie-color-hairline)',
         opacity: fading ? 0 : 1,
         transition: `opacity ${FADE_OUT_MS}ms ${easings.calmOut}`,
       }}
@@ -468,7 +468,7 @@ function DecisionRow({ item, first, fading, onDecide }: DecisionRowProps): JSX.E
               style={{
                 width: BULLET_SIZE,
                 height: BULLET_SIZE,
-                background: colors.ink,
+                background: 'var(--ollie-color-ink)',
                 display: 'inline-block',
                 marginTop: 8,
                 flexShrink: 0,
@@ -476,14 +476,14 @@ function DecisionRow({ item, first, fading, onDecide }: DecisionRowProps): JSX.E
             />
             <Text
               scale="body"
-              style={{ color: colors.ink, wordBreak: 'break-word' }}
+              style={{ color: 'var(--ollie-color-ink)', wordBreak: 'break-word' }}
             >
               {item.text}
             </Text>
           </Row>
           <Text
             scale="caption"
-            color={colors.inkFaint}
+            color="var(--ollie-color-ink-faint)"
             style={SMCP_STYLE}
           >
             {sourceLabel(item.source)}
@@ -498,7 +498,7 @@ function DecisionRow({ item, first, fading, onDecide }: DecisionRowProps): JSX.E
           <button
             type="button"
             aria-label={`cancel: ${item.text}`}
-            style={{ ...DECISION_BTN_STYLE, color: colors.sage }}
+            style={{ ...DECISION_BTN_STYLE, color: 'var(--ollie-color-sage)' }}
             onClick={handleCancel}
             data-testid={`decision-cancel-${item.id}`}
           >
@@ -507,7 +507,7 @@ function DecisionRow({ item, first, fading, onDecide }: DecisionRowProps): JSX.E
           <button
             type="button"
             aria-label={`keep: ${item.text}`}
-            style={{ ...DECISION_BTN_STYLE, color: colors.ink }}
+            style={{ ...DECISION_BTN_STYLE, color: 'var(--ollie-color-ink)' }}
             onClick={handleKeep}
             data-testid={`decision-keep-${item.id}`}
           >
@@ -516,7 +516,7 @@ function DecisionRow({ item, first, fading, onDecide }: DecisionRowProps): JSX.E
           <button
             type="button"
             aria-label={`decide later: ${item.text}`}
-            style={{ ...DECISION_BTN_STYLE, color: colors.inkSoft }}
+            style={{ ...DECISION_BTN_STYLE, color: 'var(--ollie-color-ink-soft)' }}
             onClick={handleLater}
             data-testid={`decision-later-${item.id}`}
           >

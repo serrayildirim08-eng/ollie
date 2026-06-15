@@ -11,7 +11,7 @@
 import { Profiler, type ProfilerOnRenderCallback } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router";
 import { Box } from "../layout";
-import { colors, space } from "../theme/tokens";
+import { space } from "../theme/tokens";
 import { TabBar } from "./TabBar";
 
 // Measurement sayacı: per-screen render cost. Only logs renders slower than
@@ -56,7 +56,7 @@ function BackBar(): JSX.Element | null {
         background: "none",
         border: "none",
         padding: "4px 0",
-        color: colors.inkFaint,
+        color: 'var(--ollie-color-ink-faint)',
         cursor: "pointer",
         fontSize: 13,
         fontFamily: "inherit",
@@ -117,8 +117,8 @@ export function Layout(): JSX.Element {
         style={{
           display: "flex",
           flexDirection: "row",
-          background: colors.cream,
-          color: colors.ink,
+          background: 'var(--ollie-color-cream)',
+          color: 'var(--ollie-color-ink)',
         }}
       >
         <TabBar />

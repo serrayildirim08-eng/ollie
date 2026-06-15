@@ -13,12 +13,11 @@
  */
 
 import type { CSSProperties } from 'react';
-import { colors } from '../theme/tokens';
 import { formatRelativeTime } from './formatRelativeTime';
 
 const WHEN_STYLE: CSSProperties = {
   fontSize: 11,
-  color: colors.inkFaint,
+  color: 'var(--ollie-color-ink-faint)',
   fontWeight: 400,
   letterSpacing: '0.02em',
   lineHeight: 1.4,

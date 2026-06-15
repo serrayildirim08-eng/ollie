@@ -35,7 +35,7 @@ import {
 } from '@ollie/cadence';
 import { Stack, Row } from '../../layout';
 import { Text } from '../../ui';
-import { colors, fonts } from '../../theme/tokens';
+import { fonts } from '../../theme/tokens';
 import { WhenCaption } from '../../lib/WhenCaption';
 import { PatternCards } from '../../patterns/PatternCards';
 import { migrateCycle } from './migrate';
@@ -75,7 +75,7 @@ const COLD_NOTE_STYLE: CSSProperties = {
   fontWeight: 500,
   letterSpacing: '-0.01em',
   lineHeight: 1.45,
-  color: colors.ink,
+  color: 'var(--ollie-color-ink)',
   maxWidth: 280,
   textAlign: 'left',
 };
@@ -205,14 +205,14 @@ export function CycleBox(): JSX.Element {
   return (
     <Stack gap={48}>
       <Stack gap={8}>
-        <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
+        <Text scale="caption" color="var(--ollie-color-ink-faint)" style={SMCP_STYLE}>
           box
         </Text>
         <Text scale="display">Cycle</Text>
       </Stack>
 
       {!ready ? (
-        <Text scale="caption" color={colors.inkFaint}>
+        <Text scale="caption" color="var(--ollie-color-ink-faint)">
           loading…
         </Text>
       ) : pregnant ? (
@@ -222,7 +222,7 @@ export function CycleBox(): JSX.Element {
           <CycleRing day={1} phase="still learning" length={RING_LENGTH} bleeding={false} />
           <span style={COLD_NOTE_STYLE}>
             <b style={{ fontWeight: 600 }}>nothing tracked yet.</b>{' '}
-            <span style={{ color: colors.inkFaint }}>
+            <span style={{ color: 'var(--ollie-color-ink-faint)' }}>
               try dumping &lsquo;got my period&rsquo; — ollie won&rsquo;t guess
               a date until your cycle warms up.
             </span>
@@ -245,7 +245,7 @@ export function CycleBox(): JSX.Element {
 
           {/* bleeding intensity — a quiet chip row for today's flow. */}
           <Stack gap={16}>
-            <Text scale="lede" color={colors.ink}>
+            <Text scale="lede" color="var(--ollie-color-ink)">
               today&rsquo;s flow
             </Text>
             <BleedingChips selected={todayBleeding} onSelect={handleSetBleeding} />
@@ -361,7 +361,7 @@ function CycleRing({
   const ov = showLutealArc ? ringPoint(ovulationDay + 0.5, safeLength) : null;
 
   // bleeding days carry the umber ink; the rest of the cycle sits in sage.
-  const markerInk = bleeding ? UMBER : colors.sage;
+  const markerInk = bleeding ? UMBER : 'var(--ollie-color-sage)';
 
   return (
     <div
@@ -388,8 +388,8 @@ function CycleRing({
           cy={CY}
           r={R}
           fill="none"
-          stroke={colors.paper}
           strokeWidth={9}
+          style={{ stroke: 'var(--ollie-color-paper)' }}
         />
 
         {/* luteal arc — sage, the back stretch */}
@@ -399,13 +399,13 @@ function CycleRing({
             cy={CY}
             r={R}
             fill="none"
-            stroke={colors.sage}
             strokeWidth={9}
             strokeLinecap="round"
             strokeDasharray={arcDash}
             strokeDashoffset={arcOffset}
             transform={`rotate(-90 ${CX} ${CY})`}
             opacity={0.55}
+            style={{ stroke: 'var(--ollie-color-sage)' }}
           />
         )}
 
@@ -416,21 +416,21 @@ function CycleRing({
             cy={ov.y}
             r={5.5}
             fill="none"
-            stroke={colors.ink}
             strokeWidth={2}
+            style={{ stroke: 'var(--ollie-color-ink)' }}
           />
         )}
 
         {/* travelling day marker — umber when bleeding, sage otherwise.
          *  Paper halo lifts it off the track ring without a hard edge. */}
-        <circle cx={marker.x} cy={marker.y} r={8} fill={markerInk} />
+        <circle cx={marker.x} cy={marker.y} r={8} style={{ fill: markerInk }} />
         <circle
           cx={marker.x}
           cy={marker.y}
           r={8}
           fill="none"
-          stroke={colors.cream}
           strokeWidth={3.5}
+          style={{ stroke: 'var(--ollie-color-cream)' }}
         />
       </svg>
 
@@ -449,7 +449,7 @@ function CycleRing({
             fontFamily: fonts.serif,
             fontSize: 56,
             fontWeight: 400,
-            color: colors.ink,
+            color: 'var(--ollie-color-ink)',
             letterSpacing: '-0.03em',
             lineHeight: 1,
           }}
@@ -461,7 +461,7 @@ function CycleRing({
             marginTop: 8,
             fontFamily: fonts.sans,
             fontSize: 12,
-            color: colors.inkFaint,
+            color: 'var(--ollie-color-ink-faint)',
             fontWeight: 500,
             letterSpacing: '0.10em',
             textTransform: 'uppercase',
@@ -520,10 +520,10 @@ function BleedingChips({
             onClick={() => onSelect(tag)}
             style={{
               background: active ? UMBER : 'transparent',
-              border: `1px solid ${active ? UMBER : colors.hairline}`,
+              border: `1px solid ${active ? UMBER : 'var(--ollie-color-hairline)'}`,
               borderRadius: 999,
               padding: '6px 14px',
-              color: active ? colors.cream : colors.inkSoft,
+              color: active ? 'var(--ollie-color-cream)' : 'var(--ollie-color-ink-soft)',
               cursor: 'pointer',
               fontFamily: fonts.sans,
               fontSize: 13,
@@ -564,7 +564,7 @@ function CadenceHint({
   return (
     <Text
       scale="caption"
-      color={colors.inkFaint}
+      color="var(--ollie-color-ink-faint)"
       style={{ fontVariantCaps: 'all-small-caps', letterSpacing: '0.06em' }}
     >
       {`last period ${sinceLabel} ago · usually every ${everyLabel}`}
@@ -581,20 +581,20 @@ function formatDays(d: number): string {
 function NowLine({ current }: { current: CurrentCycle | null }): JSX.Element {
   if (current === null) {
     return (
-      <Text scale="caption" color={colors.inkFaint}>
+      <Text scale="caption" color="var(--ollie-color-ink-faint)">
         no period on record yet
       </Text>
     );
   }
   if (current.bleeding) {
     return (
-      <Text scale="caption" color={colors.inkFaint}>
+      <Text scale="caption" color="var(--ollie-color-ink-faint)">
         day {current.daysSinceStart + 1} · bleeding
       </Text>
     );
   }
   return (
-    <Text scale="caption" color={colors.inkFaint}>
+    <Text scale="caption" color="var(--ollie-color-ink-faint)">
       {current.daysSinceStart === 0
         ? 'less than a day since last period started'
         : `${current.daysSinceStart} days since last period started`}
@@ -615,11 +615,11 @@ function ListSection<T>({
 }): JSX.Element {
   return (
     <Stack gap={16}>
-      <Text scale="lede" color={colors.ink}>
+      <Text scale="lede" color="var(--ollie-color-ink)">
         {label}
       </Text>
       {items.length === 0 ? (
-        <Text scale="body" color={colors.inkFaint}>
+        <Text scale="body" color="var(--ollie-color-ink-faint)">
           {empty}
         </Text>
       ) : (
@@ -662,7 +662,7 @@ function HistoryRow({
   return (
     <Stack gap={2}>
       <Row gap={12} align="baseline" justify="space-between">
-        <Text scale="caption" color={colors.inkFaint}>
+        <Text scale="caption" color="var(--ollie-color-ink-faint)">
           {label}
         </Text>
         <RemoveButton onClick={onRemove} />
@@ -685,12 +685,12 @@ function PausedView({ onResume }: { onResume: () => void }): JSX.Element {
   return (
     <Stack gap={28}>
       <Stack gap={12}>
-        <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
+        <Text scale="caption" color="var(--ollie-color-ink-faint)" style={SMCP_STYLE}>
           paused
         </Text>
         <span style={COLD_NOTE_STYLE}>
           <b style={{ fontWeight: 600 }}>cycle paused.</b>{' '}
-          <span style={{ color: colors.inkFaint }}>
+          <span style={{ color: 'var(--ollie-color-ink-faint)' }}>
             tracking will resume when this ends. nothing to do here in the
             meantime.
           </span>
@@ -723,7 +723,7 @@ function QuietLink({ label, onClick }: { label: string; onClick: () => void }): 
         background: 'none',
         border: 'none',
         padding: '4px 0',
-        color: colors.inkFaint,
+        color: 'var(--ollie-color-ink-faint)',
         cursor: 'pointer',
         fontFamily: fonts.sans,
         fontVariantCaps: 'all-small-caps',
@@ -745,7 +745,7 @@ function RemoveButton({ onClick }: { onClick: () => void }): JSX.Element {
         background: 'none',
         border: 'none',
         padding: '4px 8px',
-        color: colors.inkFaint,
+        color: 'var(--ollie-color-ink-faint)',
         cursor: 'pointer',
         fontFamily: fonts.sans,
         fontVariantCaps: 'all-small-caps',

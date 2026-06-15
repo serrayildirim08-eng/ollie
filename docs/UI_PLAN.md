@@ -83,15 +83,23 @@ Not: tek başına büyük yeniden-yerleşim; canlı geniş-ekran görsel kontrol
 
 Dosya: `App.tsx` + `App.css` (silindi) — DONE 2026-06-15 · PR #40
 
-### Faz 6b — dark mode + crisis token (AYRI PR) — ⬜
-Riskli: inline `colors.*` (lightPalette JS alias) dark'ta dönmüyor; çok
-bileşene dokunur. Crisis rengi de aynı konu (hardcode rgba). Ayrı PR'da.
+### Faz 6b — dark mode (inline colors theme-aware) — ✅ (kod)
+~600 inline `colors.*` (statik lightPalette) → `var(--ollie-color-*)` CSS var
+string'lerine çevrildi (~30 dosya, 4 paralel agent). ThemeProvider zaten bu
+var'ları mod'a göre `<html>`'e basıyor, artık dönüyor. SVG stroke/fill
+attribute'leri `style`'a taşındı (var() attribute'te çalışmaz). Kullanılmayan
+`colors` importları temizlendi.
 
-- [ ] Inline `colors.*` → CSS-var / theme-aware (TabBar/Layout/GoalsBox/TodayNoticings/…)
-- [ ] Dark mode açınca açık-renk parça kalmıyor
-- [ ] Crisis rengi token'dan (hardcode rgba yok)
+- [x] Inline `colors.*` → CSS-var (tüm bileşenler) · 0 kalan · tüm var isimleri geçerli
+- [x] tsc temiz · 404 test yeşil
+- [ ] ⚠️ GÖRSEL QA GEREKLİ: her ekranı dark mode'da gözle kontrol et (unit test renk doğrulamaz)
 
-Dosya: inline `colors` kullanan tüm bileşenler, `theme/tokens.ts`, `dump/DumpScreen.tsx`
+İSTİSNALAR (bilinçli, takip):
+- Crisis banner sabit kırmızı bırakıldı (rgba 196,64,64) — dark'ta okunmaz, ayrı renk kararı gerek
+- FeedMe diet-chip `withSageTint(colors.sage)` bırakıldı (hex parse eder; color-mix rewrite gerek)
+- Shadow'lar statik (mode-agnostic, küçük)
+
+Dosya: ~30 bileşen — DONE (kod) 2026-06-16 · PR #40 · görsel QA Serra'da
 
 ---
 

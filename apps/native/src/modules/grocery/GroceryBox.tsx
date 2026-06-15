@@ -49,7 +49,6 @@ import {
 } from '@ollie/cadence';
 import { Stack, Row } from '../../layout';
 import { Text } from '../../ui';
-import { colors } from '../../theme/tokens';
 import { WhenCaption } from '../../lib/WhenCaption';
 import { PatternCards } from '../../patterns/PatternCards';
 import { migrateGrocery } from './migrate';
@@ -310,11 +309,11 @@ export function GroceryBox(): JSX.Element {
           surface, which carries its own clean heading (redesign parity). */}
       {mode !== 'now' && (
         <Stack gap={12}>
-          <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
+          <Text scale="caption" color="var(--ollie-color-ink-faint)" style={SMCP_STYLE}>
             box · grocery
           </Text>
           <Text scale="display">Grocery</Text>
-          <Text scale="body" color={colors.inkSoft} style={{ maxWidth: 460 }}>
+          <Text scale="body" color="var(--ollie-color-ink-soft)" style={{ maxWidth: 460 }}>
             a list you talk to, a pantry that watches what you have.
           </Text>
         </Stack>
@@ -331,7 +330,7 @@ export function GroceryBox(): JSX.Element {
       <PatternCards module="grocery" />
 
       {!ready ? (
-        <Text scale="caption" color={colors.inkFaint}>
+        <Text scale="caption" color="var(--ollie-color-ink-faint)">
           loading…
         </Text>
       ) : mode === 'now' ? (
@@ -411,12 +410,12 @@ function ModeSwitch({
             style={{
               background: 'transparent',
               border: 'none',
-              borderBottom: `2px solid ${on ? colors.sage : 'transparent'}`,
+              borderBottom: `2px solid ${on ? 'var(--ollie-color-sage)' : 'transparent'}`,
               padding: '0 0 7px 0',
               fontSize: 14,
               fontWeight: on ? 600 : 500,
               letterSpacing: '-0.01em',
-              color: on ? colors.ink : colors.inkFaint,
+              color: on ? 'var(--ollie-color-ink)' : 'var(--ollie-color-ink-faint)',
               cursor: 'pointer',
               transition: 'color 200ms cubic-bezier(0.18, 0, 0.22, 1)',
             }}
@@ -463,8 +462,8 @@ function ShopList({
       {items.length > 0 && (
         <>
           {/* the running stat above the torn note */}
-          <Text scale="caption" color={colors.inkFaint} style={{ letterSpacing: '0.02em' }}>
-            <strong style={{ color: colors.ink, fontWeight: 600 }}>{openCount}</strong>
+          <Text scale="caption" color="var(--ollie-color-ink-faint)" style={{ letterSpacing: '0.02em' }}>
+            <strong style={{ color: 'var(--ollie-color-ink)', fontWeight: 600 }}>{openCount}</strong>
             {" on the list · tap one when it's in the basket"}
           </Text>
 
@@ -482,9 +481,9 @@ function ShopList({
                   alignItems: 'center',
                   gap: 15,
                   padding: '15px 2px',
-                  borderTop: `1px solid ${colors.hairline}`,
+                  borderTop: `1px solid var(--ollie-color-hairline)`,
                   borderBottom:
-                    i === items.length - 1 ? `1px solid ${colors.hairline}` : 'none',
+                    i === items.length - 1 ? `1px solid var(--ollie-color-hairline)` : 'none',
                   borderLeft: 'none',
                   borderRight: 'none',
                   background: 'transparent',
@@ -509,7 +508,7 @@ function ShopList({
                       fontSize: 17,
                       fontWeight: 400,
                       letterSpacing: '-0.01em',
-                      color: colors.ink,
+                      color: 'var(--ollie-color-ink)',
                     }}
                   >
                     {row.name}
@@ -522,7 +521,7 @@ function ShopList({
                       fontSize: 13,
                       fontWeight: 500,
                       letterSpacing: '0.01em',
-                      color: colors.inkFaint,
+                      color: 'var(--ollie-color-ink-faint)',
                       flexShrink: 0,
                     }}
                   >
@@ -575,7 +574,7 @@ function LikelyNeededSection({
       {/* hairline rule above + 11px smcp sage section caption */}
       <div
         style={{
-          borderTop: `1px solid ${colors.hairline}`,
+          borderTop: `1px solid var(--ollie-color-hairline)`,
           paddingTop: 16,
         }}
       >
@@ -583,7 +582,7 @@ function LikelyNeededSection({
           style={{
             ...SMCP_STYLE,
             fontSize: 11,
-            color: colors.sage,
+            color: 'var(--ollie-color-sage)',
             letterSpacing: '0.08em',
             fontStyle: 'italic',
           }}
@@ -621,8 +620,8 @@ function LikelyNeededRow({
   return (
     <div
       style={{
-        borderTop: `1px solid ${colors.hairline}`,
-        borderBottom: isLast ? `1px solid ${colors.hairline}` : 'none',
+        borderTop: `1px solid var(--ollie-color-hairline)`,
+        borderBottom: isLast ? `1px solid var(--ollie-color-hairline)` : 'none',
         padding: '13px 2px',
       }}
     >
@@ -650,7 +649,7 @@ function LikelyNeededRow({
             fontSize: 16,
             fontWeight: 400,
             letterSpacing: '-0.01em',
-            color: colors.ink,
+            color: 'var(--ollie-color-ink)',
           }}
         >
           {row.name}
@@ -658,7 +657,7 @@ function LikelyNeededRow({
         <span
           style={{
             fontSize: 11,
-            color: colors.inkSoft,
+            color: 'var(--ollie-color-ink-soft)',
             fontStyle: 'italic',
             letterSpacing: '0.02em',
           }}
@@ -677,7 +676,7 @@ function LikelyNeededRow({
               border: 'none',
               padding: 0,
               fontSize: 11,
-              color: colors.sage,
+              color: 'var(--ollie-color-sage)',
               cursor: 'pointer',
               fontFamily: 'inherit',
               transition: 'color 200ms cubic-bezier(0.18, 0, 0.22, 1)',
@@ -694,7 +693,7 @@ function LikelyNeededRow({
               border: 'none',
               padding: 0,
               fontSize: 11,
-              color: colors.inkSoft,
+              color: 'var(--ollie-color-ink-soft)',
               cursor: 'pointer',
               fontFamily: 'inherit',
               transition: 'color 200ms cubic-bezier(0.18, 0, 0.22, 1)',
@@ -755,8 +754,8 @@ function PantryList({
     <Stack gap={14}>
       {items.length > 0 && (
         <>
-          <Text scale="caption" color={colors.inkFaint} style={{ letterSpacing: '0.02em' }}>
-            <strong style={{ color: colors.ink, fontWeight: 600 }}>{totalCount}</strong>
+          <Text scale="caption" color="var(--ollie-color-ink-faint)" style={{ letterSpacing: '0.02em' }}>
+            <strong style={{ color: 'var(--ollie-color-ink)', fontWeight: 600 }}>{totalCount}</strong>
             {' in the pantry'}
           </Text>
 
@@ -827,8 +826,8 @@ function PantryRow({
       justify="space-between"
       style={{
         padding: '15px 2px',
-        borderTop: `1px solid ${colors.hairline}`,
-        borderBottom: isLast ? `1px solid ${colors.hairline}` : 'none',
+        borderTop: `1px solid var(--ollie-color-hairline)`,
+        borderBottom: isLast ? `1px solid var(--ollie-color-hairline)` : 'none',
         opacity: faded ? 0.6 : 1,
         transition: 'opacity 240ms cubic-bezier(0.18, 0, 0.22, 1)',
       }}
@@ -838,7 +837,7 @@ function PantryRow({
           <span
             style={{
               fontSize: 15,
-              color: colors.ink,
+              color: 'var(--ollie-color-ink)',
               fontWeight: 500,
               letterSpacing: '-0.012em',
             }}
@@ -853,7 +852,7 @@ function PantryRow({
                 fontWeight: 600,
                 letterSpacing: '0.08em',
                 textTransform: 'uppercase',
-                color: colors.amber,
+                color: 'var(--ollie-color-amber)',
               }}
             >
               low
@@ -878,7 +877,7 @@ function PantryRow({
           <span
             style={{
               fontSize: 12,
-              color: colors.inkFaint,
+              color: 'var(--ollie-color-ink-faint)',
               fontWeight: 500,
               letterSpacing: '0.02em',
             }}
@@ -928,7 +927,7 @@ function RemindToggle({
         padding: '4px 6px',
         margin: 0,
         fontSize: 11,
-        color: remindMe ? colors.sage : colors.inkFaint,
+        color: remindMe ? 'var(--ollie-color-sage)' : 'var(--ollie-color-ink-faint)',
         cursor: 'pointer',
         fontFamily: 'inherit',
         flexShrink: 0,
@@ -972,7 +971,7 @@ function StillHereAffordance({
           padding: 0,
           margin: 0,
           fontSize: 11,
-          color: colors.sage,
+          color: 'var(--ollie-color-sage)',
           cursor: 'pointer',
           fontFamily: 'inherit',
         }}
@@ -992,7 +991,7 @@ function StillHereAffordance({
           border: 'none',
           padding: 0,
           fontSize: 11,
-          color: colors.sage,
+          color: 'var(--ollie-color-sage)',
           cursor: 'pointer',
           fontFamily: 'inherit',
         }}
@@ -1008,7 +1007,7 @@ function StillHereAffordance({
           border: 'none',
           padding: 0,
           fontSize: 11,
-          color: colors.inkSoft,
+          color: 'var(--ollie-color-ink-soft)',
           cursor: 'pointer',
           fontFamily: 'inherit',
         }}
@@ -1044,11 +1043,11 @@ function ArchivedSection({
           width: '100%',
           background: 'none',
           border: 'none',
-          borderTop: `1px solid ${colors.hairline}`,
-          borderBottom: `1px solid ${colors.hairline}`,
+          borderTop: `1px solid var(--ollie-color-hairline)`,
+          borderBottom: `1px solid var(--ollie-color-hairline)`,
           padding: '10px 2px',
           fontSize: 11,
-          color: colors.inkFaint,
+          color: 'var(--ollie-color-ink-faint)',
           textAlign: 'left',
           cursor: 'pointer',
           fontFamily: 'inherit',
@@ -1067,14 +1066,14 @@ function ArchivedSection({
               style={{
                 padding: '12px 2px',
                 borderBottom:
-                  i === items.length - 1 ? `1px solid ${colors.hairline}` : 'none',
+                  i === items.length - 1 ? `1px solid var(--ollie-color-hairline)` : 'none',
                 opacity: 0.6,
               }}
             >
               <span
                 style={{
                   fontSize: 14,
-                  color: colors.inkSoft,
+                  color: 'var(--ollie-color-ink-soft)',
                   fontWeight: 500,
                   letterSpacing: '-0.01em',
                 }}
@@ -1090,7 +1089,7 @@ function ArchivedSection({
                   border: 'none',
                   padding: 0,
                   fontSize: 10,
-                  color: colors.sage,
+                  color: 'var(--ollie-color-sage)',
                   cursor: 'pointer',
                   fontFamily: 'inherit',
                 }}
@@ -1128,7 +1127,7 @@ function EmptyNote(): JSX.Element {
             borderBottom:
               i === STUBS.length - 1
                 ? 'none'
-                : `1px dashed ${colors.hairline}`,
+                : `1px dashed var(--ollie-color-hairline)`,
             display: 'flex',
             alignItems: 'center',
             gap: 13,
@@ -1140,7 +1139,7 @@ function EmptyNote(): JSX.Element {
               width: 21,
               height: 21,
               borderRadius: '50%',
-              border: `1.6px solid ${colors.hairline}`,
+              border: `1.6px solid var(--ollie-color-hairline)`,
               flexShrink: 0,
             }}
           />
@@ -1149,7 +1148,7 @@ function EmptyNote(): JSX.Element {
               flex: `0 0 ${w}px`,
               height: 6,
               borderRadius: 3,
-              background: colors.hairline,
+              background: 'var(--ollie-color-hairline)',
               opacity: 0.7,
             }}
           />
@@ -1163,7 +1162,7 @@ function ColdShop(): JSX.Element {
   return (
     <Stack gap={20} align="center">
       <EmptyNote />
-      <Text scale="caption" color={colors.inkFaint} style={{ letterSpacing: '0.02em' }}>
+      <Text scale="caption" color="var(--ollie-color-ink-faint)" style={{ letterSpacing: '0.02em' }}>
         nothing on the list yet
       </Text>
       <Text
@@ -1216,7 +1215,7 @@ function TickCircle(): JSX.Element {
         width: 23,
         height: 23,
         borderRadius: '50%',
-        border: `1.8px solid ${colors.hairline}`,
+        border: `1.8px solid var(--ollie-color-hairline)`,
         background: 'transparent',
         flexShrink: 0,
         display: 'inline-flex',
@@ -1244,7 +1243,7 @@ function SageNote({
           width: 7,
           height: 7,
           borderRadius: '50%',
-          background: colors.sage,
+          background: 'var(--ollie-color-sage)',
           flexShrink: 0,
           marginTop: 8,
         }}
@@ -1252,7 +1251,7 @@ function SageNote({
       <span
         style={{
           fontSize: 14,
-          color: colors.inkSoft,
+          color: 'var(--ollie-color-ink-soft)',
           fontWeight: 500,
           letterSpacing: '-0.01em',
           lineHeight: 1.5,
@@ -1274,7 +1273,7 @@ function RemoveButton({ onClick }: { onClick: () => void }): JSX.Element {
         background: 'none',
         border: 'none',
         padding: '4px 8px',
-        color: colors.inkFaint,
+        color: 'var(--ollie-color-ink-faint)',
         cursor: 'pointer',
         fontVariantCaps: 'all-small-caps',
         letterSpacing: '0.08em',
@@ -1318,7 +1317,7 @@ function CadenceHint({ estimate }: { estimate: CadenceEstimate | undefined }): J
     <span
       style={{
         fontSize: 11,
-        color: overdue ? colors.amber : colors.inkFaint,
+        color: overdue ? 'var(--ollie-color-amber)' : 'var(--ollie-color-ink-faint)',
         fontWeight: 500,
         letterSpacing: '0.02em',
         fontVariantCaps: 'all-small-caps',

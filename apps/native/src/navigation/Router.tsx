@@ -16,7 +16,6 @@ import { Layout } from "./Layout";
 import { useFeature } from "../settings/features";
 import { Stack, Row } from "../layout";
 import { Text } from "../ui";
-import { colors } from "../theme/tokens";
 import { DumpScreen } from "../dump";
 import { GroceryBox } from "../modules/grocery";
 import { PetsBox } from "../modules/pets";
@@ -128,7 +127,7 @@ const ASIDE_STYLE: React.CSSProperties = {
   fontFamily: 'var(--ollie-font-serif)',
   fontStyle: 'italic',
   fontSize: 14,
-  color: colors.inkFaint,
+  color: 'var(--ollie-color-ink-faint)',
   margin: '-2px 0 12px',
   letterSpacing: '0.005em',
 };
@@ -143,11 +142,11 @@ function ModulesIndex() {
   return (
     <Stack gap={48}>
       <Stack gap={12}>
-        <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
+        <Text scale="caption" color="var(--ollie-color-ink-faint)" style={SMCP_STYLE}>
           modules
         </Text>
         <Text scale="display">All of it</Text>
-        <Text scale="body" color={colors.inkSoft} style={{ maxWidth: 540 }}>
+        <Text scale="body" color="var(--ollie-color-ink-soft)" style={{ maxWidth: 540 }}>
           three rooms — yourself, your stuff, the things you owe.
         </Text>
       </Stack>
@@ -156,7 +155,7 @@ function ModulesIndex() {
         <Stack key={group.id} gap={8}>
           <Text
             scale="caption"
-            color={colors.inkFaint}
+            color="var(--ollie-color-ink-faint)"
             style={{ ...SMCP_STYLE, letterSpacing: "0.20em" }}
           >
             {group.label}
@@ -170,13 +169,13 @@ function ModulesIndex() {
                 style={{
                   textDecoration: "none",
                   color: "inherit",
-                  borderTop: i === 0 ? `1px solid ${colors.hairline}` : "none",
-                  borderBottom: `1px solid ${colors.hairline}`,
+                  borderTop: i === 0 ? "1px solid var(--ollie-color-hairline)" : "none",
+                  borderBottom: "1px solid var(--ollie-color-hairline)",
                 }}
               >
                 <Row gap={12} align="baseline" justify="space-between" style={{ padding: "16px 0" }}>
                   <Text scale="body">{m.label}</Text>
-                  <Text scale="caption" color={colors.inkFaint}>
+                  <Text scale="caption" color="var(--ollie-color-ink-faint)">
                     {m.hint}
                   </Text>
                 </Row>
@@ -195,7 +194,7 @@ function SettingsScreen() {
   return (
     <Stack gap={32}>
       <Stack gap={8}>
-        <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
+        <Text scale="caption" color="var(--ollie-color-ink-faint)" style={SMCP_STYLE}>
           settings
         </Text>
         <Text scale="display">Settings</Text>
@@ -203,7 +202,7 @@ function SettingsScreen() {
 
       <Stack gap={16}>
         <Stack gap={4}>
-          <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
+          <Text scale="caption" color="var(--ollie-color-ink-faint)" style={SMCP_STYLE}>
             account
           </Text>
           <Text scale="body">{user?.primaryEmailAddress?.emailAddress ?? "—"}</Text>
@@ -216,7 +215,7 @@ function SettingsScreen() {
             background: "none",
             border: "none",
             padding: "12px 0",
-            color: colors.inkFaint,
+            color: 'var(--ollie-color-ink-faint)',
             cursor: "pointer",
             fontVariantCaps: "all-small-caps",
             letterSpacing: "0.08em",
@@ -233,9 +232,9 @@ function SettingsScreen() {
 function BoxPlaceholder() {
   return (
     <Stack gap={16}>
-      <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>Box</Text>
+      <Text scale="caption" color="var(--ollie-color-ink-faint)" style={SMCP_STYLE}>Box</Text>
       <Text scale="display">{readBoxIdFromPath()}</Text>
-      <Text color={colors.inkFaint}>Screen slot — not yet built.</Text>
+      <Text color="var(--ollie-color-ink-faint)">Screen slot — not yet built.</Text>
     </Stack>
   );
 }
@@ -243,7 +242,7 @@ function BoxPlaceholder() {
 function NotFoundPlaceholder() {
   return (
     <Stack gap={16}>
-      <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>404</Text>
+      <Text scale="caption" color="var(--ollie-color-ink-faint)" style={SMCP_STYLE}>404</Text>
       <Text scale="display">Not here.</Text>
     </Stack>
   );

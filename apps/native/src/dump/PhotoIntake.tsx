@@ -36,7 +36,6 @@ import {
   type ClipboardEvent,
   type DragEvent,
 } from 'react';
-import { colors } from '../theme/tokens';
 import { compressImage } from './compressImage';
 import type { RouteDumpImage } from '../api';
 
@@ -251,7 +250,7 @@ export function PhotoIntakeBar({ intake, disabled = false }: PhotoIntakeBarProps
     padding: 4,
     margin: 0,
     cursor: disabled ? 'default' : 'pointer',
-    color: colors.inkFaint,
+    color: 'var(--ollie-color-ink-faint)',
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -276,10 +275,10 @@ export function PhotoIntakeBar({ intake, disabled = false }: PhotoIntakeBarProps
         disabled={disabled || intake.isProcessing}
         style={buttonStyle}
         onMouseEnter={(e) => {
-          if (!disabled) e.currentTarget.style.color = colors.ink;
+          if (!disabled) e.currentTarget.style.color = 'var(--ollie-color-ink)';
         }}
         onMouseLeave={(e) => {
-          e.currentTarget.style.color = colors.inkFaint;
+          e.currentTarget.style.color = 'var(--ollie-color-ink-faint)';
         }}
       >
         <CameraGlyph />
@@ -310,7 +309,7 @@ export function PhotoIntakeBar({ intake, disabled = false }: PhotoIntakeBarProps
           style={{
             fontFamily: 'inherit',
             fontSize: 13,
-            color: colors.inkFaint,
+            color: 'var(--ollie-color-ink-faint)',
             letterSpacing: '0.04em',
           }}
         >
@@ -324,7 +323,7 @@ export function PhotoIntakeBar({ intake, disabled = false }: PhotoIntakeBarProps
           style={{
             fontFamily: 'inherit',
             fontSize: 13,
-            color: colors.inkSoft,
+            color: 'var(--ollie-color-ink-soft)',
             letterSpacing: '0.04em',
           }}
         >
@@ -354,8 +353,8 @@ function Thumbnail({
         width: 56,
         height: 56,
         borderRadius: 5,
-        border: `1px solid ${colors.hairline}`,
-        background: colors.paper,
+        border: '1px solid var(--ollie-color-hairline)',
+        background: 'var(--ollie-color-paper)',
         overflow: 'hidden',
         opacity: processing ? 0.6 : 1,
         transition: 'opacity 200ms cubic-bezier(0.18, 0, 0.22, 1)',
@@ -382,9 +381,9 @@ function Thumbnail({
           width: 16,
           height: 16,
           padding: 0,
-          background: colors.cream,
-          color: colors.ink,
-          border: `1px solid ${colors.hairline}`,
+          background: 'var(--ollie-color-cream)',
+          color: 'var(--ollie-color-ink)',
+          border: '1px solid var(--ollie-color-hairline)',
           borderRadius: 999,
           cursor: 'pointer',
           display: 'inline-flex',
@@ -420,9 +419,9 @@ function PdfChip({
         width: 56,
         height: 56,
         borderRadius: 5,
-        border: `1px solid ${colors.hairline}`,
-        background: colors.paper,
-        color: colors.inkSoft,
+        border: '1px solid var(--ollie-color-hairline)',
+        background: 'var(--ollie-color-paper)',
+        color: 'var(--ollie-color-ink-soft)',
         fontFamily: 'inherit',
         fontSize: 11,
         letterSpacing: '0.12em',
@@ -444,9 +443,9 @@ function PdfChip({
           width: 16,
           height: 16,
           padding: 0,
-          background: colors.cream,
-          color: colors.ink,
-          border: `1px solid ${colors.hairline}`,
+          background: 'var(--ollie-color-cream)',
+          color: 'var(--ollie-color-ink)',
+          border: '1px solid var(--ollie-color-hairline)',
           borderRadius: 999,
           cursor: 'pointer',
           display: 'inline-flex',

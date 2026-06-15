@@ -15,7 +15,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@clerk/clerk-react';
 import { Stack } from '../layout';
 import { Text } from '../ui';
-import { colors, space } from '../theme/tokens';
+import { space } from '../theme/tokens';
 import { BrainDumpInput } from './BrainDumpInput';
 import { dumpArchive } from './archive';
 import { tagDumpMood } from './mood-lexicon';
@@ -377,7 +377,7 @@ function CrisisBanner({
       </Text>
       <Text
         scale="caption"
-        color={colors.inkFaint}
+        color="var(--ollie-color-ink-faint)"
         as="button"
         onClick={onDismiss}
         style={{

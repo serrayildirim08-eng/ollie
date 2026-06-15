@@ -14,7 +14,6 @@
  */
 
 import { useCallback, useRef, useState } from 'react';
-import { colors } from '../theme/tokens';
 import { routeTranscribe } from '../api';
 import styles from './MicButton.module.css';
 
@@ -225,23 +224,23 @@ export function MicButton({
           border: 'none',
           padding: 0,
           cursor: disabled || busy ? 'default' : 'pointer',
-          color: recording ? colors.sage : status === 'error' ? colors.inkSoft : colors.inkFaint,
+          color: recording ? 'var(--ollie-color-sage)' : status === 'error' ? 'var(--ollie-color-ink-soft)' : 'var(--ollie-color-ink-faint)',
         }}
         onMouseEnter={(e) => {
-          if (!disabled && !busy && !recording) e.currentTarget.style.color = colors.ink;
+          if (!disabled && !busy && !recording) e.currentTarget.style.color = 'var(--ollie-color-ink)';
         }}
         onMouseLeave={(e) => {
-          if (!recording) e.currentTarget.style.color = colors.inkFaint;
+          if (!recording) e.currentTarget.style.color = 'var(--ollie-color-ink-faint)';
         }}
       >
         <MicGlyph recording={recording} />
         {busy && (
-          <span style={{ fontSize: 11, color: colors.inkFaint }}>transcribing…</span>
+          <span style={{ fontSize: 11, color: 'var(--ollie-color-ink-faint)' }}>transcribing…</span>
         )}
       </button>
 
       {status === 'error' && errorMsg && (
-        <span style={{ fontSize: 11, color: colors.inkSoft }}>{errorMsg}</span>
+        <span style={{ fontSize: 11, color: 'var(--ollie-color-ink-soft)' }}>{errorMsg}</span>
       )}
     </>
   );

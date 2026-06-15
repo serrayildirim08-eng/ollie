@@ -30,7 +30,6 @@ import { routeDump } from '../api';
 import { detectCrisis } from '@ollie/logic/crisis';
 import type { RouteDumpRequest } from '../api';
 import { kv } from '../storage';
-import { colors } from '../theme/tokens';
 import type { RouterOutput, CrisisSignal } from '../router/schema';
 import { usePhotoIntake, PhotoIntakeBar } from './PhotoIntake';
 import { MicButton } from './MicButton';
@@ -271,7 +270,7 @@ export function BrainDumpInput({
         // 1px dashed sage on drag-over; transparent border by default so the
         // layout doesn't jitter when the border appears.
         border: photo.isDragOver
-          ? `1px dashed ${colors.sage}`
+          ? '1px dashed var(--ollie-color-sage)'
           : '1px dashed transparent',
         borderRadius: 6,
         padding: 4,
