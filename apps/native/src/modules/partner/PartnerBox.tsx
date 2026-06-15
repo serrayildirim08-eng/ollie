@@ -387,7 +387,7 @@ function PairedView({
 
       {/* my outflow — asymmetric consent (decision 6) */}
       <Stack gap={0} style={{ borderTop: `1px solid ${colors.hairline}` }}>
-        <Text scale="caption" color={colors.inkFaint} style={{ ...SMCP, padding: '18px 0 6px' }}>
+        <Text scale="lede" color={colors.ink} style={{ padding: '18px 0 6px' }}>
           what you share back
         </Text>
         {SHARE_KEYS.map((k) => (
