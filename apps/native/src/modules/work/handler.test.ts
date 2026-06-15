@@ -164,7 +164,12 @@ describe('workHandler — time-deferred reminder (remindIn)', () => {
     expect(vi.mocked(scheduleAt)).toHaveBeenCalledOnce();
     expect(vi.mocked(scheduleAt)).toHaveBeenCalledWith(
       fireAt,
-      { title: 'to do', body: 'ping boran' },
+      {
+        title: 'to do',
+        body: 'ping boran',
+        actionTypeId: 'OLLIE_REMINDER',
+        extra: { module: 'work', refId: 'task-mock-id' },
+      },
       'reminder:task-mock-id',
     );
     // Durable app-closed path fires too, same fireAt + stable dedupe_key.
@@ -174,6 +179,8 @@ describe('workHandler — time-deferred reminder (remindIn)', () => {
         body: 'ping boran',
         category: 'REMINDER',
         dedupe_key: 'reminder:task-mock-id',
+        action_url: 'ollie://box/work',
+        notification_category: 'OLLIE_REMINDER',
       },
       fireAt,
     );

@@ -35,16 +35,18 @@ const pluginMock = {
 
 vi.mock('@tauri-apps/plugin-notification', () => pluginMock);
 
-// Mock the Tauri core IPC bridge so scheduleAt's durable native path
-// (schedule_local_notification / cancel_local_notification) is observable
-// without a running Tauri shell. Default resolves; individual tests override
-// with mockRejectedValue to exercise the setTimeout fallback.
-const invokeMock = vi.fn((_cmd: string, _args?: Record<string, unknown>) =>
+// Mock the Tauri event bridge so scheduleAt's durable native path
+// (emit 'ollie-schedule-notif' / 'ollie-cancel-notif') is observable without a
+// running Tauri shell. The localhost webview's ACL blocks direct invoke() of
+// app commands, so the durable path EMITs events the Rust setup listener
+// schedules from. Default resolves; individual tests override with
+// mockRejectedValue to exercise the setTimeout fallback.
+const emitMock = vi.fn((_event: string, _payload?: unknown) =>
   Promise.resolve(undefined),
 );
 
-vi.mock('@tauri-apps/api/core', () => ({
-  invoke: invokeMock,
+vi.mock('@tauri-apps/api/event', () => ({
+  emit: emitMock,
 }));
 
 // ─── imports after mocks ───────────────────────────────────────────────────
@@ -82,8 +84,8 @@ beforeEach(() => {
   pluginMock.sendNotification.mockReset();
   scheduleAtMock.mockClear();
   scheduleAtMock.mockImplementation((date: Date) => ({ kind: 'at-schedule', date }));
-  invokeMock.mockReset();
-  invokeMock.mockImplementation(() => Promise.resolve(undefined));
+  emitMock.mockReset();
+  emitMock.mockImplementation(() => Promise.resolve(undefined));
   setTauriContext(false);
   vi.useFakeTimers();
 });
@@ -321,12 +323,12 @@ describe('scheduleAt', () => {
       );
     });
     // Immediate path never touches the OS scheduler or the native plugin sched.
-    expect(invokeMock).not.toHaveBeenCalled();
+    expect(emitMock).not.toHaveBeenCalled();
     expect(scheduleAtMock).not.toHaveBeenCalled();
   });
 
-  it('hands a future reminder to the OS via schedule_local_notification in Tauri (no double-fire)', async () => {
-    // Durable path: the native command holds the notification so it fires even
+  it('hands a future reminder to the OS via the ollie-schedule-notif event in Tauri (no double-fire)', async () => {
+    // Durable path: the native listener holds the notification so it fires even
     // after the app quits. We must NOT also arm a setTimeout, or it would
     // double-fire (OS + in-process timer) once the timer elapses.
     setTauriContext(true);
@@ -335,14 +337,16 @@ describe('scheduleAt', () => {
     const fireAt = Date.now() + 60_000;
     scheduleAt(fireAt, { title: 'call', body: 'mama' }, 'reminder:call-mama');
 
-    // Let the async loader + invoke settle.
+    // Let the async loader + emit settle.
     await vi.advanceTimersByTimeAsync(0);
     await vi.waitFor(() => {
-      expect(invokeMock).toHaveBeenCalledWith('schedule_local_notification', {
+      expect(emitMock).toHaveBeenCalledWith('ollie-schedule-notif', {
         id: 'reminder:call-mama',
         title: 'call',
         body: 'mama',
-        fireAtMs: fireAt,
+        fire_at_ms: fireAt,
+        category_id: null,
+        extra_json: null,
       });
     });
 
@@ -359,8 +363,8 @@ describe('scheduleAt', () => {
 
     scheduleAt(Date.now() + 3_000, { title: 'remember', body: 'thing' }, 'reminder:remember');
 
-    // No native scheduler reachable — the OS command is never invoked.
-    expect(invokeMock).not.toHaveBeenCalled();
+    // No native scheduler reachable — the OS event is never emitted.
+    expect(emitMock).not.toHaveBeenCalled();
     expect(scheduleAtMock).not.toHaveBeenCalled();
 
     // Let the async loader settle so the setTimeout is registered.
@@ -374,22 +378,22 @@ describe('scheduleAt', () => {
       const msg = logSpy.mock.calls.find((c) => typeof c[0] === 'string' && c[0].includes('remember'));
       expect(msg).toBeDefined();
     });
-    expect(invokeMock).not.toHaveBeenCalled();
+    expect(emitMock).not.toHaveBeenCalled();
     logSpy.mockRestore();
   });
 
-  it('falls back to setTimeout when the native invoke rejects', async () => {
+  it('falls back to setTimeout when the native emit rejects', async () => {
     setTauriContext(true);
     pluginMock.isPermissionGranted.mockResolvedValue(true);
-    invokeMock.mockRejectedValue(new Error('command not registered'));
+    emitMock.mockRejectedValue(new Error('event blocked'));
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     scheduleAt(Date.now() + 4_000, { title: 'fallback', body: 'ping' }, 'reminder:fallback');
 
     // The native attempt happened and rejected; we should warn and arm a timer.
     await vi.waitFor(() => {
-      expect(invokeMock).toHaveBeenCalledWith(
-        'schedule_local_notification',
+      expect(emitMock).toHaveBeenCalledWith(
+        'ollie-schedule-notif',
         expect.objectContaining({ id: 'reminder:fallback' }),
       );
     });
@@ -418,20 +422,20 @@ describe('scheduleAt', () => {
     // Nothing fired — the timer was cleared. No native cancel either (fallback).
     const calls = logSpy.mock.calls.filter((c) => typeof c[0] === 'string' && c[0].includes('unwanted'));
     expect(calls).toHaveLength(0);
-    expect(invokeMock).not.toHaveBeenCalled();
+    expect(emitMock).not.toHaveBeenCalled();
     logSpy.mockRestore();
   });
 
-  it('cancel() invokes cancel_local_notification in Tauri context', async () => {
+  it('cancel() emits ollie-cancel-notif in Tauri context', async () => {
     setTauriContext(true);
     pluginMock.isPermissionGranted.mockResolvedValue(true);
 
     const handle = scheduleAt(Date.now() + 60_000, { title: 'oops', body: 'cancel' }, 'reminder:oops');
 
-    // Let the schedule invoke land so cancel knows it went native.
+    // Let the schedule emit land so cancel knows it went native.
     await vi.waitFor(() => {
-      expect(invokeMock).toHaveBeenCalledWith(
-        'schedule_local_notification',
+      expect(emitMock).toHaveBeenCalledWith(
+        'ollie-schedule-notif',
         expect.objectContaining({ id: 'reminder:oops' }),
       );
     });
@@ -439,9 +443,7 @@ describe('scheduleAt', () => {
     handle.cancel();
 
     await vi.waitFor(() => {
-      expect(invokeMock).toHaveBeenCalledWith('cancel_local_notification', {
-        id: 'reminder:oops',
-      });
+      expect(emitMock).toHaveBeenCalledWith('ollie-cancel-notif', 'reminder:oops');
     });
 
     // Nothing ever fired in-process.

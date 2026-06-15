@@ -99,7 +99,12 @@ describe('adminHandler — time-deferred reminder (remindIn)', () => {
     expect(vi.mocked(scheduleAt)).toHaveBeenCalledOnce();
     expect(vi.mocked(scheduleAt)).toHaveBeenCalledWith(
       fireAt,
-      { title: 'call', body: 'mama' },
+      {
+        title: 'call',
+        body: 'mama',
+        actionTypeId: 'OLLIE_REMINDER',
+        extra: { module: 'admin', refId: 'task-id' },
+      },
       'reminder:task-id',
     );
     // Durable app-closed path fires too, same fireAt + stable dedupe_key.
@@ -109,6 +114,8 @@ describe('adminHandler — time-deferred reminder (remindIn)', () => {
         body: 'mama',
         category: 'REMINDER',
         dedupe_key: 'reminder:task-id',
+        action_url: 'ollie://todo',
+        notification_category: 'OLLIE_REMINDER',
       },
       fireAt,
     );
@@ -135,7 +142,12 @@ describe('adminHandler — time-deferred reminder (remindIn)', () => {
 
     expect(vi.mocked(scheduleAt)).toHaveBeenCalledWith(
       fireAt,
-      { title: 'call', body: 'mama · christmas' },
+      {
+        title: 'call',
+        body: 'mama · christmas',
+        actionTypeId: 'OLLIE_REMINDER',
+        extra: { module: 'admin', refId: 'task-id' },
+      },
       'reminder:task-id',
     );
   });
@@ -160,7 +172,12 @@ describe('adminHandler — time-deferred reminder (remindIn)', () => {
 
     expect(vi.mocked(scheduleAt)).toHaveBeenCalledWith(
       fireAt,
-      { title: 'to do', body: 'take zoloft' },
+      {
+        title: 'to do',
+        body: 'take zoloft',
+        actionTypeId: 'OLLIE_REMINDER',
+        extra: { module: 'admin', refId: 'task-id' },
+      },
       'reminder:task-id',
     );
     expect(vi.mocked(scheduleServerReminder)).toHaveBeenCalledWith(
@@ -169,6 +186,8 @@ describe('adminHandler — time-deferred reminder (remindIn)', () => {
         body: 'take zoloft',
         category: 'REMINDER',
         dedupe_key: 'reminder:task-id',
+        action_url: 'ollie://todo',
+        notification_category: 'OLLIE_REMINDER',
       },
       fireAt,
     );
