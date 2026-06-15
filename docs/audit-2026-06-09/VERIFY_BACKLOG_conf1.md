@@ -2,15 +2,15 @@
 
 _Sampled per Phase 4 rule, not all verified. Ordered severity then confidence._
 
-- [ ] **#43** 🟠 _(conf 1/3)_ STAGING_TEST_BEARER backdoor can bypass Clerk JWT verification with no production guard  
+- [x] **#43** ✅FIXED 2026-06-15 🟠 _(conf 1/3)_ STAGING_TEST_BEARER backdoor can bypass Clerk JWT verification with no production guard  
       `/Users/serrayildirim/ollie/workers/ai-proxy/src/router/dump.ts:123`  · _Security & Authorization_
-- [ ] **#44** 🟠 _(conf 1/3)_ Raw unscrubbed user input logged in worker dump telemetry  
+- [x] **#44** ✅FIXED 2026-06-15 🟠 _(conf 1/3)_ Raw unscrubbed user input logged in worker dump telemetry  
       `/Users/serrayildirim/ollie/workers/ai-proxy/src/router/dump.ts:387`  · _Secrets & Token Exposure_
 - [ ] **#45** 🟠 _(conf 1/3)_ Unsafe parseFloat on budget env/KV values without bounds validation  
       `/Users/serrayildirim/ollie/workers/ai-proxy/src/label.ts:137-140`  · _Input Validation_
 - [ ] **#46** 🟠 _(conf 1/3)_ No request body size limit on /brain-dump and /v1/messages endpoints  
       `/Users/serrayildirim/ollie/workers/ai-proxy/src/index.ts:389`  · _Input Validation_
-- [ ] **#47** 🟠 _(conf 1/3)_ Missing maximum text length validation in /route/dump  
+- [x] **#47** ✅FIXED 2026-06-15 🟠 _(conf 1/3)_ Missing maximum text length validation in /route/dump  
       `/Users/serrayildirim/ollie/workers/ai-proxy/src/router/dump.ts:148-157`  · _Input Validation_
 - [ ] **#48** 🟠 _(conf 1/3)_ UUID generation logic duplicated across 16+ module repositories  
       `apps/native/src/modules/goals/repo.ts:81-85`  · _Reinvented Wheels & Duplication_
