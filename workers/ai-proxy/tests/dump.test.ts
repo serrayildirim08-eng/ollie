@@ -133,6 +133,36 @@ describe('/route/dump — smoke', () => {
     expect(body.crisis).toBeUndefined();
   });
 
+  it('crisis short-circuits: returns the signal but stores/processes NOTHING', async () => {
+    const env = makeEnv();
+    // Turkish tier-2 phrase the lexicon catches.
+    const res = await handleDumpRoute(
+      makeReq({ text: 'kendime zarar vermek istiyorum' }),
+      env,
+    );
+    expect(res.status).toBe(200);
+
+    const body = (await res.json()) as {
+      originalDump: string;
+      fragments: unknown[];
+      summary: { aiCalls: number };
+      crisis?: { tier: number };
+    };
+
+    // crisis surfaced for the client's soft banner…
+    expect(body.crisis).toBeDefined();
+    expect(body.crisis?.tier).toBeGreaterThanOrEqual(2);
+    // …but nothing was classified, echoed, or stored.
+    expect(body.fragments).toEqual([]);
+    expect(body.originalDump).toBe('');
+    expect(body.summary.aiCalls).toBe(0);
+    // No embed / classify / cache / inbox round-trips happened at all — the
+    // short-circuit returns before any external call (proves zero persistence).
+    expect(fetchSpy).not.toHaveBeenCalled();
+    // The Vectorize cache was never written either.
+    expect((env.VECTORIZE_INDEX.upsert as ReturnType<typeof vi.fn>)).not.toHaveBeenCalled();
+  });
+
   it('returns 401 when authorization header missing', async () => {
     const env = makeEnv();
     const req = new Request('https://worker.dev/route/dump', {

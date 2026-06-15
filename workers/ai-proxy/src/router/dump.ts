@@ -232,6 +232,33 @@ export async function handleDumpRoute(
   // the upstream lexicon path even with no typed text.
   const crisis = detectCrisis(combinedDump) ?? undefined;
 
+  // Crisis short-circuit (product decision 2026-06-15). When the lexicon flags
+  // a crisis phrase we deliberately keep NOTHING: no classification, no Voyage
+  // embed, no Vectorize cache write, no telemetry log of the raw text, and no
+  // server-apply inbox row. Ollie is not a crisis tool — it responds gently
+  // (soft client banner) and stores none of the input anywhere. We return only
+  // the crisis signal with an empty originalDump so the text isn't even echoed
+  // back in the response. This MUST stay above the embed/classify/cache/log/
+  // writeInbox path below.
+  if (crisis) {
+    return json({
+      schemaVersion: '1.0',
+      originalDump: '',
+      dumpId,
+      timestamp: Date.now(),
+      language: detectFragmentLanguage(combinedDump),
+      crisis,
+      fragments: [],
+      summary: {
+        moduleCount: {},
+        cacheHitRate: 0,
+        aiCalls: 0,
+        durationMs: Date.now() - t0,
+        pass2Triggered: 0,
+      },
+    } satisfies RouterOutput);
+  }
+
   // 6. Per-fragment classification.
   //    Pass A: embed + Vectorize cache lookup for every fragment.
   //    Pass B: ONE batched Groq classify for all cache misses — the ~4k-token

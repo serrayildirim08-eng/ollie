@@ -12,14 +12,3 @@ export interface CrisisDetectResult {
    */
   lang: CrisisLang;
 }
-
-/**
- * Country hotline entry. `secondary` is null when no secondary line exists for
- * that country (e.g. INTL directory). Both label fields describe the service.
- */
-export interface CrisisHotline {
-  primary: string;
-  primary_label: string;
-  secondary: string | null;
-  secondary_label: string | null;
-}

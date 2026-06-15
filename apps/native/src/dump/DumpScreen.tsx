@@ -268,7 +268,7 @@ export function DumpScreen(): JSX.Element {
         />
       )}
 
-      {crisis && <CrisisBanner crisis={crisis} onDismiss={() => setCrisis(null)} />}
+      {crisis && <CrisisBanner onDismiss={() => setCrisis(null)} />}
 
       {!crisis && ackKey !== null && <Ack key={ackKey} />}
 
@@ -305,15 +305,9 @@ function Ack(): JSX.Element {
 
 // ─── crisis ───────────────────────────────────────────────────────────────
 
-function CrisisBanner({
-  crisis,
-  onDismiss,
-}: {
-  crisis: CrisisSignal;
-  onDismiss: () => void;
-}): JSX.Element {
+function CrisisBanner({ onDismiss }: { onDismiss: () => void }): JSX.Element {
   const lang = useAppLang();
-  const copy = crisisBannerCopy(lang, crisis.tier);
+  const copy = crisisBannerCopy(lang);
   const body = copy.body;
   return (
     <Stack
