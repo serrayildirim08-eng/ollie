@@ -3,6 +3,12 @@ main = "src/index.ts"
 compatibility_date = "2025-09-23"
 compatibility_flags = ["nodejs_compat"]
 
+# Plaintext environment marker. Used as a code-level guard so the staging-only
+# test bearer (STAGING_TEST_BEARER) can NEVER bypass Clerk on production even if
+# the secret is ever misconfigured here (audit #43). Production = "production".
+[vars]
+ENVIRONMENT = "production"
+
 # ─── KV bindings ───────────────────────────────────────────────────────────────
 # Run once:
 #   wrangler kv:namespace create CACHE_KV
@@ -113,6 +119,10 @@ queue = "ollie-enrich-queue"
 # Bindings inherit from top-level (wrangler 3+ requires explicit re-declaration).
 [env.staging]
 name = "ollie-ai-proxy-staging"
+
+# Staging is the ONLY environment where STAGING_TEST_BEARER is honored (audit #43).
+[env.staging.vars]
+ENVIRONMENT = "staging"
 
 [[env.staging.kv_namespaces]]
 binding = "CACHE_KV"

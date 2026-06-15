@@ -193,6 +193,35 @@ describe('/route/dump — smoke', () => {
     expect(fetchSpy).not.toHaveBeenCalled(); // rejected before any AI/embed call
   });
 
+  it('STAGING_TEST_BEARER is REFUSED on production — falls through to Clerk (audit #43)', async () => {
+    const { verifyClerkJwt } = await import('../src/clerk-verify');
+    vi.mocked(verifyClerkJwt).mockClear();
+    const env = makeEnv({ ENVIRONMENT: 'production', STAGING_TEST_BEARER: 'door-secret' });
+    const req = new Request('https://worker.dev/route/dump', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer door-secret' },
+      body: JSON.stringify({ text: 'süt aldım' }),
+    });
+    await handleDumpRoute(req, env);
+    // The door was NOT taken: Clerk verification ran on the bearer instead.
+    expect(vi.mocked(verifyClerkJwt)).toHaveBeenCalledWith('door-secret', expect.anything());
+  });
+
+  it('STAGING_TEST_BEARER works on non-production (staging) — skips Clerk (audit #43)', async () => {
+    const { verifyClerkJwt } = await import('../src/clerk-verify');
+    vi.mocked(verifyClerkJwt).mockClear();
+    const env = makeEnv({ ENVIRONMENT: 'staging', STAGING_TEST_BEARER: 'door-secret' });
+    const req = new Request('https://worker.dev/route/dump', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer door-secret' },
+      body: JSON.stringify({ text: 'süt aldım' }),
+    });
+    const res = await handleDumpRoute(req, env);
+    expect(res.status).toBe(200);
+    // Door taken → Clerk verify never called.
+    expect(vi.mocked(verifyClerkJwt)).not.toHaveBeenCalled();
+  });
+
   it('injects scheduledAtMs into payload when Layer 1 emits a remindIn hint', async () => {
     const env = makeEnv();
 

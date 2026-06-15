@@ -86,10 +86,14 @@ export interface DumpRouteEnv {
   CLERK_ISSUER?: string;
   /** Staging-only side door for golden-test harness. When set, a request
    *  with `Authorization: Bearer <STAGING_TEST_BEARER>` bypasses Clerk JWT
-   *  verify and runs as the fixed userId `staging-test-user`. The secret
-   *  exists ONLY on `ollie-ai-proxy-staging`; prod never has it set, so
-   *  the branch is unreachable on prod. */
+   *  verify and runs as the fixed userId `staging-test-user`. Defense in depth
+   *  (audit #43): honored ONLY when ENVIRONMENT !== 'production', so even a
+   *  misconfigured prod secret cannot open the door. The secret also exists
+   *  only on `ollie-ai-proxy-staging`. */
   STAGING_TEST_BEARER?: string;
+  /** Environment marker from wrangler [vars]. 'production' on the prod deploy,
+   *  'staging' on ollie-ai-proxy-staging. Gates STAGING_TEST_BEARER (audit #43). */
+  ENVIRONMENT?: string;
   VECTORIZE_INDEX: VectorizeIndex;
   /** Cloudflare Workers AI binding — same-platform classify fallback (no key).
    *  Optional so the worker still boots if the binding is absent. */
@@ -129,8 +133,11 @@ export async function handleDumpRoute(
   }
   const bearer = auth.slice('Bearer '.length);
 
+  // Defense in depth (audit #43): the staging test bearer is honored ONLY off
+  // production, so a misconfigured prod secret can never bypass Clerk.
+  const stagingDoorAllowed = env.ENVIRONMENT !== 'production';
   let userId: string | null;
-  if (env.STAGING_TEST_BEARER && bearer === env.STAGING_TEST_BEARER) {
+  if (stagingDoorAllowed && env.STAGING_TEST_BEARER && bearer === env.STAGING_TEST_BEARER) {
     userId = STAGING_TEST_USER_ID;
   } else {
     userId = await verifyClerkJwt(bearer, { CLERK_ISSUER: env.CLERK_ISSUER });
