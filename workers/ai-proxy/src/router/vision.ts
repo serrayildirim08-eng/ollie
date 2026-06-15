@@ -52,7 +52,7 @@ export async function visionExtract(
   image: VisionImage,
   geminiKey: string,
 ): Promise<VisionExtractResult> {
-  const url = `${GEMINI_API_BASE}/${GEMINI_MODEL}:generateContent?key=${geminiKey}`;
+  const url = `${GEMINI_API_BASE}/${GEMINI_MODEL}:generateContent`;
   const body = {
     systemInstruction: { parts: [{ text: VISION_SYSTEM_PROMPT }] },
     contents: [
@@ -69,7 +69,7 @@ export async function visionExtract(
 
   let res = await fetch(url, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', 'x-goog-api-key': geminiKey },
     body: JSON.stringify(body),
   });
 
@@ -77,7 +77,7 @@ export async function visionExtract(
     await new Promise((r) => setTimeout(r, 1000));
     res = await fetch(url, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', 'x-goog-api-key': geminiKey },
       body: JSON.stringify(body),
     });
   }

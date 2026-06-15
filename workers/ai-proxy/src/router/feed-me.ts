@@ -930,10 +930,10 @@ async function geminiSuggest(
     : `Suggest ${body.count} dishes I can cook from PANTRY: ${sanitizedPantry.join(', ')}. Diet: ${body.diet}. Respond in ${body.locale}.`;
   contents.push({ role: 'user', parts: [{ text: userTurn }] });
 
-  const url = `${GEMINI_API_BASE}/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
+  const url = `${GEMINI_API_BASE}/${GEMINI_MODEL}:generateContent`;
   const res = await fetch(url, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: systemPrompt }] },
       contents,
