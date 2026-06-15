@@ -43,7 +43,7 @@ import {
 import { useAuth, useUser } from '@clerk/clerk-react';
 import { Stack, Row } from '../../layout';
 import { Text } from '../../ui';
-import { colors, fonts } from '../../theme/tokens';
+import { fonts } from '../../theme/tokens';
 import { kv } from '../../storage';
 import { routeFeedMe, routeCookHistory } from '../../api/workers';
 import type {
@@ -351,7 +351,9 @@ function DietChipRow({
               padding: '7px 14px',
               borderRadius: 999,
               border: `1px solid ${on ? 'var(--ollie-color-sage)' : 'var(--ollie-color-hairline)'}`,
-              background: on ? withSageTint(colors.sage) : 'transparent',
+              background: on
+                ? 'color-mix(in srgb, var(--ollie-color-sage) 8%, transparent)'
+                : 'transparent',
               color: on ? 'var(--ollie-color-sage)' : 'var(--ollie-color-ink-faint)',
               fontSize: 11,
               fontWeight: 600,
@@ -863,19 +865,6 @@ function glyphButton(disabled: boolean): CSSProperties {
     fontWeight: 400,
     padding: 0,
   };
-}
-
-/**
- * Translucent sage fill for the active diet chip. The token palette doesn't
- * expose a pre-mixed "sageTint" so we layer an alpha right at the call site.
- * Hex stripping is defensive — `'var(--ollie-color-sage)'` is a 7-char hex in both modes.
- */
-function withSageTint(hex: string): string {
-  if (!/^#[0-9a-f]{6}$/i.test(hex)) return 'transparent';
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  return `rgba(${r}, ${g}, ${b}, 0.08)`;
 }
 
 /**
