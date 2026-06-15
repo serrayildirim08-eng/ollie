@@ -40,9 +40,29 @@ const SMCP_STYLE: React.CSSProperties = {
 // Bumped a hair so the cleanup unmount lands just after the fade-out finishes
 // and the user never sees a hard cut.
 const ACK_FADE_MS = 2500;
+// Inline ack is much shorter — a quiet "okay" under the input, not a takeover.
+// Matches the `ollie-inline-ack` keyframe.
+const INLINE_FADE_MS = 1600;
 // Force-remount each ack so the CSS animation restarts on every dump even
 // when the same Ack node would otherwise persist across submits.
 let _ackTick = 0;
+
+// The full-screen sage flood is a celebration moment — it earns the takeover
+// ONCE per day (the first dump). Every dump after that gets a quiet inline
+// "okay" instead, so the most-repeated action in the app stops hijacking the
+// whole screen 30x/day (and finally matches the documented silent dump UX).
+// Best-effort localStorage gate; falls back to inline on any failure.
+function claimFirstFloodToday(): boolean {
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const last = localStorage.getItem('ollie.ackFloodDate');
+    if (last === today) return false;
+    localStorage.setItem('ollie.ackFloodDate', today);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 /** One pending confirmation card — keyed by fragment index in the last dispatch. */
 interface PendingConfirm {
@@ -71,6 +91,9 @@ function buildRouteLabel(entry: DispatchEntry): string {
 export function DumpScreen(): JSX.Element {
   const { getToken } = useAuth();
   const [ackKey, setAckKey] = useState<number | null>(null);
+  // Whether the live ack is the full-screen flood (day's first dump) or the
+  // quiet inline "okay" (every dump after).
+  const [floodMode, setFloodMode] = useState(false);
   const [crisis, setCrisis] = useState<CrisisSignal | null>(null);
   const [pendingConfirms, setPendingConfirms] = useState<PendingConfirm[]>([]);
   // Partner is deferred out of v1 (audit #10) — its home ambient card only
@@ -85,9 +108,9 @@ export function DumpScreen(): JSX.Element {
   // screen returns to its quiet default state.
   useEffect(() => {
     if (ackKey === null) return;
-    const t = setTimeout(() => setAckKey(null), ACK_FADE_MS);
+    const t = setTimeout(() => setAckKey(null), floodMode ? ACK_FADE_MS : INLINE_FADE_MS);
     return () => clearTimeout(t);
-  }, [ackKey]);
+  }, [ackKey, floodMode]);
 
   // Fetch a Clerk session JWT for every dump request. The worker verifies
   // via JWKS at CLERK_ISSUER. Token has a short TTL (default ~60s) and
@@ -105,6 +128,7 @@ export function DumpScreen(): JSX.Element {
   // Force-remount the Ack so its CSS animation restarts on every fire.
   const fireAck = useCallback(() => {
     _ackTick += 1;
+    setFloodMode(claimFirstFloodToday());
     setAckKey(_ackTick);
   }, []);
 
@@ -245,6 +269,10 @@ export function DumpScreen(): JSX.Element {
         onCrisis={onCrisis}
       />
 
+      {/* Quiet inline ack — every dump after the day's first. A small "okay"
+          under the input that fades in ~1.6s, no screen takeover. */}
+      {!crisis && ackKey !== null && !floodMode && <InlineAck key={ackKey} />}
+
       {/* The cross-life "today" surface — the PRIMARY brain surface (Sprint 2).
           Replaces the old per-module dump card here: the selection discipline
           gathers noticings across her whole life, scores them, and shows only
@@ -272,7 +300,8 @@ export function DumpScreen(): JSX.Element {
 
       {crisis && <CrisisBanner crisis={crisis} onDismiss={() => setCrisis(null)} />}
 
-      {!crisis && ackKey !== null && <Ack key={ackKey} />}
+      {/* Full-screen sage flood — earned once per day, on the first dump. */}
+      {!crisis && ackKey !== null && floodMode && <Ack key={ackKey} />}
 
       {!crisis && pendingConfirms.length > 0 && (
         <Stack gap={10}>
@@ -301,6 +330,19 @@ function Ack(): JSX.Element {
   return (
     <div className={styles.ack} role="status" aria-live="polite">
       <span className={styles.ackText}>Okay!</span>
+    </div>
+  );
+}
+
+// ─── inline ack ─────────────────────────────────────────────────────────────
+// The quiet default: a small "okay" under the input that fades in then out.
+// No fixed positioning, no takeover — the dump UX stays silent (see memory
+// feedback-ollie-dump-ux-silent).
+
+function InlineAck(): JSX.Element {
+  return (
+    <div className={styles.inlineAck} role="status" aria-live="polite">
+      okay
     </div>
   );
 }
