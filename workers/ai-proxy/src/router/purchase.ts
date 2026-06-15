@@ -40,6 +40,10 @@ export interface PurchaseEnv {
   SUPABASE_SERVICE_ROLE: string;
   /** Set to "1" to enforce Clerk JWT auth (mirrors RouteEnv). */
   T0_JWT_ENFORCED?: string;
+  /** Environment marker — 'production' on the prod deploy. The spoofable
+   *  x-user-id dev bypass is refused on production regardless of
+   *  T0_JWT_ENFORCED (audit #30, mirrors #43). */
+  ENVIRONMENT?: string;
   /** Clerk issuer URL — required when T0_JWT_ENFORCED === '1'. */
   CLERK_ISSUER?: string;
 }
@@ -84,9 +88,10 @@ export async function handlePurchase(
   req: Request,
   env: PurchaseEnv,
 ): Promise<Response> {
-  // 1. Auth gate (T0)
+  // 1. Auth gate (T0). The x-user-id dev bypass is refused on production even
+  //    if T0_JWT_ENFORCED is misconfigured to '0' (audit #30).
   let userId: string | null;
-  if (env.T0_JWT_ENFORCED !== '0') {
+  if (env.T0_JWT_ENFORCED !== '0' || env.ENVIRONMENT === 'production') {
     const auth = req.headers.get('authorization');
     if (!auth || !auth.startsWith('Bearer ')) {
       return json({ error: 'unauthorized' }, 401);

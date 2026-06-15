@@ -19,6 +19,8 @@ export interface PartnerEnv {
   SUPABASE_URL: string;
   SUPABASE_SERVICE_ROLE: string;
   T0_JWT_ENFORCED?: string;
+  /** 'production' on prod — refuses the x-user-id dev bypass there (audit #30). */
+  ENVIRONMENT?: string;
   CLERK_ISSUER?: string;
 }
 
@@ -33,7 +35,8 @@ interface Snapshot {
 }
 
 async function resolveUser(req: Request, env: PartnerEnv): Promise<string | null> {
-  if (env.T0_JWT_ENFORCED !== '0') {
+  // x-user-id dev bypass is refused on production even if T0_JWT_ENFORCED='0' (audit #30).
+  if (env.T0_JWT_ENFORCED !== '0' || env.ENVIRONMENT === 'production') {
     const auth = req.headers.get('authorization');
     if (!auth || !auth.startsWith('Bearer ')) return null;
     return await verifyClerkJwt(auth.slice('Bearer '.length), env);

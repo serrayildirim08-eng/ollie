@@ -125,23 +125,37 @@ const RATE_WINDOW_SEC = 60;
 
 // ─── CORS helpers ──────────────────────────────────────────────────────────────
 //
-// Every endpoint here is called from the browser (Electron dev, Capacitor
-// iOS, web app). POST + application/json + Authorization Bearer all trigger
-// a preflight, so we MUST answer OPTIONS with the right headers AND echo
-// them on every real response. Pattern mirrors workers/sentry-tunnel.
+// Called from the Ollie app's WKWebView (iOS) + Tauri webview (macOS), both of
+// which serve over http://localhost:9527 (tauri-plugin-localhost), and the Vite
+// dev server. POST + application/json + Authorization Bearer all trigger a
+// preflight, so we answer OPTIONS with the right headers AND echo them on every
+// real response. Auth is Bearer-token (not cookies), so the prior wildcard was
+// low-risk; we still reflect only an allowlisted Origin (audit #11).
 
-function corsHeaders(): Record<string, string> {
+/** Origins the Ollie app legitimately calls the worker from. No public web. */
+const ALLOWED_ORIGINS = new Set([
+  'http://localhost:9527', // iOS + macOS app (tauri-plugin-localhost)
+  'http://localhost:1420', // Vite dev server
+  'tauri://localhost', // Tauri custom-scheme fallback
+]);
+
+/** Reflect the request Origin only when allowlisted; otherwise fall back to the
+ *  canonical app origin (never a blanket '*'). A non-browser caller sends no
+ *  Origin and ignores CORS anyway. */
+function corsHeaders(origin: string | null): Record<string, string> {
+  const allowOrigin = origin && ALLOWED_ORIGINS.has(origin) ? origin : 'http://localhost:9527';
   return {
-    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Origin': allowOrigin,
+    'Vary': 'Origin',
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-user-id, anthropic-beta',
     'Access-Control-Max-Age': '86400',
   };
 }
 
-function withCors(res: Response): Response {
+function withCors(origin: string | null, res: Response): Response {
   const headers = new Headers(res.headers);
-  for (const [k, v] of Object.entries(corsHeaders())) {
+  for (const [k, v] of Object.entries(corsHeaders(origin))) {
     headers.set(k, v);
   }
   return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
@@ -152,11 +166,14 @@ function withCors(res: Response): Response {
 export default {
   async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(req.url);
+    // Allowlisted-CORS origin for this request (audit #11). Resolved once and
+    // threaded through corsHeaders()/withCors() for every response below.
+    const origin = req.headers.get('Origin');
 
     // CORS preflight — every endpoint requires Authorization or x-user-id,
     // so browser will always preflight. Answer 204 + headers, no body.
     if (req.method === 'OPTIONS') {
-      return new Response(null, { status: 204, headers: corsHeaders() });
+      return new Response(null, { status: 204, headers: corsHeaders(origin) });
     }
 
     // ── /grocery/purchase — adaptive replenishment event ingestion (T2.5) ───
@@ -171,10 +188,10 @@ export default {
           PURCHASE_RATE_MAX,
         );
         if (!allowed) {
-          return withCors(json({ error: 'rate_limited' }, 429));
+          return withCors(origin, json({ error: 'rate_limited' }, 429));
         }
       }
-      return withCors(await handlePurchase(req, env));
+      return withCors(origin, await handlePurchase(req, env));
     }
 
     // ── /cook-history — Feed Me v2 cook event ingestion (rating + dish) ─────
@@ -189,10 +206,10 @@ export default {
           PURCHASE_RATE_MAX,
         );
         if (!allowed) {
-          return withCors(json({ error: 'rate_limited' }, 429));
+          return withCors(origin, json({ error: 'rate_limited' }, 429));
         }
       }
-      return withCors(await handleCookHistory(req, env));
+      return withCors(origin, await handleCookHistory(req, env));
     }
 
     // ── /transcribe — brain-dump mic → text (Groq Whisper) ─────────────────
@@ -208,10 +225,10 @@ export default {
           PURCHASE_RATE_MAX,
         );
         if (!allowed) {
-          return withCors(json({ error: 'rate_limited' }, 429));
+          return withCors(origin, json({ error: 'rate_limited' }, 429));
         }
       }
-      return withCors(await handleTranscribe(req, env));
+      return withCors(origin, await handleTranscribe(req, env));
     }
 
     // ── /partner/* — bilateral "intimate window" sync ──────────────────────
@@ -226,10 +243,10 @@ export default {
           PURCHASE_RATE_MAX,
         );
         if (!allowed) {
-          return withCors(json({ error: 'rate_limited' }, 429));
+          return withCors(origin, json({ error: 'rate_limited' }, 429));
         }
       }
-      return withCors(await handlePartner(req, env, partnerMatch[1]));
+      return withCors(origin, await handlePartner(req, env, partnerMatch[1]));
     }
 
     // ── /feed-me/:user — AI recipe suggestion (user mode + pet mode) ────────
@@ -246,10 +263,10 @@ export default {
           `rl:feedme:${fmUser}`,
         );
         if (!allowed) {
-          return withCors(json({ error: 'rate_limited' }, 429));
+          return withCors(origin, json({ error: 'rate_limited' }, 429));
         }
       }
-      return withCors(await handleFeedMe(req, env, feedMeMatch[1]));
+      return withCors(origin, await handleFeedMe(req, env, feedMeMatch[1]));
     }
 
     // ── /replenishment/:user — adaptive cadence estimates (T2.5) ─────────────
@@ -261,7 +278,7 @@ export default {
       /^\/replenishment\/([A-Za-z0-9_-]+)$/i,
     );
     if (replenishMatch && req.method === 'GET') {
-      return withCors(await handleReplenishment(req, env, replenishMatch[1]));
+      return withCors(origin, await handleReplenishment(req, env, replenishMatch[1]));
     }
 
     // ── /shelf-life/all — full canonical table + alias map (public, 24h cache) ─
@@ -278,10 +295,10 @@ export default {
           PURCHASE_RATE_MAX, // generous — full table re-fetch is rare
         );
         if (!allowed) {
-          return withCors(json({ error: 'rate_limited' }, 429));
+          return withCors(origin, json({ error: 'rate_limited' }, 429));
         }
       }
-      return withCors(await handleShelfLifeAll(req, env));
+      return withCors(origin, await handleShelfLifeAll(req, env));
     }
 
     // ── /shelf-life/lookup/:item — single-item resolution (public, 24h cache) ──
@@ -299,29 +316,29 @@ export default {
           `rl:shelflife-lookup:${slUser}`,
         );
         if (!allowed) {
-          return withCors(json({ error: 'rate_limited' }, 429));
+          return withCors(origin, json({ error: 'rate_limited' }, 429));
         }
       }
-      return withCors(await handleShelfLifeLookup(req, env, shelfLookupMatch[1]));
+      return withCors(origin, await handleShelfLifeLookup(req, env, shelfLookupMatch[1]));
     }
 
     // ── /shelf-life/lookup/ (empty item) — explicit 404 instead of falling
     //    through to method-not-allowed. Caller sent a malformed URL.
     if (url.pathname === '/shelf-life/lookup' || url.pathname === '/shelf-life/lookup/') {
-      return withCors(json({ error: 'not_found' }, 404));
+      return withCors(origin, json({ error: 'not_found' }, 404));
     }
 
     // ── A6b server-apply pilot — MUST be above the POST-only guard below,
     //    because /sync/grocery-pantry is a GET. ─────────────────────────────
     if (url.pathname === '/apply-inbox') {
-      return withCors(await handleApplyInbox(req, env));
+      return withCors(origin, await handleApplyInbox(req, env));
     }
     if (url.pathname === '/sync/grocery-pantry') {
-      return withCors(await handleSyncGroceryPantry(req, env));
+      return withCors(origin, await handleSyncGroceryPantry(req, env));
     }
 
     if (req.method !== 'POST') {
-      return withCors(json({ error: 'method_not_allowed' }, 405));
+      return withCors(origin, json({ error: 'method_not_allowed' }, 405));
     }
 
     // Telemetry endpoints — separate code path. They use the service-role
@@ -337,11 +354,11 @@ export default {
     ) {
       const authHeader = req.headers.get('authorization');
       if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return withCors(json({ error: 'unauthorized' }, 401));
+        return withCors(origin, json({ error: 'unauthorized' }, 401));
       }
       const userId = await verifyJwt(authHeader.slice('Bearer '.length), env);
       if (!userId) {
-        return withCors(json({ error: 'invalid_jwt' }, 401));
+        return withCors(origin, json({ error: 'invalid_jwt' }, 401));
       }
       const allowed = await checkRate(
         env.TELEM_RATE_LIMITER,
@@ -349,24 +366,24 @@ export default {
         `rl:telemetry:${userId}`,
       );
       if (!allowed) {
-        return withCors(json({ error: 'rate_limited' }, 429));
+        return withCors(origin, json({ error: 'rate_limited' }, 429));
       }
       if (url.pathname === '/enrich-dump') {
-        return withCors(await handleEnrichDump(req, env, userId));
+        return withCors(origin, await handleEnrichDump(req, env, userId));
       }
       if (url.pathname === '/ingest-event') {
-        return withCors(await handleIngestEvent(req, env, userId));
+        return withCors(origin, await handleIngestEvent(req, env, userId));
       }
-      return withCors(await handleLabel(req, env));
+      return withCors(origin, await handleLabel(req, env));
     }
     if (url.pathname === '/generate-invite') {
-      return withCors(await handleGenerateInvite(req, env));
+      return withCors(origin, await handleGenerateInvite(req, env));
     }
     if (url.pathname === '/validate-invite') {
-      return withCors(await handleValidateInvite(req, env));
+      return withCors(origin, await handleValidateInvite(req, env));
     }
     if (url.pathname === '/claim-invite') {
-      return withCors(await handleClaimInvite(req, env));
+      return withCors(origin, await handleClaimInvite(req, env));
     }
 
     // ── /brain-copy — Sprint 3 noticing sentence generation (A1) ─────────────
@@ -374,7 +391,7 @@ export default {
     // static sentence on any non-ok, so this route is never load-bearing.
     // Auth: Clerk JWT required (same policy as /route/dump).
     if (url.pathname === '/brain-copy' && req.method === 'POST') {
-      return withCors(await handleBrainCopy(req, env));
+      return withCors(origin, await handleBrainCopy(req, env));
     }
 
     // ── /route/dump — brain-dump universal router (Decision-locked v2) ───────
@@ -383,7 +400,7 @@ export default {
     // parallel crisis check (all 3 lexicons), 3-tier confidence policy.
     // Auth: Clerk JWT REQUIRED (not gated). User namespaces the cache.
     if (url.pathname === '/route/dump') {
-      return withCors(await handleDumpRoute(req, env, ctx));
+      return withCors(origin, await handleDumpRoute(req, env, ctx));
     }
 
     // ── /route/:module — module-agnostic AI semantic routing (T2) ────────────
@@ -392,11 +409,11 @@ export default {
     const routeMatch = url.pathname.match(/^\/route\/([a-z_-]+)$/);
     if (routeMatch) {
       const module = routeMatch[1];
-      return withCors(await handleRoute(req, env, module));
+      return withCors(origin, await handleRoute(req, env, module));
     }
 
     if (url.pathname !== '/brain-dump' && url.pathname !== '/v1/messages') {
-      return withCors(json({ error: 'not_found' }, 404));
+      return withCors(origin, json({ error: 'not_found' }, 404));
     }
 
     // Per-user rate-limit. Prefer authenticated user id from caller; fall
@@ -408,27 +425,27 @@ export default {
 
     const allowed = await checkRate(env.AI_RATE_LIMITER, env.RATE_KV, `rl:ai:${userKey}`);
     if (!allowed) {
-      return withCors(json({ error: 'rate_limited' }, 429));
+      return withCors(origin, json({ error: 'rate_limited' }, 429));
     }
 
     // Body size guard (audit #46). Cheap Content-Length pre-check, then a hard
     // cap on the actual bytes read (Content-Length can lie / be absent).
     const declaredLen = Number(req.headers.get('content-length') ?? '0');
     if (declaredLen > MAX_PROXY_BODY_BYTES) {
-      return withCors(json({ error: 'body_too_large' }, 413));
+      return withCors(origin, json({ error: 'body_too_large' }, 413));
     }
 
     // Read body once for hashing + forwarding.
     const bodyText = await req.text();
-    if (!bodyText) return withCors(json({ error: 'empty_body' }, 400));
+    if (!bodyText) return withCors(origin, json({ error: 'empty_body' }, 400));
     if (bodyText.length > MAX_PROXY_BODY_BYTES) {
-      return withCors(json({ error: 'body_too_large' }, 413));
+      return withCors(origin, json({ error: 'body_too_large' }, 413));
     }
 
     const cacheKey = `cache:ai:${await sha256Hex(bodyText)}`;
     const cached = await env.CACHE_KV.get(cacheKey);
     if (cached) {
-      return withCors(new Response(cached, {
+      return withCors(origin, new Response(cached, {
         status: 200,
         headers: {
           'content-type': 'application/json',
@@ -460,7 +477,7 @@ export default {
       await env.CACHE_KV.put(cacheKey, respText, { expirationTtl: CACHE_TTL_SEC });
     }
 
-    return withCors(new Response(respText, {
+    return withCors(origin, new Response(respText, {
       status: upstream.status,
       headers: {
         'content-type': upstream.headers.get('content-type') ?? 'application/json',
