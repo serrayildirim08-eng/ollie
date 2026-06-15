@@ -41,14 +41,15 @@ için gerekli, ama riski düşük tekrar işi.
 
 Dosya: her `*Box.tsx` başlığı, `dump/DumpScreen.tsx`
 
-## Faz 3 — "Okay!" selini kıs — ⬜
-Tam-ekran 2.4sn ack her dump'ta patlıyor; `dump-ux-silent` kararıyla çelişiyor.
+## Faz 3 — "Okay!" selini kıs — ✅
+Tam-ekran 2.4sn ack her dump'ta patlıyordu; `dump-ux-silent` kararıyla çelişiyordu.
 
-- [ ] Sıradan dump → küçük inline "okay" (ekran kaplamıyor)
-- [ ] Tam-ekran ack günde en fazla 1 kez (güne-ilk / milestone)
-- [ ] Yazmaya devam kesilmiyor
+- [x] Sıradan dump → input altında minik "okay" (1.6sn fade, ekran kaplamıyor)
+- [x] Tam-ekran sel günde en fazla 1 kez — güne-ilk dump (`localStorage` tarih kapısı)
+- [x] Yazmaya devam kesilmiyor (ikisi de pointer-events / non-blocking)
 
-Dosya: `dump/DumpScreen.tsx`, `dump/DumpScreen.module.css`
+Dosya: `dump/DumpScreen.tsx`, `dump/DumpScreen.module.css` — DONE 2026-06-15
+Not: "milestone'da da sel" tetikleyicisi şimdilik yok — sadece güne-ilk. İstenirse eklenir.
 
 ## Faz 4 — Mobil (iPhone) — ⬜
 Tip küçülmüyor, alt menüde ikon yok, parmak hedefi < 44px.
