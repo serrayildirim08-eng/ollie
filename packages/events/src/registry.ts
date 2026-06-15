@@ -214,6 +214,13 @@ export const REGISTRY: Registry = {
   'admin:recurring_pattern':           { payload: '{ category_or_label: string, predicted_next_ts: number, ts: number }' },
   'admin:appointment_completed':       { payload: '{ task_id: string, kind?: "doctor"|"appointment"|"other", ts: number }' },
   'admin:reflect_upcoming':            { payload: '{ source_event: string, source_module: string, kind: string, due_at: number, message: string, ts: number }' },
+  // Registered to match admin.ts emit sites (audit #9) — these were emitted but
+  // unregistered, so emit() warned + skipped payload-shape validation on each.
+  'admin:cost_of_delay':               { payload: '{ task_id: string, ts: number }' },
+  'admin:ef_scaffold':                 { payload: '{ ef_state: string, count: number, ts: number }' },
+  'admin:decision_recall':             { payload: '{ rule_id: string, ts: number }' },
+  'admin:doc_refs':                    { payload: '{ task_id: string, count: number, ts: number }' },
+  'admin:schedule_drift':              { payload: '{ category: string, ts: number }' },
 
   // ─── Sprint 3 / D1 burhan life-event tree ───────────────────────
   // Constitutional: tree never decays. Elements are append-only.

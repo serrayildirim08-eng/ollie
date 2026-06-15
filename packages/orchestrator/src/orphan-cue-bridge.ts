@@ -43,6 +43,25 @@ export const BRIDGED_CUE_EVENTS = [
   'medication:adherence_drift',
   'journal:entries_added',
   'notifications:delivered',
+  // admin pattern-detection events that had NO consumer (audit #11): the
+  // orchestrator did real detection work that was emitted into the void with
+  // zero observability. Capture them here so they're at least recorded.
+  // (Whether any should ALSO surface as a user noticing is a product decision.)
+  'admin:open_loop_missing',
+  'admin:cost_of_delay',
+  'admin:decision_recall',
+  'admin:defer_chain',
+  'admin:doc_refs',
+  'admin:ef_scaffold',
+  'admin:firehose_dump',
+  'admin:last_5pct',
+  'admin:paperwork_split',
+  'admin:renewal_cue',
+  'admin:schedule_drift',
+  'admin:stale_ball',
+  'admin:two_minute_tasks',
+  'admin:appointment_completed',
+  'admin:recurring_pattern',
 ] as const;
 
 export type BridgedCueEvent = (typeof BRIDGED_CUE_EVENTS)[number];

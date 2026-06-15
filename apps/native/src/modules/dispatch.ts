@@ -50,6 +50,15 @@ export async function dispatchRouterOutput(
   for (const fragment of output.fragments) {
     const handler = handlers[fragment.module];
     if (!handler) {
+      // No native handler for a module the worker routed to. `stubHandlers` is
+      // typed Record<Module,…> so this can't be a missing native handler — it
+      // means the worker's module list drifted ahead of the native Module type
+      // (separate packages, kept in sync by hand; audit #22). Log LOUDLY so the
+      // drift is observable instead of a silent drop. The raw dump text is still
+      // archived by DumpScreen, so the content itself is not lost.
+      console.error(
+        `[dispatch] worker↔native module drift: no handler for "${fragment.module}" — fragment NOT routed (raw dump still archived)`,
+      );
       entries.push({
         fragment,
         result: { ok: false, note: `no handler for ${fragment.module}` },
