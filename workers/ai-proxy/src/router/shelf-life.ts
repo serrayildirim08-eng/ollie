@@ -31,7 +31,7 @@ import {
  * interface (not `Record<string, never>`) so callers can union it with
  * other env shapes without TypeScript complaining.
  */
-// eslint-disable-next-line @typescript-eslint/no-empty-interface
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface ShelfLifeEnv {}
 
 // ─── version (ETag) ──────────────────────────────────────────────────────────
