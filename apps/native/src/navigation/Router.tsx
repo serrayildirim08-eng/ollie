@@ -16,6 +16,8 @@ import { Layout } from "./Layout";
 import { useFeature } from "../settings/features";
 import { Stack, Row } from "../layout";
 import { Text } from "../ui";
+import { useTheme } from "../theme/ThemeProvider";
+import type { ModePreference } from "../theme/mode";
 import { DumpScreen } from "../dump";
 import { GroceryBox } from "../modules/grocery";
 import { PetsBox } from "../modules/pets";
@@ -188,6 +190,48 @@ function ModulesIndex() {
   );
 }
 
+const APPEARANCE_OPTIONS: ReadonlyArray<{ value: ModePreference; label: string }> = [
+  { value: "light", label: "light" },
+  { value: "dark", label: "dark" },
+  { value: "system", label: "system" },
+];
+
+/** Light / Dark / System picker — drives the whole app via setPreference. */
+function AppearanceControl(): React.ReactElement {
+  const { preference, setPreference } = useTheme();
+  return (
+    <Row gap={20}>
+      {APPEARANCE_OPTIONS.map((opt) => {
+        const active = preference === opt.value;
+        return (
+          <button
+            key={opt.value}
+            onClick={() => setPreference(opt.value)}
+            aria-pressed={active}
+            style={{
+              background: "none",
+              border: "none",
+              padding: "8px 0",
+              cursor: "pointer",
+              fontVariantCaps: "all-small-caps",
+              letterSpacing: "0.08em",
+              fontSize: 13,
+              color: active
+                ? "var(--ollie-color-ink)"
+                : "var(--ollie-color-ink-faint)",
+              borderBottom: active
+                ? "1px solid var(--ollie-color-ink)"
+                : "1px solid transparent",
+            }}
+          >
+            {opt.label}
+          </button>
+        );
+      })}
+    </Row>
+  );
+}
+
 function SettingsScreen() {
   const { user } = useUser();
   const { signOut } = useClerk();
@@ -206,6 +250,13 @@ function SettingsScreen() {
             account
           </Text>
           <Text scale="body">{user?.primaryEmailAddress?.emailAddress ?? "—"}</Text>
+        </Stack>
+
+        <Stack gap={8}>
+          <Text scale="caption" color="var(--ollie-color-ink-faint)" style={SMCP_STYLE}>
+            appearance
+          </Text>
+          <AppearanceControl />
         </Stack>
 
         <button
