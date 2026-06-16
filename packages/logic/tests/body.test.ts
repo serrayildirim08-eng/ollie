@@ -837,7 +837,11 @@ describe('detectCaffeineWaterTradeoff', () => {
     const waterLog = [];
     const dumps = [];
     for (let d = 1; d <= 24; d++) {
-      const base = NOW - d * DAY + 9 * HOUR;
+      // Anchor near midday UTC (NOW is 12:00Z) so the day's coffee AND water
+      // stay inside the SAME calendar day in any runtime TZ. The old +9h put
+      // coffee at 21:00Z and water at +4h = 01:00Z (next UTC day), which split
+      // the pair across day buckets under UTC (CI) and broke the correlation.
+      const base = NOW - d * DAY + 2 * HOUR;
       const highCaf = d % 2 === 0;
       const cafCups = highCaf ? 3 : 1;
       const waterGlasses = highCaf ? 2 : 6;
@@ -854,7 +858,7 @@ describe('detectCaffeineWaterTradeoff', () => {
     const waterLog = [];
     const dumps = [];
     for (let d = 1; d <= 24; d++) {
-      const base = NOW - d * DAY + 9 * HOUR;
+      const base = NOW - d * DAY + 2 * HOUR;
       dumps.push({ ts: base, rawText: 'coffee' });
       dumps.push({ ts: base + 30 * MIN, rawText: 'coffee' });
       waterLog.push(base + 4 * HOUR, base + 5 * HOUR, base + 6 * HOUR);

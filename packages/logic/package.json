@@ -27,8 +27,8 @@
     "./brain": "./src/brain/index.ts"
   },
   "scripts": {
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "test": "TZ=UTC vitest run",
+    "test:watch": "TZ=UTC vitest",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
