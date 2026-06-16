@@ -19,7 +19,7 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { Stack } from '../../layout';
 import { Text } from '../../ui';
-import { colors, fonts, fontSizes, letterSpacings } from '../../theme/tokens';
+import { fonts, fontSizes, letterSpacings } from '../../theme/tokens';
 import { events } from './repo';
 import { NotifyPrimeLine } from '../../notify/NotifyPrimeLine';
 
@@ -257,7 +257,7 @@ export function FocusTimer({ onSessionLogged }: FocusTimerProps): JSX.Element {
       <Stack gap={12}>
         <Text
           scale="caption"
-          color={colors.inkFaint}
+          color="var(--ollie-color-ink-faint)"
           style={SMCP}
           as="span"
         >
@@ -290,7 +290,7 @@ export function FocusTimer({ onSessionLogged }: FocusTimerProps): JSX.Element {
                 style={{
                   ...SMCP,
                   fontSize: fontSizes.caption,
-                  color: colors.inkFaint,
+                  color: 'var(--ollie-color-ink-faint)',
                 }}
               >
                 min
@@ -308,10 +308,10 @@ export function FocusTimer({ onSessionLogged }: FocusTimerProps): JSX.Element {
                   width: 56,
                   fontFamily: fonts.sans,
                   fontSize: fontSizes.body,
-                  color: colors.ink,
+                  color: 'var(--ollie-color-ink)',
                   background: 'transparent',
                   border: 'none',
-                  borderBottom: `1px solid ${colors.hairline}`,
+                  borderBottom: '1px solid var(--ollie-color-hairline)',
                   padding: '2px 4px',
                   outline: 'none',
                   textAlign: 'center',
@@ -329,7 +329,7 @@ export function FocusTimer({ onSessionLogged }: FocusTimerProps): JSX.Element {
           style={{
             ...SMCP,
             fontSize: fontSizes.caption,
-            color: colors.inkFaint,
+            color: 'var(--ollie-color-ink-faint)',
             display: 'block',
           }}
         >
@@ -345,10 +345,10 @@ export function FocusTimer({ onSessionLogged }: FocusTimerProps): JSX.Element {
           style={{
             fontFamily: fonts.sans,
             fontSize: fontSizes.body,
-            color: colors.ink,
+            color: 'var(--ollie-color-ink)',
             background: 'transparent',
             border: 'none',
-            borderBottom: `1px solid ${colors.hairline}`,
+            borderBottom: '1px solid var(--ollie-color-hairline)',
             padding: '4px 0',
             width: '100%',
             outline: 'none',
@@ -359,8 +359,8 @@ export function FocusTimer({ onSessionLogged }: FocusTimerProps): JSX.Element {
       {/* ── time display ───────────────────────────────────────────────── */}
       <div
         style={{
-          borderTop: `1px solid ${colors.hairline}`,
-          borderBottom: `1px solid ${colors.hairline}`,
+          borderTop: '1px solid var(--ollie-color-hairline)',
+          borderBottom: '1px solid var(--ollie-color-hairline)',
           padding: '32px 0',
           textAlign: 'center',
         }}
@@ -371,7 +371,7 @@ export function FocusTimer({ onSessionLogged }: FocusTimerProps): JSX.Element {
             style={{
               fontFamily: fonts.serif,
               fontSize: fontSizes.h2,
-              color: colors.sage,
+              color: 'var(--ollie-color-sage)',
               letterSpacing: letterSpacings.body,
             }}
           >
@@ -384,7 +384,7 @@ export function FocusTimer({ onSessionLogged }: FocusTimerProps): JSX.Element {
             style={{
               fontFamily: fonts.serif,
               fontSize: fontSizes.display, // 64px per tokens
-              color: isDimmed ? colors.inkFaint : colors.ink,
+              color: isDimmed ? 'var(--ollie-color-ink-faint)' : 'var(--ollie-color-ink)',
               letterSpacing: letterSpacings.display,
               // tabular nums so digits don't jitter
               fontVariantNumeric: 'tabular-nums',
@@ -460,7 +460,7 @@ export function FocusTimer({ onSessionLogged }: FocusTimerProps): JSX.Element {
             style={{
               ...SMCP,
               fontSize: fontSizes.caption,
-              color: colors.inkFaint,
+              color: 'var(--ollie-color-ink-faint)',
             }}
           >
             logged
@@ -480,7 +480,7 @@ export function FocusTimer({ onSessionLogged }: FocusTimerProps): JSX.Element {
               border: 'none',
               padding: '6px 8px',
               cursor: 'pointer',
-              color: noiseOn ? colors.sage : colors.inkFaint,
+              color: noiseOn ? 'var(--ollie-color-sage)' : 'var(--ollie-color-ink-faint)',
               fontSize: 16,
               lineHeight: 1,
               transition: 'color 200ms cubic-bezier(0.18, 0, 0.22, 1)',
@@ -519,11 +519,11 @@ function PresetChip({
       style={{
         appearance: 'none',
         background: 'transparent',
-        border: `1px solid ${active ? colors.sage : colors.hairline}`,
+        border: `1px solid ${active ? 'var(--ollie-color-sage)' : 'var(--ollie-color-hairline)'}`,
         padding: '4px 12px',
         fontFamily: fonts.sans,
         fontSize: fontSizes.caption,
-        color: active ? colors.sage : colors.inkSoft,
+        color: active ? 'var(--ollie-color-sage)' : 'var(--ollie-color-ink-soft)',
         cursor: disabled ? 'default' : 'pointer',
         opacity: disabled && !active ? 0.45 : 1,
         transition: 'border-color 120ms, color 120ms',
@@ -549,9 +549,9 @@ function ControlButton({
   'aria-label': string;
 }): JSX.Element {
   const borderColor =
-    variant === 'start' ? colors.sage : variant === 'ink' ? colors.inkSoft : colors.hairline;
+    variant === 'start' ? 'var(--ollie-color-sage)' : variant === 'ink' ? 'var(--ollie-color-ink-soft)' : 'var(--ollie-color-hairline)';
   const textColor =
-    variant === 'start' ? colors.sage : variant === 'ink' ? colors.ink : colors.inkFaint;
+    variant === 'start' ? 'var(--ollie-color-sage)' : variant === 'ink' ? 'var(--ollie-color-ink)' : 'var(--ollie-color-ink-faint)';
 
   return (
     <button

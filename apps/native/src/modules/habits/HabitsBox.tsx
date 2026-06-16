@@ -22,7 +22,6 @@
 import { useCallback, useEffect, useState, type CSSProperties } from 'react';
 import { Stack, Row } from '../../layout';
 import { Text } from '../../ui';
-import { colors } from '../../theme/tokens';
 import { PatternCards } from '../../patterns/PatternCards';
 import { migrateHabits } from './migrate';
 import { registry, completions, events } from './repo';
@@ -136,24 +135,24 @@ export function HabitsBox(): JSX.Element {
   return (
     <Stack gap={56}>
       <Stack gap={12}>
-        <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
+        <Text scale="caption" color="var(--ollie-color-ink-faint)" style={SMCP_STYLE}>
           box · habits
         </Text>
         <Text scale="display">Habits</Text>
-        <Text scale="body" color={colors.inkSoft} style={{ maxWidth: 460 }}>
+        <Text scale="body" color="var(--ollie-color-ink-soft)" style={{ maxWidth: 460 }}>
           a quiet list of what you do. no streaks, no scoring.
         </Text>
       </Stack>
 
       {!ready ? (
-        <Text scale="caption" color={colors.inkFaint}>
+        <Text scale="caption" color="var(--ollie-color-ink-faint)">
           loading…
         </Text>
       ) : (
         <Stack gap={48}>
           <Section label="today">
             {todayCompletions.length === 0 ? (
-              <Text scale="body" color={colors.inkFaint}>
+              <Text scale="body" color="var(--ollie-color-ink-faint)">
                 nothing yet today.
               </Text>
             ) : (
@@ -193,7 +192,7 @@ export function HabitsBox(): JSX.Element {
                   disabled={newName.trim().length === 0}
                   style={{
                     ...buttonStyle,
-                    color: newName.trim() ? colors.ink : colors.inkFaint,
+                    color: newName.trim() ? 'var(--ollie-color-ink)' : 'var(--ollie-color-ink-faint)',
                   }}
                   aria-label="add habit"
                 >
@@ -203,7 +202,7 @@ export function HabitsBox(): JSX.Element {
             </Stack>
 
             {rows.length === 0 ? (
-              <Text scale="body" color={colors.inkFaint}>
+              <Text scale="body" color="var(--ollie-color-ink-faint)">
                 no habits yet — add one above, or dump &lsquo;did yoga&rsquo;.
               </Text>
             ) : (
@@ -246,7 +245,7 @@ export function HabitsBox(): JSX.Element {
 
           <Section label="identity notes">
             {identityEvents.length === 0 ? (
-              <Text scale="body" color={colors.inkFaint}>
+              <Text scale="body" color="var(--ollie-color-ink-faint)">
                 nothing yet — try dumping &lsquo;i am someone who walks every
                 morning&rsquo;.
               </Text>
@@ -309,7 +308,7 @@ function CueChooser({
         return (
           <Row key={cue} gap={10} align="baseline">
             {i > 0 && (
-              <Text scale="caption" color={colors.inkFaint} aria-hidden>
+              <Text scale="caption" color="var(--ollie-color-ink-faint)" aria-hidden>
                 ·
               </Text>
             )}
@@ -321,7 +320,7 @@ function CueChooser({
               onClick={() => onChange(cue)}
               style={{
                 ...segmentStyle,
-                color: active ? colors.sageDeep : colors.inkFaint,
+                color: active ? 'var(--ollie-color-sage-deep)' : 'var(--ollie-color-ink-faint)',
               }}
             >
               {cue}
@@ -336,7 +335,7 @@ function CueChooser({
 function Section({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <Stack gap={16}>
-      <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
+      <Text scale="lede" color="var(--ollie-color-ink)">
         {label}
       </Text>
       {children}
@@ -348,7 +347,7 @@ const buttonStyle: CSSProperties = {
   background: 'none',
   border: 'none',
   padding: '4px 8px',
-  color: colors.inkFaint,
+  color: 'var(--ollie-color-ink-faint)',
   cursor: 'pointer',
   fontVariantCaps: 'all-small-caps',
   letterSpacing: '0.08em',
@@ -368,9 +367,9 @@ const segmentStyle: CSSProperties = {
 const inputStyle: CSSProperties = {
   background: 'none',
   border: 'none',
-  borderBottom: `1px solid ${colors.hairline}`,
+  borderBottom: `1px solid var(--ollie-color-hairline)`,
   padding: '6px 0',
-  color: colors.ink,
+  color: 'var(--ollie-color-ink)',
   fontSize: 16,
   outline: 'none',
   width: '100%',

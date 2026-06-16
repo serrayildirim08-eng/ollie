@@ -15,13 +15,14 @@ import type { PantryItem } from './types';
 import { ageOf } from './aging';
 import { lookupDays } from './shelfLifeCache';
 
-// Redesign palette (literal, not the app theme — see header note).
+// Redesign palette · bound to the app theme CSS vars so the surface follows
+// light/dark (was a literal warm palette; unified 2026-06-16).
 const C = {
-  ink: '#23211C',
-  soft: '#6B675E',
-  faint: '#A8A29A',
-  hair: '#EAE5DB',
-  sage: '#7C8C6F',
+  ink: 'var(--ollie-color-ink)',
+  soft: 'var(--ollie-color-ink-soft)',
+  faint: 'var(--ollie-color-ink-faint)',
+  hair: 'var(--ollie-color-hairline)',
+  sage: 'var(--ollie-color-sage)',
 };
 const SERIF = '"DM Serif Display", Georgia, "Times New Roman", serif';
 const SMCP: React.CSSProperties = {

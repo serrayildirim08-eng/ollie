@@ -29,7 +29,7 @@ import {
 } from '@ollie/cadence';
 import { Stack, Row } from '../../layout';
 import { Text } from '../../ui';
-import { colors, fonts } from '../../theme/tokens';
+import { fonts } from '../../theme/tokens';
 import { WhenCaption } from '../../lib/WhenCaption';
 import { PatternCards } from '../../patterns/PatternCards';
 import { migratePets } from './migrate';
@@ -165,7 +165,7 @@ export function PetsBox(): JSX.Element {
     <Stack gap={56}>
       {/* kicker + display title — the box mast */}
       <Stack gap={8}>
-        <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
+        <Text scale="caption" color="var(--ollie-color-ink-faint)" style={SMCP_STYLE}>
           box
         </Text>
         <Text scale="display">Pets</Text>
@@ -181,7 +181,7 @@ export function PetsBox(): JSX.Element {
           fontWeight: 400,
           lineHeight: 1.5,
           letterSpacing: '0.01em',
-          color: colors.inkFaint,
+          color: 'var(--ollie-color-ink-faint)',
         }}
       >
         {PREFACE}
@@ -195,11 +195,11 @@ export function PetsBox(): JSX.Element {
       <PatternCards module="pets" />
 
       {!ready ? (
-        <Text scale="caption" color={colors.inkFaint}>
+        <Text scale="caption" color="var(--ollie-color-ink-faint)">
           loading…
         </Text>
       ) : empty ? (
-        <Text scale="body" color={colors.inkFaint}>
+        <Text scale="body" color="var(--ollie-color-ink-faint)">
           the notebook&rsquo;s empty &mdash; try dumping &ldquo;fed
           tontin&rdquo;
         </Text>
@@ -307,21 +307,21 @@ function Hero({
           height: empty ? 78 : 62,
           borderRadius: '50%',
           background: empty ? 'transparent' : DISC_FILL,
-          border: empty ? `1.5px solid ${colors.hairline}` : 'none',
+          border: empty ? `1.5px solid var(--ollie-color-hairline)` : 'none',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
         }}
       >
         {empty ? (
-          <PawGlyph size={34} stroke={colors.inkFaint} />
+          <PawGlyph size={34} stroke="var(--ollie-color-ink-faint)" />
         ) : (
           <span
             style={{
               fontFamily: fonts.sans,
               fontSize: 25,
               fontWeight: 700,
-              color: colors.ink,
+              color: 'var(--ollie-color-ink)',
               letterSpacing: '-0.02em',
             }}
           >
@@ -333,7 +333,7 @@ function Hero({
       {empty ? (
         <Text
           scale="caption"
-          color={colors.inkFaint}
+          color="var(--ollie-color-ink-faint)"
           style={{ letterSpacing: '0.02em' }}
         >
           no pets yet
@@ -362,11 +362,11 @@ function VitaminCStatus({ on }: { on: boolean }): JSX.Element {
           width: 8,
           height: 8,
           borderRadius: 4,
-          background: on ? colors.sage : AMBER_FAINT,
+          background: on ? 'var(--ollie-color-sage)' : AMBER_FAINT,
           opacity: on ? 1 : 0.7,
         }}
       />
-      <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
+      <Text scale="caption" color="var(--ollie-color-ink-faint)" style={SMCP_STYLE}>
         {on ? "today's vitamin c · logged" : "today's vitamin c · not yet"}
       </Text>
     </Row>
@@ -387,10 +387,10 @@ function PawGlyph({
       height={size}
       viewBox="0 0 24 24"
       fill="none"
-      stroke={stroke}
       strokeWidth={1.6}
       strokeLinecap="round"
       strokeLinejoin="round"
+      style={{ stroke }}
     >
       <circle cx="5" cy="9" r="1.6" />
       <circle cx="9" cy="5.5" r="1.6" />
@@ -463,11 +463,11 @@ function ListSection<T>({
 }): JSX.Element {
   return (
     <Stack gap={16}>
-      <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
+      <Text scale="lede" color="var(--ollie-color-ink)">
         {label}
       </Text>
       {items.length === 0 ? (
-        <Text scale="body" color={colors.inkFaint}>
+        <Text scale="body" color="var(--ollie-color-ink-faint)">
           {empty}
         </Text>
       ) : (
@@ -482,10 +482,10 @@ function ListSection<T>({
               key={i}
               style={{
                 boxSizing: 'border-box',
-                borderTop: `1px solid ${colors.hairline}`,
+                borderTop: `1px solid var(--ollie-color-hairline)`,
                 borderBottom:
                   i === items.length - 1
-                    ? `1px solid ${colors.hairline}`
+                    ? `1px solid var(--ollie-color-hairline)`
                     : 'none',
                 padding: '12px 2px',
               }}
@@ -523,7 +523,7 @@ function EventRow({
             <Text
               as="span"
               scale="caption"
-              color={colors.inkFaint}
+              color="var(--ollie-color-ink-faint)"
               style={{ marginLeft: 8 }}
             >
               · {secondary}
@@ -563,7 +563,7 @@ function CadenceHint({
   return (
     <Text
       scale="caption"
-      color={colors.inkFaint}
+      color="var(--ollie-color-ink-faint)"
       style={{ fontVariantCaps: 'all-small-caps', letterSpacing: '0.06em' }}
     >
       {`last ${subject} ${sinceLabel} ago · usually every ${everyLabel}`}
@@ -586,7 +586,7 @@ function RemoveButton({ onClick }: { onClick: () => void }): JSX.Element {
         background: 'none',
         border: 'none',
         padding: '4px 8px',
-        color: colors.inkFaint,
+        color: 'var(--ollie-color-ink-faint)',
         cursor: 'pointer',
         fontVariantCaps: 'all-small-caps',
         letterSpacing: '0.08em',
@@ -594,10 +594,10 @@ function RemoveButton({ onClick }: { onClick: () => void }): JSX.Element {
         transition: 'color 120ms cubic-bezier(0.18, 0, 0.22, 1)',
       }}
       onMouseEnter={(e) => {
-        e.currentTarget.style.color = colors.ink;
+        e.currentTarget.style.color = 'var(--ollie-color-ink)';
       }}
       onMouseLeave={(e) => {
-        e.currentTarget.style.color = colors.inkFaint;
+        e.currentTarget.style.color = 'var(--ollie-color-ink-faint)';
       }}
     >
       remove

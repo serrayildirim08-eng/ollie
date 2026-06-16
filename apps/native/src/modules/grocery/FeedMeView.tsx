@@ -43,7 +43,7 @@ import {
 import { useAuth, useUser } from '@clerk/clerk-react';
 import { Stack, Row } from '../../layout';
 import { Text } from '../../ui';
-import { colors, fonts } from '../../theme/tokens';
+import { fonts } from '../../theme/tokens';
 import { kv } from '../../storage';
 import { routeFeedMe, routeCookHistory } from '../../api/workers';
 import type {
@@ -318,12 +318,12 @@ function FeedMeHeader(): JSX.Element {
           lineHeight: 1.05,
           letterSpacing: '-0.025em',
           fontWeight: 400,
-          color: colors.ink,
+          color: 'var(--ollie-color-ink)',
         }}
       >
         feed me
       </span>
-      <Text scale="body" color={colors.inkSoft} style={{ maxWidth: 460 }}>
+      <Text scale="body" color="var(--ollie-color-ink-soft)" style={{ maxWidth: 460 }}>
         from what&rsquo;s already in your pantry.
       </Text>
     </Stack>
@@ -350,9 +350,11 @@ function DietChipRow({
             style={{
               padding: '7px 14px',
               borderRadius: 999,
-              border: `1px solid ${on ? colors.sage : colors.hairline}`,
-              background: on ? withSageTint(colors.sage) : 'transparent',
-              color: on ? colors.sage : colors.inkFaint,
+              border: `1px solid ${on ? 'var(--ollie-color-sage)' : 'var(--ollie-color-hairline)'}`,
+              background: on
+                ? 'color-mix(in srgb, var(--ollie-color-sage) 8%, transparent)'
+                : 'transparent',
+              color: on ? 'var(--ollie-color-sage)' : 'var(--ollie-color-ink-faint)',
               fontSize: 11,
               fontWeight: 600,
               cursor: 'pointer',
@@ -392,7 +394,7 @@ function CountStepper({
           fontFamily: fonts.serif,
           fontSize: 18,
           letterSpacing: '-0.01em',
-          color: colors.ink,
+          color: 'var(--ollie-color-ink)',
           minWidth: 64,
           textAlign: 'center',
         }}
@@ -430,10 +432,10 @@ function FeedMeCta({
       style={{
         alignSelf: 'flex-start',
         padding: '12px 26px',
-        background: disabled ? 'transparent' : colors.sage,
-        border: `1px solid ${disabled ? colors.hairline : colors.sage}`,
+        background: disabled ? 'transparent' : 'var(--ollie-color-sage)',
+        border: `1px solid ${disabled ? 'var(--ollie-color-hairline)' : 'var(--ollie-color-sage)'}`,
         borderRadius: 999,
-        color: disabled ? colors.inkFaint : colors.cream,
+        color: disabled ? 'var(--ollie-color-ink-faint)' : 'var(--ollie-color-cream)',
         fontSize: 13,
         fontWeight: 600,
         cursor: disabled ? 'not-allowed' : 'pointer',
@@ -448,7 +450,7 @@ function FeedMeCta({
 
 function PantryEmptyHint(): JSX.Element {
   return (
-    <Text scale="caption" color={colors.inkFaint}>
+    <Text scale="caption" color="var(--ollie-color-ink-faint)">
       pantry&rsquo;s empty. dump what you bought and come back.
     </Text>
   );
@@ -457,7 +459,7 @@ function PantryEmptyHint(): JSX.Element {
 function LoadingLine(): JSX.Element {
   return (
     <Row gap={6} align="center" aria-live="polite">
-      <Text scale="caption" color={colors.inkFaint}>
+      <Text scale="caption" color="var(--ollie-color-ink-faint)">
         thinking
       </Text>
       <DotPulse />
@@ -484,7 +486,7 @@ function DotPulse(): JSX.Element {
             width: 4,
             height: 4,
             borderRadius: '50%',
-            background: colors.inkFaint,
+            background: 'var(--ollie-color-ink-faint)',
             animation: `ollie-feedme-pulse 1200ms ${i * 160}ms cubic-bezier(0.45, 0, 0.55, 1) infinite`,
           }}
         />
@@ -495,7 +497,7 @@ function DotPulse(): JSX.Element {
 
 function EmptyResultLine(): JSX.Element {
   return (
-    <Text scale="caption" color={colors.inkFaint}>
+    <Text scale="caption" color="var(--ollie-color-ink-faint)">
       couldn&rsquo;t dream anything up. add a couple more things to your pantry.
     </Text>
   );
@@ -503,7 +505,7 @@ function EmptyResultLine(): JSX.Element {
 
 function NetworkErrorLine(): JSX.Element {
   return (
-    <Text scale="caption" color={colors.inkFaint}>
+    <Text scale="caption" color="var(--ollie-color-ink-faint)">
       couldn&rsquo;t reach the kitchen — try in a moment.
     </Text>
   );
@@ -554,8 +556,8 @@ function RecipeCard({
     <article
       style={{
         padding: '20px 22px',
-        background: colors.paper,
-        border: `1px solid ${colors.hairline}`,
+        background: 'var(--ollie-color-paper)',
+        border: '1px solid var(--ollie-color-hairline)',
         borderRadius: 4,
         display: 'flex',
         flexDirection: 'column',
@@ -598,7 +600,7 @@ function RecipeCard({
               lineHeight: 1.1,
               letterSpacing: '-0.012em',
               fontWeight: 400,
-              color: colors.ink,
+              color: 'var(--ollie-color-ink)',
             }}
           >
             {suggestion.dish}
@@ -609,7 +611,7 @@ function RecipeCard({
               style={{
                 flexShrink: 0,
                 fontSize: 11,
-                color: colors.inkFaint,
+                color: 'var(--ollie-color-ink-faint)',
                 ...SMCP_STYLE,
               }}
             >
@@ -618,7 +620,7 @@ function RecipeCard({
           )}
         </Row>
 
-        <Text scale="caption" color={colors.inkFaint}>
+        <Text scale="caption" color="var(--ollie-color-ink-faint)">
           {minutes > 0 ? `about ${minutes} min` : 'a few minutes'}
           {specificDiet && ` · ${specificDiet}`}
         </Text>
@@ -627,7 +629,7 @@ function RecipeCard({
           <span
             style={{
               fontSize: 11,
-              color: colors.inkSoft,
+              color: 'var(--ollie-color-ink-soft)',
               ...SMCP_STYLE,
             }}
           >
@@ -640,7 +642,7 @@ function RecipeCard({
         <Stack gap={14} style={{ marginTop: 4 }}>
           {suggestion.ingredients.length > 0 && (
             <Stack gap={6}>
-              <span style={{ fontSize: 11, color: colors.inkFaint, ...SMCP_STYLE }}>
+              <span style={{ fontSize: 11, color: 'var(--ollie-color-ink-faint)', ...SMCP_STYLE }}>
                 ingredients{suggestion.servings > 0 ? ` · serves ${suggestion.servings}` : ''}
               </span>
               {suggestion.ingredients.map((ing, i) => {
@@ -652,7 +654,7 @@ function RecipeCard({
                 // Have it already → plain line, no affordance.
                 if (ing.have) {
                   return (
-                    <Text key={key} scale="caption" color={colors.ink}>
+                    <Text key={key} scale="caption" color="var(--ollie-color-ink)">
                       {label}
                     </Text>
                   );
@@ -665,13 +667,13 @@ function RecipeCard({
                 if (added || !onAddToShop) {
                   return (
                     <Row key={key} gap={6} align="baseline">
-                      <Text scale="caption" color={added ? colors.sage : colors.inkSoft}>
+                      <Text scale="caption" color={added ? 'var(--ollie-color-sage)' : 'var(--ollie-color-ink-soft)'}>
                         {label}
                       </Text>
                       <span
                         style={{
                           fontSize: 11,
-                          color: added ? colors.sage : colors.inkFaint,
+                          color: added ? 'var(--ollie-color-sage)' : 'var(--ollie-color-ink-faint)',
                           fontWeight: added ? 600 : 400,
                           ...SMCP_STYLE,
                         }}
@@ -709,13 +711,13 @@ function RecipeCard({
                       gap: 6,
                     }}
                   >
-                    <Text scale="caption" color={colors.inkSoft}>
+                    <Text scale="caption" color="var(--ollie-color-ink-soft)">
                       {label}
                     </Text>
                     <span
                       style={{
                         fontSize: 11,
-                        color: colors.sage,
+                        color: 'var(--ollie-color-sage)',
                         fontWeight: 600,
                         ...SMCP_STYLE,
                       }}
@@ -730,7 +732,7 @@ function RecipeCard({
 
           {suggestion.steps.length > 0 && (
             <Stack gap={8}>
-              <span style={{ fontSize: 11, color: colors.inkFaint, ...SMCP_STYLE }}>
+              <span style={{ fontSize: 11, color: 'var(--ollie-color-ink-faint)', ...SMCP_STYLE }}>
                 steps
               </span>
               {suggestion.steps.map((step, i) => (
@@ -740,12 +742,12 @@ function RecipeCard({
                       flexShrink: 0,
                       fontFamily: fonts.serif,
                       fontSize: 13,
-                      color: colors.inkFaint,
+                      color: 'var(--ollie-color-ink-faint)',
                     }}
                   >
                     {i + 1}
                   </span>
-                  <Text scale="body" color={colors.ink}>
+                  <Text scale="body" color="var(--ollie-color-ink)">
                     {step}
                   </Text>
                 </Row>
@@ -760,7 +762,7 @@ function RecipeCard({
           <span
             style={{
               fontSize: 11,
-              color: colors.sage,
+              color: 'var(--ollie-color-sage)',
               fontWeight: 600,
               ...SMCP_STYLE,
             }}
@@ -777,7 +779,7 @@ function RecipeCard({
               padding: 0,
               cursor: 'pointer',
               fontSize: 11,
-              color: colors.sage,
+              color: 'var(--ollie-color-sage)',
               fontWeight: 600,
               ...SMCP_STYLE,
             }}
@@ -807,7 +809,7 @@ function RecentStrip({ rows }: { rows: CookHistoryEntry[] }): JSX.Element | null
           border: 'none',
           padding: 0,
           cursor: 'pointer',
-          color: colors.inkFaint,
+          color: 'var(--ollie-color-ink-faint)',
           fontSize: 11,
           fontWeight: 600,
           display: 'inline-flex',
@@ -834,7 +836,7 @@ function RecentStrip({ rows }: { rows: CookHistoryEntry[] }): JSX.Element | null
         <Stack gap={6} as="ul" style={{ listStyle: 'none', padding: 0, margin: 0 }}>
           {rows.map((r) => (
             <li key={r.id}>
-              <Text scale="caption" color={colors.inkSoft}>
+              <Text scale="caption" color="var(--ollie-color-ink-soft)">
                 {r.recipeName} · {formatAgo(r.cookedAtMs)}
               </Text>
             </li>
@@ -854,28 +856,15 @@ function glyphButton(disabled: boolean): CSSProperties {
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
-    border: `1px solid ${colors.hairline}`,
+    border: '1px solid var(--ollie-color-hairline)',
     background: 'transparent',
     borderRadius: 999,
     cursor: disabled ? 'not-allowed' : 'pointer',
-    color: disabled ? colors.inkGhost : colors.inkFaint,
+    color: disabled ? 'var(--ollie-color-ink-ghost)' : 'var(--ollie-color-ink-faint)',
     fontSize: 14,
     fontWeight: 400,
     padding: 0,
   };
-}
-
-/**
- * Translucent sage fill for the active diet chip. The token palette doesn't
- * expose a pre-mixed "sageTint" so we layer an alpha right at the call site.
- * Hex stripping is defensive — `colors.sage` is a 7-char hex in both modes.
- */
-function withSageTint(hex: string): string {
-  if (!/^#[0-9a-f]{6}$/i.test(hex)) return 'transparent';
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  return `rgba(${r}, ${g}, ${b}, 0.08)`;
 }
 
 /**

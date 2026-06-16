@@ -1,7 +1,15 @@
 import type { ElementType, HTMLAttributes, ReactNode } from "react";
 import styles from "./Text.module.css";
 
-export type TextScale = "display" | "title" | "heading" | "body" | "caption";
+export type TextScale =
+  | "hero"     // 96 · one per surface — cover, manifesto break
+  | "display"  // 64 · section openers / page mastheads
+  | "title"    // 42 · spread headline
+  | "heading"  // 28 · section header
+  | "lede"     // 22 · sub-section / standfirst
+  | "body"     // 17 · running text anchor
+  | "small"    // 14 · secondary body
+  | "caption"; // 13 · caption / footnote / kicker
 
 /**
  * Color accepts any CSS value — intended for theme token strings from
@@ -17,10 +25,13 @@ export interface TextProps extends HTMLAttributes<HTMLElement> {
 }
 
 const DEFAULT_TAG: Record<TextScale, ElementType> = {
+  hero:    "h1",
   display: "h1",
   title:   "h2",
   heading: "h3",
+  lede:    "p",
   body:    "p",
+  small:   "p",
   caption: "span",
 };
 

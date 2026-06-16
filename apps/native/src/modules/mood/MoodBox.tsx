@@ -14,7 +14,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Stack, Row } from '../../layout';
 import { Text } from '../../ui';
-import { colors, fontWeights } from '../../theme/tokens';
+import { fontWeights } from '../../theme/tokens';
 import { WhenCaption } from '../../lib/WhenCaption';
 import { migrateMood } from './migrate';
 import { events as eventsRepo } from './repo';
@@ -89,14 +89,14 @@ export function MoodBox(): JSX.Element {
   return (
     <Stack gap={48}>
       <Stack gap={8}>
-        <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
+        <Text scale="caption" color="var(--ollie-color-ink-faint)" style={SMCP_STYLE}>
           box
         </Text>
         <Text scale="display">Mood</Text>
       </Stack>
 
       {!ready ? (
-        <Text scale="caption" color={colors.inkFaint}>
+        <Text scale="caption" color="var(--ollie-color-ink-faint)">
           loading…
         </Text>
       ) : isEmpty ? (
@@ -137,12 +137,12 @@ function ColdStart(): JSX.Element {
           width: 7,
           height: 7,
           borderRadius: '50%',
-          background: colors.sageDeep,
+          background: 'var(--ollie-color-sage-deep)',
           flexShrink: 0,
           marginTop: 7,
         }}
       />
-      <Text scale="body" color={colors.ink}>
+      <Text scale="body" color="var(--ollie-color-ink)">
         <b style={{ fontWeight: fontWeights.medium }}>
           this is mood — how you feel, your energy, the way you talk to yourself.
         </b>{' '}
@@ -166,7 +166,7 @@ function ListSection({
   if (items.length === 0) return null;
   return (
     <Stack gap={16}>
-      <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
+      <Text scale="lede" color="var(--ollie-color-ink)">
         {label}
       </Text>
       <Stack gap={4}>{items.map((e) => children(e))}</Stack>
@@ -230,7 +230,7 @@ function RemoveButton({ onClick }: { onClick: () => void }): JSX.Element {
         background: 'none',
         border: 'none',
         padding: '4px 8px',
-        color: colors.inkFaint,
+        color: 'var(--ollie-color-ink-faint)',
         cursor: 'pointer',
         fontVariantCaps: 'all-small-caps',
         letterSpacing: '0.08em',

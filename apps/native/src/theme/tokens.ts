@@ -133,10 +133,14 @@ export const fonts = {
 
 export const fontSizes = {
   // editorial scale · names describe role, not pixel size.
-  hero: '96px',     // one per surface · cover, manifesto break
-  display: '64px',  // section openers
-  h1: '42px',       // spread headline
-  h2: '28px',       // sub-section
+  // Display rungs are FLUID via clamp(min, vw, max): the max is the desktop
+  // size (so wide screens are unchanged) and the min keeps iPhone titles to
+  // 1–2 lines instead of wrapping to 3. Body/caption stay fixed — small text
+  // must not shrink further on narrow screens.
+  hero: 'clamp(48px, 14vw, 96px)',    // one per surface · cover, manifesto break
+  display: 'clamp(36px, 9vw, 64px)',  // section openers / page mastheads
+  h1: 'clamp(30px, 7vw, 42px)',       // spread headline
+  h2: 'clamp(24px, 5vw, 28px)',       // sub-section
   h3: '22px',       // lede / standfirst
   body: '17px',     // running text · anchor
   small: '14px',    // small body, secondary

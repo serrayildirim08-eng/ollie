@@ -13,7 +13,6 @@
 import type { CSSProperties } from 'react';
 import { Stack, Row } from '../layout';
 import { Text } from '../ui';
-import { colors } from '../theme/tokens';
 
 const SMCP_STYLE: CSSProperties = {
   fontVariantCaps: 'all-small-caps',
@@ -50,8 +49,8 @@ export function NeedsConfirmCard({
       style={{
         padding: '14px 18px',
         borderRadius: 10,
-        background: colors.paper,
-        border: `1px solid ${colors.hairline}`,
+        background: 'var(--ollie-color-paper)',
+        border: '1px solid var(--ollie-color-hairline)',
         position: 'relative',
       }}
     >
@@ -64,7 +63,7 @@ export function NeedsConfirmCard({
             right: 12,
             fontFamily: 'inherit',
             fontSize: 10,
-            color: colors.sage,
+            color: 'var(--ollie-color-sage)',
             letterSpacing: '0.10em',
             fontVariantCaps: 'all-small-caps',
           }}
@@ -74,17 +73,17 @@ export function NeedsConfirmCard({
       )}
       <Stack gap={10}>
         {/* kicker */}
-        <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
+        <Text scale="caption" color="var(--ollie-color-ink-faint)" style={SMCP_STYLE}>
           not sure · confirm?
         </Text>
 
         {/* fragment preview */}
-        <Text scale="body" color={colors.ink} style={{ fontStyle: 'italic' }}>
+        <Text scale="body" color="var(--ollie-color-ink)" style={{ fontStyle: 'italic' }}>
           &ldquo;{fragmentPreview}&rdquo;
         </Text>
 
         {/* route label */}
-        <Text scale="caption" color={colors.inkSoft} style={SMCP_STYLE}>
+        <Text scale="caption" color="var(--ollie-color-ink-soft)" style={SMCP_STYLE}>
           {routeLabel}
         </Text>
 
@@ -103,7 +102,7 @@ export function NeedsConfirmCard({
               fontSize: 13,
               fontWeight: 600,
               letterSpacing: '0.04em',
-              color: colors.sage,
+              color: 'var(--ollie-color-sage)',
             }}
           >
             keep
@@ -121,7 +120,7 @@ export function NeedsConfirmCard({
               fontSize: 13,
               fontWeight: 500,
               letterSpacing: '0.04em',
-              color: colors.inkFaint,
+              color: 'var(--ollie-color-ink-faint)',
             }}
           >
             undo

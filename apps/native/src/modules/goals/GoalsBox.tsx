@@ -34,7 +34,7 @@ import {
 } from '@ollie/cadence';
 import { Stack, Row } from '../../layout';
 import { Text, Button } from '../../ui';
-import { colors, fonts, fontWeights, zIndex } from '../../theme/tokens';
+import { fonts, fontWeights, zIndex } from '../../theme/tokens';
 import { WhenCaption } from '../../lib/WhenCaption';
 import { PatternCards } from '../../patterns/PatternCards';
 import { migrateGoals } from './migrate';
@@ -179,7 +179,7 @@ export function GoalsBox(): JSX.Element {
     <Stack gap={48}>
       <Row justify="space-between" align="flex-end" gap={16}>
         <Stack gap={8}>
-          <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
+          <Text scale="caption" color="var(--ollie-color-ink-faint)" style={SMCP_STYLE}>
             box
           </Text>
           <Text scale="display">Goals</Text>
@@ -189,7 +189,7 @@ export function GoalsBox(): JSX.Element {
       </Row>
 
       {!ready ? (
-        <Text scale="caption" color={colors.inkFaint}>
+        <Text scale="caption" color="var(--ollie-color-ink-faint)">
           loading…
         </Text>
       ) : (
@@ -309,8 +309,8 @@ const OVERLAY_BACKDROP: React.CSSProperties = {
 const OVERLAY_CARD: React.CSSProperties = {
   width: '100%',
   maxWidth: 420,
-  background: colors.cream,
-  border: `1px solid ${colors.hairline}`,
+  background: 'var(--ollie-color-cream)',
+  border: '1px solid var(--ollie-color-hairline)',
   borderRadius: 14,
   boxShadow: '0 12px 40px rgba(20, 25, 20, 0.10)',
   padding: '32px 28px',
@@ -347,7 +347,7 @@ function DeleteHeldOverlay({ onClose }: { onClose: () => void }): JSX.Element {
               fontFamily: fonts.serif,
               fontSize: 24,
               fontWeight: fontWeights.regular,
-              color: colors.ink,
+              color: 'var(--ollie-color-ink)',
               letterSpacing: '-0.02em',
               lineHeight: 1.25,
               textAlign: 'center',
@@ -360,7 +360,7 @@ function DeleteHeldOverlay({ onClose }: { onClose: () => void }): JSX.Element {
               fontFamily: fonts.serif,
               fontStyle: 'italic',
               fontSize: 17,
-              color: colors.sageDeep,
+              color: 'var(--ollie-color-sage-deep)',
               lineHeight: 1.5,
               textAlign: 'center',
               maxWidth: 320,
@@ -411,7 +411,7 @@ function DeleteConfirmOverlay({
         style={OVERLAY_CARD}
       >
         <Stack gap={24}>
-          <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
+          <Text scale="caption" color="var(--ollie-color-ink-faint)" style={SMCP_STYLE}>
             a note from past-you
           </Text>
 
@@ -423,7 +423,7 @@ function DeleteConfirmOverlay({
                 fontStyle: 'italic',
                 fontSize: 21,
                 fontWeight: fontWeights.regular,
-                color: colors.ink,
+                color: 'var(--ollie-color-ink)',
                 letterSpacing: '-0.012em',
                 lineHeight: 1.45,
               }}
@@ -436,7 +436,7 @@ function DeleteConfirmOverlay({
                 fontFamily: fonts.serif,
                 fontStyle: 'italic',
                 fontSize: 18,
-                color: colors.inkSoft,
+                color: 'var(--ollie-color-ink-soft)',
                 lineHeight: 1.45,
               }}
             >
@@ -445,7 +445,7 @@ function DeleteConfirmOverlay({
             </div>
           )}
 
-          <Text scale="caption" color={colors.inkSoft}>
+          <Text scale="caption" color="var(--ollie-color-ink-soft)">
             removing <em style={{ fontFamily: fonts.serif }}>{goal.name}</em> takes
             it off your list for good.
           </Text>
@@ -478,10 +478,10 @@ function NewGoalButton({ onClick }: { onClick: () => void }): JSX.Element {
       aria-label="add a new goal"
       style={{
         background: 'none',
-        border: `1px solid ${colors.hairline}`,
+        border: '1px solid var(--ollie-color-hairline)',
         borderRadius: 999,
         padding: '8px 16px',
-        color: colors.sageDeep,
+        color: 'var(--ollie-color-sage-deep)',
         cursor: 'pointer',
         fontFamily: fonts.sans,
         fontSize: 13,
@@ -527,7 +527,7 @@ function FocusHero({ goal, index, total, onFocus }: FocusHeroProps): JSX.Element
           fontFamily: fonts.serif,
           fontSize: 28,
           fontWeight: fontWeights.regular,
-          color: colors.ink,
+          color: 'var(--ollie-color-ink)',
           letterSpacing: '-0.022em',
           lineHeight: 1.1,
           textAlign: 'center',
@@ -545,7 +545,7 @@ function FocusHero({ goal, index, total, onFocus }: FocusHeroProps): JSX.Element
             fontStyle: 'italic',
             fontSize: 17,
             fontWeight: fontWeights.regular,
-            color: colors.sageDeep,
+            color: 'var(--ollie-color-sage-deep)',
             letterSpacing: '-0.01em',
             lineHeight: 1.45,
             textAlign: 'center',
@@ -558,7 +558,7 @@ function FocusHero({ goal, index, total, onFocus }: FocusHeroProps): JSX.Element
         <div
           style={{
             fontSize: 13,
-            color: colors.inkFaint,
+            color: 'var(--ollie-color-ink-faint)',
             fontWeight: fontWeights.regular,
             letterSpacing: '0.01em',
             textAlign: 'center',
@@ -575,7 +575,7 @@ function FocusHero({ goal, index, total, onFocus }: FocusHeroProps): JSX.Element
         <div
           style={{
             fontSize: 13,
-            color: colors.inkSoft,
+            color: 'var(--ollie-color-ink-soft)',
             fontWeight: fontWeights.regular,
             letterSpacing: '0.01em',
             lineHeight: 1.55,
@@ -604,7 +604,7 @@ function FocusHero({ goal, index, total, onFocus }: FocusHeroProps): JSX.Element
                 padding: 0,
                 borderRadius: '50%',
                 border: 'none',
-                background: i === index ? colors.sageDeep : colors.hairline,
+                background: i === index ? 'var(--ollie-color-sage-deep)' : 'var(--ollie-color-hairline)',
                 cursor: 'pointer',
                 WebkitTapHighlightColor: 'transparent',
               }}
@@ -635,21 +635,21 @@ function ColdHero({ showExample }: { showExample: boolean }): JSX.Element {
           fontFamily: fonts.serif,
           fontSize: 22,
           fontWeight: fontWeights.regular,
-          color: colors.ink,
+          color: 'var(--ollie-color-ink)',
           letterSpacing: '-0.018em',
           lineHeight: 1.3,
           textAlign: 'center',
           maxWidth: 340,
         }}
       >
-        <em style={{ color: colors.sageDeep }}>no goals yet</em> &mdash; a clean
+        <em style={{ color: 'var(--ollie-color-sage-deep)' }}>no goals yet</em> &mdash; a clean
         slate, not a gap.
       </div>
 
       <div
         style={{
           fontSize: 13.5,
-          color: colors.inkSoft,
+          color: 'var(--ollie-color-ink-soft)',
           fontWeight: fontWeights.regular,
           letterSpacing: '0.005em',
           lineHeight: 1.55,
@@ -678,7 +678,7 @@ const EXAMPLE_ROWS: { name: string; cat: string }[] = [
 function ColdExample(): JSX.Element {
   return (
     <Stack gap={4} style={{ alignSelf: 'stretch', marginTop: 16 }}>
-      <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
+      <Text scale="caption" color="var(--ollie-color-ink-faint)" style={SMCP_STYLE}>
         the kinds of things that live here
       </Text>
       <Stack gap={0}>
@@ -689,10 +689,10 @@ function ColdExample(): JSX.Element {
             align="center"
             style={{
               boxSizing: 'border-box',
-              borderTop: `1px solid ${colors.hairline}`,
+              borderTop: '1px solid var(--ollie-color-hairline)',
               borderBottom:
                 i === EXAMPLE_ROWS.length - 1
-                  ? `1px solid ${colors.hairline}`
+                  ? '1px solid var(--ollie-color-hairline)'
                   : 'none',
               padding: '14px 2px',
             }}
@@ -703,12 +703,12 @@ function ColdExample(): JSX.Element {
                 width: 30,
                 height: 30,
                 borderRadius: 9,
-                background: colors.paper,
+                background: 'var(--ollie-color-paper)',
                 display: 'inline-flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 flexShrink: 0,
-                color: colors.inkFaint,
+                color: 'var(--ollie-color-ink-faint)',
                 fontFamily: fonts.serif,
                 fontStyle: 'italic',
                 fontSize: 14,
@@ -717,10 +717,10 @@ function ColdExample(): JSX.Element {
               {eg.cat.charAt(0)}
             </span>
             <Stack gap={2} style={{ flex: 1 }}>
-              <Text scale="body" color={colors.ink}>
+              <Text scale="body" color="var(--ollie-color-ink)">
                 {eg.name}
               </Text>
-              <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
+              <Text scale="caption" color="var(--ollie-color-ink-faint)" style={SMCP_STYLE}>
                 {eg.cat}
               </Text>
             </Stack>
@@ -746,11 +746,14 @@ function ListSection<T>({
 }): JSX.Element {
   return (
     <Stack gap={16}>
-      <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
+      {/* Section heads use the mid-range rung (lede · 22 serif), not a tiny
+          smcp eyebrow — this is the anchor that was missing between the 64
+          page title and the 17 body rows. Serif-vs-sans carries the rest. */}
+      <Text scale="lede" color="var(--ollie-color-ink)">
         {label}
       </Text>
       {items.length === 0 ? (
-        <Text scale="body" color={colors.inkFaint}>
+        <Text scale="body" color="var(--ollie-color-ink-faint)">
           {empty}
         </Text>
       ) : (
@@ -776,11 +779,11 @@ function GoalRow({
   return (
     <Row gap={12} align="baseline" justify="space-between">
       <Stack gap={2}>
-        <Text scale="body" color={colors.ink}>
+        <Text scale="body" color="var(--ollie-color-ink)">
           {goal.name}
         </Text>
         {goal.latestProgress ? (
-          <Text scale="caption" color={colors.inkFaint}>
+          <Text scale="caption" color="var(--ollie-color-ink-faint)">
             {goal.latestProgress.text}
           </Text>
         ) : null}
@@ -791,7 +794,7 @@ function GoalRow({
               fontFamily: fonts.serif,
               fontStyle: 'italic',
               fontSize: 13,
-              color: colors.sageDeep,
+              color: 'var(--ollie-color-sage-deep)',
               letterSpacing: '-0.005em',
               lineHeight: 1.45,
             }}
@@ -831,7 +834,7 @@ function CadenceHint({
   return (
     <Text
       scale="caption"
-      color={colors.inkFaint}
+      color="var(--ollie-color-ink-faint)"
       style={{ fontVariantCaps: 'all-small-caps', letterSpacing: '0.06em' }}
     >
       {`last touched ${sinceLabel} ago · usually every ${everyLabel}`}
@@ -855,7 +858,7 @@ function EventRow({
   return (
     <Stack gap={2}>
       <Row gap={12} align="baseline" justify="space-between">
-        <Text scale="body" color={colors.ink}>
+        <Text scale="body" color="var(--ollie-color-ink)">
           {event.text}
         </Text>
         <RemoveButton onClick={onRemove} />
@@ -874,7 +877,7 @@ function RemoveButton({ onClick }: { onClick: () => void }): JSX.Element {
         background: 'none',
         border: 'none',
         padding: '4px 8px',
-        color: colors.inkFaint,
+        color: 'var(--ollie-color-ink-faint)',
         cursor: 'pointer',
         fontVariantCaps: 'all-small-caps',
         letterSpacing: '0.08em',
@@ -943,7 +946,7 @@ function GoalArc({
         <path
           d={bgPath}
           fill="none"
-          stroke={colors.hairline}
+          style={{ stroke: 'var(--ollie-color-hairline)' }}
           strokeWidth={stroke}
           strokeLinecap="round"
         />
@@ -951,7 +954,7 @@ function GoalArc({
           <path
             d={fgPath}
             fill="none"
-            stroke={colors.sageDeep}
+            style={{ stroke: 'var(--ollie-color-sage-deep)' }}
             strokeWidth={stroke}
             strokeLinecap="round"
           />
@@ -984,7 +987,7 @@ function SeedGlyph(): JSX.Element {
       viewBox="0 0 34 34"
       aria-hidden
       fill="none"
-      stroke={colors.inkFaint}
+      style={{ stroke: 'var(--ollie-color-ink-faint)' }}
       strokeWidth={1.5}
       strokeLinecap="round"
       strokeLinejoin="round"

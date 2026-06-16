@@ -11,7 +11,6 @@ import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@clerk/clerk-react';
 import { Stack, Row } from '../../layout';
 import { Text } from '../../ui';
-import { colors } from '../../theme/tokens';
 import { partnerRepo } from './repo';
 import { cardLine } from './interpret';
 import type { InterpretedState, PartnerPairing } from './types';
@@ -56,17 +55,17 @@ export function PartnerCard(): JSX.Element | null {
       gap={8}
       style={{
         padding: '18px 20px',
-        background: colors.paper,
-        border: `1px solid ${colors.hairlineSoft}`,
+        background: 'var(--ollie-color-paper)',
+        border: '1px solid var(--ollie-color-hairline-soft)',
         borderRadius: 4,
       }}
     >
       <Row justify="space-between" align="baseline">
-        <Text scale="caption" color={colors.inkFaint} style={SMCP}>
+        <Text scale="caption" color="var(--ollie-color-ink-faint)" style={SMCP}>
           {state.crisis ? 'your person' : 'with you'}
         </Text>
       </Row>
-      <Text scale="heading" color={state.crisis ? colors.sageDeep : colors.ink}>
+      <Text scale="heading" color={state.crisis ? 'var(--ollie-color-sage-deep)' : 'var(--ollie-color-ink)'}>
         {cardLine(pairing.partnerName, state)}
       </Text>
     </Stack>
