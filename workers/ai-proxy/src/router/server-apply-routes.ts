@@ -7,6 +7,7 @@
  */
 
 import { verifyClerkJwt } from '../clerk-verify';
+import { checkRate, type RateLimiter } from '../rate-limit';
 import { applyInbox, pullGroceryPantry, type ServerApplyEnv } from './server-apply';
 
 interface RoutesEnv extends ServerApplyEnv {
@@ -14,9 +15,19 @@ interface RoutesEnv extends ServerApplyEnv {
   STAGING_TEST_BEARER?: string;
   /** 'production' on prod — disables the staging test bearer there (audit #24). */
   ENVIRONMENT?: string;
+  /** Per-user rate-limit machinery (shared with index.ts). Optional so a
+   *  deploy missing the binding still type-checks + falls back to the KV
+   *  counter (TELEM_RATE_LIMITER undefined → KV fixed-window). */
+  RATE_KV: KVNamespace;
+  TELEM_RATE_LIMITER?: RateLimiter;
 }
 
 const STAGING_TEST_USER_ID = 'staging-test-user';
+
+/** req/min per user across both server-apply routes. Generous — an
+ *  app-foreground sync drains the inbox once then pulls grocery rows; this
+ *  only stops a single account from looping the encrypt/Supabase path. */
+const SERVER_APPLY_RATE_MAX = 60;
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -43,6 +54,8 @@ export async function handleApplyInbox(req: Request, env: RoutesEnv): Promise<Re
   if (req.method !== 'POST') return json({ error: 'method_not_allowed' }, 405);
   const userId = await authUser(req, env);
   if (!userId) return json({ error: 'unauthorized' }, 401);
+  if (!(await checkRate(env.TELEM_RATE_LIMITER, env.RATE_KV, `rl:server-apply:${userId}`, SERVER_APPLY_RATE_MAX)))
+    return json({ error: 'rate_limited' }, 429);
   const result = await applyInbox(env, userId);
   return json({ ok: true, ...result });
 }
@@ -51,6 +64,8 @@ export async function handleSyncGroceryPantry(req: Request, env: RoutesEnv): Pro
   if (req.method !== 'GET') return json({ error: 'method_not_allowed' }, 405);
   const userId = await authUser(req, env);
   if (!userId) return json({ error: 'unauthorized' }, 401);
+  if (!(await checkRate(env.TELEM_RATE_LIMITER, env.RATE_KV, `rl:server-apply:${userId}`, SERVER_APPLY_RATE_MAX)))
+    return json({ error: 'rate_limited' }, 429);
   const since = new URL(req.url).searchParams.get('since');
   const rows = await pullGroceryPantry(env, userId, since);
   return json({ ok: true, rows });

@@ -41,9 +41,6 @@ export function resolveDeepLink(raw: string): { path: string; focusDump?: boolea
 }
 
 function applyDeepLink(raw: string, navigate: NavigateFunction): boolean {
-  // TEMP A3 device-test hook: ollie://testnotif fires a buttoned notification
-  // in ~1s so we can background the app and verify the action buttons +
-  // onAction routing on a real device. Remove once A3 is confirmed.
   const target = resolveDeepLink(raw);
   if (!target) return false;
   navigate(target.path);

@@ -54,18 +54,24 @@ export async function pullGroceryPantry(getBearer: () => Promise<string | null>)
   let newestCursor = since ?? '';
   for (const row of rows) {
     const name = (row.payload.item ?? row.payload.name ?? '').trim();
-    // Tombstones (deleted) are skipped in the pilot — the demo path is
-    // pantry_add (item appears). Depletion sync is a follow-up.
+    // Tombstones (deleted) and nameless rows have nothing to apply — they're
+    // durably "handled" by being a no-op, so the cursor may advance past them.
+    // Depletion sync is a follow-up; the demo path is pantry_add (item appears).
     if (name && !row.deleted) {
       try {
         await pantry.add({ name });
         merged++;
-      } catch {
-        /* one bad row shouldn't abort the merge */
+      } catch (err) {
+        // The row failed to apply. Do NOT advance the cursor past it, or it's
+        // permanently skipped (data loss). Stop here so the next pull retries
+        // this row from the current cursor.
+        console.warn(`[groceryPull] failed to apply row ${row.id}, halting pull to retry`, err);
+        break;
       }
     }
+    // Only reached for rows that were durably handled (applied or no-op).
     if (row.updated_at > newestCursor) newestCursor = row.updated_at;
   }
-  if (newestCursor) localStorage.setItem(CURSOR_KEY, newestCursor);
+  if (newestCursor !== (since ?? '')) localStorage.setItem(CURSOR_KEY, newestCursor);
   return merged;
 }

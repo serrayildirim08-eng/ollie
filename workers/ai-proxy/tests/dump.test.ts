@@ -279,6 +279,36 @@ describe('/route/dump — smoke', () => {
     expect(remindIn?.scheduledAtMs).toBeLessThanOrEqual(after + 60_000);
   });
 
+  it('NEVER logs the raw user dump text to any console.* sink (audit #44)', async () => {
+    const env = makeEnv();
+    // Reuse the smoke-test's known-200 single-fragment phrase (the default fetch
+    // mock classifies any dump as grocery/pantry_add) but append a distinctive
+    // secret token. The token would be a privacy leak if it ever reached Worker
+    // logs; it must NOT appear in any console.{log,info,warn,error} arg.
+    const SECRET = 'gizli-sir-12345';
+    const RAW = `süt aldım ${SECRET}`;
+
+    const sinks = ['log', 'info', 'warn', 'error'] as const;
+    const spies = sinks.map((m) => vi.spyOn(console, m).mockImplementation(() => {}));
+
+    // The default beforeEach fetch impl classifies any dump as grocery/pantry_add.
+    const res = await handleDumpRoute(makeReq({ text: RAW }), env);
+    expect(res.status).toBe(200);
+
+    const allArgs = spies.flatMap((s) => s.mock.calls.flat());
+    // At least one structural telemetry line was emitted (proves we are actually
+    // exercising the logging path, not vacuously passing).
+    expect(allArgs.some((a) => typeof a === 'string' && a.includes('[route/dump]'))).toBe(true);
+    // …but the raw text — and its distinctive secret fragment — never appear.
+    for (const arg of allArgs) {
+      const s = typeof arg === 'string' ? arg : JSON.stringify(arg);
+      expect(s).not.toContain(RAW);
+      expect(s).not.toContain(SECRET);
+    }
+
+    for (const s of spies) s.mockRestore();
+  });
+
   it('drops a malformed remindIn (no scheduledAtMs surfaced)', async () => {
     const env = makeEnv();
 

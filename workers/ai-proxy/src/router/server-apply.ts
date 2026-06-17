@@ -69,7 +69,12 @@ export async function writeInbox(
     fragments.map(async (f, i) => {
       const e = await envelopeEncrypt(env.ENVELOPE_KEK!, f.payload);
       return {
-        id: `${dumpId}:${i}`,
+        // SECURITY: namespace the row id with the JWT-derived userId. dump_inbox
+        // id is the table PK and writes go through the service role (BYPASSRLS),
+        // so a client-chosen dumpId alone would let one user collide with — and
+        // via on_conflict=id merge, overwrite — another user's row. Prefixing
+        // with the verified userId makes cross-user collision unforgeable.
+        id: `${userId}:${dumpId}:${i}`,
         user_id: userId,
         routed_module: f.module,
         ...e,
@@ -120,7 +125,9 @@ export async function applyInbox(
         body: JSON.stringify({ status: 'applied', applied_at: new Date().toISOString() }),
       });
       applied++;
-    } catch {
+    } catch (err) {
+      // Dead-letter: a row that fails to apply must be surfaced, not swallowed.
+      console.warn(`[server-apply] inbox row ${row.id} failed to apply`, err);
       await fetch(rest(env, `dump_inbox?id=eq.${encodeURIComponent(row.id)}`), {
         method: 'PATCH',
         headers: headers(env, 'return=minimal'),
@@ -184,11 +191,16 @@ export async function pullGroceryPantry(
   const rows = (await res.json()) as Array<EnvelopeFields & { id: string; updated_at: string; deleted: boolean }>;
   const out: PantryPullRow[] = [];
   for (const r of rows) {
-    const payload = await envelopeDecrypt<Record<string, unknown>>(env.ENVELOPE_KEK!, r, {
-      userId,
-      recordId: r.id,
-    });
-    out.push({ id: r.id, payload, updated_at: r.updated_at, deleted: r.deleted });
+    try {
+      const payload = await envelopeDecrypt<Record<string, unknown>>(env.ENVELOPE_KEK!, r, {
+        userId,
+        recordId: r.id,
+      });
+      out.push({ id: r.id, payload, updated_at: r.updated_at, deleted: r.deleted });
+    } catch (err) {
+      // One undecryptable row must not fail the whole pull — skip + surface it.
+      console.warn(`[server-apply] pantry row ${r.id} failed to decrypt; skipping`, err);
+    }
   }
   return out;
 }

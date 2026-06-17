@@ -73,14 +73,9 @@ import {
   type ShelfLifeEnv,
 } from './router/shelf-life';
 import { verifyClerkJwt } from './clerk-verify';
+import { checkRate, type RateLimiter } from './rate-limit';
 
-/**
- * Cloudflare native Rate Limiting binding. `limit()` is atomic edge-side,
- * which fixes the read-then-write race the KV counter had.
- */
-export interface RateLimiter {
-  limit(opts: { key: string }): Promise<{ success: boolean }>;
-}
+export type { RateLimiter };
 
 export interface Env
   extends EnrichEnv,
@@ -115,13 +110,11 @@ export interface Env
 
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 const CACHE_TTL_SEC = 300;          // 5 min
-const RATE_MAX = 10;                // req/min — default
 /** Max request body for the /brain-dump + /v1/messages proxy (audit #46).
  *  1 MiB is well above any real prompt (incl. cached context) but blocks an
  *  oversized payload from being read into memory + forwarded upstream. */
 const MAX_PROXY_BODY_BYTES = 1024 * 1024;
 const PURCHASE_RATE_MAX = 100;      // req/min — purchase ingestion can burst at checkout
-const RATE_WINDOW_SEC = 60;
 
 // ─── CORS helpers ──────────────────────────────────────────────────────────────
 //
@@ -488,40 +481,6 @@ export default {
 };
 
 // ─── helpers ───────────────────────────────────────────────────────────────────
-
-/**
- * Rate-limit check. Prefers the native Cloudflare Rate Limiting binding
- * (atomic at the edge — fixes the read-then-write race the KV counter had).
- * Falls back to the legacy KV fixed-window counter when the binding is not
- * present, so a deploy that has not yet picked up the [[ratelimits]] config
- * still enforces a limit.
- */
-async function checkRate(
-  limiter: RateLimiter | undefined,
-  kv: KVNamespace,
-  key: string,
-  maxOverride?: number,
-): Promise<boolean> {
-  if (limiter) {
-    // NB: the native binding's limit is configured per-binding in
-    // wrangler.toml. `maxOverride` only affects the KV fallback branch
-    // below — when the binding is live the configured limit wins, which
-    // for the purchase endpoint means we share the telemetry bucket (10/min)
-    // until/unless a dedicated PURCHASE_RATE_LIMITER ships. Acceptable for
-    // ingestion — bursts come from a single user, not many.
-    const { success } = await limiter.limit({ key });
-    return success;
-  }
-  // Legacy fallback — racy fixed-window KV counter.
-  const max = maxOverride ?? RATE_MAX;
-  const now = Math.floor(Date.now() / 1000);
-  const slot = `${key}:${Math.floor(now / RATE_WINDOW_SEC)}`;
-  const raw = await kv.get(slot);
-  const count = raw ? parseInt(raw, 10) || 0 : 0;
-  if (count >= max) return false;
-  await kv.put(slot, String(count + 1), { expirationTtl: RATE_WINDOW_SEC * 2 + 1 });
-  return true;
-}
 
 /**
  * Determine the rate-limit key for /grocery/purchase. Prefers the Clerk
