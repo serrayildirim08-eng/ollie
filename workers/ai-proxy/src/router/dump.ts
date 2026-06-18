@@ -32,7 +32,7 @@
  * NEVER cached: raw fragment text, pass-2 segmentation output.
  */
 
-import { json, upstreamError } from '@ollie/worker-http';
+import { json, upstreamError, exceedsContentLength, payloadTooLarge } from '@ollie/worker-http';
 import { detectCrisis } from '@ollie/crisis-lexicon';
 import { verifyClerkJwt } from '../clerk-verify';
 import { scrubPII } from '../pii';
@@ -67,6 +67,11 @@ const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
  *  by nature; 10k chars is far above any real dump but blocks an abusive payload
  *  from reaching the segmenter / embedder / AI cascade. */
 const MAX_TEXT_CHARS = 10_000;
+/** Hard upper bound on the whole request body (audit #38). An image dump is
+ *  base64 (~1.37× the byte budget) plus JSON framing; this leaves generous
+ *  headroom over MAX_IMAGE_BYTES while blocking an arbitrary-volume payload
+ *  from being buffered into worker memory via req.json(). */
+const MAX_BODY_BYTES = Math.ceil(MAX_IMAGE_BYTES * 1.4) + 64 * 1024;
 
 const VOYAGE_MODEL = 'voyage-multilingual-2';
 const VOYAGE_EMBED_DIM = 1024;
@@ -157,6 +162,12 @@ export async function handleDumpRoute(
   }
   if (!userId) {
     return json({ error: 'invalid_jwt' }, 401);
+  }
+
+  // Memory-DoS guard (audit #38): reject an oversized payload on its declared
+  // Content-Length BEFORE buffering the body via req.json().
+  if (exceedsContentLength(req, MAX_BODY_BYTES)) {
+    return payloadTooLarge('body_too_large');
   }
 
   // Parse body

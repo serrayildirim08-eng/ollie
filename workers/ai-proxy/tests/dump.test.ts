@@ -210,6 +210,23 @@ describe('/route/dump — smoke', () => {
     expect(fetchSpy).not.toHaveBeenCalled(); // rejected before any AI/embed call
   });
 
+  it('returns 413 when Content-Length exceeds the body cap before parsing (audit #38)', async () => {
+    const env = makeEnv();
+    const req = new Request('https://worker.dev/route/dump', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: 'Bearer fake-clerk-token',
+        'content-length': String(20 * 1024 * 1024),
+      },
+      body: JSON.stringify({ text: 'süt aldım' }),
+    });
+    const res = await handleDumpRoute(req, env);
+    expect(res.status).toBe(413);
+    expect((await res.json() as { error: string }).error).toBe('body_too_large');
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
   it('STAGING_TEST_BEARER is REFUSED on production — falls through to Clerk (audit #43)', async () => {
     const { verifyClerkJwt } = await import('../src/clerk-verify');
     vi.mocked(verifyClerkJwt).mockClear();

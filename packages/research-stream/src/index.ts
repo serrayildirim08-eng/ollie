@@ -168,10 +168,20 @@ export function createResearchStream(deps: ResearchDeps): ResearchClient {
     return deps.store.get<string | null>('shared', DEVICE_ID_KEY, null);
   }
   function ensureDeviceId(): string {
-    let id = deviceId();
-    if (!id) {
-      id = randomUuid();
+    // (audit #170) Never throw out of the telemetry path. randomUuid() now
+    // degrades to a non-crypto id, and we guard the store read/write so a
+    // backing-store failure can't bubble up into track()/the host app.
+    try {
+      const existing = deviceId();
+      if (existing) return existing;
+    } catch {
+      /* store read failed — mint a fresh id below */
+    }
+    const id = randomUuid();
+    try {
       deps.store.set('shared', DEVICE_ID_KEY, id);
+    } catch {
+      /* store write failed — return the id anyway; non-persistent is fine */
     }
     return id;
   }
@@ -338,12 +348,25 @@ function roundToMinute(ts: number): number {
 function randomUuid(): string {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const g: any = globalThis;
-  if (g.crypto?.randomUUID) return g.crypto.randomUUID() as string;
-  // Fallback (Node 20 has randomUUID; this is just for completeness)
-  const bytes = new Uint8Array(16);
-  g.crypto.getRandomValues(bytes);
-  bytes[6] = (bytes[6] & 0x0f) | 0x40;
-  bytes[8] = (bytes[8] & 0x3f) | 0x80;
-  const hex = Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('');
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  try {
+    if (g.crypto?.randomUUID) return g.crypto.randomUUID() as string;
+    if (g.crypto?.getRandomValues) {
+      const bytes = new Uint8Array(16);
+      g.crypto.getRandomValues(bytes);
+      bytes[6] = (bytes[6] & 0x0f) | 0x40;
+      bytes[8] = (bytes[8] & 0x3f) | 0x80;
+      const hex = Array.from(bytes as Uint8Array)
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('');
+      return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+    }
+  } catch {
+    /* crypto threw — fall through to the non-crypto fallback below */
+  }
+  // (audit #170) Non-crypto fallback so research-stream NEVER throws when
+  // crypto.getRandomValues is unavailable. A device id is an opaque
+  // anonymous correlation token, not a secret — Math.random is acceptable
+  // here and keeping the never-throw contract is the priority.
+  const rnd = () => Math.floor(Math.random() * 0x10000).toString(16).padStart(4, '0');
+  return `${rnd()}${rnd()}-${rnd()}-4${rnd().slice(1)}-${((Math.floor(Math.random() * 4) + 8).toString(16))}${rnd().slice(1)}-${rnd()}${rnd()}${rnd()}`;
 }

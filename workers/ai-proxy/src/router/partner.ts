@@ -12,7 +12,7 @@
  * `sub` is the user id); fail CLOSED unless T0_JWT_ENFORCED === '0' (dev).
  */
 
-import { json } from '@ollie/worker-http';
+import { json, exceedsContentLength, payloadTooLarge } from '@ollie/worker-http';
 import { verifyClerkJwt } from '../clerk-verify';
 
 export interface PartnerEnv {
@@ -25,6 +25,12 @@ export interface PartnerEnv {
 }
 
 const CODE_TTL_SEC = 30 * 60;
+/** Snapshot bounds (audit #38, #154). A snapshot is ≤5 short phrases + a word;
+ *  cap the whole body and each phrase so an oversized payload neither reaches
+ *  worker memory nor lands ≤5 arbitrarily large strings on the partner. */
+const MAX_SNAPSHOT_BODY_BYTES = 16 * 1024;
+const MAX_PHRASE_LEN = 200;
+const MAX_PHRASES = 5;
 
 interface Snapshot {
   phrases: string[];
@@ -157,6 +163,10 @@ async function getSnapshot(env: PartnerEnv, me: string): Promise<Response> {
 }
 
 async function putSnapshot(req: Request, env: PartnerEnv, me: string): Promise<Response> {
+  // Memory-DoS guard (audit #38).
+  if (exceedsContentLength(req, MAX_SNAPSHOT_BODY_BYTES)) {
+    return payloadTooLarge('body_too_large');
+  }
   let body: Partial<Snapshot>;
   try {
     body = (await req.json()) as Partial<Snapshot>;
@@ -165,8 +175,13 @@ async function putSnapshot(req: Request, env: PartnerEnv, me: string): Promise<R
   }
   const row = {
     user_id: me,
+    // audit #154: cap EACH phrase to MAX_PHRASE_LEN (not just the count) so the
+    // partner never receives ≤5 arbitrarily large strings.
     phrases: Array.isArray(body.phrases)
-      ? body.phrases.filter((p): p is string => typeof p === 'string').slice(0, 5)
+      ? body.phrases
+          .filter((p): p is string => typeof p === 'string')
+          .slice(0, MAX_PHRASES)
+          .map((p) => p.slice(0, MAX_PHRASE_LEN))
       : [],
     self_word: typeof body.self_word === 'string' ? body.self_word.slice(0, 40) : null,
     crisis: body.crisis === true,

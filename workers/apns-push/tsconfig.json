@@ -12,5 +12,5 @@
     "noFallthroughCasesInSwitch": true,
     "isolatedModules": true
   },
-  "include": ["src"]
+  "include": ["src", "tests"]
 }

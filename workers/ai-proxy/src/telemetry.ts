@@ -28,7 +28,7 @@
  */
 
 import { scrubPII } from './pii';
-import { json, upstreamError } from '@ollie/worker-http';
+import { json, upstreamError, exceedsContentLength, payloadTooLarge } from '@ollie/worker-http';
 
 /**
  * Server-side anonymized user identity (audit #4 — IDOR fix).
@@ -80,6 +80,13 @@ const ALLOWED_TABLES = new Set([
 
 // 3 days — long enough that a wedged cron can still catch up after a weekend.
 const QUEUE_TTL_SEC = 60 * 60 * 24 * 3;
+/** Bound the raw dump text before scrubbing + queuing (audit #84). A brain
+ *  dump is short by nature; this mirrors the /route/dump 10k cap so an abusive
+ *  payload can't push unbounded text through the PII scrubber into the queue. */
+const MAX_RAW_TEXT_CHARS = 10_000;
+/** Whole-body memory-DoS bound (audit #38/#84): generous headroom over the
+ *  text cap + small metadata fields. */
+const MAX_ENRICH_BODY_BYTES = 64 * 1024;
 
 // ─── /enrich-dump ──────────────────────────────────────────────────────────────
 
@@ -117,6 +124,11 @@ export async function handleEnrichDump(
   env: EnrichEnv,
   userId: string,
 ): Promise<Response> {
+  // Memory-DoS guard (audit #38/#84): reject oversized bodies on Content-Length
+  // before buffering via req.json().
+  if (exceedsContentLength(req, MAX_ENRICH_BODY_BYTES)) {
+    return payloadTooLarge('body_too_large');
+  }
   let body: EnrichDumpRequest;
   try {
     body = (await req.json()) as EnrichDumpRequest;
@@ -140,6 +152,12 @@ export async function handleEnrichDump(
 
   if (body.modality !== 'voice' && body.modality !== 'text' && body.modality !== 'paste') {
     return json({ error: 'invalid_modality' }, 400);
+  }
+
+  // Bound raw_text before scrubbing + queuing (audit #84). Content-Length can
+  // be omitted/understated, so cap the parsed field too.
+  if (body.raw_text.length > MAX_RAW_TEXT_CHARS) {
+    return payloadTooLarge('raw_text_too_large');
   }
 
   // US + cycle restriction — never queue cycle dumps from US users.

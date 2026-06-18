@@ -180,6 +180,23 @@ describe('/route/:module — routing', () => {
     expect(res.status).toBe(400);
   });
 
+  it('returns 413 when Content-Length exceeds the body cap (audit #38)', async () => {
+    const req = new Request('https://worker.dev/route/grocery', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'content-length': String(512 * 1024) },
+      body: JSON.stringify({ text: 'buy milk' }),
+    });
+    const res = await handleRoute(req, makeEnv(), 'grocery');
+    expect(res.status).toBe(413);
+  });
+
+  it('returns 413 when parsed text exceeds the char cap (audit #38)', async () => {
+    const req = makeReq({ text: 'x'.repeat(10_001) });
+    const res = await handleRoute(req, makeEnv(), 'grocery');
+    expect(res.status).toBe(413);
+    expect((await res.json() as { error: string }).error).toBe('text_too_large');
+  });
+
   it('returns 401 when T0_JWT_ENFORCED=1 and no auth header', async () => {
     const req = makeReq({ text: 'buy milk' });
     const res = await handleRoute(req, makeEnv({ T0_JWT_ENFORCED: '1' }), 'grocery');

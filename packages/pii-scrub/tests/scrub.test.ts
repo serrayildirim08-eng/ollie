@@ -74,6 +74,18 @@ describe('@ollie/pii-scrub · name wordlist layer', () => {
     expect(scrubbed).toContain('[NAME] [NAME]');
   });
 
+  it('redacts Turkish dotted-İ initial names (audit #76 golden)', () => {
+    // Capital "İ" must fold to "i" under the Turkish locale (default
+    // toLowerCase yields "i̇" + combining dot and never matches the wordlist).
+    for (const name of ['İrem', 'İsmail', 'İbrahim', 'İlkay', 'İşıl']) {
+      const { scrubbed, redactions } = scrubPII(`bugün ${name} aradı`, 'tr');
+      const names = redactions.filter((r) => r.type === 'NAME');
+      expect(names.length, `${name} should be redacted`).toBeGreaterThan(0);
+      expect(scrubbed).toContain('[NAME]');
+      expect(scrubbed).not.toContain(name);
+    }
+  });
+
   it('preserves module vocabulary (cycle/food/mood)', () => {
     const samples = [
       'pms symptoms hitting hard',

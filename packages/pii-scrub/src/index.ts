@@ -218,11 +218,9 @@ const MENTAL_HEALTH_REGEX = new RegExp(
   'gi',
 );
 
-// Stop list for names that look like names but aren't.
-const ADDRESS_NAME_STOPWORDS = new Set([
-  'New York', 'New Jersey', 'Los Angeles', 'San Francisco', 'San Diego',
-  'United States', 'United Kingdom',
-]);
+// (audit #172) The former ADDRESS_NAME_STOPWORDS set was dead code: every
+// ADDRESS_REGEX match begins with a street number (`\d{1,6}\s+…`), so it could
+// never equal a bare place name like "New York" / "United States". Removed.
 
 // ─── orchestrator ─────────────────────────────────────────────────────────────
 
@@ -283,7 +281,6 @@ export function scrubPII(text: string, locale: Locale): ScrubResult {
 
   // 4. Address (before phone — long digit runs in addresses can look like phones)
   out = out.replace(ADDRESS_REGEX, (match) => {
-    if (ADDRESS_NAME_STOPWORDS.has(match)) return match;
     redactions.push({ type: 'ADDRESS', original: match });
     return '[ADDRESS]';
   });

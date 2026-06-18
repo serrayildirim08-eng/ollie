@@ -24,7 +24,7 @@
  * Dependency: T1 migration that creates `routing_cache` (pgvector) table.
  */
 
-import { json, upstreamError } from '@ollie/worker-http';
+import { json, upstreamError, exceedsContentLength, payloadTooLarge } from '@ollie/worker-http';
 import { scrubPII } from '../pii';
 import { groceryConfig, type ModuleConfig } from '../modules/grocery.config';
 import {
@@ -202,6 +202,11 @@ export interface RouteResponse {
 // ─── constants ────────────────────────────────────────────────────────────────
 
 const COSINE_THRESHOLD = 0.85;
+/** Memory-DoS bounds for /route/:module (audit #38). The body carries a short
+ *  command plus optional list-state `context`; 256KB is far above any real
+ *  payload, and `text` itself is capped at 10k chars (same as a dump). */
+const MAX_BODY_BYTES = 256 * 1024;
+const MAX_TEXT_CHARS = 10_000;
 const VOYAGE_MODEL = 'voyage-multilingual-2';
 const VOYAGE_EMBED_DIM = 1024;
 
@@ -243,6 +248,12 @@ export async function handleRoute(
   // intentionally module-agnostic at the route layer — each config decides
   // how to render it into the system prompt (groceryConfig appends a
   // CURRENT SHOPPING LIST / CURRENT PANTRY block).
+  // Memory-DoS guard (audit #38): reject oversized bodies on the declared
+  // Content-Length before buffering via req.json().
+  if (exceedsContentLength(req, MAX_BODY_BYTES)) {
+    return payloadTooLarge('body_too_large');
+  }
+
   let body: { text: string; dumpId?: string; context?: unknown };
   try {
     body = (await req.json()) as { text: string; dumpId?: string; context?: unknown };
@@ -251,6 +262,11 @@ export async function handleRoute(
   }
   if (!body || typeof body.text !== 'string' || body.text.trim().length === 0) {
     return json({ error: 'missing_text' }, 400);
+  }
+  // Cap the parsed text (audit #38): Content-Length can be omitted/understated,
+  // so bound the field the segmenter/embedder/AI cascade actually consume.
+  if (body.text.length > MAX_TEXT_CHARS) {
+    return payloadTooLarge('text_too_large');
   }
 
   // 1. PII scrub

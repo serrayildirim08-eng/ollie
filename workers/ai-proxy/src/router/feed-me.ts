@@ -24,7 +24,7 @@
  * Spec: docs/handoffs/feed-me/00-SPEC.md
  */
 
-import { json, upstreamError } from '@ollie/worker-http';
+import { json, upstreamError, exceedsContentLength, payloadTooLarge } from '@ollie/worker-http';
 import { scrubPII, type Locale } from '@ollie/pii-scrub';
 import { verifyClerkJwt } from '../clerk-verify';
 import { groqChat, type GroqMessage } from '../groq';
@@ -124,6 +124,11 @@ const MAX_COUNT = 5;
 const PANTRY_MAX_ITEMS = 80;
 const PANTRY_MAX_ITEM_LEN = 100;
 const PET_NAME_MAX_LEN = 80;
+/** Memory-DoS bound (audit #38). Field-level caps below already bound the
+ *  parsed shape (≤80 items × ≤100 chars + small enums); 64KB is generous
+ *  headroom over a real body while blocking an arbitrary-volume payload from
+ *  being buffered via req.json(). */
+const MAX_BODY_BYTES = 64 * 1024;
 const COOK_SIGNAL_MIN_SAMPLE = 5;
 
 // ─── handler ─────────────────────────────────────────────────────────────────
@@ -164,6 +169,11 @@ export async function handleFeedMe(
   }
 
   // ── Parse + validate body ────────────────────────────────────────────────
+  // Memory-DoS guard (audit #38): reject oversized bodies on Content-Length
+  // before buffering via req.json().
+  if (exceedsContentLength(req, MAX_BODY_BYTES)) {
+    return payloadTooLarge('body_too_large');
+  }
   let raw: unknown;
   try {
     raw = await req.json();

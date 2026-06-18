@@ -92,6 +92,24 @@ describe('research-stream · consent gate', () => {
     expect(canonical?.necessary).toBe(true);
     expect(r.hasConsent()).toBe(false);
   });
+
+  it('never throws when crypto is unavailable (audit #170)', () => {
+    // Simulate a runtime with no crypto.randomUUID / getRandomValues.
+    vi.stubGlobal('crypto', undefined);
+    try {
+      const api = makeFakeApi(() => ({ ok: true }));
+      const r = createResearchStream({ store, api, endpointUrl: 'https://research/api/events' });
+      r.grantConsent();
+      // track() calls ensureDeviceId() → randomUuid() with no crypto: must not throw.
+      expect(() => r.track('finance.transaction_logged', { amount_band: 'med' })).not.toThrow();
+      expect(r._inspect().queueDepth).toBeGreaterThan(0);
+      const id = r._inspect().deviceId;
+      expect(typeof id).toBe('string');
+      expect((id ?? '').length).toBeGreaterThan(10);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });
 
 describe('research-stream · capture', () => {

@@ -6,6 +6,8 @@ import {
   Router,
   upstreamError,
   newRequestId,
+  exceedsContentLength,
+  payloadTooLarge,
 } from '../src/index';
 
 describe('worker-http · json', () => {
@@ -106,6 +108,32 @@ describe('worker-http · S8 · upstreamError', () => {
     const b = newRequestId();
     expect(a).not.toBe(b);
     expect(a.length).toBeGreaterThan(0);
+  });
+});
+
+describe('worker-http · body-size guards (audit #38)', () => {
+  function reqWith(len?: string): Request {
+    const headers = new Headers();
+    if (len !== undefined) headers.set('content-length', len);
+    return new Request('https://x/', { method: 'POST', headers });
+  }
+
+  it('returns true only when Content-Length exceeds the cap', () => {
+    expect(exceedsContentLength(reqWith('100'), 1024)).toBe(false);
+    expect(exceedsContentLength(reqWith('1024'), 1024)).toBe(false); // equal, not over
+    expect(exceedsContentLength(reqWith('2048'), 1024)).toBe(true);
+  });
+
+  it('returns false when Content-Length is absent or unparseable', () => {
+    expect(exceedsContentLength(reqWith(undefined), 1024)).toBe(false);
+    expect(exceedsContentLength(reqWith('not-a-number'), 1024)).toBe(false);
+  });
+
+  it('payloadTooLarge builds a 413 with a default + custom code', async () => {
+    const def = payloadTooLarge();
+    expect(def.status).toBe(413);
+    expect(await def.json()).toEqual({ error: 'payload_too_large' });
+    expect(await payloadTooLarge('body_too_large').json()).toEqual({ error: 'body_too_large' });
   });
 });
 
