@@ -27,6 +27,29 @@ export interface StoreMeta {
 
 export const NO_MIGRATIONS: MigrationMap = {};
 
+/** Key prefix for pre-migration backup snapshots. */
+const SNAPSHOT_PREFIX = 'void.state._backup.pre_migration.';
+
+/**
+ * Monotonic per-process counter appended to snapshot keys so two snapshots
+ * taken in the same millisecond never collide (#125).
+ */
+let snapshotSeq = 0;
+function nextSnapshotSeq(): number {
+  return snapshotSeq++;
+}
+
+/**
+ * Parse the millisecond timestamp embedded in a snapshot key.
+ * Key shape: `<SNAPSHOT_PREFIX><ts>` (legacy) or `<SNAPSHOT_PREFIX><ts>.<seq>`.
+ * Returns NaN-safe 0 for unparseable keys so they sort oldest-first.
+ */
+function snapshotTs(key: string): number {
+  const rest = key.slice(SNAPSHOT_PREFIX.length);
+  const ts = Number.parseInt(rest.split('.')[0] ?? '', 10);
+  return Number.isFinite(ts) ? ts : 0;
+}
+
 export function readMeta(adapter: StorageAdapter): StoreMeta {
   const raw = adapter.getItem(STORE_META_KEY);
   if (!raw) return {};
@@ -63,7 +86,7 @@ function snapshotVoidNamespace(adapter: StorageAdapter): { key: string; value: s
   for (const k of adapter.getAllKeys()) {
     if (!k.startsWith('void.state.')) continue;
     // Don't snapshot prior snapshots — they are large and self-referential.
-    if (k.startsWith('void.state._backup.pre_migration.')) continue;
+    if (k.startsWith(SNAPSHOT_PREFIX)) continue;
     const v = adapter.getItem(k);
     if (v != null) snap.push({ key: k, value: v });
   }
@@ -113,7 +136,10 @@ export function runMigrations(
   let snap: { key: string; value: string }[] = [];
   try {
     snap = snapshotVoidNamespace(adapter);
-    const snapKey = `void.state._backup.pre_migration.${Date.now()}`;
+    // Embed a per-call counter after the ts so two snapshots taken in the
+    // same millisecond get distinct keys (#125) — otherwise the second would
+    // overwrite the first under the bare `Date.now()` key.
+    const snapKey = `${SNAPSHOT_PREFIX}${Date.now()}.${nextSnapshotSeq()}`;
     adapter.setItem(snapKey, JSON.stringify(snap));
     // Trim older snapshots, keep last 3.
     pruneOldSnapshots(adapter, 3);
@@ -161,12 +187,13 @@ export function runMigrations(
 
 function pruneOldSnapshots(adapter: StorageAdapter, keep: number): void {
   // Uses getAllKeys() (audit item #14) so pruning works on every adapter,
-  // not just localStorage. Snapshot keys embed Date.now() so a lexical
-  // sort is also chronological.
+  // not just localStorage. Sort NUMERICALLY by the embedded ts (a lexical
+  // sort breaks once ms-counts differ in digit width, and the new `.<seq>`
+  // suffix would also misorder lexically) so we always evict the oldest (#125).
   const keys = adapter
     .getAllKeys()
-    .filter((k) => k.startsWith('void.state._backup.pre_migration.'))
-    .sort();
+    .filter((k) => k.startsWith(SNAPSHOT_PREFIX))
+    .sort((a, b) => snapshotTs(a) - snapshotTs(b) || (a < b ? -1 : a > b ? 1 : 0));
   while (keys.length > keep) {
     const old = keys.shift();
     if (old) {

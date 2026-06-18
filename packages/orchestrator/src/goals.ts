@@ -54,6 +54,8 @@ import type {
 } from '@ollie/logic/goals';
 import type { NotificationSpec } from '@ollie/notifications';
 import type { Orchestrator } from './types';
+// Single canonical UTC-based week key, shared across detectors (#146).
+import { isoWeekKey } from './body-weekly';
 
 const DEBOUNCE_MS = 500;
 const DAY = 86_400_000;
@@ -83,20 +85,6 @@ function flatten<T>(r: T | T[] | null): T[] {
   if (r == null) return [];
   if (Array.isArray(r)) return r.filter((x) => x != null);
   return [r];
-}
-
-/** ISO-8601 week key, e.g. "2026-W20", for week-scoped dedupe. */
-function isoWeekKey(ts: number): string {
-  const d = new Date(ts);
-  // Shift to UTC midnight, then to the Thursday of this ISO week.
-  const target = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
-  const dayNum = (target.getUTCDay() + 6) % 7; // Mon=0 … Sun=6
-  target.setUTCDate(target.getUTCDate() - dayNum + 3);
-  const firstThursday = new Date(Date.UTC(target.getUTCFullYear(), 0, 4));
-  const firstDayNum = (firstThursday.getUTCDay() + 6) % 7;
-  firstThursday.setUTCDate(firstThursday.getUTCDate() - firstDayNum + 3);
-  const week = 1 + Math.round((target.getTime() - firstThursday.getTime()) / (7 * DAY));
-  return `${target.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
 }
 
 /** UTC calendar-day key (YYYY-MM-DD) for day-scoped dedupe. */

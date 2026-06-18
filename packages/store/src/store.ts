@@ -164,6 +164,24 @@ export function createStore(adapter: StorageAdapter): Store {
     _invalidateModule(mod: string): void {
       cache.delete(mod);
       const next = readModule(mod);
+      // A cross-tab write can touch ANY key in the module, so fan out to
+      // every per-key (subscribeKey) listener in addition to the whole-
+      // module ('*') subscribers — otherwise the cache is refreshed but
+      // bound components never re-render (#94).
+      const modSubs = subs.get(mod);
+      if (modSubs) {
+        for (const [key, keySubs] of modSubs) {
+          if (key === '*') continue;
+          const value = next && key in next ? next[key] : undefined;
+          for (const cb of keySubs) {
+            try {
+              cb(value);
+            } catch (err) {
+              console.error('[@ollie/store] subscriber threw:', err);
+            }
+          }
+        }
+      }
       notify(mod, '*', next);
     },
   };

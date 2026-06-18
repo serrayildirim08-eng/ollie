@@ -5,6 +5,7 @@ import {
   installCrossTabSync,
   storeModuleKey,
   STORE_VERSION,
+  STORE_META_KEY,
   runMigrations,
   readMeta,
   type Store,
@@ -268,14 +269,86 @@ describe('@ollie/store · cross-tab sync (#120)', () => {
     expect(spy).toHaveBeenCalledWith('cycle');
   });
 
-  it('SKIPS `_`-prefixed internal modules (sync bookkeeping like `_sync`)', () => {
+  it('SKIPS the `_sync` bookkeeping namespace (deny-list, #123)', () => {
     const { adapter, fire } = makeOnChangeAdapter();
     const s = createStore(adapter);
     const spy = vi.spyOn(s, '_invalidateModule');
     installCrossTabSync(s, adapter);
-    // The `_sync` namespace (audit #120) now actually exercises the dead `_`
-    // filter — a cross-tab watermark/queue write must NOT invalidate anything.
+    // The `_sync` namespace (audit #120) carries cursor/queue/watermark
+    // bookkeeping — a cross-tab write there must NOT invalidate anything.
     fire(storeModuleKey('_sync'));
     expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('does NOT broadly suppress every `_`-prefixed module (#123 deny-list, not prefix)', () => {
+    const { adapter, fire } = makeOnChangeAdapter();
+    const s = createStore(adapter);
+    const spy = vi.spyOn(s, '_invalidateModule');
+    installCrossTabSync(s, adapter);
+    // A legitimate module that merely starts with `_` (not the bookkeeping
+    // namespace) must still invalidate — the old broad `startsWith('_')`
+    // filter would have silently dropped it.
+    fire(storeModuleKey('_widget'));
+    expect(spy).toHaveBeenCalledWith('_widget');
+  });
+});
+
+describe('@ollie/store · cross-tab fans out to per-key subscribers (#94)', () => {
+  it('_invalidateModule fires subscribeKey listeners, not just `*`', () => {
+    const adapter = createMemoryAdapter();
+    const s = createStore(adapter);
+    // Prime the cache.
+    s.set('cycle', 'items', [1]);
+    const keySeen: unknown[] = [];
+    const starSeen: unknown[] = [];
+    s.subscribeKey('cycle', 'items', (v) => keySeen.push(v));
+    s.subscribe('cycle', (snap) => starSeen.push(snap));
+
+    // Sibling tab wrote a new module blob; invalidate.
+    adapter.setItem(storeModuleKey('cycle'), JSON.stringify({ items: [1, 2, 3] }));
+    s._invalidateModule('cycle');
+
+    // Per-key subscriber must have received the new value (#94 — previously
+    // only the `*` subscriber fired so bound components never re-rendered).
+    expect(keySeen[keySeen.length - 1]).toEqual([1, 2, 3]);
+    expect(starSeen[starSeen.length - 1]).toEqual({ items: [1, 2, 3] });
+  });
+
+  it('per-key subscriber receives undefined when its key vanished cross-tab', () => {
+    const adapter = createMemoryAdapter();
+    const s = createStore(adapter);
+    s.set('cycle', 'items', [1]);
+    const keySeen: unknown[] = [];
+    s.subscribeKey('cycle', 'items', (v) => keySeen.push(v));
+
+    adapter.setItem(storeModuleKey('cycle'), JSON.stringify({ other: true }));
+    s._invalidateModule('cycle');
+
+    expect(keySeen[keySeen.length - 1]).toBeUndefined();
+  });
+});
+
+describe('@ollie/store · migration snapshot key collisions (#125)', () => {
+  it('two same-ms snapshots on one adapter keep distinct keys (no overwrite)', () => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    try {
+      const a = createMemoryAdapter();
+      a.setItem('void.state.cycle.items', 'V1');
+      runMigrations(a, { 1: () => {} }); // snapshot 1 @ frozen ms
+
+      // Force another migration pass at the SAME frozen ms by rewinding meta.
+      a.setItem(STORE_META_KEY, JSON.stringify({ version: 0 }));
+      a.setItem('void.state.cycle.items', 'V2');
+      runMigrations(a, { 1: () => {} }); // snapshot 2 @ same ms
+
+      // Pre-fix: both used the bare `...pre_migration.<ms>` key → the second
+      // overwrote the first. Now the per-process counter suffix keeps them
+      // distinct, so BOTH snapshots survive (subject to the keep=3 cap).
+      const snaps = a.getAllKeys().filter((k) => k.includes('_backup.pre_migration.'));
+      expect(snaps.length).toBe(2);
+      expect(new Set(snaps).size).toBe(2);
+    } finally {
+      now.mockRestore();
+    }
   });
 });

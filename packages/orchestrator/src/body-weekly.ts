@@ -308,17 +308,24 @@ export function nextSunday19(now: number): number {
 
 /**
  * ISO week key for dedup: YYYY-Www (ISO 8601 week).
- * Two computes in the same calendar week return the same key.
+ * Two computes in the same ISO week return the same key.
+ *
+ * THE canonical impl — UTC-based (#146). body-correlations.ts and goals.ts
+ * import this rather than carrying their own copies, so a date never maps to
+ * two different week keys depending on which detector computed it. UTC is the
+ * right frame for a cross-module dedupe key: it's stable regardless of the
+ * runtime's local timezone or DST.
  */
 export function isoWeekKey(ts: number): string {
   const d = new Date(ts);
-  // Get ISO week number
-  const dayOfWeek = d.getDay() === 0 ? 7 : d.getDay(); // Mon=1..Sun=7
+  // ISO week: Monday = day 1; shift so Monday is 0.
+  const day = (d.getUTCDay() + 6) % 7;
+  // Nearest Thursday (ISO rule: a week belongs to the year of its Thursday).
   const thursday = new Date(d);
-  thursday.setDate(d.getDate() - dayOfWeek + 4);
-  const jan1 = new Date(thursday.getFullYear(), 0, 1);
-  const weekNo = Math.ceil(((thursday.getTime() - jan1.getTime()) / DAY_MS + 1) / 7);
-  return `${thursday.getFullYear()}-W${String(weekNo).padStart(2, '0')}`;
+  thursday.setUTCDate(d.getUTCDate() - day + 3);
+  const yearStart = new Date(Date.UTC(thursday.getUTCFullYear(), 0, 1));
+  const weekNo = Math.ceil(((thursday.getTime() - yearStart.getTime()) / DAY_MS + 1) / 7);
+  return `${thursday.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
 }
 
 // ─── emit helper ────────────────────────────────────────────────────────────

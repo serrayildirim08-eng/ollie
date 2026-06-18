@@ -39,6 +39,8 @@ import {
   type CorrelationRunResult,
   type SnapshotStoreLike,
 } from '@ollie/logic/body';
+// Single canonical UTC-based week key, shared across detectors (#146).
+import { isoWeekKey } from './body-weekly';
 
 const DAY_MS = 86_400_000;
 const COOLDOWN_MS = 24 * 3600 * 1000;
@@ -163,25 +165,6 @@ export function nextLocal03(nowMs: number): number {
 }
 
 // ─── APNs subscriber for pattern:detected ────────────────────────────────
-
-/**
- * Returns the ISO 8601 week key (YYYY-Www) for a given timestamp.
- * Used as the dedup + aggregation discriminator — one push per
- * correlator per week.
- */
-function isoWeekKey(ts: number): string {
-  const d = new Date(ts);
-  // ISO week: Monday = day 1; shift so Monday is 0
-  const day = (d.getUTCDay() + 6) % 7;
-  // Nearest Thursday (ISO rule: week belongs to the year of its Thursday)
-  const thursday = new Date(d);
-  thursday.setUTCDate(d.getUTCDate() - day + 3);
-  const yearStart = new Date(Date.UTC(thursday.getUTCFullYear(), 0, 1));
-  const week = Math.ceil(
-    ((thursday.getTime() - yearStart.getTime()) / 86_400_000 + 1) / 7,
-  );
-  return `${thursday.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
-}
 
 export interface PatternDetectedSubscriberOpts {
   /**
