@@ -35,8 +35,8 @@ import type { OllieAPI } from '@ollie/api';
 import * as events from '@ollie/events';
 import { hasNecessaryConsent } from '@ollie/consent';
 import {
-  bytesToBase64,
-  base64ToBytes,
+  bytesToPgHex,
+  pgHexToBytes,
   encryptData,
   decryptData,
 } from '@ollie/crypto';
@@ -98,8 +98,8 @@ export interface RemoteFinanceRow {
   user_id: string;
   module: 'finance';
   record_type: FinanceRecordType;
-  encrypted_payload: string; // base64
-  iv: string;                // base64
+  encrypted_payload: string; // Postgres bytea hex (\x+hex) on the wire
+  iv: string;                // Postgres bytea hex (\x+hex) on the wire
   blob_version: number;
   deleted_at: string | null;
   created_at: string;
@@ -125,9 +125,9 @@ const PAGE_LIMIT = 500;
 interface QueuedPush {
   id: string;
   record_type: FinanceRecordType;
-  /** Encrypted payload (base64). For tombstones we still ship an
-   *  encrypted empty-object blob so the server-side row shape is
-   *  uniform. */
+  /** Encrypted payload as Postgres bytea hex (\x+hex). For tombstones
+   *  we still ship an encrypted empty-object blob so the server-side row
+   *  shape is uniform. */
   encrypted_payload: string;
   iv: string;
   deleted: boolean;
@@ -260,8 +260,8 @@ export function createFinanceSyncClient(initialDeps: FinanceSyncDeps): FinanceSy
     const entry: QueuedPush = {
       id: String(row.id),
       record_type: recordType,
-      encrypted_payload: bytesToBase64(enc.ciphertext),
-      iv: bytesToBase64(enc.iv),
+      encrypted_payload: bytesToPgHex(enc.ciphertext),
+      iv: bytesToPgHex(enc.iv),
       deleted: row._deleted === true,
       updated_at_ms: typeof row.last_edited_at === 'number' ? row.last_edited_at : nowFn(),
     };
@@ -343,10 +343,10 @@ export function createFinanceSyncClient(initialDeps: FinanceSyncDeps): FinanceSy
         user_id: deps.userId,
         module: 'finance' as const,
         record_type: u.record_type,
-        // Supabase REST accepts base64 for bytea via the
-        // `\x` hex prefix OR base64; we go base64 → \x hex below to
-        // match the rest of the codebase (encrypted_state path uses
-        // base64 strings on a bytea column too).
+        // Already encoded as Postgres `bytea` hex (`\x`+hex) at enqueue
+        // time via bytesToPgHex — NOT base64. PostgREST stores string
+        // literals verbatim into bytea, so base64 would make the IV 16
+        // octets and trip `check (octet_length(iv) = 12)` (audit #1).
         encrypted_payload: u.encrypted_payload,
         iv: u.iv,
         blob_version: 1,
@@ -449,8 +449,8 @@ export function createFinanceSyncClient(initialDeps: FinanceSyncDeps): FinanceSy
           deletedByType.set(row.record_type, s);
           continue;
         }
-        const ciphertext = base64ToBytes(row.encrypted_payload);
-        const iv = base64ToBytes(row.iv);
+        const ciphertext = pgHexToBytes(row.encrypted_payload);
+        const iv = pgHexToBytes(row.iv);
         const plain = await decryptData<SyncableFinanceRow>(deps.encryptionKey, { ciphertext, iv });
         if (!plain || typeof plain !== 'object') continue;
         // Pin the id from the row — defense against a tampered blob

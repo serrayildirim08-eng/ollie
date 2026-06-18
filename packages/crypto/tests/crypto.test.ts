@@ -11,6 +11,8 @@ import {
   randomIv,
   bytesToBase64,
   base64ToBytes,
+  bytesToPgHex,
+  pgHexToBytes,
   passphraseStrength,
   CRYPTO_PARAMS,
 } from '../src/index';
@@ -407,5 +409,30 @@ describe('crypto · passphraseStrength — bands + guidance', () => {
     // it higher, but the hard length floor caps it at weak.
     const s = await passphraseStrength('aB3$aB3$aB3');
     expect(s.band).toBe('weak');
+  });
+});
+
+describe('crypto · Postgres bytea hex helpers (audit #1)', () => {
+  it('encodes bytes as \\x + lowercase hex, two chars per byte', () => {
+    const bytes = new Uint8Array([0x00, 0x0f, 0xab, 0xff]);
+    expect(bytesToPgHex(bytes)).toBe('\\x000fabff');
+    // A 12-byte IV → "\x" + 24 hex chars → octet_length = 12 on the server.
+    expect(bytesToPgHex(randomIv()).length).toBe(2 + 24);
+  });
+
+  it('round-trips bytes → \\x-hex → bytes', () => {
+    const bytes = randomIv();
+    expect(pgHexToBytes(bytesToPgHex(bytes))).toEqual(bytes);
+  });
+
+  it('never produces base64-only characters (uppercase / + / / / =)', () => {
+    const hex = bytesToPgHex(new Uint8Array([0xff, 0xfe, 0x10, 0x7a]));
+    expect(/[A-Z+/=]/.test(hex)).toBe(false);
+  });
+
+  it('decodes legacy base64 values too (back-compat for pre-fix rows)', () => {
+    const bytes = new Uint8Array([1, 2, 3, 250, 0, 99]);
+    // A legacy row stored base64 ASCII inside the bytea column.
+    expect(pgHexToBytes(bytesToBase64(bytes))).toEqual(bytes);
   });
 });
