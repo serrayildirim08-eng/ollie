@@ -249,12 +249,26 @@ export interface ScheduledNotificationHandle {
  *
  * Never throws.
  */
+/** Defensive upper bound on how far out scheduleAt will arm a reminder.
+ *  Callers re-derive intent-based fire times (see admin/work handlers #92),
+ *  but this is a belt-and-braces guard so a bogus far-future timestamp can
+ *  never arm a multi-year setTimeout or hand the OS an absurd schedule. */
+const MAX_SCHEDULE_HORIZON_MS = 365 * 24 * 60 * 60 * 1000;
+
 export function scheduleAt(
   at: number,
   payload: NotifyEventDetail,
   id: string,
 ): ScheduledNotificationHandle {
   const delay = at - Date.now();
+
+  // Beyond the sane horizon — almost certainly a clock-skew / bad-input bug
+  // (#92). Drop quietly rather than arm a years-long timer or hand the OS
+  // garbage.
+  if (delay > MAX_SCHEDULE_HORIZON_MS) {
+    console.warn('[systemNotify] scheduleAt fire time beyond horizon — dropping', id);
+    return { cancel: () => {} };
+  }
 
   // Past or near-immediate (< 1s) — fire now so we don't arm a no-op timer
   // or hand the OS a fire time it would treat as "now" anyway.
@@ -266,14 +280,34 @@ export function scheduleAt(
   // Mutable timer slot — the native path leaves this null (OS owns the fire);
   // the fallback / non-Tauri path fills it so cancel() can clear it.
   let timerId: ReturnType<typeof setTimeout> | null = null;
-  // Set once we've committed to the native OS scheduler, so cancel() knows to
-  // route through `cancel_local_notification` instead of clearing a timer.
-  let nativeScheduled = false;
+  // Flips true the moment cancel() is called. The async path-decider below
+  // checks this BEFORE the dynamic import and BEFORE emitting the schedule
+  // event, so a cancel that races ahead of the native schedule still wins: we
+  // never commit what was already cancelled. (Audit #27 — the OS notification
+  // used to fire after the user undid it because cancel() ran before the
+  // emit('ollie-schedule-notif') reached the Rust listener.)
+  let cancelled = false;
 
   const armTimer = (): void => {
+    // A cancel that landed while the plugin loader was resolving must not
+    // arm a stale timer.
+    if (cancelled) return;
     timerId = setTimeout(() => {
       void sendSystemNotification(payload);
     }, delay);
+  };
+
+  // Idempotently tell the OS to drop this id. The Rust cancel handler is a
+  // no-op when nothing is scheduled under `id`, so it is always safe to emit
+  // — even before (or without) a successful schedule. cancel() therefore
+  // fires this unconditionally rather than gating on a "did we schedule yet?"
+  // flag that the async race can leave stale.
+  const cancelNative = (): void => {
+    void import('@tauri-apps/api/event')
+      .then(({ emit }) => emit('ollie-cancel-notif', id))
+      .catch((err) => {
+        console.warn('[systemNotify] cancel emit failed', err);
+      });
   };
 
   // Decide the path asynchronously: loadNotificationPlugin() resolves whether
@@ -281,6 +315,7 @@ export function scheduleAt(
   // The handle is returned synchronously; cancel() reads the flags whenever
   // it's eventually called.
   void loadNotificationPlugin().then(async (plugin) => {
+    if (cancelled) return; // cancelled before we even chose a path
     if (!plugin) {
       // Web preview / vitest — no native scheduler, keep the timer fallback.
       armTimer();
@@ -292,6 +327,10 @@ export function scheduleAt(
       // are permitted (core:event:default), so we EMIT and the Rust setup
       // listener schedules. This is the path that survives app-quit.
       const { emit } = await import('@tauri-apps/api/event');
+      // Re-check right before committing to the OS: cancel() may have run
+      // while the dynamic import above was in flight. Without this, the emit
+      // would commit a schedule the user already undid (#27).
+      if (cancelled) return;
       await emit('ollie-schedule-notif', {
         id,
         title: payload.title,
@@ -303,7 +342,6 @@ export function scheduleAt(
         category_id: payload.actionTypeId ?? null,
         extra_json: payload.extra ? JSON.stringify(payload.extra) : null,
       });
-      nativeScheduled = true;
     } catch (err) {
       // Native scheduler unreachable/failed — fall back to the in-process
       // timer so an open app still fires (no double-fire: native didn't take).
@@ -314,17 +352,21 @@ export function scheduleAt(
 
   return {
     cancel: () => {
+      cancelled = true;
       if (timerId !== null) {
         clearTimeout(timerId);
         timerId = null;
       }
-      if (nativeScheduled) {
-        void import('@tauri-apps/api/event')
-          .then(({ emit }) => emit('ollie-cancel-notif', id))
-          .catch((err) => {
-            console.warn('[systemNotify] cancel emit failed', err);
-          });
-      }
+      // Always emit the native cancel for this id, regardless of whether the
+      // async scheduler has reached emit('ollie-schedule-notif') yet. The
+      // Rust cancel handler is idempotent, so an early cancel that beats the
+      // schedule still removes it once it lands — and a cancel after a
+      // successful schedule removes it the obvious way. Skipped only when we
+      // KNOW we're off-Tauri (no plugin), where there is nothing native to
+      // cancel and the timer clear above is sufficient.
+      void loadNotificationPlugin().then((plugin) => {
+        if (plugin) cancelNative();
+      });
     },
   };
 }
