@@ -71,6 +71,7 @@ import type {
   WindDownLogEntry,
 } from '@ollie/logic/sleep';
 import { computePhaseForDate } from '@ollie/logic/cycle';
+import { startOfLocalDay, addLocalDays } from '@ollie/logic/util';
 import {
   inferCaffeineFromTransactions,
   correlateCaffeineAndSleep,
@@ -81,6 +82,7 @@ import type { Orchestrator } from './types';
 
 const DEBOUNCE_MS = 500;
 const MAX_DUMP_LEN = 4000;
+const HOUR_MS = 3_600_000;
 
 // Extended settings type — augments SleepSettings with orchestrator-level
 // show_* flags and the chronotherapy block that aren't part of the core logic type.
@@ -242,9 +244,15 @@ export function createSleepOrchestrator(
   ): CyclePhaseWindow[] {
     if (!Array.isArray(cycles) || cycles.length === 0) return [];
     const out: CyclePhaseWindow[] = [];
-    let curStart = fromTs;
+    // Step by true LOCAL calendar days (anchored at local noon) rather than a
+    // fixed 24h +=, which skips/double-counts a day across DST and shifts the
+    // phase-transition boundary onto the wrong local day.
+    const firstNoon = startOfLocalDay(fromTs) + 12 * HOUR_MS;
+    const endNoon = startOfLocalDay(toTs) + 12 * HOUR_MS;
+    let curStart = firstNoon;
+    let prevT = firstNoon;
     let curName: string | null = null;
-    for (let t = fromTs; t <= toTs; t += 86_400_000) {
+    for (let t = firstNoon; t <= endNoon; prevT = t, t = addLocalDays(t, 1)) {
       let phase: string | null;
       try {
         phase = computePhaseForDate(
@@ -256,7 +264,7 @@ export function createSleepOrchestrator(
       }
       if (curName === null) { curName = phase; curStart = t; continue; }
       if (phase !== curName) {
-        if (curName) out.push({ start: curStart, end: t - 86_400_000, name: curName });
+        if (curName) out.push({ start: curStart, end: prevT, name: curName });
         curName = phase; curStart = t;
       }
     }

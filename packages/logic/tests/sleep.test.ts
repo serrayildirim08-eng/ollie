@@ -293,11 +293,18 @@ describe('detectWeekendRecoveryIllusion', () => {
     // Build 28 records: weekdays ~5h, weekends ~7.5h
     const dayNames = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
     const recs: SleepRecord[] = [];
-    const base = new Date('2026-01-05'); // Monday
+    // Construct each day in LOCAL time so the iso `night_of` key and the
+    // weekday agree with how the detector re-derives the weekday
+    // (`night_of + 'T12:00:00'`). A UTC-parsed `new Date('2026-01-05')` shifts
+    // both the weekday and the iso by a day in west-of-UTC zones.
     for (let i = 0; i < 28; i++) {
-      const d = new Date(base);
-      d.setDate(base.getDate() + i);
-      const iso = d.toISOString().slice(0, 10);
+      const d = new Date(2026, 0, 5 + i); // local Monday 2026-01-05 + i days
+      const iso =
+        d.getFullYear() +
+        '-' +
+        String(d.getMonth() + 1).padStart(2, '0') +
+        '-' +
+        String(d.getDate()).padStart(2, '0');
       const day = dayNames[d.getDay()];
       const tst = ['fri', 'sat'].includes(day) ? 450 : 300; // 7.5h vs 5h
       recs.push(makeRecord(iso, tst));
@@ -437,11 +444,17 @@ describe('forecastTonightHeuristic', () => {
     // and every other day is long (8h). Forecasting for a Friday should land
     // below the un-adjusted recency mean.
     const recs: SleepRecord[] = [];
-    const base = new Date('2026-04-03'); // a Friday
+    // Build days in LOCAL time so the iso `night_of` and weekday agree with how
+    // the forecaster derives a record's weekday (local `night_of + 'T12:00:00'`
+    // → getDay()). A UTC-parsed base shifts both by a day west of UTC.
     for (let i = 0; i < 21; i++) {
-      const d = new Date(base);
-      d.setDate(base.getDate() + i);
-      const iso = d.toISOString().slice(0, 10);
+      const d = new Date(2026, 3, 3 + i); // local Friday 2026-04-03 + i days
+      const iso =
+        d.getFullYear() +
+        '-' +
+        String(d.getMonth() + 1).padStart(2, '0') +
+        '-' +
+        String(d.getDate()).padStart(2, '0');
       const isFriday = d.getDay() === 5;
       recs.push(makeRecord(iso, isFriday ? 240 : 480));
     }

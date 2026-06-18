@@ -13,7 +13,7 @@ import type {
   HabitSignal,
 } from './types';
 import { mean, buildDayCompletionMap } from './helpers';
-import { DAY_MS, dayKey } from '../util';
+import { DAY_MS, dayKey, eachLocalDayKey } from '../util';
 
 // ─── detectExternalizationRequirement ────────────────────────────────
 
@@ -127,8 +127,6 @@ export function detectLutealCollapse(
   const flatCompletions = history.completions ?? null;
   if (arr.length === 0 || phases.length === 0) return null;
 
-  // Local-time day key — matches the local keys used across habit detectors.
-  const dKey = dayKey;
 
   const dayPhase = new Map<string, string>();
   const ranges: Array<{ start: number; end: number; name: string }> = [];
@@ -141,22 +139,24 @@ export function detectLutealCollapse(
   for (const r of ranges) {
     const s = Math.max(r.start, windowStart);
     const e = Math.min(r.end, now);
-    for (let t = s; t <= e; t += DAY_MS) dayPhase.set(dKey(t), r.name);
+    for (const k of eachLocalDayKey(s, e)) dayPhase.set(k, r.name);
   }
   if (markers.length > 0) {
     markers.sort((a, b) => a.ts - b.ts);
-    for (let t = windowStart; t <= now; t += DAY_MS) {
+    for (const k of eachLocalDayKey(windowStart, now)) {
+      // Compare markers against this local day's noon timestamp (DST-stable).
+      const t = Date.parse(k + 'T12:00:00');
       let cur: string | null = null;
       for (const m of markers) {
         if (m.ts <= t) cur = m.phase; else break;
       }
-      if (cur) dayPhase.set(dKey(t), cur);
+      if (cur) dayPhase.set(k, cur);
     }
   }
 
   let lutealWindows = 0, inLuteal = false;
-  for (let t = windowStart; t <= now; t += DAY_MS) {
-    const ph = dayPhase.get(dKey(t));
+  for (const k of eachLocalDayKey(windowStart, now)) {
+    const ph = dayPhase.get(k);
     if (ph === 'luteal') {
       if (!inLuteal) { lutealWindows++; inLuteal = true; }
     } else {
@@ -248,7 +248,7 @@ export function detectSensoryPreflight(
   if (sensoryDays.size < minClusters) return null;
 
   const allDays: string[] = [];
-  for (let t = windowStart; t <= now; t += DAY_MS) allDays.push(dKey(t));
+  for (const k of eachLocalDayKey(windowStart, now)) allDays.push(k);
 
   const habitsActive = arr.length;
   const expectedDaily = habitsActive;

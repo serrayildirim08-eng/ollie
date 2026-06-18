@@ -10,7 +10,7 @@
 
 import type { HabitsHistory, HabitsOpts, HabitSignal } from './types';
 import { dayKey, buildDayCompletionMap } from './helpers';
-import { DAY_MS } from '../util';
+import { DAY_MS, eachLocalDayKey, addLocalDays } from '../util';
 
 // ─── detectHyperfocusSpillover ────────────────────────────────────────
 
@@ -49,12 +49,11 @@ export function detectHyperfocusSpillover(
   for (const k of crashDays) {
     const t = Date.parse(k + 'T12:00:00');
     if (isNaN(t)) continue;
-    for (let i = 1; i <= followDays; i++) postSet.add(dayKey(t + i * DAY_MS));
+    for (let i = 1; i <= followDays; i++) postSet.add(dayKey(addLocalDays(t, i)));
   }
 
   let postCompletions = 0, postDays = 0, baselineCompletions = 0, baselineDays = 0;
-  for (let t = windowStart; t <= now; t += DAY_MS) {
-    const k = dayKey(t);
+  for (const k of eachLocalDayKey(windowStart, now)) {
     const cs = dayCompletions.get(k) ?? 0;
     if (postSet.has(k)) { postCompletions += cs; postDays++; }
     else if (!crashDays.has(k)) { baselineCompletions += cs; baselineDays++; }

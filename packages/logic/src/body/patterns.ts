@@ -16,7 +16,7 @@ import {
   spearman,
   nextDayKey,
 } from './math';
-import { DAY_MS, HOUR_MS, MINUTE_MS } from '../util';
+import { DAY_MS, HOUR_MS, MINUTE_MS, eachLocalDayKey } from '../util';
 
 import {
   HEADACHE_RE,
@@ -966,7 +966,7 @@ export function detectSymptomPhaseCoupling(
     if (!p || typeof p.start !== 'number' || typeof p.end !== 'number' || typeof p.name !== 'string') continue;
     const s = Math.max(p.start, windowStart);
     const e = Math.min(p.end, now);
-    for (let t = s; t <= e; t += DAY_MS) phaseForDay.set(dayKey(t), p.name);
+    for (const k of eachLocalDayKey(s, e)) phaseForDay.set(k, p.name);
   }
   if (phaseForDay.size === 0) return null;
 

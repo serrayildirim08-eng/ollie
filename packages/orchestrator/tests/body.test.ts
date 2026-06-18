@@ -6,6 +6,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createStore, createMemoryAdapter } from '@ollie/store';
 import { _clearAllHandlers, on, emit } from '@ollie/events';
 import { createBodyOrchestrator } from '../src/body';
+import { dayKey as localDayKey, addLocalDays as addLocalDaysTest } from '@ollie/logic/util';
 import type { NotificationSpec } from '@ollie/notifications';
 
 // Fixture: a user with 30 days of water logs and braindump entries
@@ -414,13 +415,16 @@ describe('body orchestrator — cross-module signals', () => {
   });
 
   it('writes a sleep↔work signal to shared.signals from sleep + focus data', () => {
-    const dKey = (ts: number) => new Date(ts).toISOString().slice(0, 10);
+    // `night_of` is a LOCAL calendar date and the detector maps a focus
+    // session to its "night before" with a LOCAL day key — build the fixture
+    // the same way so it is TZ-stable (passes under UTC and America/LA alike).
+    const dKey = localDayKey;
     const sleepRecords: Array<{ night_of: string; tst_min: number }> = [];
     const focusLog: Array<{ ts: number; duration_min: number; duration_ms: number }> = [];
     for (let d = 14; d >= 1; d--) {
       const dayTs = FIXED_NOW - d * DAY + 13 * HOUR;
       const short = d % 2 === 0;
-      sleepRecords.push({ night_of: dKey(dayTs - DAY), tst_min: short ? 300 : 450 });
+      sleepRecords.push({ night_of: dKey(addLocalDaysTest(dayTs, -1)), tst_min: short ? 300 : 450 });
       for (let k = 0; k < 2; k++) {
         focusLog.push({
           ts: dayTs + k * HOUR,
@@ -455,13 +459,13 @@ describe('body orchestrator — cross-module signals', () => {
   });
 
   it('recompute is idempotent — no duplicate body signal entries', () => {
-    const dKey = (ts: number) => new Date(ts).toISOString().slice(0, 10);
+    const dKey = localDayKey;
     const sleepRecords: Array<{ night_of: string; tst_min: number }> = [];
     const focusLog: Array<{ ts: number; duration_min: number; duration_ms: number }> = [];
     for (let d = 14; d >= 1; d--) {
       const dayTs = FIXED_NOW - d * DAY + 13 * HOUR;
       const short = d % 2 === 0;
-      sleepRecords.push({ night_of: dKey(dayTs - DAY), tst_min: short ? 300 : 450 });
+      sleepRecords.push({ night_of: dKey(addLocalDaysTest(dayTs, -1)), tst_min: short ? 300 : 450 });
       for (let k = 0; k < 2; k++) {
         focusLog.push({
           ts: dayTs + k * HOUR, duration_min: 45,

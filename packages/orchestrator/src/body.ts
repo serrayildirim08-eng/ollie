@@ -41,11 +41,13 @@ import type { NotificationSpec } from '@ollie/notifications';
 import { detectPatterns, normalizeEpisode, isWellFormedEpisode } from '@ollie/logic/body';
 import type { AnyBodyPattern, CyclePhaseRange, SleepRecord, WaterEntry, SupplementLogEntry, Episode } from '@ollie/logic/body';
 import { computePhaseForDate } from '@ollie/logic/cycle';
+import { startOfLocalDay, addLocalDays } from '@ollie/logic/util';
 import { runBodySignalsPass } from './body-signals';
 import { appendCapped } from './dedup-store';
 import type { Orchestrator } from './types';
 
 const DEBOUNCE_MS = 500;
+const HOUR_MS = 3_600_000;
 
 // Default supplement reminder window: 8am local. Stored per-supp via
 // optional `reminder_hhmm` field on body.supplements entries.
@@ -95,14 +97,20 @@ export function createBodyOrchestrator(
   function buildCyclePhases(cycles: unknown[], fromTs: number, toTs: number): CyclePhaseRange[] {
     if (!Array.isArray(cycles) || cycles.length === 0) return [];
     const out: CyclePhaseRange[] = [];
-    let curStart = fromTs;
+    // Step by true LOCAL calendar days (anchored at local noon) rather than a
+    // fixed 24h +=, which skips/double-counts a day across DST and shifts the
+    // phase-transition boundary onto the wrong local day.
+    const firstNoon = startOfLocalDay(fromTs) + 12 * HOUR_MS;
+    const endNoon = startOfLocalDay(toTs) + 12 * HOUR_MS;
+    let curStart = firstNoon;
+    let prevT = firstNoon;
     let curName: string | null = null;
-    for (let t = fromTs; t <= toTs; t += 86_400_000) {
+    for (let t = firstNoon; t <= endNoon; prevT = t, t = addLocalDays(t, 1)) {
       let phase: string | null;
       try { phase = computePhaseForDate(cycles as Parameters<typeof computePhaseForDate>[0], t); } catch { phase = null; }
       if (curName === null) { curName = phase; curStart = t; continue; }
       if (phase !== curName) {
-        if (curName) out.push({ start: curStart, end: t - 86_400_000, name: curName });
+        if (curName) out.push({ start: curStart, end: prevT, name: curName });
         curName = phase; curStart = t;
       }
     }

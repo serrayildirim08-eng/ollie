@@ -84,7 +84,7 @@ export interface BodySignalsOpts {
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
-import { DAY_MS, MINUTE_MS, dayKey } from '../util';
+import { DAY_MS, MINUTE_MS, dayKey, addLocalDays } from '../util';
 
 const SLEEP_SOURCE: PatternSource = {
   citation: 'Lim & Dinges 2010, Psychol Bull — A meta-analysis of the impact of short-term sleep deprivation on cognitive variables',
@@ -155,7 +155,7 @@ export function detectSleepDebtFocusQuality(
     if (s.ts < windowStart || s.ts > now) continue;
     if (typeof s.duration_min !== 'number' || typeof s.duration_ms !== 'number') continue;
     // "night before" = the night_of for the day prior to the session date.
-    const prevNightKey = dayKeyOf(s.ts - DAY_MS);
+    const prevNightKey = dayKeyOf(addLocalDays(s.ts, -1));
     const tst = tstByNight[prevNightKey];
     if (tst == null) continue; // no sleep data for that night → cannot classify
     const ratio = completionRatio(s);

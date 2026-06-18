@@ -68,6 +68,26 @@ const MIN = 60000;
 /** Build a fake "now" anchored to a fixed epoch. */
 const NOW = new Date('2026-01-15T12:00:00Z').getTime();
 
+/**
+ * Epoch ms for a LOCAL wall-clock time `n` whole calendar days before the
+ * local day containing `NOW`. The body detectors bucket by LOCAL `dayKey` and
+ * read LOCAL `getHours()`, so fixtures must place events at a real local
+ * wall-clock time — not `NOW − k·DAY + h·HOUR`, which only lands on the
+ * intended local hour/day under UTC and drifts across other timezones.
+ */
+function localDaysAgoAt(daysAgo: number, hour: number, minute = 0): number {
+  const d = new Date(NOW);
+  return new Date(
+    d.getFullYear(),
+    d.getMonth(),
+    d.getDate() - daysAgo,
+    hour,
+    minute,
+    0,
+    0,
+  ).getTime();
+}
+
 // ─── math ────────────────────────────────────────────────────────────────────
 
 describe('dayKey', () => {
@@ -117,15 +137,16 @@ describe('detectHeadacheHydration', () => {
     const dumps = [];
     const waterLog = [];
     for (let i = 0; i < 20; i++) {
-      const ts = NOW - (20 - i) * DAY;
+      const daysAgo = 20 - i;
       const lowWater = i % 2 === 0;
       if (lowWater) {
-        // Only 1 AM glass
-        waterLog.push(ts - 8 * HOUR); // ~4am
-        dumps.push({ ts, rawText: 'başım ağrıyor headache' });
+        // Only 1 AM glass (07:00 local) + a headache dump that afternoon —
+        // both on the SAME local calendar day.
+        waterLog.push(localDaysAgoAt(daysAgo, 7));
+        dumps.push({ ts: localDaysAgoAt(daysAgo, 15), rawText: 'başım ağrıyor headache' });
       } else {
-        // 4 AM glasses
-        for (let g = 0; g < 4; g++) waterLog.push(ts - (9 - g) * HOUR);
+        // 4 AM glasses (06:00–09:00 local)
+        for (let g = 0; g < 4; g++) waterLog.push(localDaysAgoAt(daysAgo, 6 + g));
       }
     }
     const result = detectHeadacheHydration({ now: NOW, dumps, waterLog }, { minSampleDays: 14, minRunLength: 3, minAbsR: 0.2 });
@@ -177,10 +198,9 @@ describe('detectAfternoonCrashWindow', () => {
   it('surfaces afternoon block when 14:00–16:00 is dominant', () => {
     const dumps = [];
     for (let d = 0; d < 20; d++) {
-      const base = NOW - (20 - d) * DAY;
-      // 15 crashes at 14:30, 5 elsewhere
+      // 15 crashes at 14:30 LOCAL, 5 at 10:30 LOCAL.
       const hour = d < 15 ? 14 : 10;
-      dumps.push({ ts: base + hour * HOUR + 30 * MIN, rawText: 'tükendim' });
+      dumps.push({ ts: localDaysAgoAt(20 - d, hour, 30), rawText: 'tükendim' });
     }
     const result = detectAfternoonCrashWindow(
       { now: NOW, dumps },

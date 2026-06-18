@@ -91,6 +91,70 @@ export function daysBetweenKeys(a: string, b: string): number {
   );
 }
 
+// ─── DST-safe calendar-day stepping ──────────────────────────────────────────────
+//
+// Stepping a timestamp by a fixed 24h (`t += DAY_MS`) while bucketing by a
+// LOCAL `dayKey` is wrong across DST transitions: a spring-forward day is 23h
+// long and a fall-back day is 25h long, so the 24h step lands on the wrong
+// local calendar day — skipping one day or visiting one twice. These helpers
+// advance by true LOCAL calendar days instead, so every step maps to exactly
+// one local day regardless of DST. Use them for any loop/offset that buckets
+// results by `dayKey`.
+
+/**
+ * Local **midnight** (00:00:00.000 wall-clock) of the calendar day that
+ * contains `ts`, as epoch ms. Built via local `Date` construction, so it is
+ * the real start of the local day even on DST-transition days.
+ */
+export function startOfLocalDay(ts: number): number {
+  const d = new Date(ts);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+}
+
+/**
+ * Advance `ts` by `n` whole **local calendar days**, preserving the local
+ * time-of-day across DST. `new Date(y, m, d + n, …)` normalises overflow and
+ * re-resolves the offset, so the result is the same wall-clock time `n` days
+ * later — not `ts + n·DAY_MS`, which drifts an hour across DST.
+ */
+export function addLocalDays(ts: number, n: number): number {
+  const d = new Date(ts);
+  return new Date(
+    d.getFullYear(),
+    d.getMonth(),
+    d.getDate() + n,
+    d.getHours(),
+    d.getMinutes(),
+    d.getSeconds(),
+    d.getMilliseconds(),
+  ).getTime();
+}
+
+/**
+ * Iterate the LOCAL calendar-day keys (`YYYY-MM-DD`) from the day containing
+ * `from` through the day containing `to`, inclusive — exactly one key per
+ * local day, DST-safe. Replaces `for (let t = from; t <= to; t += DAY_MS)`
+ * loops that bucket by `dayKey(t)`.
+ *
+ * Yields nothing when `to < from`.
+ */
+export function* eachLocalDayKey(
+  from: number,
+  to: number,
+): Generator<string, void, unknown> {
+  if (!(to >= from)) return;
+  // Anchor at local noon so each += day lands squarely inside the next local
+  // day even across a 23h/25h DST transition, then read its dayKey.
+  let cursor = startOfLocalDay(from) + 12 * HOUR_MS;
+  const end = startOfLocalDay(to) + 12 * HOUR_MS;
+  // Guard against pathological non-finite inputs.
+  let guard = 0;
+  while (cursor <= end && guard++ < 100_000) {
+    yield dayKey(cursor);
+    cursor = addLocalDays(cursor, 1);
+  }
+}
+
 // ─── string distance ────────────────────────────────────────────────────────────
 
 /**

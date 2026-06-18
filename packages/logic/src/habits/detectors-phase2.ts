@@ -9,7 +9,7 @@
 
 import type { HabitsHistory, HabitsOpts, HabitSignal, Habit } from './types';
 import { mean, buildDayCompletionMap } from './helpers';
-import { DAY_MS, dayKey } from '../util';
+import { DAY_MS, dayKey, addLocalDays } from '../util';
 
 // ─── detectFreshStartCrash ────────────────────────────────────────────
 
@@ -474,7 +474,7 @@ export function detectSleepHabitCoupling(
     }
     if (baseTs == null) continue;
     if (baseTs < windowStart || baseTs > now) continue;
-    const followKey = dayKey(baseTs + DAY_MS);
+    const followKey = dayKey(addLocalDays(baseTs, 1));
     if (r.tst_min < lowTstMin) lowSleepFollowDays.add(followKey);
     else normalSleepFollowDays.add(followKey);
   }

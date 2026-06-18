@@ -35,6 +35,7 @@ import {
   type HabitsHistory,
   type Habit,
 } from '../src/habits';
+import { addLocalDays } from '../src/util';
 
 // ─── helpers ──────────────────────────────────────────────────────────
 
@@ -474,15 +475,20 @@ describe('detectSleepHabitCoupling', () => {
     ];
     // Sleep record instant: 00:30 LOCAL on the night's calendar day.
     const sleepTs = (key: string): number => Date.parse(key + 'T00:30:00');
-    // The detector adds DAY_MS then keys LOCAL → next local calendar day.
-    const localFollowKey = (key: string): string => dayKey(sleepTs(key) + DAY);
+    // The detector advances by one LOCAL calendar day then keys LOCAL → next
+    // local calendar day (DST-safe; matches `dayKey(addLocalDays(ts, 1))`).
+    const localFollowKey = (key: string): string => dayKey(addLocalDays(sleepTs(key), 1));
 
-    // Confirm the chosen instants genuinely straddle the date line vs UTC on a
-    // non-UTC host — i.e. this fixture really stresses the timezone bug.
-    if (new Date().getTimezoneOffset() !== 0) {
-      const s = sleepTs('2024-04-10');
-      expect(dayKey(s)).not.toBe(dayKeyUTC(s));
-    }
+    // Sanity: this fixture is meant to stress the LOCAL-vs-UTC keying split.
+    // At 00:30 LOCAL the local/UTC keys diverge only in zones EAST of UTC
+    // (where 00:30 local is the previous UTC day); west-of-UTC hosts (e.g.
+    // America/Los_Angeles) see no divergence at this instant. Either way the
+    // behavioural assertions below pin LOCAL keying — this guard only
+    // documents when the divergence is actually exercised.
+    const stressesUtcSplit = baseKeys.some(
+      (k) => localFollowKey(k) !== dayKeyUTC(sleepTs(k) + DAY),
+    );
+    void stressesUtcSplit;
 
     // Split nights: even-index = short sleep, odd-index = normal sleep.
     const shortKeys = baseKeys.filter((_, i) => i % 2 === 0);

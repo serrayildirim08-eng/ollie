@@ -68,7 +68,7 @@ import {
   RUMINATIVE_LEXICON,
   OVERWHELMED_LEXICON,
 } from './constants';
-import { DAY_MS, HOUR_MS, MINUTE_MS, dayKey } from '../util';
+import { DAY_MS, HOUR_MS, MINUTE_MS, dayKey, eachLocalDayKey } from '../util';
 
 // ─── Phase 1 ──────────────────────────────────────────────────────────
 
@@ -1071,9 +1071,6 @@ export function detectCyclePhaseSleepCoupling(
   const minOtherNights = o.minOtherNights != null ? o.minOtherNights : 10;
   const minDeltaMin = o.minDeltaMin != null ? o.minDeltaMin : 8;
 
-  // Local-time day key — delegates to the shared util.
-  const isoDayKey = dayKey;
-
   const phaseForDay = new Map<string, string>();
   for (const p of cyclePhases) {
     if (
@@ -1083,8 +1080,8 @@ export function detectCyclePhaseSleepCoupling(
       typeof p.name !== 'string'
     )
       continue;
-    for (let t = p.start; t <= p.end; t += DAY_MS)
-      phaseForDay.set(isoDayKey(t), p.name);
+    for (const k of eachLocalDayKey(p.start, p.end))
+      phaseForDay.set(k, p.name);
   }
   if (phaseForDay.size === 0) return null;
 
