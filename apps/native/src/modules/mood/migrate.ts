@@ -34,7 +34,12 @@ export function migrateMood(): Promise<void> {
       for (const stmt of MIGRATIONS) {
         await sql.execute(stmt);
       }
-    })();
+    })().catch((e) => {
+      // A transient SQLite failure must not brick the module for the whole
+      // session — clear the memo so the next call retries.
+      migrationPromise = null;
+      throw e;
+    });
   }
   return migrationPromise;
 }

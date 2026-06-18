@@ -117,7 +117,12 @@ export function migrateAdmin(): Promise<void> {
         "ball_state TEXT NOT NULL DEFAULT 'mine'",
       );
       await addColumnIfMissing('admin_tasks', 'last_transition_at', 'last_transition_at INTEGER');
-    })();
+    })().catch((e) => {
+      // A transient SQLite failure must not brick the module for the whole
+      // session — clear the memo so the next call retries.
+      migrationPromise = null;
+      throw e;
+    });
   }
   return migrationPromise;
 }

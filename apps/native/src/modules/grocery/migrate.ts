@@ -153,7 +153,12 @@ export function migrateGrocery(): Promise<void> {
            ON grocery_pantry(predicted_out_at_ms)
            WHERE predicted_out_at_ms IS NOT NULL`,
       );
-    })();
+    })().catch((e) => {
+      // A transient SQLite failure must not brick the module for the whole
+      // session — clear the memo so the next call retries.
+      migrationPromise = null;
+      throw e;
+    });
   }
   return migrationPromise;
 }

@@ -63,18 +63,61 @@ async function maybeUpgradeFragment(fragment: Fragment): Promise<Fragment> {
   }
 
   const first = res.data.actions[0];
-  let parsedPayload: BodyAction;
+  let parsed: unknown;
   try {
-    parsedPayload = JSON.parse(first.data) as BodyAction;
+    parsed = JSON.parse(first.data);
   } catch {
     // data isn't valid JSON — can't upgrade, fall back.
     return fragment;
   }
+
+  // Validate the AI payload against known actions + required fields BEFORE
+  // adopting it. An invalid action would otherwise hit exhaustive() (which
+  // throws, breaking the fallback path) or write an undefined row. On any
+  // validation failure we preserve the original Layer 1 fragment.
+  const validated = validateBodyAction(parsed);
+  if (!validated) return fragment;
+
   return {
     ...fragment,
     module: 'body',
-    payload: parsedPayload,
+    payload: validated,
   };
+}
+
+/**
+ * Required string fields per action — the discriminant payload fields the
+ * handler reads unconditionally. Actions with no required field map to [].
+ */
+const BODY_REQUIRED_FIELDS: Record<BodyAction['action'], readonly string[]> = {
+  log_symptom: ['symptom'],
+  log_water: [],
+  log_supplement: ['name'],
+  log_episode: ['kind'],
+  log_posture: [],
+  log_hunger: [],
+  log_movement: ['type'],
+};
+
+/**
+ * Narrows arbitrary parsed JSON to a BodyAction the handler can safely apply.
+ * Returns null when the shape is unknown or a required field is missing/empty.
+ */
+function validateBodyAction(value: unknown): BodyAction | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const obj = value as Record<string, unknown>;
+
+  if (obj.module !== 'body') return null;
+  if (typeof obj.action !== 'string') return null;
+  if (!(obj.action in BODY_REQUIRED_FIELDS)) return null;
+
+  const required = BODY_REQUIRED_FIELDS[obj.action as BodyAction['action']];
+  for (const field of required) {
+    const v = obj[field];
+    if (typeof v !== 'string' || v.trim().length === 0) return null;
+  }
+
+  return obj as unknown as BodyAction;
 }
 
 // ─── handler ──────────────────────────────────────────────────────────────────

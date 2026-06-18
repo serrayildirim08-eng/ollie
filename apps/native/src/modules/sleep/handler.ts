@@ -61,18 +61,58 @@ async function maybeUpgradeFragment(fragment: Fragment): Promise<Fragment> {
   }
 
   const first = res.data.actions[0];
-  let parsedPayload: SleepAction;
+  let parsed: unknown;
   try {
-    parsedPayload = JSON.parse(first.data) as SleepAction;
+    parsed = JSON.parse(first.data);
   } catch {
     // data isn't valid JSON — can't upgrade, fall back.
     return fragment;
   }
+
+  // Validate the AI payload against known actions + required fields BEFORE
+  // adopting it. An invalid action would otherwise hit exhaustive() (which
+  // throws, breaking the fallback path) or write an undefined row. On any
+  // validation failure we preserve the original Layer 1 fragment.
+  const validated = validateSleepAction(parsed);
+  if (!validated) return fragment;
+
   return {
     ...fragment,
     module: 'sleep',
-    payload: parsedPayload,
+    payload: validated,
   };
+}
+
+/**
+ * Required string fields per action — the discriminant payload fields the
+ * handler reads unconditionally. Actions with no required field map to [].
+ */
+const SLEEP_REQUIRED_FIELDS: Record<SleepAction['action'], readonly string[]> = {
+  log_sleep: [],
+  wind_down_note: ['note'],
+  dream_log: ['text'],
+  log_insomnia: [],
+};
+
+/**
+ * Narrows arbitrary parsed JSON to a SleepAction the handler can safely apply.
+ * Returns null when the shape is unknown or a required field is missing/empty.
+ */
+function validateSleepAction(value: unknown): SleepAction | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const obj = value as Record<string, unknown>;
+
+  if (obj.module !== 'sleep') return null;
+  if (typeof obj.action !== 'string') return null;
+  if (!(obj.action in SLEEP_REQUIRED_FIELDS)) return null;
+
+  const required = SLEEP_REQUIRED_FIELDS[obj.action as SleepAction['action']];
+  for (const field of required) {
+    const v = obj[field];
+    if (typeof v !== 'string' || v.trim().length === 0) return null;
+  }
+
+  return obj as unknown as SleepAction;
 }
 
 export const sleepHandler: ModuleHandler<'sleep'> = {

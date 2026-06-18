@@ -79,7 +79,12 @@ export function migrateMedication(): Promise<void> {
           `ALTER TABLE medications_registry ADD COLUMN schedule TEXT NOT NULL DEFAULT '[]'`,
         );
       }
-    })();
+    })().catch((e) => {
+      // A transient SQLite failure must not brick the module for the whole
+      // session — clear the memo so the next call retries.
+      migrationPromise = null;
+      throw e;
+    });
   }
   return migrationPromise;
 }

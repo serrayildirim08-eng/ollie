@@ -162,6 +162,61 @@ describe('bodyHandler — Layer 2 re-routing', () => {
     expect(result.ok).toBe(true);
   });
 
+  it('Layer 2 returns an UNKNOWN action: falls back to original Layer 1 action', async () => {
+    // The AI emits an action this handler does not know. Adopting it would
+    // hit exhaustive() and throw, breaking the fallback. Must be rejected.
+    mockRouteModule.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      data: {
+        actions: [
+          {
+            module: 'body',
+            action: 'log_vibes',
+            data: JSON.stringify({ module: 'body', action: 'log_vibes', vibe: 'cosmic' }),
+          },
+        ],
+      },
+    });
+
+    const fragment = makeBodyFragmentNeedsConfirm('drank two glasses of water');
+    const result = await bodyHandler.apply(fragment);
+
+    // Falls back to the original Layer 1 water action — no throw.
+    expect(mockEventsAdd).toHaveBeenCalledOnce();
+    expect(mockEventsAdd).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'water' }),
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it('Layer 2 returns a known action MISSING its required field: falls back', async () => {
+    // log_symptom requires `symptom`; without it normaliseLabel/add would
+    // write a row with undefined label. Must be rejected → Layer 1 fallback.
+    mockRouteModule.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      data: {
+        actions: [
+          {
+            module: 'body',
+            action: 'log_symptom',
+            data: JSON.stringify({ module: 'body', action: 'log_symptom' }),
+          },
+        ],
+      },
+    });
+
+    const fragment = makeBodyFragmentNeedsConfirm('drank two glasses of water');
+    const result = await bodyHandler.apply(fragment);
+
+    expect(mockEventsAdd).toHaveBeenCalledOnce();
+    expect(mockEventsAdd).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'water' }),
+    );
+    expect(result.ok).toBe(true);
+  });
+
   it('routeModule error: falls back to original Layer 1 action', async () => {
     mockRouteModule.mockResolvedValueOnce({
       ok: false,
