@@ -117,6 +117,68 @@ describe('@ollie/store · subscriptions', () => {
   });
 });
 
+describe('@ollie/store · set deep-equal no-op (#64)', () => {
+  it('does NOT notify when the new value is structurally identical', () => {
+    store.set('work', 'focus_log', [{ id: 'a', mins: 25 }]);
+    const seen: unknown[] = [];
+    store.subscribeKey('work', 'focus_log', (v) => seen.push(v));
+    // A fresh array with identical shape (what the all-modules sweep builds).
+    store.set('work', 'focus_log', [{ id: 'a', mins: 25 }]);
+    expect(seen).toEqual([]); // no fan-out for unchanged data
+  });
+
+  it('whole-module `*` subscribers also stay quiet on a no-op set', () => {
+    store.set('work', 'focus_log', [{ id: 'a' }]);
+    const seen: unknown[] = [];
+    store.subscribe('work', (snap) => seen.push(snap));
+    store.set('work', 'focus_log', [{ id: 'a' }]);
+    expect(seen).toEqual([]);
+  });
+
+  it('still notifies when a structurally different value arrives', () => {
+    store.set('work', 'focus_log', [{ id: 'a', mins: 25 }]);
+    const seen: unknown[] = [];
+    store.subscribeKey('work', 'focus_log', (v) => seen.push(v));
+    store.set('work', 'focus_log', [{ id: 'a', mins: 50 }]);
+    expect(seen).toEqual([[{ id: 'a', mins: 50 }]]);
+  });
+
+  it('notifies the first time a key is set even if value equals default', () => {
+    const seen: unknown[] = [];
+    store.subscribeKey('cycle', 'items', (v) => seen.push(v));
+    store.set('cycle', 'items', []);
+    expect(seen).toEqual([[]]); // key did not exist before → must fire
+  });
+});
+
+describe('@ollie/store · clone safety (#95)', () => {
+  it('getModule returns a clone; mutating it does not corrupt the store', () => {
+    store.set('cycle', 'a', { n: 1 });
+    const snap = store.getModule('cycle')!;
+    (snap as Record<string, unknown>).a = { n: 999 };
+    (snap as Record<string, unknown>).injected = true;
+    // Internal state untouched.
+    expect(store.getModule('cycle')).toEqual({ a: { n: 1 } });
+  });
+
+  it('a `*` subscriber cannot corrupt the cache by mutating its snapshot', () => {
+    store.set('cycle', 'a', 1);
+    store.subscribe('cycle', (snap) => {
+      if (snap) (snap as Record<string, unknown>).hacked = true;
+    });
+    store.set('cycle', 'b', 2);
+    expect(store.getModule('cycle')).toEqual({ a: 1, b: 2 });
+  });
+
+  it('set does not mutate a previously-returned getModule snapshot', () => {
+    store.set('cycle', 'a', 1);
+    const earlier = store.getModule('cycle')!;
+    store.set('cycle', 'b', 2);
+    // The earlier snapshot is frozen-in-time, not retro-mutated.
+    expect(earlier).toEqual({ a: 1 });
+  });
+});
+
 describe('@ollie/store · resilience', () => {
   it('treats corrupt JSON as an empty module + warns', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});

@@ -23,7 +23,7 @@
  * made from another tab / from a dump while the page is open.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import {
   formatDays,
@@ -35,6 +35,7 @@ import { Stack, Row } from '../../layout';
 import { Text } from '../../ui';
 import { colors, fonts } from '../../theme/tokens';
 import { WhenCaption } from '../../lib/WhenCaption';
+import { useModuleData } from '../../lib/useModuleData';
 import { PatternCards } from '../../patterns/PatternCards';
 import { migrateFinance } from './migrate';
 import {
@@ -64,8 +65,6 @@ import {
  * surface it (per redesign tokens.css `--umber`) so it lives locally.
  */
 const UMBER = '#8A4B2C';
-
-const POLL_MS = 6000;
 
 const SMCP_STYLE: CSSProperties = {
   fontVariantCaps: 'all-small-caps',
@@ -140,7 +139,6 @@ export function FinanceBox(): JSX.Element {
   const [merchantCadence, setMerchantCadence] = useState<Map<string, CadenceEstimate>>(
     () => new Map(),
   );
-  const [ready, setReady] = useState(false);
   const [openCard, setOpenCard] = useState<AreaKey | null>(null);
 
   const refresh = useCallback(async () => {
@@ -170,33 +168,11 @@ export function FinanceBox(): JSX.Element {
     setMerchantCadence(new Map(pairs));
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      await migrateFinance();
-      if (cancelled) return;
-      await refresh();
-      if (cancelled) return;
-      setReady(true);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [refresh]);
-
-  useEffect(() => {
-    const t = setInterval(() => {
-      void refresh();
-    }, POLL_MS);
-    const onFocus = () => {
-      void refresh();
-    };
-    window.addEventListener('focus', onFocus);
-    return () => {
-      clearInterval(t);
-      window.removeEventListener('focus', onFocus);
-    };
-  }, [refresh]);
+  const { ready } = useModuleData({
+    migrationKey: 'finance',
+    migrate: migrateFinance,
+    refresh,
+  });
 
   const handleRemoveTx = useCallback(
     async (id: string) => {

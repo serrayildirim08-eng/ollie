@@ -22,7 +22,7 @@
  * inlined for desktop-first Tauri).
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import type { CSSProperties } from 'react';
 import {
   formatDays,
@@ -34,6 +34,7 @@ import { Stack, Row } from '../../layout';
 import { Text, Input, Button } from '../../ui';
 import { colors } from '../../theme/tokens';
 import { WhenCaption } from '../../lib/WhenCaption';
+import { useModuleData } from '../../lib/useModuleData';
 import { PatternCards } from '../../patterns/PatternCards';
 import { migrateWork } from './migrate';
 import {
@@ -56,8 +57,6 @@ const SMCP_STYLE: CSSProperties = {
   letterSpacing: '0.08em',
 };
 
-const POLL_MS = 6000;
-
 interface TodaySnapshot {
   focusMinutes: number;
   lastDone: WorkTask | null;
@@ -76,7 +75,6 @@ export function WorkBox(): JSX.Element {
     focusMinutes: 0,
     lastDone: null,
   });
-  const [ready, setReady] = useState(false);
 
   const refresh = useCallback(async () => {
     const { fromMs, toMs } = todayWindow();
@@ -110,33 +108,11 @@ export function WorkBox(): JSX.Element {
     setTaskCadence(new Map(pairs));
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      await migrateWork();
-      if (cancelled) return;
-      await refresh();
-      if (cancelled) return;
-      setReady(true);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [refresh]);
-
-  useEffect(() => {
-    const t = setInterval(() => {
-      void refresh();
-    }, POLL_MS);
-    const onFocus = () => {
-      void refresh();
-    };
-    window.addEventListener('focus', onFocus);
-    return () => {
-      clearInterval(t);
-      window.removeEventListener('focus', onFocus);
-    };
-  }, [refresh]);
+  const { ready } = useModuleData({
+    migrationKey: 'work',
+    migrate: migrateWork,
+    refresh,
+  });
 
   const handleToggleTask = useCallback(
     async (id: string) => {

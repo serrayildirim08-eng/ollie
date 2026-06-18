@@ -11,11 +11,12 @@
  * from another tab / from a dump while the page is open.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Stack, Row } from '../../layout';
 import { Text } from '../../ui';
 import { colors, fontWeights } from '../../theme/tokens';
 import { WhenCaption } from '../../lib/WhenCaption';
+import { useModuleData } from '../../lib/useModuleData';
 import { migrateMood } from './migrate';
 import { events as eventsRepo } from './repo';
 import {
@@ -34,44 +35,19 @@ const SMCP_STYLE: React.CSSProperties = {
   letterSpacing: '0.08em',
 };
 
-const POLL_MS = 6000;
-
 export function MoodBox(): JSX.Element {
   const [items, setItems] = useState<MoodEvent[]>([]);
-  const [ready, setReady] = useState(false);
 
   const refresh = useCallback(async () => {
     const list = await eventsRepo.list();
     setItems(list);
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      await migrateMood();
-      if (cancelled) return;
-      await refresh();
-      if (cancelled) return;
-      setReady(true);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [refresh]);
-
-  useEffect(() => {
-    const t = setInterval(() => {
-      void refresh();
-    }, POLL_MS);
-    const onFocus = () => {
-      void refresh();
-    };
-    window.addEventListener('focus', onFocus);
-    return () => {
-      clearInterval(t);
-      window.removeEventListener('focus', onFocus);
-    };
-  }, [refresh]);
+  const { ready } = useModuleData({
+    migrationKey: 'mood',
+    migrate: migrateMood,
+    refresh,
+  });
 
   const handleRemove = useCallback(
     async (id: string) => {

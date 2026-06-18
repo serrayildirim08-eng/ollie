@@ -53,7 +53,6 @@
 
 import {
   useCallback,
-  useEffect,
   useMemo,
   useState,
   type CSSProperties,
@@ -69,6 +68,7 @@ import { Stack, Row } from '../../layout';
 import { Text } from '../../ui';
 import { colors } from '../../theme/tokens';
 import { WhenCaption } from '../../lib/WhenCaption';
+import { useModuleData } from '../../lib/useModuleData';
 import { PatternCards } from '../../patterns/PatternCards';
 import { migrateAdmin } from './migrate';
 import {
@@ -90,8 +90,6 @@ const SMCP_STYLE: CSSProperties = {
   fontVariantCaps: 'all-small-caps',
   letterSpacing: '0.08em',
 };
-
-const POLL_MS = 6000;
 
 /** Umber accent for renewal markers. Lifted verbatim from v2 Runway. */
 const UMBER = '#A8703C';
@@ -126,7 +124,6 @@ export function AdminBox(): JSX.Element {
   const [renewalCadence, setRenewalCadence] = useState<Map<string, CadenceEstimate>>(
     () => new Map(),
   );
-  const [ready, setReady] = useState(false);
 
   const refresh = useCallback(async () => {
     const [t, r] = await Promise.all([tasksRepo.list(), renewalsRepo.list()]);
@@ -149,33 +146,11 @@ export function AdminBox(): JSX.Element {
     setRenewalCadence(new Map(pairs));
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      await migrateAdmin();
-      if (cancelled) return;
-      await refresh();
-      if (cancelled) return;
-      setReady(true);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [refresh]);
-
-  useEffect(() => {
-    const t = setInterval(() => {
-      void refresh();
-    }, POLL_MS);
-    const onFocus = () => {
-      void refresh();
-    };
-    window.addEventListener('focus', onFocus);
-    return () => {
-      clearInterval(t);
-      window.removeEventListener('focus', onFocus);
-    };
-  }, [refresh]);
+  const { ready } = useModuleData({
+    migrationKey: 'admin',
+    migrate: migrateAdmin,
+    refresh,
+  });
 
   const handleRemoveTask = useCallback(
     async (id: string) => {

@@ -52,6 +52,7 @@ import { Stack, Row } from '../../layout';
 import { Text } from '../../ui';
 import { colors } from '../../theme/tokens';
 import { WhenCaption } from '../../lib/WhenCaption';
+import { useModuleData } from '../../lib/useModuleData';
 import { PatternCards } from '../../patterns/PatternCards';
 import { migrateGrocery } from './migrate';
 import {
@@ -72,8 +73,6 @@ const SMCP_STYLE: CSSProperties = {
   letterSpacing: '0.08em',
 };
 
-const POLL_MS = 6000;
-
 type Mode = 'now' | 'shop' | 'pantry' | 'feed-me';
 
 // ─── component ────────────────────────────────────────────────────────────
@@ -86,7 +85,6 @@ export function GroceryBox(): JSX.Element {
   const [cadenceByName, setCadenceByName] = useState<Map<string, CadenceEstimate>>(
     () => new Map(),
   );
-  const [ready, setReady] = useState(false);
   // Pantry is the default — it's the surface you live in most of the time.
   // Shop mode is for the few minutes you're actually adding to the list.
   // Persisted in sessionStorage so a hot-reload / refresh keeps you on the
@@ -138,38 +136,18 @@ export function GroceryBox(): JSX.Element {
     setCadenceByName(new Map(pairs));
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      await migrateGrocery();
-      if (cancelled) return;
-      await refresh();
-      if (cancelled) return;
-      setReady(true);
-      // Kick the shelf-life table load — non-blocking. When it resolves
-      // we bump the tick so the pantry recomputes aging from the live table.
+  const { ready } = useModuleData({
+    migrationKey: 'grocery',
+    migrate: migrateGrocery,
+    refresh,
+    // Kick the shelf-life table load — non-blocking. When it resolves we bump
+    // the tick so the pantry recomputes aging from the live table.
+    onFirstLoad: (cancelled) => {
       void loadShelfLifeTable().then(() => {
-        if (!cancelled) setShelfTableTick((n) => n + 1);
+        if (!cancelled()) setShelfTableTick((n) => n + 1);
       });
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [refresh]);
-
-  useEffect(() => {
-    const t = setInterval(() => {
-      void refresh();
-    }, POLL_MS);
-    const onFocus = () => {
-      void refresh();
-    };
-    window.addEventListener('focus', onFocus);
-    return () => {
-      clearInterval(t);
-      window.removeEventListener('focus', onFocus);
-    };
-  }, [refresh]);
+    },
+  });
 
   const handleRemovePantry = useCallback(
     async (id: string) => {

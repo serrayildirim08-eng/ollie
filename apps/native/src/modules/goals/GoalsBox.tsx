@@ -37,6 +37,7 @@ import { Stack, Row } from '../../layout';
 import { Text, Button } from '../../ui';
 import { colors, fonts, fontWeights, zIndex } from '../../theme/tokens';
 import { WhenCaption } from '../../lib/WhenCaption';
+import { useModuleData } from '../../lib/useModuleData';
 import { PatternCards } from '../../patterns/PatternCards';
 import { migrateGoals } from './migrate';
 import {
@@ -52,8 +53,6 @@ const SMCP_STYLE: React.CSSProperties = {
   letterSpacing: '0.08em',
 };
 
-const POLL_MS = 6000;
-
 export function GoalsBox(): JSX.Element {
   const [activeGoals, setActiveGoals] = useState<GoalWithLatest[]>([]);
   const [milestones, setMilestones] = useState<GoalEvent[]>([]);
@@ -62,7 +61,6 @@ export function GoalsBox(): JSX.Element {
   const [progressCadence, setProgressCadence] = useState<Map<string, CadenceEstimate>>(
     () => new Map(),
   );
-  const [ready, setReady] = useState(false);
   // which goal in the deck is in focus — the swipe index
   const [focus, setFocus] = useState(0);
   // the rich create-a-goal overlay
@@ -95,33 +93,11 @@ export function GoalsBox(): JSX.Element {
     setProgressCadence(new Map(pairs));
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      await migrateGoals();
-      if (cancelled) return;
-      await refresh();
-      if (cancelled) return;
-      setReady(true);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [refresh]);
-
-  useEffect(() => {
-    const t = setInterval(() => {
-      void refresh();
-    }, POLL_MS);
-    const onFocus = () => {
-      void refresh();
-    };
-    window.addEventListener('focus', onFocus);
-    return () => {
-      clearInterval(t);
-      window.removeEventListener('focus', onFocus);
-    };
-  }, [refresh]);
+  const { ready } = useModuleData({
+    migrationKey: 'goals',
+    migrate: migrateGoals,
+    refresh,
+  });
 
   // Tapping "remove" on a goal row no longer deletes immediately. We first
   // ask the repo whether deletion is allowed (the low-mood gate). If it's

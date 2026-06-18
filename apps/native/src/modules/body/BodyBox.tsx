@@ -20,7 +20,7 @@
  * made from another tab / from a dump while the page is open.
  */
 
-import { useCallback, useEffect, useId, useState } from 'react';
+import { useCallback, useId, useState } from 'react';
 import {
   formatDays,
   daysSinceLast,
@@ -31,6 +31,7 @@ import { Stack, Row } from '../../layout';
 import { Text } from '../../ui';
 import { colors, fontSizes, fontWeights, letterSpacings } from '../../theme/tokens';
 import { WhenCaption } from '../../lib/WhenCaption';
+import { useModuleData } from '../../lib/useModuleData';
 import { PatternCards } from '../../patterns/PatternCards';
 import { migrateBody } from './migrate';
 import { cadence as cadenceRepo, events as eventsRepo, profile as profileRepo } from './repo';
@@ -55,8 +56,6 @@ const SMCP_STYLE: React.CSSProperties = {
   letterSpacing: '0.08em',
 };
 
-const POLL_MS = 6000;
-
 export function BodyBox(): JSX.Element {
   const [items, setItems] = useState<BodyEvent[]>([]);
   const [waterTotalMl, setWaterTotalMl] = useState<number>(0);
@@ -65,7 +64,6 @@ export function BodyBox(): JSX.Element {
   const [movementCadenceByActivity, setMovementCadenceByActivity] = useState<
     Map<string, CadenceEstimate>
   >(() => new Map());
-  const [ready, setReady] = useState(false);
 
   const refresh = useCallback(async () => {
     const [list, water, movement, storedAge] = await Promise.all([
@@ -95,33 +93,11 @@ export function BodyBox(): JSX.Element {
     setMovementCadenceByActivity(new Map(pairs));
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      await migrateBody();
-      if (cancelled) return;
-      await refresh();
-      if (cancelled) return;
-      setReady(true);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [refresh]);
-
-  useEffect(() => {
-    const t = setInterval(() => {
-      void refresh();
-    }, POLL_MS);
-    const onFocus = () => {
-      void refresh();
-    };
-    window.addEventListener('focus', onFocus);
-    return () => {
-      clearInterval(t);
-      window.removeEventListener('focus', onFocus);
-    };
-  }, [refresh]);
+  const { ready } = useModuleData({
+    migrationKey: 'body',
+    migrate: migrateBody,
+    refresh,
+  });
 
   const handleRemove = useCallback(
     async (id: string) => {

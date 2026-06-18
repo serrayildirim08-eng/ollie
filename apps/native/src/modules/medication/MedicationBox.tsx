@@ -26,7 +26,7 @@
  * observable layer over SQLite yet.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { type CadenceEstimate } from '@ollie/cadence';
 import { Stack, Row } from '../../layout';
 import { Text } from '../../ui';
@@ -38,6 +38,7 @@ import {
 } from '../../theme/tokens';
 import { formatRelativeTime } from '../../lib/formatRelativeTime';
 import { PatternCards } from '../../patterns/PatternCards';
+import { useModuleData } from '../../lib/useModuleData';
 import { migrateMedication } from './migrate';
 import {
   cadence as cadenceRepo,
@@ -57,7 +58,6 @@ const SMCP_STYLE: React.CSSProperties = {
   letterSpacing: '0.08em',
 };
 
-const POLL_MS = 6000;
 const RECENT_LIMIT = 8;
 
 interface BoxState {
@@ -83,7 +83,6 @@ const EMPTY_STATE: BoxState = {
 
 export function MedicationBox(): JSX.Element {
   const [state, setState] = useState<BoxState>(EMPTY_STATE);
-  const [ready, setReady] = useState(false);
 
   const refresh = useCallback(async () => {
     const startOfToday = startOfLocalDay(Date.now());
@@ -116,33 +115,11 @@ export function MedicationBox(): JSX.Element {
     });
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      await migrateMedication();
-      if (cancelled) return;
-      await refresh();
-      if (cancelled) return;
-      setReady(true);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [refresh]);
-
-  useEffect(() => {
-    const t = setInterval(() => {
-      void refresh();
-    }, POLL_MS);
-    const onFocus = () => {
-      void refresh();
-    };
-    window.addEventListener('focus', onFocus);
-    return () => {
-      clearInterval(t);
-      window.removeEventListener('focus', onFocus);
-    };
-  }, [refresh]);
+  const { ready } = useModuleData({
+    migrationKey: 'medication',
+    migrate: migrateMedication,
+    refresh,
+  });
 
   const handleRemoveMed = useCallback(
     async (id: string) => {

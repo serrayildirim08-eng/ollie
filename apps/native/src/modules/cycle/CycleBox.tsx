@@ -26,7 +26,7 @@
  * made from another tab while it's open. Same polling pattern as Grocery.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import type { CSSProperties } from 'react';
 import {
   formatDays,
@@ -38,6 +38,7 @@ import { Stack, Row } from '../../layout';
 import { Text } from '../../ui';
 import { colors, fonts } from '../../theme/tokens';
 import { WhenCaption } from '../../lib/WhenCaption';
+import { useModuleData } from '../../lib/useModuleData';
 import { PatternCards } from '../../patterns/PatternCards';
 import { migrateCycle } from './migrate';
 import { cycleCadence, cycleRepo } from './repo';
@@ -56,8 +57,6 @@ import {
  * NEVER red, NEVER amber — colour never alarms here.
  */
 const UMBER = '#8A4B2C';
-
-const POLL_MS = 6000;
 
 /** typical cycle length used for the ring's angular scale when we don't
  *  know the user's true length yet. 28 is the cold-start convention. */
@@ -91,7 +90,6 @@ export function CycleBox(): JSX.Element {
   const [periodCadence, setPeriodCadence] = useState<CadenceEstimate | null>(null);
   const [todayBleeding, setTodayBleeding] = useState<BleedingIntensity | null>(null);
   const [pregnant, setPregnant] = useState(false);
-  const [ready, setReady] = useState(false);
 
   const refresh = useCallback(async () => {
     const [cur, sym, pil, starts, ends, cad, bleeding, preg] = await Promise.all([
@@ -118,33 +116,11 @@ export function CycleBox(): JSX.Element {
     setHistory(merged);
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      await migrateCycle();
-      if (cancelled) return;
-      await refresh();
-      if (cancelled) return;
-      setReady(true);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [refresh]);
-
-  useEffect(() => {
-    const t = setInterval(() => {
-      void refresh();
-    }, POLL_MS);
-    const onFocus = () => {
-      void refresh();
-    };
-    window.addEventListener('focus', onFocus);
-    return () => {
-      clearInterval(t);
-      window.removeEventListener('focus', onFocus);
-    };
-  }, [refresh]);
+  const { ready } = useModuleData({
+    migrationKey: 'cycle',
+    migrate: migrateCycle,
+    refresh,
+  });
 
   const handleRemove = useCallback(
     async (id: string) => {

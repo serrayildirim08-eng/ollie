@@ -20,7 +20,7 @@
  *   - "the rest" drawer → drill sections rendered inline
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   formatDays,
   daysSinceLast,
@@ -31,6 +31,7 @@ import { Stack, Row } from '../../layout';
 import { Text } from '../../ui';
 import { colors, fonts } from '../../theme/tokens';
 import { WhenCaption } from '../../lib/WhenCaption';
+import { useModuleData } from '../../lib/useModuleData';
 import { PatternCards } from '../../patterns/PatternCards';
 import { migrateSleep } from './migrate';
 import { cadence as cadenceRepo, sleepRepo } from './repo';
@@ -41,7 +42,6 @@ const SMCP_STYLE: React.CSSProperties = {
   letterSpacing: '0.08em',
 };
 
-const POLL_MS = 6000;
 const RECENT_SLEEP_LIMIT = 7;
 
 // the calm baseline-bar visual from sleep-v2 / WeekBars
@@ -59,7 +59,6 @@ export function SleepBox(): JSX.Element {
   const [dreams, setDreams] = useState<SleepEvent[]>([]);
   const [insomnia, setInsomnia] = useState<SleepEvent[]>([]);
   const [logCadence, setLogCadence] = useState<CadenceEstimate | null>(null);
-  const [ready, setReady] = useState(false);
 
   const refresh = useCallback(async () => {
     const [latestSleep, sleeps, winds, dreamRows, rough, cad] = await Promise.all([
@@ -78,33 +77,11 @@ export function SleepBox(): JSX.Element {
     setLogCadence(cad);
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      await migrateSleep();
-      if (cancelled) return;
-      await refresh();
-      if (cancelled) return;
-      setReady(true);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [refresh]);
-
-  useEffect(() => {
-    const t = setInterval(() => {
-      void refresh();
-    }, POLL_MS);
-    const onFocus = () => {
-      void refresh();
-    };
-    window.addEventListener('focus', onFocus);
-    return () => {
-      clearInterval(t);
-      window.removeEventListener('focus', onFocus);
-    };
-  }, [refresh]);
+  const { ready } = useModuleData({
+    migrationKey: 'sleep',
+    migrate: migrateSleep,
+    refresh,
+  });
 
   const handleRemove = useCallback(
     async (id: string) => {

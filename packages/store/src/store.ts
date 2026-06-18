@@ -24,6 +24,41 @@ export const storeModuleKey = (mod: string): string =>
 export type ModuleState = Record<string, unknown>;
 type Subscriber<T = unknown> = (value: T) => void;
 
+/**
+ * Structural equality for store values (#64). The store mirrors module SQLite
+ * into watcher-read keys on every dump's ALL-modules sweep (see
+ * apps/native bridge/index.ts + dispatch.ts) — each sweep builds fresh arrays,
+ * so without a value-equality check every unchanged module would still notify
+ * every subscriber. Compares by JSON-shape: handles the array/object payloads
+ * the bridges write; falls back to `Object.is` for primitives/functions.
+ */
+function deepEqual(a: unknown, b: unknown): boolean {
+  if (Object.is(a, b)) return true;
+  if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) {
+    return false;
+  }
+  const aIsArr = Array.isArray(a);
+  const bIsArr = Array.isArray(b);
+  if (aIsArr !== bIsArr) return false;
+  if (aIsArr && bIsArr) {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      if (!deepEqual(a[i], b[i])) return false;
+    }
+    return true;
+  }
+  const aObj = a as Record<string, unknown>;
+  const bObj = b as Record<string, unknown>;
+  const aKeys = Object.keys(aObj);
+  const bKeys = Object.keys(bObj);
+  if (aKeys.length !== bKeys.length) return false;
+  for (const key of aKeys) {
+    if (!Object.prototype.hasOwnProperty.call(bObj, key)) return false;
+    if (!deepEqual(aObj[key], bObj[key])) return false;
+  }
+  return true;
+}
+
 export interface Store {
   get<T = unknown>(mod: string, key: string, defaultValue?: T): T;
   set<T = unknown>(mod: string, key: string, value: T): void;
@@ -88,7 +123,9 @@ export function createStore(adapter: StorageAdapter): Store {
     if (key !== '*') {
       const starSubs = modSubs.get('*');
       if (starSubs) {
-        const snapshot = readModule(mod);
+        // #95: clone so `*` subscribers can't mutate the internal cache.
+        const live = readModule(mod);
+        const snapshot = live ? { ...live } : null;
         for (const cb of starSubs) {
           try {
             cb(snapshot);
@@ -127,9 +164,21 @@ export function createStore(adapter: StorageAdapter): Store {
       return state[key] as T;
     },
     set<T = unknown>(mod: string, key: string, value: T): void {
-      const state = readModule(mod) ?? {};
-      state[key] = value;
-      writeModule(mod, state);
+      const current = readModule(mod);
+      // #64: short-circuit when the stored value is structurally identical.
+      // The all-modules dump sweep re-sets every module with freshly-built
+      // arrays; without this, byte-identical data still fans out to every
+      // subscriber. Note: this compares by VALUE, not reference — a
+      // same-reference object that was mutated in place will NOT be detected
+      // as changed, so callers must always pass a new value (the bridges do).
+      if (current && key in current && deepEqual(current[key], value)) {
+        return;
+      }
+      // #95: shallow-copy before mutating so the cached object handed to
+      // subscribers / getModule callers is never mutated under them.
+      const next: ModuleState = current ? { ...current } : {};
+      next[key] = value;
+      writeModule(mod, next);
       notify(mod, key, value);
     },
     update<T = unknown>(mod: string, key: string, updater: (current: T | undefined) => T): void {
@@ -139,12 +188,18 @@ export function createStore(adapter: StorageAdapter): Store {
     remove(mod: string, key: string): void {
       const state = readModule(mod);
       if (!state || !(key in state)) return;
-      delete state[key];
-      writeModule(mod, state);
+      // #95: shallow-copy before mutating so cached refs handed out earlier
+      // are not corrupted.
+      const next: ModuleState = { ...state };
+      delete next[key];
+      writeModule(mod, next);
       notify(mod, key, undefined);
     },
     getModule(mod: string): ModuleState | null {
-      return readModule(mod);
+      // #95: return a shallow clone so callers cannot mutate the internal
+      // cache object (which subscribers and future reads also hold).
+      const state = readModule(mod);
+      return state ? { ...state } : null;
     },
     setModule(mod: string, state: ModuleState): void {
       writeModule(mod, state);

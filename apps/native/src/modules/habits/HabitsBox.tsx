@@ -19,10 +19,11 @@
  * streak count + streak-break event log.
  */
 
-import { useCallback, useEffect, useState, type CSSProperties } from 'react';
+import { useCallback, useState, type CSSProperties } from 'react';
 import { Stack, Row } from '../../layout';
 import { Text } from '../../ui';
 import { colors } from '../../theme/tokens';
+import { useModuleData } from '../../lib/useModuleData';
 import { PatternCards } from '../../patterns/PatternCards';
 import { migrateHabits } from './migrate';
 import { registry, completions, events } from './repo';
@@ -41,8 +42,6 @@ const SMCP_STYLE: CSSProperties = {
   letterSpacing: '0.08em',
 };
 
-const POLL_MS = 6000;
-
 interface HabitRowVM {
   habit: Habit;
   doneToday: boolean;
@@ -52,7 +51,6 @@ export function HabitsBox(): JSX.Element {
   const [rows, setRows] = useState<HabitRowVM[]>([]);
   const [todayCompletions, setTodayCompletions] = useState<Habit[]>([]);
   const [identityEvents, setIdentityEvents] = useState<HabitEvent[]>([]);
-  const [ready, setReady] = useState(false);
   const [newName, setNewName] = useState('');
   const [newCue, setNewCue] = useState<HabitCue>('anytime');
 
@@ -68,29 +66,11 @@ export function HabitsBox(): JSX.Element {
     setIdentityEvents(identity);
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      await migrateHabits();
-      if (cancelled) return;
-      await refresh();
-      if (cancelled) return;
-      setReady(true);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [refresh]);
-
-  useEffect(() => {
-    const t = setInterval(() => void refresh(), POLL_MS);
-    const onFocus = () => void refresh();
-    window.addEventListener('focus', onFocus);
-    return () => {
-      clearInterval(t);
-      window.removeEventListener('focus', onFocus);
-    };
-  }, [refresh]);
+  const { ready } = useModuleData({
+    migrationKey: 'habits',
+    migrate: migrateHabits,
+    refresh,
+  });
 
   const handleCheck = useCallback(
     async (habitId: string) => {

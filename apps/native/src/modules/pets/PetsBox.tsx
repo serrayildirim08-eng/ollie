@@ -21,7 +21,7 @@
  * refreshes on focus + every 6s.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   formatDays,
   daysSinceLast,
@@ -32,6 +32,7 @@ import { Stack, Row } from '../../layout';
 import { Text } from '../../ui';
 import { colors, fonts } from '../../theme/tokens';
 import { WhenCaption } from '../../lib/WhenCaption';
+import { useModuleData } from '../../lib/useModuleData';
 import { PatternCards } from '../../patterns/PatternCards';
 import { migratePets } from './migrate';
 import { cadence as cadenceRepo, events as eventsRepo } from './repo';
@@ -47,7 +48,6 @@ const SMCP_STYLE: React.CSSProperties = {
   letterSpacing: '0.08em',
 };
 
-const POLL_MS = 6000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 // v2 redesign accents — faint amber is the umber-soft umbrella used for
@@ -75,7 +75,6 @@ export function PetsBox(): JSX.Element {
   const [suppCadence, setSuppCadence] = useState<Map<string, CadenceEstimate>>(
     () => new Map(),
   );
-  const [ready, setReady] = useState(false);
 
   const refresh = useCallback(async () => {
     const [list, lastVitC] = await Promise.all([
@@ -118,33 +117,11 @@ export function PetsBox(): JSX.Element {
     setSuppCadence(new Map(suppPairs));
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      await migratePets();
-      if (cancelled) return;
-      await refresh();
-      if (cancelled) return;
-      setReady(true);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [refresh]);
-
-  useEffect(() => {
-    const t = setInterval(() => {
-      void refresh();
-    }, POLL_MS);
-    const onFocus = () => {
-      void refresh();
-    };
-    window.addEventListener('focus', onFocus);
-    return () => {
-      clearInterval(t);
-      window.removeEventListener('focus', onFocus);
-    };
-  }, [refresh]);
+  const { ready } = useModuleData({
+    migrationKey: 'pets',
+    migrate: migratePets,
+    refresh,
+  });
 
   const handleRemove = useCallback(
     async (id: string) => {
