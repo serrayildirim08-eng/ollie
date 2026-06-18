@@ -122,6 +122,26 @@ function rebuildAggregator(): void {
       state.flushTimers.delete(group);
     },
     deliver: (spec) => {
+      // Re-check the daily cap at FLUSH time (audit #167). The cap was checked
+      // when the spec was enqueued, but the aggregation window can be tens of
+      // minutes long — other notifications may have consumed the budget since.
+      // Delivering the digest unconditionally would bypass the cap.
+      if (state.store) {
+        const budget = readBudget(state.store);
+        const todayCount = countDeliveredToday(state.store, Date.now());
+        if (todayCount >= budget.daily_cap) {
+          appendLog(state.store, {
+            ts: Date.now(),
+            dedupe_key: spec.dedupe_key,
+            category: spec.category,
+            title: spec.title,
+            delivered: false,
+            reason: 'budget',
+            aggregation_group: spec.aggregation_group,
+          });
+          return;
+        }
+      }
       void deliverNow(spec, /* alreadyAggregated */ true);
     },
   });

@@ -57,6 +57,7 @@ import type {
   RecurringPatternSignal,
 } from '@ollie/logic/admin';
 import type { Orchestrator } from './types';
+import { appendCapped } from './dedup-store';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type AdminPattern = { signal: string; pattern: string; ts: number } & Record<string, any>;
@@ -503,7 +504,7 @@ export function createAdminOrchestrator(
       newlyFired.push(t.id);
     }
     if (newlyFired.length) {
-      store.set('admin', '_appointmentCompletedIds', [...seen, ...newlyFired]);
+      store.set('admin', '_appointmentCompletedIds', appendCapped([...seen], newlyFired));
     }
   }
 

@@ -213,6 +213,57 @@ describe('notify · aggregation', () => {
     await Promise.resolve();
     expect(backend.calls.length).toBe(1);
   });
+
+  it('digest re-checks the daily cap at flush time and is suppressed when over (audit #167)', async () => {
+    // Enqueue an aggregated digest while the budget is still empty (passes
+    // the enqueue-time cap check).
+    await notify({
+      title: 'morning digest item',
+      category: 'REMINDER',
+      dedupe_key: 'dig-1',
+      aggregation_group: 'morning',
+    });
+    expect(_inspect().bufferedCount).toBe(1);
+    expect(backend.calls.length).toBe(0);
+
+    // Now consume the entire daily budget with direct deliveries BEFORE the
+    // aggregation window flushes.
+    for (let i = 0; i < DEFAULT_BUDGET.daily_cap; i++) {
+      await notify({ title: `direct ${i}`, category: 'REMINDER', dedupe_key: `direct-${i}` });
+    }
+    expect(backend.calls.length).toBe(DEFAULT_BUDGET.daily_cap);
+
+    // Flush the digest — the re-check must suppress it (over cap).
+    _flushAggregator();
+    await Promise.resolve();
+    expect(backend.calls.length).toBe(DEFAULT_BUDGET.daily_cap); // digest NOT delivered
+
+    // And it's logged as a budget skip, not silently dropped. The flushed
+    // digest carries a `digest:<group>:<earliest>` dedupe_key.
+    const log = store.get<Array<{ dedupe_key: string; reason?: string }>>('shared', '_notification_log', []) ?? [];
+    const digestEntry = [...log].reverse().find(
+      (e) => e.dedupe_key.startsWith('digest:morning:') && e.reason === 'budget',
+    );
+    expect(digestEntry).toBeDefined();
+  });
+
+  it('digest still delivers at flush when under cap (audit #167 — no false suppression)', async () => {
+    await notify({
+      title: 'item a',
+      category: 'REMINDER',
+      dedupe_key: 'd-a',
+      aggregation_group: 'win',
+    });
+    await notify({
+      title: 'item b',
+      category: 'REMINDER',
+      dedupe_key: 'd-b',
+      aggregation_group: 'win',
+    });
+    _flushAggregator();
+    await Promise.resolve();
+    expect(backend.calls.length).toBe(1);
+  });
 });
 
 describe('resumeScheduled · #70 / NC6 no-double-fire on resume', () => {

@@ -42,6 +42,7 @@ import { detectPatterns, normalizeEpisode, isWellFormedEpisode } from '@ollie/lo
 import type { AnyBodyPattern, CyclePhaseRange, SleepRecord, WaterEntry, SupplementLogEntry, Episode } from '@ollie/logic/body';
 import { computePhaseForDate } from '@ollie/logic/cycle';
 import { runBodySignalsPass } from './body-signals';
+import { appendCapped } from './dedup-store';
 import type { Orchestrator } from './types';
 
 const DEBOUNCE_MS = 500;
@@ -174,7 +175,7 @@ export function createBodyOrchestrator(
     }
 
     if (fresh.length) {
-      store.set('body', '_supplementDueEmittedKeys', [...emitted, ...fresh]);
+      store.set('body', '_supplementDueEmittedKeys', appendCapped([...emitted], fresh));
     }
   }
 
@@ -198,7 +199,7 @@ export function createBodyOrchestrator(
     try {
       events.emit('body:posture_nudge', { hourBucket: localHour, ts: now });
     } catch { /* non-fatal */ }
-    store.set('body', '_postureNudgeEmittedBuckets', [...emitted, bucketKey]);
+    store.set('body', '_postureNudgeEmittedBuckets', appendCapped([...emitted], [bucketKey]));
   }
 
   // ── episode normalization ───────────────────────────────────────────────
@@ -336,13 +337,20 @@ export function createBodyOrchestrator(
       }),
     );
 
-    // Hourly tick — supplement_due + posture_nudge windows are time-based.
-    const HOUR_MS = 60 * 60_000;
-    const hourTick = setInterval(() => {
+    // Time-window tick — supplement_due + posture_nudge windows are
+    // time-based. We scan every 5 minutes rather than hourly (audit #158):
+    // an hourly setInterval is offset from the wall-clock top of hour (it
+    // fires at init+1h, init+2h, …), so a fixed-time reminder window that
+    // opens and the matching clock-hour can be skipped entirely if the tick
+    // lands on the wrong side of the boundary. A 5-min scan is safe because
+    // both emitters dedupe per hour-bucket / per day, so the extra scans are
+    // idempotent no-ops between window edges.
+    const SCAN_MS = 5 * 60_000;
+    const windowTick = setInterval(() => {
       try { emitSupplementDue(); } catch { /* non-fatal */ }
       try { emitPostureNudge(); } catch { /* non-fatal */ }
-    }, HOUR_MS);
-    unsubs.push(() => clearInterval(hourTick));
+    }, SCAN_MS);
+    unsubs.push(() => clearInterval(windowTick));
 
     // ── APNs push subscribers (body-v2 wiring) ──────────────────────────
     if (scheduleNotification) {

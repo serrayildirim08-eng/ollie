@@ -213,7 +213,9 @@ async function processJob(
     // No registered device. Treat as a delivery failure so the retry
     // budget eventually flips it to 'failed' — but the client-side
     // fallback timer still covers the app-open case meanwhile.
-    await applyRetry(env, job, stats, 'no-device-token');
+    // Count ONLY no_token here (audit #160): applyRetry would otherwise also
+    // bump retried/failed, double-counting this job against the batch totals.
+    await applyRetry(env, job, stats, 'no-device-token', false);
     stats.no_token++;
     return;
   }
@@ -250,6 +252,13 @@ async function applyRetry(
   job: ScheduledJobRow,
   stats: FlushStats,
   reason: string,
+  /**
+   * When false, run the retry state machine WITHOUT bumping the generic
+   * retried/failed counters — the caller is counting this job under a more
+   * specific stat (e.g. no_token) and double-counting would break the batch
+   * totals (audit #160).
+   */
+  countGeneric = true,
 ): Promise<void> {
   const nextAttempt = (job.attempts ?? 0) + 1;
   if (nextAttempt >= MAX_ATTEMPTS) {
@@ -258,14 +267,14 @@ async function applyRetry(
       attempts: nextAttempt,
       last_error: reason.slice(0, 200),
     });
-    stats.failed++;
+    if (countGeneric) stats.failed++;
   } else {
     await updateJob(env, job.id, {
       status: 'pending',
       attempts: nextAttempt,
       last_error: reason.slice(0, 200),
     });
-    stats.retried++;
+    if (countGeneric) stats.retried++;
   }
 }
 

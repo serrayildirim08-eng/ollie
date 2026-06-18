@@ -18,11 +18,14 @@ function makeKv(seed: Record<string, string> = {}) {
       put: vi.fn(async (key: string, value: string) => { data.set(key, value); }),
       get: vi.fn(async (key: string) => data.get(key) ?? null),
       delete: vi.fn(async (key: string) => { data.delete(key); }),
-      list: vi.fn(async ({ prefix }: { prefix: string }) => ({
-        keys: [...data.keys()]
-          .filter(k => k.startsWith(prefix))
-          .map(name => ({ name })),
-      })),
+      list: vi.fn(async ({ prefix, limit }: { prefix: string; limit?: number }) => {
+        // Mirror Cloudflare KV: list returns ALL keys under the prefix up to
+        // `limit`, in lexicographic order. Honoring `limit` lets us pin audit
+        // #42 — a retry counter sharing the prefix would consume the budget.
+        const sorted = [...data.keys()].filter(k => k.startsWith(prefix)).sort();
+        const capped = typeof limit === 'number' ? sorted.slice(0, limit) : sorted;
+        return { keys: capped.map(name => ({ name })) };
+      }),
     } as unknown as KVNamespace,
   };
 }
@@ -147,7 +150,9 @@ describe('drainEnrichQueue · failure modes', () => {
     expect(stats.failed).toBe(1);
     expect(stats.succeeded).toBe(0);
     expect(data.get('q:enrich:1715000000000:x')).toBeDefined();
-    expect(data.get('q:enrich:retry:x')).toBe('1');
+    // Retry counter lives under a DISJOINT prefix (audit #42) so it can't be
+    // returned by the BATCH_CAP-limited list({ prefix: 'q:enrich:' }) scan.
+    expect(data.get('qretry:enrich:x')).toBe('1');
 
     fetchSpy.mockRestore();
   });
@@ -156,7 +161,7 @@ describe('drainEnrichQueue · failure modes', () => {
     const dump = fakeDump('y');
     const seed: Record<string, string> = {
       'q:enrich:1715000000000:y': JSON.stringify(dump),
-      'q:enrich:retry:y': '11', // next attempt will be the 12th
+      'qretry:enrich:y': '11', // next attempt will be the 12th (disjoint prefix, audit #42)
     };
     const { kv, data } = makeKv(seed);
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
@@ -167,7 +172,35 @@ describe('drainEnrichQueue · failure modes', () => {
     expect(stats.dlq).toBe(1);
     expect(data.get('q:enrich:1715000000000:y')).toBeUndefined();
     expect(data.get('dlq:enrich:y')).toBeDefined();
-    expect(data.get('q:enrich:retry:y')).toBeUndefined();
+    expect(data.get('qretry:enrich:y')).toBeUndefined();
+
+    fetchSpy.mockRestore();
+  });
+
+  it('retry counters do NOT consume the BATCH_CAP budget (audit #42)', async () => {
+    // Seed 50 real payloads, each with a sibling retry counter. With the OLD
+    // overlapping prefix (`q:enrich:retry:*`) the counters would sort BEFORE
+    // the numeric payload keys and eat the 50-key list budget, so few/no real
+    // dumps would be scanned. With the disjoint `qretry:enrich:*` prefix the
+    // counters are invisible to the scan, so all 50 payloads process.
+    const seed: Record<string, string> = {};
+    for (let i = 0; i < 50; i++) {
+      const id = String(i).padStart(3, '0');
+      seed[`q:enrich:1715000000${id}:${id}`] = JSON.stringify(fakeDump(id));
+      seed[`qretry:enrich:${id}`] = '1';
+    }
+    const { kv } = makeKv(seed);
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes('/rest/v1/')) return new Response(null, { status: 201 });
+        return fakeAnthropicResponse();
+      });
+
+    const stats = await drainEnrichQueue({ CACHE_KV: kv, ...ENV_BASE });
+    expect(stats.scanned).toBe(50);
+    expect(stats.succeeded).toBe(50);
 
     fetchSpy.mockRestore();
   });

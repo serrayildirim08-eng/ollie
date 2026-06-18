@@ -173,6 +173,41 @@ describe('work orchestrator · notification cues', () => {
     orch.teardown();
   });
 
+  it('#7 a single re-logged session does NOT count as four blocks (audit #159)', () => {
+    const { store, orch, captured } = makeHarness();
+    // ONE real session, logged four times with the SAME ts (a re-log /
+    // duplicate write). Counting raw rows would fire four_blocks_today; the
+    // distinct-by-ts Set must collapse them to one.
+    const ts = NOW - 30 * MIN;
+    const dup: FocusLogEntry = { ts, duration_min: 25, duration_ms: 25 * MIN };
+    store.set('work', 'focus_log', [dup, dup, dup, dup]);
+    orch.init();
+    vi.advanceTimersByTime(600);
+
+    const hits = captured.filter((c) => c.spec.dedupe_key.startsWith('work:four_blocks_today:'));
+    expect(hits.length).toBe(0);
+
+    orch.teardown();
+  });
+
+  it('#7 four DISTINCT-ts sessions still fire even with extra dup rows (audit #159)', () => {
+    const { store, orch, captured } = makeHarness();
+    // Four distinct sessions plus a duplicate of one — distinct count is 4.
+    const base = Array.from({ length: 4 }, (_, i) => ({
+      ts: NOW - (i + 1) * 30 * MIN,
+      duration_min: 25,
+      duration_ms: 25 * MIN,
+    })) as FocusLogEntry[];
+    store.set('work', 'focus_log', [...base, base[0]!]);
+    orch.init();
+    vi.advanceTimersByTime(600);
+
+    const hits = captured.filter((c) => c.spec.dedupe_key.startsWith('work:four_blocks_today:'));
+    expect(hits.length).toBe(1);
+
+    orch.teardown();
+  });
+
   it('dedupe set persists across scans (no double-fire)', () => {
     const { store, orch, captured } = makeHarness();
     const meeting: Meeting = {

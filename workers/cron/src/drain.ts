@@ -10,7 +10,8 @@
  * Retry policy:
  *   - On any failure (Anthropic OR Supabase) we LEAVE the KV entry intact.
  *   - The KV TTL (3 days, set by enrich-dump) gives natural drop-dead.
- *   - We track retry counts via a sibling `q:enrich:retry:<id>` counter.
+ *   - We track retry counts via a sibling `qretry:enrich:<id>` counter
+ *     (deliberately NOT under `q:enrich:` so the BATCH_CAP scan skips it).
  *     After 12 retries (~1 hour) we copy the payload to `dlq:enrich:<id>`
  *     and delete the live entry so it stops re-queueing.
  *
@@ -73,7 +74,11 @@ export interface EnrichedSignals {
 }
 
 const QUEUE_PREFIX = 'q:enrich:';
-const RETRY_PREFIX = 'q:enrich:retry:';
+// Disjoint from QUEUE_PREFIX (audit #42). If retry counters lived under
+// `q:enrich:` they'd be returned by `list({ prefix: QUEUE_PREFIX })` and eat
+// the BATCH_CAP budget, starving real payloads under backlog. A separate
+// top-level prefix keeps them out of the scan entirely.
+const RETRY_PREFIX = 'qretry:enrich:';
 const DLQ_PREFIX = 'dlq:enrich:';
 const MAX_RETRIES = 12;
 const BATCH_CAP = 50;
@@ -120,8 +125,10 @@ export async function drainEnrichQueue(env: DrainEnv): Promise<{
   const list = await env.CACHE_KV.list({ prefix: QUEUE_PREFIX, limit: BATCH_CAP });
 
   for (const entry of list.keys) {
-    // Skip the retry-counter keys — they share the prefix but aren't payloads.
-    if (entry.name.startsWith(RETRY_PREFIX)) continue;
+    // Safety net: retry counters now use a disjoint prefix (audit #42) so the
+    // list above never returns them, but keep the guard in case a legacy
+    // `q:enrich:retry:*` key lingers in KV from before the prefix change.
+    if (entry.name.startsWith(RETRY_PREFIX) || entry.name.startsWith('q:enrich:retry:')) continue;
     scanned++;
 
     const raw = await env.CACHE_KV.get(entry.name);

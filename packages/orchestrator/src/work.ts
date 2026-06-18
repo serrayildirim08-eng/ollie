@@ -316,10 +316,14 @@ export function createWorkOrchestrator(
 
       // focus_log → #2 session_end, #3 session_90_warn, #7 four_blocks_today.
       const focusLog = store.get<FocusLogEntry[]>('work', 'focus_log', []) ?? [];
-      let todayCount = 0;
+      // Count DISTINCT entries by ts (audit #159). A single session can be
+      // re-logged (duplicate entry, same ts) — counting raw rows would let
+      // four_blocks_today fire on fewer than four real sessions. The ts is the
+      // session's identity, mirroring the hyperfocus loop's per-ts dedupe.
+      const todaySessionTs = new Set<number>();
       for (const e of focusLog) {
         if (!e || typeof e.ts !== 'number') continue;
-        if (localDayKey(e.ts) === localDayKey(now)) todayCount += 1;
+        if (localDayKey(e.ts) === localDayKey(now)) todaySessionTs.add(e.ts);
 
         const sinceStart = now - e.ts;
 
@@ -357,8 +361,8 @@ export function createWorkOrchestrator(
         }
       }
 
-      // #7 — four+ focus blocks logged today.
-      if (todayCount >= 4) {
+      // #7 — four+ distinct focus blocks logged today.
+      if (todaySessionTs.size >= 4) {
         fire({
           title: WORK_NOTIFICATION_COPY.four_blocks_today,
           category: 'PATTERN_ALERT',

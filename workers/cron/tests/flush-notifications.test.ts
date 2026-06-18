@@ -295,8 +295,13 @@ describe('flushNotificationQueue · retry + failure', () => {
 
     const stats = await flushNotificationQueue(h.env);
 
+    // Counted under EXACTLY ONE stat (audit #160): the no-token path used to
+    // bump both no_token AND failed/retried, breaking the batch totals. The
+    // retry state machine still runs — the DB row flips to 'failed' — but the
+    // generic failed/retried counters stay untouched for this job.
     expect(stats.no_token).toBe(1);
-    expect(stats.failed).toBe(1);
+    expect(stats.failed).toBe(0);
+    expect(stats.retried).toBe(0);
     const patch = h.patches.find((p) => p.id === j.id);
     expect(patch?.body.status).toBe('failed');
   });

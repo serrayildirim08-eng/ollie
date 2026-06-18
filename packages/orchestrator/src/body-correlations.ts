@@ -279,18 +279,28 @@ export function scheduleBodyCorrelationPass(
   const getNow = opts.now ?? (() => Date.now());
   let timer: ReturnType<typeof setTimeout> | null = null;
 
-  function arm(): void {
+  // Floor for any re-arm delay (audit #93). Guards against a setTimeout that
+  // fires early (suspend/resume, clock skew) busy-re-arming with a near-zero
+  // recomputed delay.
+  const MIN_REARM_MS = 60_000;
+
+  function arm(floor = false): void {
     const now = getNow();
     const fireAt = nextLocal03(now);
-    const delay = Math.max(0, fireAt - now);
+    const delay = floor ? Math.max(MIN_REARM_MS, fireAt - now) : Math.max(0, fireAt - now);
     timer = setTimeout(() => {
       timer = null;
-      try {
-        runBodyCorrelationPass({ store: opts.store, now: getNow });
-      } catch (err) {
-        console.warn('[orchestrator/body-correlations] scheduled pass failed:', err);
+      // Only run the pass if the clock has actually reached the target; an
+      // early fire re-arms instead. (runBodyCorrelationPass has its own 24h
+      // cooldown, so a stray run is harmless, but skipping it avoids churn.)
+      if (getNow() >= fireAt) {
+        try {
+          runBodyCorrelationPass({ store: opts.store, now: getNow });
+        } catch (err) {
+          console.warn('[orchestrator/body-correlations] scheduled pass failed:', err);
+        }
       }
-      arm();
+      arm(true); // re-arm with floored delay
     }, delay);
   }
 

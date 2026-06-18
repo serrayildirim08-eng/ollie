@@ -403,14 +403,40 @@ export function scheduleWeeklyReview(
 ): () => void {
   let timer: ReturnType<typeof setTimeout> | null = null;
 
+  // Floor for any re-arm delay (audit #93). A setTimeout can fire early on
+  // suspend/resume or clock skew; without a floor a recomputed near-zero
+  // delay would busy-loop arm() → setTimeout(0) → arm() ... burning CPU.
+  const MIN_REARM_MS = 60_000;
+
   function arm(): void {
     const now = opts.now();
     const fireAt = nextSunday19(now);
+    // Pure scheduling delay must never be floored below 0, but we cap the
+    // tiny end so a fire-and-immediately-rearm can't spin.
     const delay = Math.max(0, fireAt - now);
     timer = setTimeout(() => {
       timer = null;
-      emitWeeklyReview(opts);
-      arm(); // re-schedule next week
+      // Only treat this as a real fire if the clock has actually reached
+      // the target. An early fire (skew/resume) re-arms instead of emitting.
+      if (opts.now() >= fireAt) {
+        emitWeeklyReview(opts);
+        // After a genuine fire, re-arm for next week with a floored delay so
+        // a clock that's still at/just-past 19:00 can't tight-loop.
+        rearmFloored();
+      } else {
+        rearmFloored();
+      }
+    }, delay);
+  }
+
+  function rearmFloored(): void {
+    const now = opts.now();
+    const fireAt = nextSunday19(now);
+    const delay = Math.max(MIN_REARM_MS, fireAt - now);
+    timer = setTimeout(() => {
+      timer = null;
+      if (opts.now() >= fireAt) emitWeeklyReview(opts);
+      rearmFloored();
     }, delay);
   }
 
