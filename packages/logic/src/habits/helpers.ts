@@ -62,6 +62,24 @@ export function dayCompletionMapFromFlat(
   return m;
 }
 
+/**
+ * #142: count how many habits were ACTIVE on a given local day, i.e. already
+ * created on/before that day. A habit with no `created_at` is treated as
+ * always-active (we have no creation evidence, so we don't exclude it).
+ *
+ * `dayKey` is a local-tz key; we compare against the day's local noon
+ * timestamp (DST-stable, matches the rest of the habits module).
+ */
+export function activeHabitCount(habits: Habit[], dayKeyStr: string): number {
+  const dayNoon = Date.parse(dayKeyStr + 'T12:00:00');
+  let n = 0;
+  for (const h of habits) {
+    const created = typeof h.created_at === 'number' ? h.created_at : null;
+    if (created == null || created <= dayNoon) n++;
+  }
+  return n;
+}
+
 /** Returns the appropriate dayCompletion map given history shape. */
 export function buildDayCompletionMap(
   habits: Habit[],

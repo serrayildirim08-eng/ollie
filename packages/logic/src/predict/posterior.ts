@@ -76,18 +76,29 @@ export function resolveOpts(observations: number[], opts: ForecastOpts): Resolve
   return { prior, minSigma, robustThreshold, alpha };
 }
 
+/** Floor on the pooled sd (days) — degenerate zero-variance guard (#106). */
+const MIN_POOLED_SD = 1.0;
+
 /** Change-point: last 6 vs prior 6 using pooled-sd rule. */
 export function detectChangePoint(
   values: number[],
   _opts?: ForecastOpts,
 ): ChangePointResult {
   const arr = values ?? [];
-  if (arr.length < 9) return { detected: false, cutoff: 0, delta: 0, pooledSd: 0 };
+  // Finding #106: require ≥12 obs for SYMMETRIC 6-vs-6 windows (the old <9
+  // gate left 9-11 obs comparing 6 recent against only 3-5 older points).
+  if (arr.length < 12) return { detected: false, cutoff: 0, delta: 0, pooledSd: 0 };
   const recent = arr.slice(-6);
   const older = arr.slice(-12, -6);
   const delta = Math.abs(mean(recent) - mean(older));
-  const pooledSd = Math.sqrt((variance(recent) + variance(older)) / 2);
-  const detected = delta > 2 * pooledSd && pooledSd > 0;
+  const rawPooledSd = Math.sqrt((variance(recent) + variance(older)) / 2);
+  // Floor the pooled sd: with perfectly regular cycles rawPooledSd === 0, so
+  // `delta > 2*0` would fire on ANY nonzero shift (a 1-day jump reads as a
+  // change-point). A measurement-noise floor keeps the test honest under
+  // degenerate (zero-variance) inputs while still catching a genuine large
+  // shift. Mirrors cycle/posterior.detectChangePoint.
+  const pooledSd = Math.max(rawPooledSd, MIN_POOLED_SD);
+  const detected = delta > 2 * pooledSd;
   return { detected, cutoff: detected ? arr.length - 6 : 0, delta, pooledSd };
 }
 

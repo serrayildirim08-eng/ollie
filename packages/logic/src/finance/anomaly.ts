@@ -28,8 +28,9 @@ export function detectAnomaly(
     return { isAnomaly: false, modZ: null, framing: null };
   }
   const threshold = typeof opts?.threshold === 'number' ? opts.threshold : 3.5;
-  const madRaw = p.amount_mad;
-  if (!madRaw) {
+  // amount_mad is stored RAW (#104); the modified z-score wants raw MAD.
+  const mad = p.amount_mad;
+  if (!mad) {
     const rel = Math.abs(r.amount - p.amount_median) / Math.max(p.amount_median, 1);
     if (rel > 0.5) {
       return {
@@ -40,7 +41,7 @@ export function detectAnomaly(
     }
     return { isAnomaly: false, modZ: null, framing: null };
   }
-  const modZ = (0.6745 * (r.amount - p.amount_median)) / madRaw;
+  const modZ = (0.6745 * (r.amount - p.amount_median)) / mad;
   if (Math.abs(modZ) >= threshold) {
     return {
       isAnomaly: true,

@@ -98,6 +98,26 @@ describe('detectChangePoint', () => {
     const r = detectChangePoint(stable);
     expect(r.detected).toBe(false);
   });
+
+  // #106: require ≥12 obs for symmetric 6-vs-6 windows. At 9-11 obs the
+  // older window was only 3-5 points — an unbalanced comparison — so the
+  // detector must abstain (not fire on the lopsided estimate).
+  it('#106: abstains at 9-11 observations (asymmetric windows)', () => {
+    // A genuine shift, but only 11 obs → must NOT detect yet.
+    const obs11 = [28, 28, 28, 28, 28, 40, 40, 40, 40, 40, 40];
+    expect(obs11.length).toBe(11);
+    expect(detectChangePoint(obs11).detected).toBe(false);
+    // Same shift padded to 12 obs (6 vs 6) → now detects.
+    const obs12 = [28, 28, 28, 28, 28, 28, 40, 40, 40, 40, 40, 40];
+    expect(detectChangePoint(obs12).detected).toBe(true);
+  });
+
+  // #106: perfectly regular cycles (zero pooled variance) must not let a
+  // tiny shift register as a change-point.
+  it('#106: degenerate zero-variance windows do not false-fire on a 1-day shift', () => {
+    const r = detectChangePoint([28, 28, 28, 28, 28, 28, 29, 29, 29, 29, 29, 29]);
+    expect(r.detected).toBe(false);
+  });
 });
 
 // ─── robustStats ──────────────────────────────────────────────────────────────

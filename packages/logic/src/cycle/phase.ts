@@ -22,6 +22,7 @@ import type {
 } from './types';
 import { DAY_MS } from './constants';
 import { mean, sampleSd } from './math';
+import { phaseForDay } from '../patterns/phase-fold';
 
 export function computePhaseForDate(
   cycles: readonly CycleRecord[] | undefined | null,
@@ -55,12 +56,9 @@ export function computePhaseForDate(
   const margin = 7;
   if (day > avgCycle + margin) return 'unknown';
 
-  if (day <= menstrualEnd) return 'menstrual';
-  const fertileStart = avgCycle - 18;
-  const fertileEnd = avgCycle - 13;
-  if (day < fertileStart) return 'follicular';
-  if (day <= fertileEnd) return 'ovulation window';
-  return 'luteal';
+  // Finding #51: delegate to the ONE canonical classifier so this detector
+  // can't drift from phaseFold / correlateSymptom.
+  return phaseForDay(day, avgCycle, menstrualEnd);
 }
 
 export function deriveCycleStats(cycles: readonly CycleRecord[] | undefined | null): CycleStats {
@@ -145,12 +143,12 @@ export function correlateSymptom(
   let total = 0;
   byCycle.forEach((offsets, idx) => {
     const cycleLen = safeCycles[idx]?.cycleLengthDays ?? 28;
+    const bleedLen = safeCycles[idx]?.periodLengthDays;
     for (const off of offsets) {
       const day = Math.floor(off / DAY_MS) + 1;
-      let phase: Phase = 'luteal';
-      if (day <= 5) phase = 'menstrual';
-      else if (day < cycleLen - 17) phase = 'follicular';
-      else if (day <= cycleLen - 13) phase = 'ovulation window';
+      // Finding #51: use the ONE canonical classifier (was an inline copy that
+      // used `cycleLen-17` and `<`, disagreeing with phaseForDay's `cycleLen-18`).
+      const phase: Phase = phaseForDay(day, cycleLen, typeof bleedLen === 'number' ? bleedLen : undefined);
       phaseCount[phase]++;
       total++;
     }

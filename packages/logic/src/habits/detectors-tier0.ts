@@ -638,6 +638,13 @@ export function detectHabitRebirthLegacy(
   const windowDays = o.windowDays ?? 60;
   const windowStart = now - windowDays * DAY_MS;
 
+  // Finding #139: a restart is a gap that is ABNORMAL *for that habit*, not a
+  // fixed ≥7-day gap. A genuinely weekly habit has ~7-day gaps by design, so
+  // the old absolute rule counted every normal weekly cadence as a "restart"
+  // (a weekly habit "restarted" every week). We infer each habit's expected
+  // cadence from its own median inter-completion interval and only count a gap
+  // as a restart when it materially exceeds that cadence.
+  const gapMultiple = o.restartGapMultiple ?? 2.5; // gap must be ≥ 2.5× the habit's typical interval
   const arr = history.habits ?? [];
   let restarts = 0;
   for (const h of arr) {
@@ -645,8 +652,26 @@ export function detectHabitRebirthLegacy(
       .filter(e => e && typeof e.ts === 'number' && e.ts >= windowStart)
       .map(e => e.ts)
       .sort((a, b) => a - b);
-    for (let i = 1; i < c.length; i++) {
-      if ((c[i] - c[i - 1]) >= minGapDays * DAY_MS) restarts++;
+    if (c.length < 2) continue;
+    const gaps: number[] = [];
+    for (let i = 1; i < c.length; i++) gaps.push(c[i] - c[i - 1]);
+    // Expected cadence = median gap (robust to the long restart gaps
+    // themselves). Only meaningful with ≥3 gaps; with a single gap there is no
+    // cadence to compare against, so fall back to the absolute floor.
+    let cadenceThreshold = minGapDays * DAY_MS;
+    if (gaps.length >= 3) {
+      const sortedGaps = [...gaps].sort((a, b) => a - b);
+      const mid = Math.floor(sortedGaps.length / 2);
+      const medianGap =
+        sortedGaps.length % 2 === 0
+          ? (sortedGaps[mid - 1] + sortedGaps[mid]) / 2
+          : sortedGaps[mid];
+      // A restart must clear BOTH the per-habit cadence-relative threshold AND
+      // the absolute floor (so very high-frequency habits don't trip on noise).
+      cadenceThreshold = Math.max(medianGap * gapMultiple, minGapDays * DAY_MS);
+    }
+    for (const g of gaps) {
+      if (g >= cadenceThreshold) restarts++;
     }
   }
   if (restarts < minRestarts) return null;

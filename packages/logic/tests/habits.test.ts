@@ -209,6 +209,38 @@ describe('detectHabitRebirthLegacy', () => {
     expect(r).not.toBeNull();
     expect(r?.pattern).toBe('habit-rebirth');
   });
+
+  // #139: a genuinely weekly habit has ~7-day gaps by design. The old absolute
+  // ≥minGapDays rule counted EVERY weekly cadence as a "restart". Cadence-aware
+  // detection must NOT flag a steady weekly habit as restarting.
+  it('#139: steady weekly habit is NOT a string of restarts', () => {
+    const weekly = makeHabit('w1', null, []);
+    // 9 completions, every 7 days → 8 normal weekly gaps, zero restarts.
+    weekly.completions = Array.from({ length: 9 }, (_, i) => ({ ts: ts(7 + i * 7), habit_id: 'w1' }));
+    const history: HabitsHistory = { now: NOW, habits: [weekly] };
+    // Even with the old minGapDays:7, the weekly cadence must not register.
+    const r = detectHabitRebirthLegacy(history, { minRestarts: 3, minGapDays: 7 });
+    expect(r).toBeNull();
+  });
+
+  // #139: a weekly habit that ACTUALLY lapsed (a multi-week gap) still counts,
+  // relative to its own cadence.
+  it('#139: a real multi-week lapse in a weekly habit still counts', () => {
+    const weekly = makeHabit('w2', null, []);
+    // weekly for a while, then three big gaps (~3 weeks each).
+    const completions = [
+      ...Array.from({ length: 4 }, (_, i) => ts(2 + i * 7)),   // recent weekly run
+      ts(2 + 4 * 7 + 21),                                       // +3wk lapse
+      ts(2 + 4 * 7 + 21 + 7),
+      ts(2 + 4 * 7 + 21 + 7 + 21),                              // another +3wk lapse
+      ts(2 + 4 * 7 + 21 + 7 + 21 + 21),                         // another +3wk lapse
+    ].map((t) => ({ ts: t, habit_id: 'w2' }));
+    weekly.completions = completions;
+    const history: HabitsHistory = { now: NOW, habits: [weekly] };
+    const r = detectHabitRebirthLegacy(history, { minRestarts: 3, minGapDays: 7, windowDays: 365 });
+    expect(r).not.toBeNull();
+    expect(r?.pattern).toBe('habit-rebirth');
+  });
 });
 
 // ─── detectExternalizationRequirement (tier-1) ───────────────────────
@@ -260,6 +292,35 @@ describe('detectLutealCollapse', () => {
     const r = detectLutealCollapse(history, { minLutealWindows: 1, maxRatio: 0.95, windowDays: 65 });
     expect(r).not.toBeNull();
     expect(r?.signal).toBe('luteal_collapse');
+  });
+
+  // #142: a habit created mid-window must NOT have its pre-creation days
+  // counted as missed slots. Here a steady habit completes every non-luteal
+  // day and nothing in luteal — a clean collapse. A SECOND habit is created
+  // only AFTER the luteal window (in the recent follicular stretch) and
+  // completes every day it exists. With the old `days * totalHabits`
+  // denominator, the new habit's pre-creation days inflate the OTHER-phase
+  // denominator and wrongly soften the measured collapse. Counting only
+  // active habits keeps the luteal collapse fully visible.
+  it('#142: habit added mid-window does not bias the per-day rate', () => {
+    const lutealStart = ts(40);
+    const lutealEnd = ts(31);
+    const phases = [
+      { start: ts(60), end: ts(41), name: 'follicular' },
+      { start: lutealStart, end: lutealEnd, name: 'luteal' },
+      { start: ts(30), end: ts(1), name: 'follicular' },
+    ];
+    // Habit 1: present whole window, completes every non-luteal day, none luteal.
+    const h1 = makeHabit('h1', null, [2, 3, 4, 5, 6, 7, 8, 9, 10, 42, 43, 44, 45, 46, 47, 48, 49, 50, 55, 58]);
+    // Habit 2: created only ~15 days ago (well after luteal), completes daily since.
+    const h2 = makeHabit('h2', null, [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
+    h2.created_at = ts(15);
+    const history: HabitsHistory = { now: NOW, habits: [h1, h2], cyclePhases: phases };
+    const r = detectLutealCollapse(history, { minLutealWindows: 1, maxRatio: 0.95, windowDays: 65 });
+    expect(r).not.toBeNull();
+    expect(r?.signal).toBe('luteal_collapse');
+    // Luteal had zero completions for the only active habit (h1) → full collapse.
+    expect(r?.evidence).toContain('luteal_rate:0');
   });
 });
 

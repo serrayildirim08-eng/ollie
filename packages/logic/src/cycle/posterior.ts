@@ -51,7 +51,11 @@ export function posteriorCycleLength(
 }
 
 export function detectChangePoint(cycleLengths: readonly number[]): ChangePointResult {
-  if (cycleLengths.length < 9) return { detected: false, cutoff: 0 };
+  // Finding #106: require ≥12 observations so the two windows are SYMMETRIC
+  // (6 recent vs 6 older). At 9-11 obs the old `slice(-12,-6)` gave only 3-5
+  // "older" points against 6 "recent" — an unbalanced two-sample comparison
+  // whose pooled-sd estimate is dominated by the smaller window.
+  if (cycleLengths.length < 12) return { detected: false, cutoff: 0 };
   const recent = cycleLengths.slice(-6);
   const older = cycleLengths.slice(-12, -6);
   const delta = Math.abs(mean([...recent]) - mean([...older]));

@@ -8,8 +8,11 @@
  * braindump text, then attempts to attribute them to named savings goals.
  *
  * Confidence rules:
- *   high   — outbound+inbound same-day same-amount pair, OR explicit goal
- *             name in memo → auto-update goal progress
+ *   high   — outbound+inbound same-day same-amount pair *corroborated by a
+ *             savings keyword* (#143), OR explicit goal name in memo →
+ *             auto-update goal progress
+ *   medium — same-day same-amount pair with NO savings keyword (could be a
+ *             refund/wash) → surface card, never auto-apply
  *   medium — keyword match in memo with plausible amount → surface card
  *   low    — weak keyword match or ambiguous → ignore / don't surface
  */
@@ -152,7 +155,20 @@ export function detectSavingsTransfers(transactions: FinanceRecord[]): SavingsTr
       pairedOutboundIds.add(out.id ?? '');
       pairedInboundIds.add(match.id ?? '');
       const memo = out.notes ?? out.merchant ?? null;
-      const kw = SAVINGS_KEYWORDS.find((k) => k.re.test(memo ?? ''))?.keyword ?? null;
+      // Finding #143: a same-day, same-amount in/out pair is NOT proof of a
+      // savings transfer on its own — a rent payment + a reimbursement, or any
+      // wash/refund, looks identical. Require a corroborating savings keyword
+      // on EITHER side (memo / merchant / category) before granting high
+      // confidence + is_matched_pair (which gates downstream auto_apply).
+      const outText = [out.notes, out.merchant, out.category].filter(Boolean).join(' ');
+      const inText = [match.notes, match.merchant, match.category].filter(Boolean).join(' ');
+      const hit =
+        SAVINGS_KEYWORDS.find((k) => k.re.test(outText)) ??
+        SAVINGS_KEYWORDS.find((k) => k.re.test(inText)) ??
+        null;
+      // 'deposit' / 'save' alone are weak — don't let them carry a high-conf pair.
+      const strongHit = hit && hit.keyword !== 'deposit' && hit.keyword !== 'save' ? hit : null;
+      const corroborated = strongHit != null;
       results.push({
         id: transferId({
           record_id: out.id ?? '',
@@ -165,9 +181,12 @@ export function detectSavingsTransfers(transactions: FinanceRecord[]): SavingsTr
         amount: out.amount as number,
         date: out.event_date,
         memo,
-        matched_keyword: kw,
-        confidence: 'high',
-        is_matched_pair: true,
+        matched_keyword: strongHit?.keyword ?? null,
+        // Corroborated pair → high + treated as a matched pair (auto-applyable).
+        // Uncorroborated coincidental pair → medium, NOT a matched pair, so the
+        // goal matcher will never auto_apply it.
+        confidence: corroborated ? 'high' : 'medium',
+        is_matched_pair: corroborated,
       });
     }
   }

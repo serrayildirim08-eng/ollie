@@ -113,6 +113,8 @@ export interface HabitsOpts {
   minNormalN?: number;
   lowTstMin?: number;
   minGapDays?: number;
+  /** #139: a rebirth gap must be ≥ this multiple of the habit's median cadence. */
+  restartGapMultiple?: number;
   reentryDays?: number;
   minRebirths?: number;
   followDays?: number;

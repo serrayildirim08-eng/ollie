@@ -12,7 +12,7 @@ import type {
   HabitsOpts,
   HabitSignal,
 } from './types';
-import { mean, buildDayCompletionMap } from './helpers';
+import { mean, buildDayCompletionMap, activeHabitCount } from './helpers';
 import { DAY_MS, dayKey, eachLocalDayKey } from '../util';
 
 // ─── detectExternalizationRequirement ────────────────────────────────
@@ -165,20 +165,26 @@ export function detectLutealCollapse(
   }
   if (lutealWindows < minLutealWindows) return null;
 
-  const habitsActive = arr.length;
   const dayCompletions = buildDayCompletionMap(arr, flatCompletions, windowStart, now);
 
-  let lutealDays = 0, lutealCompletions = 0;
-  let otherDays = 0, otherCompletions = 0;
+  // #142: the completion-rate denominator must reflect how many habits were
+  // ACTIVE on each day, not the total habit count for the whole window. With a
+  // fixed `days * arr.length` denominator, habits created mid-window deflate
+  // every prior day's rate (their "missed" days never existed), biasing the
+  // luteal-vs-other comparison. We accumulate per-day active-habit slots.
+  let lutealDays = 0, lutealCompletions = 0, lutealSlots = 0;
+  let otherDays = 0, otherCompletions = 0, otherSlots = 0;
   for (const [k, ph] of dayPhase.entries()) {
     const cs = dayCompletions.get(k) ?? 0;
-    if (ph === 'luteal') { lutealDays++; lutealCompletions += cs; }
-    else { otherDays++; otherCompletions += cs; }
+    const active = activeHabitCount(arr, k);
+    if (ph === 'luteal') { lutealDays++; lutealCompletions += cs; lutealSlots += active; }
+    else { otherDays++; otherCompletions += cs; otherSlots += active; }
   }
   if (lutealDays < 4 || otherDays < 8) return null;
+  if (lutealSlots === 0 || otherSlots === 0) return null;
 
-  const lutealRate = lutealCompletions / (lutealDays * habitsActive);
-  const otherRate = otherCompletions / (otherDays * habitsActive);
+  const lutealRate = lutealCompletions / lutealSlots;
+  const otherRate = otherCompletions / otherSlots;
   if (otherRate === 0) return null;
   const ratio = lutealRate / otherRate;
   if (ratio > maxRatio) return null;

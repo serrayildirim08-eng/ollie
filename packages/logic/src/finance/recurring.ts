@@ -60,8 +60,8 @@ function detectFreqChangePoint(
   }
   const o = opts ?? {};
   const med = fMedian(intervals) ?? 0;
-  const mad = fMad(intervals, med);
-  const sigma = 1.4826 * (mad || 0.5);
+  const mad = fMad(intervals, med); // RAW MAD (#104)
+  const sigma = 1.4826 * (mad || 0.5); // raw→σ; 0.5-day floor when MAD is 0
   const k = o.k != null ? o.k : 0.5 * sigma;
   const h = o.h != null ? o.h : 5 * sigma;
   let sHi = 0;
@@ -222,11 +222,14 @@ export function predictNextDue(p: RecurringPattern, _now: number): NextDuePredic
     return { dueAt: null, confidence: 'low', rangeDays: null };
   }
   const dueAt = p.last_at + p.interval_days_median * DAY_MS;
-  const mad = p.interval_days_mad || 0;
-  const rangeDays = Number((1.4826 * mad).toFixed(1));
+  const mad = p.interval_days_mad || 0; // RAW MAD (#104)
+  const sigma = 1.4826 * mad; // consistency-scaled spread, in days
+  const rangeDays = Number(sigma.toFixed(1));
   return {
     dueAt,
-    confidence: mad < 3 ? 'high' : mad < 7 ? 'medium' : 'low',
+    // Threshold on the σ (in days), so behavior is unchanged after fMad
+    // switched to RAW MAD: old `mad<3/<7` was against scaled mad == σ.
+    confidence: sigma < 3 ? 'high' : sigma < 7 ? 'medium' : 'low',
     rangeDays,
   };
 }
@@ -398,7 +401,9 @@ export function detectRecurringEarly(
     const amounts = sorted.map((r) => r.amount).filter((v): v is number => v != null);
     const medAmt = amounts.length ? fMedian(amounts) : null;
     const madAmt = amounts.length > 1 ? fMad(amounts, medAmt ?? 0) : 0;
-    const cvAmt = (medAmt && medAmt > 0) ? madAmt / medAmt : null;
+    // CV uses the consistency-scaled MAD (σ≈1.4826·MAD) so the 0.05 tolerance
+    // gate (amtTol) keeps its meaning after fMad switched to RAW MAD (#104).
+    const cvAmt = (medAmt && medAmt > 0) ? (1.4826 * madAmt) / medAmt : null;
 
     if (count >= 3) {
       // high confidence — pass through; detectRecurring() is the authority
