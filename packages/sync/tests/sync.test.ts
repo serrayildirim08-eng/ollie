@@ -15,6 +15,7 @@ import type { OllieAPI } from '@ollie/api';
 interface CapturedUpsert {
   rows: unknown;
   authJwt: string | undefined;
+  params: Record<string, string> | undefined;
 }
 
 function makeFakeApi() {
@@ -42,7 +43,7 @@ function makeFakeApi() {
         }) as any,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         upsert: vi.fn(async (_t: string, rows: any, opts: any) => {
-          captured.upserts.push({ rows, authJwt: opts?.authJwt });
+          captured.upserts.push({ rows, authJwt: opts?.authJwt, params: opts?.params });
           if (nextUpsertResult.ok) return { ok: true, status: 201, data: rows };
           return { ok: false, error: { code: nextUpsertResult.code ?? 'http', status: nextUpsertResult.status, message: 'x' } };
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -105,6 +106,9 @@ describe('sync · outbound', () => {
     expect(row.ciphertext).toBeTypeOf('string');
     expect(row.iv).toBeTypeOf('string');
     expect(captured.upserts[0].authJwt).toBe('jwt');
+    // Audit #23: PostgREST needs the (user_id, module) conflict target
+    // explicitly or the 2nd+ push per module 409s and retries forever.
+    expect(captured.upserts[0].params).toEqual({ on_conflict: 'user_id,module' });
     sync.stop();
   });
 
