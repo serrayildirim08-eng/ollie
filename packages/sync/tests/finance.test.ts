@@ -12,11 +12,13 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createStore, createMemoryAdapter } from '@ollie/store';
-import { deriveKey, randomSalt, bytesToBase64, encryptData } from '@ollie/crypto';
+import { deriveKey, randomSalt, bytesToBase64, bytesToPgHex, encryptData } from '@ollie/crypto';
 import { createFinanceSyncClient } from '../src/finance';
 import type { RemoteFinanceRow } from '../src/finance';
 import type { OllieAPI } from '@ollie/api';
 import { settleUntil, settleQuiet } from './_timers';
+
+const PAGE_LIMIT = 500;
 
 interface CapturedUpsert {
   table: string;
@@ -264,7 +266,9 @@ describe('finance sync · inbound decrypt + apply', () => {
     const firstGet = captured.gets[0];
     expect(firstGet.table).toBe('finance_records');
     expect(firstGet.params?.user_id).toBe('eq.u');
-    expect(firstGet.params?.order).toBe('updated_at.asc');
+    // audit #6: composite (updated_at, id) ordering so boundary-timestamp
+    // rows page deterministically (no skips).
+    expect(firstGet.params?.order).toBe('updated_at.asc,id.asc');
     sync.stop();
   });
 
@@ -328,7 +332,7 @@ describe('finance sync · inbound decrypt + apply', () => {
     sync.stop();
   });
 
-  it('cursor advances so the next pull only asks for newer rows', async () => {
+  it('cursor advances so the next pull only asks for rows >= cursor (gte, audit #6)', async () => {
     const { api, captured } = makeFakeApi();
     const enc = await encryptData(key, { id: 'b1', amount: 10 });
     captured.nextGetRows = [{
@@ -346,10 +350,13 @@ describe('finance sync · inbound decrypt + apply', () => {
     await vi.runOnlyPendingTimersAsync();
     await Promise.resolve();
 
-    // Manual second pull — params should now include updated_at gt cursor.
+    // Manual second pull — params should now include updated_at gte cursor.
+    // audit #6: gte. (not gt.) so rows sharing the boundary timestamp are
+    // never skipped; the in-client seen-id dedupe prevents re-applying the
+    // cursor row itself.
     await sync.syncIn();
     const lastGet = captured.gets[captured.gets.length - 1];
-    expect(lastGet.params?.updated_at).toBe(`gt.${new Date(7000).toISOString()}`);
+    expect(lastGet.params?.updated_at).toBe(`gte.${new Date(7000).toISOString()}`);
     sync.stop();
   });
 });
@@ -427,6 +434,184 @@ describe('finance sync · RLS hardening at client layer', () => {
     expect(store.get('finance', 'bills', [])).toEqual([]);
     expect(warn).toHaveBeenCalled();
     warn.mockRestore();
+    sync.stop();
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// A PostgREST-faithful fake whose GET honours the cursor/keyset predicates the
+// production syncIn builds. Backed by a fixed server-side row set so we can
+// exercise multi-page paging, gte. boundary dedupe, and decrypt-failure clamp
+// the way the real server would behave.
+// ──────────────────────────────────────────────────────────────────────────
+function makePagingApi(serverRows: RemoteFinanceRow[]) {
+  const gets: Array<Record<string, string> | undefined> = [];
+  // Stable (updated_at, id) ordering — matches the server's order clause.
+  const sorted = [...serverRows].sort((a, b) =>
+    a.updated_at < b.updated_at ? -1 : a.updated_at > b.updated_at ? 1
+    : a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+
+  function applyPredicate(p: Record<string, string> | undefined): RemoteFinanceRow[] {
+    let rows = sorted;
+    const ua = p?.updated_at;
+    if (ua?.startsWith('gte.')) {
+      const ts = ua.slice(4);
+      rows = rows.filter((r) => r.updated_at >= ts);
+    } else if (ua?.startsWith('gt.')) {
+      const ts = ua.slice(3);
+      rows = rows.filter((r) => r.updated_at > ts);
+    }
+    const or = p?.or;
+    if (or) {
+      // (updated_at.gt.TS,and(updated_at.eq.TS,id.gt.ID))
+      const m = /\(updated_at\.gt\.([^,]+),and\(updated_at\.eq\.([^,]+),id\.gt\.([^)]+)\)\)/.exec(or);
+      if (m) {
+        const [, gtTs, eqTs, gtId] = m;
+        rows = rows.filter((r) =>
+          r.updated_at > gtTs || (r.updated_at === eqTs && r.id > gtId));
+      }
+    }
+    return rows.slice(0, PAGE_LIMIT);
+  }
+
+  const api: OllieAPI = {
+    request: vi.fn(),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    anthropic: { proxyUrl: null, route: vi.fn() as any },
+    supabase: {
+      url: 'https://x.supabase.co', anonKey: 'anon',
+      rest: {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        get: vi.fn(async (_t: string, opts: any) => {
+          gets.push(opts?.params);
+          return { ok: true, status: 200, data: applyPredicate(opts?.params) };
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        }) as any,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        upsert: vi.fn(async (_t: string, rows: any) => ({ ok: true, status: 201, data: rows })) as any,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        delete: vi.fn(async () => ({ ok: true, status: 204, data: null })) as any,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        rpc: vi.fn(async () => ({ ok: true, status: 200, data: [] })) as any,
+      },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      auth: { signUp: vi.fn() as any, signInWithPassword: vi.fn() as any, refresh: vi.fn() as any, signOut: vi.fn() as any },
+    },
+  };
+  return { api, gets };
+}
+
+async function makeRow(
+  k: CryptoKey, id: string, ts: number, extra: Record<string, unknown> = {},
+): Promise<RemoteFinanceRow> {
+  const enc = await encryptData(k, { id, last_edited_at: ts, ...extra });
+  return {
+    id, user_id: 'u', module: 'finance', record_type: 'bill',
+    encrypted_payload: bytesToPgHex(enc.ciphertext),
+    iv: bytesToPgHex(enc.iv),
+    blob_version: 1, deleted_at: null,
+    created_at: new Date(ts).toISOString(),
+    updated_at: new Date(ts).toISOString(),
+  };
+}
+
+describe('finance sync · #5 decrypt-failure does not advance cursor past failed row', () => {
+  it('a row that fails to decrypt is re-fetched on the next pull (no silent loss)', async () => {
+    // Two applied rows below a corrupt row. The written cursor must clamp
+    // strictly BELOW the failure (to the highest applied row at 1000) so the
+    // next pull (gte.cursor) re-asks for the failed row at 2000 — never
+    // jumps past it.
+    const good1 = await makeRow(key, 'g1', 1000);
+    const badEnc = await encryptData(key, { id: 'bad', last_edited_at: 2000 });
+    const badCt = new Uint8Array(badEnc.ciphertext); badCt[0] ^= 0xff;
+    const bad: RemoteFinanceRow = {
+      id: 'bad', user_id: 'u', module: 'finance', record_type: 'bill',
+      encrypted_payload: bytesToPgHex(badCt), iv: bytesToPgHex(badEnc.iv),
+      blob_version: 1, deleted_at: null,
+      created_at: new Date(2000).toISOString(), updated_at: new Date(2000).toISOString(),
+    };
+
+    const { api, gets } = makePagingApi([good1, bad]);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const sync = createFinanceSyncClient({
+      store, api, userId: 'u', authJwt: 'jwt', encryptionKey: key, now: () => 9000,
+    });
+    await sync.start();
+    await vi.runOnlyPendingTimersAsync();
+    await Promise.resolve();
+
+    // Cursor must be the applied row strictly BELOW the failure (1000), not
+    // 3000 — otherwise the failed row at 2000 could never be retried.
+    expect(sync._inspect().cursor).toBe(new Date(1000).toISOString());
+
+    // Next pull uses gte.1000 so it re-includes the 2000 failure row.
+    await sync.syncIn();
+    const lastGet = gets[gets.length - 1];
+    expect(lastGet?.updated_at).toBe(`gte.${new Date(1000).toISOString()}`);
+
+    warn.mockRestore();
+    sync.stop();
+  });
+});
+
+describe('finance sync · #6 boundary-timestamp paging (>PAGE_LIMIT rows at one ts)', () => {
+  it('pages through 600 rows sharing one updated_at with zero loss and no infinite loop', async () => {
+    const TS = 5000;
+    const N = 600; // > PAGE_LIMIT (500)
+    const rows: RemoteFinanceRow[] = [];
+    for (let i = 0; i < N; i++) {
+      // zero-pad ids so lexical id ordering == numeric (matches server).
+      rows.push(await makeRow(key, `r${String(i).padStart(4, '0')}`, TS));
+    }
+    const { api } = makePagingApi(rows);
+    const sync = createFinanceSyncClient({
+      store, api, userId: 'u', authJwt: 'jwt', encryptionKey: key, now: () => 9000,
+    });
+    await sync.start();
+    await vi.runOnlyPendingTimersAsync();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const bills = store.get<Array<{ id: string }>>('finance', 'bills', []) ?? [];
+    expect(bills.length).toBe(N);
+    expect(new Set(bills.map((b) => b.id)).size).toBe(N);
+    sync.stop();
+  });
+
+  it('two rows sharing a boundary timestamp across pulls are both applied (gte, no skip)', async () => {
+    const a = await makeRow(key, 'aaa', 4000);
+    const b = await makeRow(key, 'bbb', 4000); // same ts as a
+    const { api } = makePagingApi([a, b]);
+    const sync = createFinanceSyncClient({
+      store, api, userId: 'u', authJwt: 'jwt', encryptionKey: key, now: () => 9000,
+    });
+    await sync.start();
+    await vi.runOnlyPendingTimersAsync();
+    await Promise.resolve();
+    // Second pull at the SAME boundary must not re-apply, must not skip.
+    await sync.syncIn();
+    const bills = store.get<Array<{ id: string }>>('finance', 'bills', []) ?? [];
+    expect(new Set(bills.map((x) => x.id))).toEqual(new Set(['aaa', 'bbb']));
+    sync.stop();
+  });
+});
+
+describe('finance sync · #117 outbound LWW timestamp falls back to created_at', () => {
+  it('a row with created_at but no last_edited_at ships updated_at = created_at (not now())', async () => {
+    const { api, captured } = makeFakeApi();
+    const sync = createFinanceSyncClient({
+      store, api, userId: 'u', authJwt: 'jwt', encryptionKey: key, now: () => 999999,
+    });
+    await sync.start();
+    captured.upserts.length = 0;
+
+    store.set('finance', 'bills', [{ id: 'b1', amount: 10, created_at: 4242 }]);
+    await settleUntil(() => captured.upserts.length >= 1);
+
+    const row = (captured.upserts[0].rows as Array<Record<string, unknown>>)[0];
+    // Mirrors inbound precedence: last_edited_at ?? created_at ?? now().
+    // Must be created_at (4242), NOT now() (999999).
+    expect(row.updated_at).toBe(new Date(4242).toISOString());
     sync.stop();
   });
 });

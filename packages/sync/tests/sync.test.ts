@@ -11,6 +11,7 @@ import { createStore, createMemoryAdapter } from '@ollie/store';
 import { deriveKey, randomSalt, bytesToBase64, encryptData } from '@ollie/crypto';
 import { createSyncClient } from '../src/index';
 import type { OllieAPI } from '@ollie/api';
+import { settleQuiet } from './_timers';
 
 interface CapturedUpsert {
   rows: unknown;
@@ -211,6 +212,117 @@ describe('sync · inbound', () => {
     await sync.start();
     await Promise.resolve();
     expect(store.get('cycle', 'items', [])).toEqual([{ local: true }]);
+    sync.stop();
+  });
+
+  it('#7: an inbound apply does NOT echo back out as a push (no ping-pong)', async () => {
+    const { api, captured } = makeFakeApi();
+    const enc = await encryptData(key, { items: [{ remote: true }] });
+    captured.remoteRows = [{
+      id: 'r1', user_id: 'u', module: 'cycle',
+      ciphertext: bytesToBase64(enc.ciphertext),
+      iv: bytesToBase64(enc.iv),
+      updated_at: new Date(5_000).toISOString(),
+      blob_version: 1,
+    }];
+
+    const sync = createSyncClient({ store, api, userId: 'u', authJwt: 'jwt', encryptionKey: key, modules: ['cycle'], now: () => 6000 });
+    await sync.start();
+    await vi.runOnlyPendingTimersAsync();
+    await Promise.resolve();
+    // The apply landed…
+    expect(store.get('cycle', 'items', [])).toEqual([{ remote: true }]);
+
+    // …but it must NOT have enqueued a push. Give the chain time to (wrongly)
+    // arm a debounce/drain, then assert nothing was upserted and the queue
+    // is empty.
+    await vi.runAllTimersAsync();
+    expect(captured.upserts.length).toBe(0);
+    expect(sync._inspect().queueDepth).toBe(0);
+    sync.stop();
+  });
+
+  it('#7: watermark is the applied REMOTE ts, not now() — same-row re-pull is LWW-skipped', async () => {
+    const { api, captured } = makeFakeApi();
+    const enc = await encryptData(key, { items: [{ remote: true }] });
+    captured.remoteRows = [{
+      id: 'r1', user_id: 'u', module: 'cycle',
+      ciphertext: bytesToBase64(enc.ciphertext),
+      iv: bytesToBase64(enc.iv),
+      updated_at: new Date(5_000).toISOString(),
+      blob_version: 1,
+    }];
+
+    const sync = createSyncClient({ store, api, userId: 'u', authJwt: 'jwt', encryptionKey: key, modules: ['cycle'], now: () => 6000 });
+    await sync.start();
+    await vi.runOnlyPendingTimersAsync();
+    await Promise.resolve();
+
+    // Watermark must equal the remote ts (5000), NOT nowFn() (6000). If it
+    // were clobbered with now(), a later remote row at 5500 would be wrongly
+    // LWW-skipped.
+    expect(store.get('shared', '_sync_local_ts.cycle', 0)).toBe(5000);
+    sync.stop();
+  });
+});
+
+describe('sync · #118 same-ms enqueue dedupe (monotonic seq, no NUL key)', () => {
+  it('two writes for one module in the same ms both survive the queue (newer kept)', async () => {
+    const { api, captured } = makeFakeApi();
+    const sync = createSyncClient({
+      store, api, userId: 'u', authJwt: 'jwt', encryptionKey: key,
+      modules: ['cycle'], now: () => 7000, isOnline: () => false,
+    });
+    await sync.start();
+    captured.upserts.length = 0;
+
+    // Offline: two distinct writes at the SAME injected clock value. The old
+    // (module, updated_at) dedupe key would collide here and could drop the
+    // newer entry. With monotonic seq, coalesce-by-module keeps exactly the
+    // latest write and the queue holds it.
+    store.set('cycle', 'items', [{ v: 1 }]);
+    await settleQuiet();
+    store.set('cycle', 'items', [{ v: 2 }]);
+    await settleQuiet();
+
+    expect(sync._inspect().queueDepth).toBe(1);
+    const q = store.get<Array<{ seq: number; module: string }>>('shared', '_sync_queue', []) ?? [];
+    expect(q.length).toBe(1);
+    expect(q[0].module).toBe('cycle');
+    // The surviving entry carries a monotonic seq id (audit #118).
+    expect(typeof q[0].seq).toBe('number');
+    sync.stop();
+  });
+
+  it('drain removes shipped entries by seq, leaving a same-ms newer write intact', async () => {
+    const { api, captured } = makeFakeApi();
+    // Pre-seed two queue entries for DIFFERENT modules with identical
+    // updated_at — the old string key `${module}\x00${updated_at}` is what
+    // made git treat index.ts as binary; seq removal sidesteps that entirely.
+    const ts = new Date(7000).toISOString();
+    store.set('shared', '_sync_queue', [
+      { seq: 1, module: 'cycle', row: { user_id: 'u', module: 'cycle', ciphertext: '\\x00', iv: '\\x00', updated_at: ts, blob_version: 1 } },
+      { seq: 2, module: 'work', row: { user_id: 'u', module: 'work', ciphertext: '\\x00', iv: '\\x00', updated_at: ts, blob_version: 1 } },
+    ]);
+
+    const sync = createSyncClient({
+      store, api, userId: 'u', authJwt: 'jwt', encryptionKey: key,
+      modules: ['cycle', 'work'], now: () => 7000,
+    });
+    // Drain via syncOut → drainOnce. Both entries ship; both removed by seq.
+    await sync.syncOut();
+    await vi.waitFor(() => {
+      expect(captured.upserts.length).toBeGreaterThan(0);
+    }, { timeout: 2000, interval: 20 });
+    await vi.runAllTimersAsync();
+    // After a clean ship, the pre-seeded entries are gone.
+    const q = store.get<unknown[]>('shared', '_sync_queue', []) ?? [];
+    // syncOut also pushes the (empty) modules, but with no store data those
+    // re-enqueue; the key assertion is the two PRE-SEEDED entries (seq 1,2)
+    // are no longer present.
+    const seqs = (q as Array<{ seq: number }>).map((e) => e.seq);
+    expect(seqs).not.toContain(1);
+    expect(seqs).not.toContain(2);
     sync.stop();
   });
 });
