@@ -37,7 +37,8 @@
  * Features:
  *   - 5-minute KV cache keyed by sha256(canonicalised body).
  *   - 10 req/min rate limit per user (proxy: header `x-user-id` or
- *     X-Forwarded-For; telemetry: verified Supabase user id).
+ *     X-Forwarded-For; telemetry: verified Supabase user id; /route/dump
+ *     + /route/:module: Clerk `sub` → x-user-id → IP, share the AI bucket).
  *   - anthropic-beta: prompt-caching-2024-07-31 is forwarded.
  */
 
@@ -392,16 +393,43 @@ export default {
     // Vectorize cache lookup, Groq Llama 3.3 70B classify (JSON mode),
     // parallel crisis check (all 3 lexicons), 3-tier confidence policy.
     // Auth: Clerk JWT REQUIRED (not gated). User namespaces the cache.
+    // Rate-limit: these are the most expensive AI-cost endpoints (Voyage embed
+    // + Groq/Gemini LLM per call). Without a limit a single account can drain
+    // the AI budget by spamming dumps. Share the AI bucket (10/min per user).
     if (url.pathname === '/route/dump') {
+      const dumpUserId = await resolveUserIdForRateLimit(req, env);
+      if (dumpUserId) {
+        const allowed = await checkRate(
+          env.AI_RATE_LIMITER,
+          env.RATE_KV,
+          `rl:ai:routedump:${dumpUserId}`,
+        );
+        if (!allowed) {
+          return withCors(origin, json({ error: 'rate_limited' }, 429));
+        }
+      }
       return withCors(origin, await handleDumpRoute(req, env, ctx));
     }
 
     // ── /route/:module — module-agnostic AI semantic routing (T2) ────────────
     // e.g. POST /route/grocery
     // Auth: JWT enforcement gated by T0_JWT_ENFORCED env var (T0 dependency).
+    // Rate-limit: same AI-cost class as /route/dump (Voyage + Groq per call);
+    // share the AI bucket (10/min per user) so one account cannot burn budget.
     const routeMatch = url.pathname.match(/^\/route\/([a-z_-]+)$/);
     if (routeMatch) {
       const module = routeMatch[1];
+      const routeUserId = await resolveUserIdForRateLimit(req, env);
+      if (routeUserId) {
+        const allowed = await checkRate(
+          env.AI_RATE_LIMITER,
+          env.RATE_KV,
+          `rl:ai:route:${module}:${routeUserId}`,
+        );
+        if (!allowed) {
+          return withCors(origin, json({ error: 'rate_limited' }, 429));
+        }
+      }
       return withCors(origin, await handleRoute(req, env, module));
     }
 
