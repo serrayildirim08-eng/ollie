@@ -40,7 +40,7 @@
  *     which depend on `patterns` selectors not present in this repo
  */
 
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import {
   daysSinceLast,
   isOverdue,
@@ -107,6 +107,16 @@ export function GroceryBox(): JSX.Element {
   // Bumps whenever the background shelf-life table finishes loading; lets
   // the pantry view recompute aging states without a poll cycle.
   const [shelfTableTick, setShelfTableTick] = useState(0);
+
+  // Ids whose auto-archive is in flight OR already done this session (audit
+  // #134). The auto-archive effect closes over the pantryItems snapshot, and a
+  // transient poll snapshot can still contain a row we already kicked off an
+  // archive() for before refresh() pulled the archived_at_ms update — without
+  // this guard the effect re-fires archive() for the same id, doubling the
+  // write. A row that genuinely comes back (unarchived) gets a NEW lifecycle
+  // before it could age out again, so never clearing here is safe for the
+  // session; the set resets naturally on remount.
+  const archivingRef = useRef<Set<string>>(new Set());
 
   const refresh = useCallback(async () => {
     const [p, a, s, pred] = await Promise.all([
@@ -212,9 +222,17 @@ export function GroceryBox(): JSX.Element {
     const now = Date.now();
     const toArchive = pantryItems.filter((it) => {
       const days = lookupDays(it.name);
-      return ageOf(it.addedAt, days, now) === 'should_archive';
+      // Skip ids already being archived this session (audit #134) so a
+      // transient poll snapshot can't re-fire archive() for the same row.
+      return (
+        ageOf(it.addedAt, days, now) === 'should_archive' &&
+        !archivingRef.current.has(it.id)
+      );
     });
     if (toArchive.length === 0) return;
+    // Mark in-flight BEFORE awaiting so a re-render mid-archive (poll tick,
+    // shelfTableTick) recomputes toArchive with these ids already excluded.
+    for (const it of toArchive) archivingRef.current.add(it.id);
     let cancelled = false;
     (async () => {
       for (const it of toArchive) {

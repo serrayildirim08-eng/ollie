@@ -53,12 +53,11 @@ export async function dispatchRouterOutput(
       // No native handler for a module the worker routed to. `stubHandlers` is
       // typed Record<Module,…> so this can't be a missing native handler — it
       // means the worker's module list drifted ahead of the native Module type
-      // (separate packages, kept in sync by hand; audit #22). Log LOUDLY so the
-      // drift is observable instead of a silent drop. The raw dump text is still
-      // archived by DumpScreen, so the content itself is not lost.
-      console.error(
-        `[dispatch] worker↔native module drift: no handler for "${fragment.module}" — fragment NOT routed (raw dump still archived)`,
-      );
+      // (separate packages, kept in sync by hand; audit #22). The raw dump text
+      // is still archived by DumpScreen, so the content itself is not lost, but
+      // the fragment is silently dropped — so we must SURFACE the drift, not bury
+      // it in a lone console.error nobody greps for (audit #130).
+      reportNoHandlerDrift(fragment.module);
       entries.push({
         fragment,
         result: { ok: false, note: `no handler for ${fragment.module}` },
@@ -161,6 +160,46 @@ export async function applyFragment(
     });
 
   return result;
+}
+
+/**
+ * Surface a worker↔native module drift (audit #130). A fragment routed to a
+ * module with no native handler is dropped; without telemetry that drop is
+ * invisible until a user notices their dump "did nothing". We:
+ *   1. log a structured `metric` line (same JSON convention as dump_roundtrip /
+ *      screen_render) so it's greppable in device logs + ingestible by the
+ *      telemetry tail, AND
+ *   2. drop a Sentry breadcrumb when a Sentry SDK is present on the runtime
+ *      global (guarded — apps/native ships Sentry via tunnel config at runtime,
+ *      so the SDK may or may not be installed; never throw if it isn't).
+ * Carries the module name only — never fragment text — to keep dump content out
+ * of telemetry. Exported for the dispatch test that pins this branch.
+ */
+export function reportNoHandlerDrift(module: string): void {
+  const ts = Date.now();
+  console.error(
+    JSON.stringify({
+      metric: 'dispatch_no_handler',
+      module,
+      ts,
+      detail: `worker↔native module drift: no handler for "${module}" — fragment NOT routed (raw dump still archived)`,
+    }),
+  );
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const g: any = globalThis;
+    const sentry = g?.Sentry;
+    if (sentry && typeof sentry.addBreadcrumb === 'function') {
+      sentry.addBreadcrumb({
+        category: 'dispatch',
+        level: 'error',
+        message: 'no_handler module drift',
+        data: { module, ts },
+      });
+    }
+  } catch {
+    /* telemetry is best-effort — never break dispatch on a breadcrumb failure */
+  }
 }
 
 function handlerErrorNote(module: Module, err: unknown): string {

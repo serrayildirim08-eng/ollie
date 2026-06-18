@@ -194,7 +194,7 @@ describe('sync · inbound', () => {
     const { api } = makeFakeApi();
     // Pre-set a local module + local edit ts in the future
     store.setModule('cycle', { items: [{ local: true }] });
-    store.set('shared', '_sync_local_ts.cycle', 10_000);
+    store.set('_sync', 'local_ts.cycle', 10_000);
 
     const enc = await encryptData(key, { items: [{ remote: true }] });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -261,7 +261,7 @@ describe('sync · inbound', () => {
     // Watermark must equal the remote ts (5000), NOT nowFn() (6000). If it
     // were clobbered with now(), a later remote row at 5500 would be wrongly
     // LWW-skipped.
-    expect(store.get('shared', '_sync_local_ts.cycle', 0)).toBe(5000);
+    expect(store.get('_sync', 'local_ts.cycle', 0)).toBe(5000);
     sync.stop();
   });
 });
@@ -286,7 +286,7 @@ describe('sync · #118 same-ms enqueue dedupe (monotonic seq, no NUL key)', () =
     await settleQuiet();
 
     expect(sync._inspect().queueDepth).toBe(1);
-    const q = store.get<Array<{ seq: number; module: string }>>('shared', '_sync_queue', []) ?? [];
+    const q = store.get<Array<{ seq: number; module: string }>>('_sync', 'queue', []) ?? [];
     expect(q.length).toBe(1);
     expect(q[0].module).toBe('cycle');
     // The surviving entry carries a monotonic seq id (audit #118).
@@ -300,7 +300,7 @@ describe('sync · #118 same-ms enqueue dedupe (monotonic seq, no NUL key)', () =
     // updated_at — the old string key `${module}\x00${updated_at}` is what
     // made git treat index.ts as binary; seq removal sidesteps that entirely.
     const ts = new Date(7000).toISOString();
-    store.set('shared', '_sync_queue', [
+    store.set('_sync', 'queue', [
       { seq: 1, module: 'cycle', row: { user_id: 'u', module: 'cycle', ciphertext: '\\x00', iv: '\\x00', updated_at: ts, blob_version: 1 } },
       { seq: 2, module: 'work', row: { user_id: 'u', module: 'work', ciphertext: '\\x00', iv: '\\x00', updated_at: ts, blob_version: 1 } },
     ]);
@@ -316,13 +316,60 @@ describe('sync · #118 same-ms enqueue dedupe (monotonic seq, no NUL key)', () =
     }, { timeout: 2000, interval: 20 });
     await vi.runAllTimersAsync();
     // After a clean ship, the pre-seeded entries are gone.
-    const q = store.get<unknown[]>('shared', '_sync_queue', []) ?? [];
+    const q = store.get<unknown[]>('_sync', 'queue', []) ?? [];
     // syncOut also pushes the (empty) modules, but with no store data those
     // re-enqueue; the key assertion is the two PRE-SEEDED entries (seq 1,2)
     // are no longer present.
     const seqs = (q as Array<{ seq: number }>).map((e) => e.seq);
     expect(seqs).not.toContain(1);
     expect(seqs).not.toContain(2);
+    sync.stop();
+  });
+});
+
+describe('sync · #120 bookkeeping namespacing + coalesced queueDepth', () => {
+  it('outbound queue + watermark live under the `_sync` module, NOT `shared`', async () => {
+    const { api } = makeFakeApi();
+    const sync = createSyncClient({
+      store, api, userId: 'u', authJwt: 'jwt', encryptionKey: key,
+      modules: ['cycle'], now: () => 7000, isOnline: () => false,
+    });
+    await sync.start();
+
+    // An offline edit enqueues a push AND records a local watermark.
+    store.set('cycle', 'items', [{ v: 1 }]);
+    await settleQuiet();
+
+    // Bookkeeping is namespaced under `_sync` (so cross-tab's `_` filter skips
+    // it) — and the old `shared` keys are NOT written.
+    const q = store.get<unknown[]>('_sync', 'queue', []) ?? [];
+    expect(q.length).toBe(1);
+    expect(store.get<number>('_sync', 'local_ts.cycle', 0)).toBe(7000);
+    expect(store.get<unknown[]>('shared', '_sync_queue', [])).toEqual([]);
+    expect(store.get<number>('shared', '_sync_local_ts.cycle', 0)).toBe(0);
+    sync.stop();
+  });
+
+  it('queueDepth reports COALESCED depth (distinct modules), not raw length', async () => {
+    const { api } = makeFakeApi();
+    const sync = createSyncClient({
+      store, api, userId: 'u', authJwt: 'jwt', encryptionKey: key,
+      modules: ['cycle', 'work'], now: () => 7000, isOnline: () => false,
+    });
+    await sync.start();
+
+    // Pre-seed a RAW queue with two entries for the SAME module + one for a
+    // second module. drainOnce() would coalesce the same-module pair into one
+    // upsert, so the honest "pending pushes" depth is 2, not 3.
+    const ts = new Date(7000).toISOString();
+    const mkRow = (m: string) => ({ user_id: 'u', module: m, ciphertext: '\\x00', iv: '\\x00', updated_at: ts, blob_version: 1 });
+    store.set('_sync', 'queue', [
+      { seq: 1, module: 'cycle', row: mkRow('cycle') },
+      { seq: 2, module: 'cycle', row: mkRow('cycle') },
+      { seq: 3, module: 'work', row: mkRow('work') },
+    ]);
+
+    expect(sync._inspect().queueDepth).toBe(2);
     sync.stop();
   });
 });

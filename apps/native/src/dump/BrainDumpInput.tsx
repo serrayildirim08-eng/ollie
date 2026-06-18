@@ -125,6 +125,14 @@ export function BrainDumpInput({
   // id; a failed/timed-out submit keeps it, which is exactly the retry case.
   const dumpIdRef = useRef<string | null>(null);
 
+  // Concurrent-submit guard (audit #33). The disabled button only blocks the
+  // pointer path; Cmd/Ctrl+Enter and the voice auto-submit call submit()
+  // directly, and `setState({kind:'loading'})` is async so re-entry inside the
+  // same tick can't see it. This ref flips SYNCHRONOUSLY the instant a submit
+  // begins and clears in `finally`, so a second trigger (double Cmd+Enter,
+  // button + key, voice + button) bails before dispatching a duplicate route.
+  const inFlightRef = useRef(false);
+
   const photo = usePhotoIntake();
 
   // Restore a persisted draft on mount (unless the textarea already has
@@ -164,7 +172,15 @@ export function BrainDumpInput({
     // No-op when both sides are empty. Spec: "If text is empty AND image is
     // empty, do nothing." We DON'T flip to error state — quietly bail.
     if (!hasText && !hasImage) return;
+    // Concurrent-submit guard (audit #33): bail if a submit is already in
+    // flight. The state check is the declarative belt; the ref is the
+    // synchronous braces — `setState` hasn't flushed yet when two triggers
+    // fire in the same tick, so the ref is what actually prevents the
+    // double-dispatch + double-ack from Cmd+Enter / voice / button races.
+    if (state.kind === 'loading' || inFlightRef.current) return;
+    inFlightRef.current = true;
     setState({ kind: 'loading' });
+    try {
 
     // Instant ack: fire the moment we know the dump is non-empty, BEFORE the
     // cloud round-trip + dispatch, so perceived latency is ~0. The parent shows
@@ -260,6 +276,15 @@ export function BrainDumpInput({
       photo.clear();
     }
 
+    // Recover the swallowed ack on a local crisis FALSE-POSITIVE (audit #88).
+    // We withheld the optimistic ack above because the offline matcher tripped,
+    // but the authoritative server verdict came back NOT a crisis — so the dump
+    // genuinely routed and deserves feedback. Without this the user sees zero
+    // response and reads the dump as dropped. Fire the ack now (the real-crisis
+    // branch below never reaches here for an acked dump because onCrisis hides
+    // the ack reactively).
+    if (localCrisis && !res.data.crisis && onSubmitted) onSubmitted();
+
     // Crisis short-circuit BEFORE module result — parent decides whether to
     // pause downstream side-effects, but in v1 both callbacks fire so a
     // simple parent can route the journal and the crisis screen at once.
@@ -267,7 +292,15 @@ export function BrainDumpInput({
       onCrisis(res.data.crisis, res.data);
     }
     if (onResult) onResult(res.data);
-  }, [text, photo, getBearer, onSubmitted, onResult, onCrisis, clearOnSuccess]);
+    } finally {
+      // Release the concurrent-submit guard (audit #33) on EVERY exit path —
+      // success, auth/bearer bail, route error, or a thrown exception. The
+      // dumpId is retired separately (only on success) so a failed attempt
+      // still reuses its id on retry; the in-flight flag is purely "is a
+      // submit running right now".
+      inFlightRef.current = false;
+    }
+  }, [text, state.kind, photo, getBearer, onSubmitted, onResult, onCrisis, clearOnSuccess]);
 
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {

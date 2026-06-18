@@ -86,6 +86,7 @@ vi.mock('./compressImage', () => ({
 }));
 
 import { BrainDumpInput } from './BrainDumpInput';
+import { detectCrisis } from '@ollie/logic/crisis';
 
 const KEY = 'pending_dump';
 let container: HTMLDivElement;
@@ -228,6 +229,71 @@ it('submits an image-only dump (no typed text)', async () => {
   const body = routeDump.mock.calls[0]![0] as Record<string, unknown>;
   expect(body.image).toEqual({ mime: 'image/jpeg', data: 'AAAA' });
   expect(body.text).toBeUndefined();
+});
+
+it('#33: a second submit while one is in flight does NOT double-dispatch', async () => {
+  // Hold the route open so the first submit stays "in flight" while we fire a
+  // second one (simulating a double Cmd+Enter / button + voice race that
+  // bypasses the disabled button).
+  let resolveRoute!: (v: unknown) => void;
+  routeDump.mockReturnValue(new Promise((res) => { resolveRoute = res; }));
+  await act(async () => {
+    root.render(
+      React.createElement(BrainDumpInput, { getBearer: () => 'tok', initialValue: 'buy milk' }),
+    );
+  });
+  await flush();
+  const btn = container.querySelector('[data-testid="send"]') as HTMLButtonElement;
+
+  // Fire twice back-to-back, both before the in-flight route resolves.
+  await act(async () => {
+    btn.click();
+    btn.click();
+  });
+  await flush();
+
+  // Only ONE route call should have been dispatched — the guard blocked the
+  // re-entry.
+  expect(routeDump).toHaveBeenCalledTimes(1);
+
+  // Release the route + let a NEW submit through to prove the guard cleared.
+  routeDump.mockResolvedValue({ ok: true, data: { fragments: [] } });
+  await act(async () => { resolveRoute({ ok: true, data: { fragments: [] } }); });
+  await flush();
+});
+
+it('#88: a local-crisis FALSE-POSITIVE that the server clears still fires the ack', async () => {
+  // This hyperbolic phrasing trips the offline ideation matcher ("want to die")
+  // but the authoritative server verdict (with full context) is NOT a crisis.
+  // The optimistic ack was withheld on submit; it must be recovered on result
+  // so the dump doesn't read as silently dropped.
+  const phrase = 'this traffic is so bad i want to die lol';
+  // Guard the test's own premise: the local matcher must actually trip here,
+  // otherwise the ack would fire normally on submit and the test proves nothing.
+  expect(detectCrisis(phrase).match).toBe(true);
+  routeDump.mockResolvedValue({ ok: true, data: { fragments: [], crisis: null } });
+  const onSubmitted = vi.fn();
+  const onCrisis = vi.fn();
+  await act(async () => {
+    root.render(
+      React.createElement(BrainDumpInput, {
+        getBearer: () => 'tok',
+        initialValue: phrase,
+        onSubmitted,
+        onCrisis,
+      }),
+    );
+  });
+  await flush();
+  const btn = container.querySelector('[data-testid="send"]') as HTMLButtonElement;
+  await act(async () => { btn.click(); });
+  await flush();
+
+  // The ack fires exactly once — recovered post-route (it was suppressed on
+  // submit because the local matcher tripped). Server said no crisis, so the
+  // crisis callback never fires.
+  expect(onSubmitted).toHaveBeenCalledTimes(1);
+  expect(onCrisis).not.toHaveBeenCalled();
 });
 
 it('submit no-ops when there is neither text nor image', async () => {

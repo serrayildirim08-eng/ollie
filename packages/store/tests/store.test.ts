@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   createStore,
   createMemoryAdapter,
+  installCrossTabSync,
   storeModuleKey,
   STORE_VERSION,
   runMigrations,
@@ -240,5 +241,41 @@ describe('@ollie/store · migrations', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     expect((globalThis as any).__ollie_migration_failed).toBeUndefined();
     errSpy.mockRestore();
+  });
+});
+
+describe('@ollie/store · cross-tab sync (#120)', () => {
+  // An adapter that exposes onChange so we can simulate a sibling tab writing
+  // a key + assert which modules get invalidated.
+  function makeOnChangeAdapter() {
+    let handler: ((c: { key: string; newValue: string | null }) => void) | null = null;
+    const adapter: StorageAdapter = {
+      ...createMemoryAdapter(),
+      onChange(h) {
+        handler = h as typeof handler;
+        return () => { handler = null; };
+      },
+    };
+    return { adapter, fire: (key: string) => handler?.({ key, newValue: '{}' }) };
+  }
+
+  it('invalidates a real module when a sibling tab writes its key', () => {
+    const { adapter, fire } = makeOnChangeAdapter();
+    const s = createStore(adapter);
+    const spy = vi.spyOn(s, '_invalidateModule');
+    installCrossTabSync(s, adapter);
+    fire(storeModuleKey('cycle'));
+    expect(spy).toHaveBeenCalledWith('cycle');
+  });
+
+  it('SKIPS `_`-prefixed internal modules (sync bookkeeping like `_sync`)', () => {
+    const { adapter, fire } = makeOnChangeAdapter();
+    const s = createStore(adapter);
+    const spy = vi.spyOn(s, '_invalidateModule');
+    installCrossTabSync(s, adapter);
+    // The `_sync` namespace (audit #120) now actually exercises the dead `_`
+    // filter — a cross-tab watermark/queue write must NOT invalidate anything.
+    fire(storeModuleKey('_sync'));
+    expect(spy).not.toHaveBeenCalled();
   });
 });

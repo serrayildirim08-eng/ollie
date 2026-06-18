@@ -99,6 +99,21 @@ const DEFAULT_MODULES = [
   'shared',
 ];
 
+/**
+ * Top-level store module that holds SYNC-INTERNAL bookkeeping (audit #120):
+ * the outbound queue (`queue`) + per-module LWW watermarks (`local_ts.<mod>`).
+ * These were previously keys under the user-facing `shared` module, where two
+ * problems compounded:
+ *   1. a cross-tab write to a watermark invalidated the WHOLE `shared` module
+ *      (the cross-tab filter skips `_`-prefixed MODULES, but these were keys,
+ *      not a module — so the `_` filter was dead), and
+ *   2. it muddied `shared` with engine state that isn't user data.
+ * Namespacing them under a `_`-prefixed module makes the cross-tab `_` filter
+ * correctly skip them. NOTE: user-facing `settings.sync` stays under `shared`
+ * — it is genuine config, not bookkeeping.
+ */
+const SYNC_NS = '_sync';
+
 export interface SyncClient {
   /** Subscribe + drain on boot. Returns immediately; pull happens async. */
   start(): Promise<void>;
@@ -143,10 +158,19 @@ export function createSyncClient(initialDeps: SyncDeps): SyncClient {
 
   // ── outbound queue (persisted to store so offline writes survive reload)
   function readQueue(): QueueEntry[] {
-    return deps.store.get<QueueEntry[]>('shared', '_sync_queue', []) ?? [];
+    return deps.store.get<QueueEntry[]>(SYNC_NS, 'queue', []) ?? [];
   }
   function writeQueue(q: QueueEntry[]): void {
-    deps.store.set('shared', '_sync_queue', q.slice(-QUEUE_CAP));
+    deps.store.set(SYNC_NS, 'queue', q.slice(-QUEUE_CAP));
+  }
+  // Number of DISTINCT modules in the queue — i.e. the count that will
+  // actually be shipped after drainOnce()'s coalesce step (audit #120). The
+  // raw queue can transiently hold >1 entry per module between enqueues, so
+  // readQueue().length over-reports what's pending.
+  function coalescedQueueDepth(): number {
+    const mods = new Set<string>();
+    for (const e of readQueue()) mods.add(e.module);
+    return mods.size;
   }
   function nextSeq(): number {
     // Seed past any seq persisted from a prior session before issuing.
@@ -277,7 +301,7 @@ export function createSyncClient(initialDeps: SyncDeps): SyncClient {
     for (const row of r.data ?? []) {
       try {
         // LWW: skip remote if our local module was edited after row.updated_at.
-        const localTs = deps.store.get<number>('shared', `_sync_local_ts.${row.module}`, 0) ?? 0;
+        const localTs = deps.store.get<number>(SYNC_NS, `local_ts.${row.module}`, 0) ?? 0;
         const remoteTs = Date.parse(row.updated_at);
         if (Number.isFinite(remoteTs) && remoteTs <= localTs) continue;
 
@@ -295,7 +319,7 @@ export function createSyncClient(initialDeps: SyncDeps): SyncClient {
         }
         // Watermark = the applied REMOTE ts (audit #7), not nowFn(). Set after
         // the apply so a same-module re-pull is LWW-skipped correctly.
-        deps.store.set('shared', `_sync_local_ts.${row.module}`, remoteTs);
+        deps.store.set(SYNC_NS, `local_ts.${row.module}`, remoteTs);
       } catch (err) {
         console.warn('[sync] decrypt failed for module', row.module, err);
       }
@@ -324,7 +348,7 @@ export function createSyncClient(initialDeps: SyncDeps): SyncClient {
         // (ping-pong) and clobbers the LWW watermark with nowFn().
         if (applyingModules.has(m)) return;
         // Record local edit ts before debounce — drives LWW.
-        deps.store.set('shared', `_sync_local_ts.${m}`, nowFn());
+        deps.store.set(SYNC_NS, `local_ts.${m}`, nowFn());
         debouncedPush(m);
       });
       unsubs.push(unsub);
@@ -358,7 +382,7 @@ export function createSyncClient(initialDeps: SyncDeps): SyncClient {
     syncIn,
     setAuthJwt(jwt) { deps.authJwt = jwt; },
     setEncryptionKey(key) { deps.encryptionKey = key; },
-    _inspect() { return { queueDepth: readQueue().length, running }; },
+    _inspect() { return { queueDepth: coalescedQueueDepth(), running }; },
   };
 }
 

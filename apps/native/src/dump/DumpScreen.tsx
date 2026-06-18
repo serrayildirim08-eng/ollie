@@ -11,7 +11,7 @@
  * is short-circuited (no module updates) and a quiet banner surfaces.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '@clerk/clerk-react';
 import { Stack } from '../layout';
 import { Text } from '../ui';
@@ -40,9 +40,6 @@ const SMCP_STYLE: React.CSSProperties = {
 // Bumped a hair so the cleanup unmount lands just after the fade-out finishes
 // and the user never sees a hard cut.
 const ACK_FADE_MS = 2500;
-// Force-remount each ack so the CSS animation restarts on every dump even
-// when the same Ack node would otherwise persist across submits.
-let _ackTick = 0;
 
 /** One pending confirmation card — keyed by fragment index in the last dispatch. */
 interface PendingConfirm {
@@ -71,6 +68,12 @@ function buildRouteLabel(entry: DispatchEntry): string {
 export function DumpScreen(): JSX.Element {
   const { getToken } = useAuth();
   const [ackKey, setAckKey] = useState<number | null>(null);
+  // Monotonic tick that forces the <Ack> to remount so its CSS animation
+  // restarts on every dump (audit #127). Component-local useRef, NOT a
+  // module-scope `let`: the old global was shared across every DumpScreen
+  // instance and never reset, so it leaked across HMR reloads + would collide
+  // if two screens ever mounted.
+  const ackTickRef = useRef(0);
   const [crisis, setCrisis] = useState<CrisisSignal | null>(null);
   const [pendingConfirms, setPendingConfirms] = useState<PendingConfirm[]>([]);
   // Partner is deferred out of v1 (audit #10) — its home ambient card only
@@ -104,8 +107,8 @@ export function DumpScreen(): JSX.Element {
 
   // Force-remount the Ack so its CSS animation restarts on every fire.
   const fireAck = useCallback(() => {
-    _ackTick += 1;
-    setAckKey(_ackTick);
+    ackTickRef.current += 1;
+    setAckKey(ackTickRef.current);
   }, []);
 
   // Instant ack: fired SYNCHRONOUSLY by BrainDumpInput the moment a non-empty
@@ -149,8 +152,17 @@ export function DumpScreen(): JSX.Element {
     // see it (audit §MISSING: native discarded dump text). We archive only
     // non-crisis dumps — a crisis fragment short-circuits dispatch and must not
     // be re-surfaced later. Best-effort: archive.record swallows its own errors.
+    //
+    // AWAIT, not fire-and-forget (audit #86): dispatchRouterOutput's post-write
+    // sweep calls the dump bridge's syncToStore, which reads dumpArchive.list()
+    // to mirror dump.items / journal.entries. If the archive write is still
+    // floating when that read runs, THIS dump is missing from the mirror for a
+    // whole cycle (the resurfacer + finance doom-buying + goals detectors don't
+    // see it until the NEXT dump triggers another sweep). Awaiting first
+    // guarantees the row is on disk before the sweep reads it. record() never
+    // throws, so this can't break the dump flow.
     if (!output.crisis) {
-      void dumpArchive.record({
+      await dumpArchive.record({
         id: output.dumpId,
         text: output.originalDump,
         modules: Array.from(new Set(output.fragments.map((f) => f.module))),
@@ -186,6 +198,12 @@ export function DumpScreen(): JSX.Element {
           routeLabel: buildRouteLabel(e),
           fromPhoto,
           onKeep: async () => {
+            // Dismiss FIRST, synchronously (audit #53): removing the card from
+            // pendingConfirms unmounts its keep/undo buttons in this same React
+            // commit, so a fast double-tap can't fire applyFragment twice (which
+            // would write the grey-zone fragment to the module repo twice). The
+            // write then runs after the card is already gone.
+            dismissConfirm(id);
             if (isDraft) {
               try {
                 await applyFragment(e.fragment);
@@ -193,9 +211,11 @@ export function DumpScreen(): JSX.Element {
                 console.error('[dump] draft apply failed', err);
               }
             }
-            dismissConfirm(id);
           },
           onUndo: async () => {
+            // Dismiss FIRST (audit #53): same double-tap guard as onKeep — undo
+            // dismisses synchronously so the row-removal can't run twice.
+            dismissConfirm(id);
             // draft → nothing was written; just drop it. legacy → remove row.
             if (!isDraft && realUndo) {
               try {
@@ -204,7 +224,6 @@ export function DumpScreen(): JSX.Element {
                 console.error('[dump] undo failed', err);
               }
             }
-            dismissConfirm(id);
           },
         };
       });

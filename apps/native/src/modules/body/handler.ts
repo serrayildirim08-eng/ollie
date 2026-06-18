@@ -231,10 +231,15 @@ export const bodyHandler: ModuleHandler<'body'> = {
         // price→finance pattern. Primary write already succeeded above; this
         // mirror is best-effort.
         const pet = (p as { pet?: string | null }).pet;
+        // Capture the mirrored pets row id (audit #91) so undo removes BOTH
+        // rows. Previously undo only removed the body event, leaving an orphan
+        // pets care row that the pets Box would keep showing forever.
+        let petRowId: string | null = null;
         if (typeof pet === 'string' && pet.trim().length > 0) {
           try {
             await migratePets();
-            await petsEvents.logCare({ petName: pet, what: label });
+            const petRow = await petsEvents.logCare({ petName: pet, what: label });
+            petRowId = petRow.id;
           } catch (err) {
             console.error('[body] pets mirror failed', err);
           }
@@ -245,7 +250,19 @@ export const bodyHandler: ModuleHandler<'body'> = {
           ok: true,
           note: `logged movement: ${label}${tail}`,
           deepLink: '/box/body',
-          undo: undoFor(row.id),
+          // Undo removes the body event AND the mirrored pets row (if one was
+          // written). Pets removal is best-effort so a stale pets id can't
+          // block the primary undo.
+          undo: async () => {
+            await events.remove(row.id);
+            if (petRowId !== null) {
+              try {
+                await petsEvents.remove(petRowId);
+              } catch (err) {
+                console.error('[body] pets mirror undo failed', err);
+              }
+            }
+          },
         };
       }
 
