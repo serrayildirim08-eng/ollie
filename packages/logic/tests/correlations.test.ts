@@ -291,6 +291,28 @@ describe('correlateLutealAndSpending', () => {
     }
   });
 
+  // #107 regression: unlogged days must NOT be injected as $0 spend. Sample
+  // size should equal the number of days with an actual logged transaction
+  // inside luteal, not the full day-span (which previously padded with zeros,
+  // biasing Spearman and inflating n).
+  it('counts only logged-transaction days, not structural zeros', () => {
+    const cycleStart = NOW - 28 * DAY_MS;
+    const cycles = [cycle(cycleStart, 28, 5)];
+    // Only 4 logged txns across the luteal window; the remaining luteal days
+    // have NO record at all.
+    const loggedDays = [16, 19, 22, 25];
+    const txns: FinanceRecord[] = loggedDays.map((i) =>
+      txn(dayKey(cycleStart + i * DAY_MS + 12 * 3600_000), 10 + i),
+    );
+    const r = correlateLutealAndSpending(cycles, txns, {
+      now: NOW,
+      lookbackDays: 90,
+      minSampleSize: 2,
+    });
+    // Old code would have produced ~13 (every luteal day, padded with 0).
+    expect(r.sampleSize).toBe(loggedDays.length);
+  });
+
   it('respects sample size gate with tight lookback', () => {
     // With lookbackDays=3, we only inspect 3 days; any cycle starting
     // 28d ago has those 3 days inside luteal but n < 14 → no detection.

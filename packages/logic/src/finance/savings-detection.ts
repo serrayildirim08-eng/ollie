@@ -88,9 +88,29 @@ function extractAmount(text: string): number | null {
   return null;
 }
 
-let _idCounter = 0;
-function nextId(): string {
-  return `st-${Date.now()}-${++_idCounter}`;
+/**
+ * Deterministic, purity-preserving id for a detected transfer.
+ *
+ * The previous implementation used `Date.now()` plus a module-level counter,
+ * which made `detectSavingsTransfers` non-pure (same input → different ids on
+ * each call / across runs) and order-coupled via shared mutable state. The id
+ * is now a stable hash of the fields that define the transfer, so identical
+ * inputs always yield identical ids.
+ */
+function transferId(parts: {
+  record_id: string;
+  paired_record_id: string | null;
+  date: string;
+  amount: number;
+}): string {
+  const key = `${parts.record_id}|${parts.paired_record_id ?? ''}|${parts.date}|${parts.amount}`;
+  // 32-bit FNV-1a — deterministic, no I/O, collision-resistant enough for ids.
+  let h = 0x811c9dc5;
+  for (let i = 0; i < key.length; i++) {
+    h ^= key.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return `st-${(h >>> 0).toString(36)}`;
 }
 
 // ─── detectSavingsTransfers ───────────────────────────────────────────────
@@ -134,7 +154,12 @@ export function detectSavingsTransfers(transactions: FinanceRecord[]): SavingsTr
       const memo = out.notes ?? out.merchant ?? null;
       const kw = SAVINGS_KEYWORDS.find((k) => k.re.test(memo ?? ''))?.keyword ?? null;
       results.push({
-        id: nextId(),
+        id: transferId({
+          record_id: out.id ?? '',
+          paired_record_id: match.id ?? null,
+          date: out.event_date,
+          amount: out.amount as number,
+        }),
         record_id: out.id ?? '',
         paired_record_id: match.id ?? null,
         amount: out.amount as number,
@@ -160,7 +185,12 @@ export function detectSavingsTransfers(transactions: FinanceRecord[]): SavingsTr
     if (confidence === 'low') continue;
 
     results.push({
-      id: nextId(),
+      id: transferId({
+        record_id: out.id ?? '',
+        paired_record_id: null,
+        date: out.event_date,
+        amount: out.amount as number,
+      }),
       record_id: out.id ?? '',
       paired_record_id: null,
       amount: out.amount as number,

@@ -11,7 +11,7 @@
  */
 
 import type { Prior, Posterior, ChangePointResult, RobustStatsResult } from './types';
-import { DEFAULT_PRIOR, EWMA_ALPHA, MIN_SIGMA_USER, ROBUST_SD_THRESHOLD, MAD_TO_SD } from './constants';
+import { DEFAULT_PRIOR, EWMA_ALPHA, MIN_SIGMA_USER, MIN_SIGMA_CHANGEPOINT, ROBUST_SD_THRESHOLD, MAD_TO_SD } from './constants';
 import { mean, sampleSd, median } from './math';
 
 export function posteriorCycleLength(
@@ -59,7 +59,12 @@ export function detectChangePoint(cycleLengths: readonly number[]): ChangePointR
     const m = mean([...arr]);
     return arr.reduce((acc, x) => acc + (x - m) ** 2, 0) / arr.length;
   };
-  const pooledSd = Math.sqrt((variance(recent) + variance(older)) / 2);
+  const rawPooledSd = Math.sqrt((variance(recent) + variance(older)) / 2);
+  // Floor the pooled sd: when both windows have zero variance (e.g. perfectly
+  // regular cycles) rawPooledSd === 0, so `delta > 2*0` fires on ANY nonzero
+  // shift — a 1-day change reads as a change-point. A measurement-noise floor
+  // keeps the test honest under degenerate (zero-variance) inputs.
+  const pooledSd = Math.max(rawPooledSd, MIN_SIGMA_CHANGEPOINT);
   const detected = delta > 2 * pooledSd;
   return { detected, cutoff: detected ? cycleLengths.length - 6 : 0, delta, pooledSd };
 }

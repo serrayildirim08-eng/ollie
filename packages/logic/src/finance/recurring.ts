@@ -487,8 +487,13 @@ export function computeMonthlyOutflow(
   now: number,
 ): MonthlyFlowResult {
   if (!Array.isArray(records)) return { outflow: 0, inflow: 0, count: 0, net: 0 };
-  const target = new Date(now);
-  target.setMonth(target.getMonth() + (offset || 0));
+  // Build the target month from (year, month+offset, day=1) rather than
+  // mutating the current day-of-month: setMonth() on a 29-31st date overflows
+  // into the following month for short targets (e.g. now=Mar 31, offset=-1 →
+  // Feb 31 → Mar 3), so the intended month is skipped and the current month is
+  // counted twice in the MoM baseline. Anchoring to day 1 is overflow-safe.
+  const nowDate = new Date(now);
+  const target = new Date(nowDate.getFullYear(), nowDate.getMonth() + (offset || 0), 1);
   const ym =
     target.getFullYear() + '-' + String(target.getMonth() + 1).padStart(2, '0');
   let out = 0;

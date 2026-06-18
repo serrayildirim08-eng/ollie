@@ -25,6 +25,7 @@ import {
   detectPatterns,
   tagResearchLoops,
   monthOverMonthDelta,
+  computeMonthlyOutflow,
   DAY_MS,
   isoDate,
   detectSavingsTransfers,
@@ -368,6 +369,38 @@ describe('monthOverMonthDelta', () => {
     const delta = monthOverMonthDelta(records, 3, now);
     expect(delta).not.toBeNull();
     expect(delta?.direction).toBe('up');
+  });
+
+  // #52 regression: on the 29-31st, setMonth() overflowed short target months
+  // (e.g. now=Mar 31, offset=-1 → Feb 31 → Mar 3) so February was skipped and
+  // March was counted as both the current AND a baseline month.
+  it('does not skip February when now is the 31st (overflow-safe month math)', () => {
+    const now = new Date(2026, 2, 31, 12, 0, 0).getTime(); // local Mar 31 2026
+    // offset 0 = March; offset -1 = February. February must resolve to Feb, not
+    // roll forward into March.
+    const feb = computeMonthlyOutflow(
+      [rec('2026-02-15', 200, 'out', 'shop')],
+      -1,
+      now,
+    );
+    expect(feb.count).toBe(1);
+    expect(feb.outflow).toBe(200);
+  });
+
+  it('current vs prior month do not double-count on a 31st (MoM baseline)', () => {
+    const now = new Date(2026, 2, 31, 12, 0, 0).getTime(); // Mar 31 2026
+    const records: FinanceRecord[] = [
+      rec('2026-03-10', 900, 'out', 'shop'), // current month
+      rec('2026-02-15', 300, 'out', 'shop'),
+      rec('2026-01-15', 300, 'out', 'shop'),
+      rec('2025-12-15', 300, 'out', 'shop'),
+    ];
+    const mar = computeMonthlyOutflow(records, 0, now);
+    const feb = computeMonthlyOutflow(records, -1, now);
+    expect(mar.outflow).toBe(900);
+    expect(feb.outflow).toBe(300); // NOT 900 (no current-month bleed-through)
+    const delta = monthOverMonthDelta(records, 3, now);
+    expect(delta?.baseline).toBe(300);
   });
 });
 
@@ -871,6 +904,24 @@ describe('detectSavingsTransfers', () => {
     expect(match).toBeDefined();
     expect(match?.confidence).toBe('high');
     expect(match?.amount).toBe(500);
+  });
+
+  // #144 regression: ids must be derived deterministically from inputs, not
+  // from Date.now() + a module counter. Same input → identical ids on repeat
+  // calls (purity), and ids do not depend on call order / wall clock.
+  it('produces deterministic, input-derived transfer ids (purity)', () => {
+    const out1 = rec('2026-03-01', 500, 'out', undefined, { id: 'out-1', notes: 'transfer to savings' });
+    const in1  = rec('2026-03-01', 500, 'in',  undefined, { id: 'in-1', notes: 'from checking' });
+    const a = detectSavingsTransfers([out1, in1]);
+    const b = detectSavingsTransfers([out1, in1]);
+    expect(a.map((t) => t.id)).toEqual(b.map((t) => t.id));
+    // and stable across a separate single-sided detection
+    const single = rec('2026-03-05', 300, 'out', undefined, { id: 'out-2', notes: 'to high-yield savings' });
+    const c = detectSavingsTransfers([single]);
+    const dRun = detectSavingsTransfers([single]);
+    expect(c[0].id).toBe(dRun[0].id);
+    // distinct transfers get distinct ids
+    expect(a[0].id).not.toBe(c[0].id);
   });
 
   it('detects medium-confidence single-sided transfer to high-yield', () => {

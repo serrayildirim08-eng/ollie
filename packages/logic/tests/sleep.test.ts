@@ -237,6 +237,28 @@ describe('computeSleepDebt', () => {
     const d = computeSleepDebt(recs, 8);
     expect(d.totalDeficitHours).toBeCloseTo(10, 1);
   });
+
+  // #145 regression: the window cutoff must be a day boundary, not now-W*DAY_MS.
+  // Otherwise whether the oldest night is included depends on the time-of-day
+  // of `now` (off-by-one). With W=14 and a night exactly 14 days before now's
+  // local day, the count must be identical regardless of now's clock time.
+  it('window membership is independent of now-time-of-day (day-boundary cutoff)', () => {
+    const W = 14;
+    // 15 consecutive nights ending on Jan 20; night 14 days before Jan 20 is
+    // Jan 06 — it must be the boundary-included night.
+    const recs: SleepRecord[] = [];
+    for (let dom = 6; dom <= 20; dom++) {
+      recs.push(makeRecord(`2026-01-${String(dom).padStart(2, '0')}`, 6 * 60));
+    }
+    const nowMorning = new Date(2026, 0, 20, 1, 0, 0).getTime();   // 01:00 local
+    const nowEvening = new Date(2026, 0, 20, 23, 0, 0).getTime();  // 23:00 local
+    const dM = computeSleepDebt(recs, 8, W, nowMorning);
+    const dE = computeSleepDebt(recs, 8, W, nowEvening);
+    expect(dM.nightsCounted).toBe(dE.nightsCounted);
+    expect(dM.totalDeficitHours).toBe(dE.totalDeficitHours);
+    // Jan 06..Jan 20 inclusive = 15 nights within the [now-14d-day, now] window.
+    expect(dM.nightsCounted).toBe(15);
+  });
 });
 
 // ─── pattern detectors ───────────────────────────────────────────────

@@ -740,6 +740,56 @@ describe('detectFrictionSignatureLegacy', () => {
     ];
     expect(detectFrictionSignatureLegacy({ now: NOW, habits })).toBeNull();
   });
+
+  // #58 regression: multiple completions of one habit on the same day must not
+  // push a per-weekday rate above 1, and the valley must never be a weekday
+  // with zero observed days. We build a window dominated by one weekday, then
+  // double-log that weekday for both habits.
+  it('per-weekday rate stays <= 1 even with multiple same-day completions', () => {
+    // Find the weekday at "5 days ago" and double-log it; everything else once.
+    const heavyDow = new Date(ts(5)).getDay();
+    const h1: Habit = { id: 'h1', name: 'h1', completions: [] };
+    const h2: Habit = { id: 'h2', name: 'h2', completions: [] };
+    for (let d = 1; d <= 84; d++) {
+      const dow = new Date(ts(d)).getDay();
+      const reps = dow === heavyDow ? 3 : 1; // triple-log the heavy weekday
+      for (let k = 0; k < reps; k++) {
+        h1.completions!.push({ ts: ts(d), habit_id: 'h1' });
+        h2.completions!.push({ ts: ts(d), habit_id: 'h2' });
+      }
+    }
+    const result = detectFrictionSignatureLegacy({ now: NOW, habits: [h1, h2] });
+    // Even though the heavy weekday is triple-logged, dedupe to one-per-day
+    // keeps every rate a true fraction; an even spread → no pattern (rate==1
+    // everywhere, spread 0). The key assertion is it does NOT crash / over-count.
+    expect(result).toBeNull();
+  });
+
+  it('valley never resolves to a weekday with no observed days', () => {
+    // Tiny window (8 days) so several weekdays have dowDays===0. One real
+    // weekday lags. The valley must be a covered weekday, not a 0-day one.
+    const NAMES = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+    const coveredDows = new Set<string>();
+    for (let d = 0; d <= 8; d++) coveredDows.add(NAMES[new Date(ts(d)).getDay()]);
+    // Lag one specific covered weekday (the one at "3 days ago").
+    const lagDow = new Date(ts(3)).getDay();
+    const mk = (id: string): Habit => {
+      const h: Habit = { id, name: id, completions: [] };
+      for (let d = 1; d <= 8; d++) {
+        if (new Date(ts(d)).getDay() === lagDow) continue; // skip lagging weekday
+        h.completions!.push({ ts: ts(d), habit_id: id });
+      }
+      return h;
+    };
+    const result = detectFrictionSignatureLegacy(
+      { now: NOW, habits: [mk('h1'), mk('h2')] },
+      { windowDays: 8 },
+    );
+    if (result) {
+      expect(coveredDows.has(result.valley as string)).toBe(true);
+      expect(coveredDows.has(result.peak as string)).toBe(true);
+    }
+  });
 });
 
 // ─── detectSleepHabitCouplingLegacy ───────────────────────────────────

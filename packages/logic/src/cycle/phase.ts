@@ -48,6 +48,13 @@ export function computePhaseForDate(
     .filter((d): d is number => typeof d === 'number');
   const menstrualEnd = bleeds.length ? Math.round(mean(bleeds)) : 5;
 
+  // Upper bound: once we're well past the expected cycle length the last
+  // logged start is stale (a missed/unlogged period), so we can no longer say
+  // which phase the user is in. Without this, a single old start makes every
+  // future date read as 'luteal' forever. Margin allows for normal late cycles.
+  const margin = 7;
+  if (day > avgCycle + margin) return 'unknown';
+
   if (day <= menstrualEnd) return 'menstrual';
   const fertileStart = avgCycle - 18;
   const fertileEnd = avgCycle - 13;

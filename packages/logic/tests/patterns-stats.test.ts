@@ -61,4 +61,31 @@ describe('patterns/stats · mulberry32 + bootstrapCI', () => {
     expect(Number.isFinite(hi)).toBe(true);
     expect(lo).toBeLessThan(hi);
   });
+
+  // #21 regression: the default RNG seed must NOT be coupled to `iters`. With a
+  // seed of mulberry32(iters), the resample stream changed whenever iters did,
+  // so a CI shifted for reasons unrelated to the data. With a fixed default
+  // seed, the first min(iters) resamples are shared, so the smaller-iters CI
+  // bounds appear within the larger run's sorted stat distribution.
+  it('default-seed resample stream is decoupled from iters', () => {
+    const xs = [3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5, 8];
+    const ys = [2, 7, 1, 8, 2, 8, 1, 8, 2, 8, 4, 5];
+    const meanDiff = (a: number[], b: number[]): number => {
+      const mean = (arr: number[]) => arr.reduce((s, x) => s + x, 0) / arr.length;
+      return mean(b) - mean(a);
+    };
+    // Same default seed → first 200 resamples identical regardless of total
+    // iters, so the first drawn statistic matches across runs.
+    const firstStat = (iters: number): number => {
+      let captured = NaN;
+      const wrappedStat = (a: number[], b: number[]): number => {
+        const v = meanDiff(a, b);
+        if (Number.isNaN(captured)) captured = v;
+        return v;
+      };
+      bootstrapCI(xs, ys, wrappedStat, iters, 0.1); // default rng
+      return captured;
+    };
+    expect(firstStat(200)).toBe(firstStat(2000));
+  });
 });

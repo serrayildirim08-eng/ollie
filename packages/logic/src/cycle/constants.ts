@@ -25,6 +25,13 @@ export const EWMA_ALPHA = 0.85;
 /** Minimum within-user sigma even when sample sd is tiny — prevents collapse. */
 export const MIN_SIGMA_USER = 2.0;
 
+/**
+ * Measurement-noise floor for the change-point pooled sd (days). When both
+ * comparison windows have zero variance the pooled sd is 0 and `delta > 2*sd`
+ * would fire on any nonzero shift; this floor requires a meaningful jump.
+ */
+export const MIN_SIGMA_CHANGEPOINT = 1.0;
+
 /** Standard luteal phase length, in days. */
 export const LUTEAL_DAYS = 14;
 

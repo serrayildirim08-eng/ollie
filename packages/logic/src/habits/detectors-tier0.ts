@@ -517,23 +517,44 @@ export function detectFrictionSignatureLegacy(
   for (let t = windowStart; t <= now; t += DAY_MS) {
     dowDays[new Date(t).getDay()]++;
   }
-  for (const h of arr) {
-    const c = h.completions ?? [];
+  // Count at most one completion per habit per local day, so the per-weekday
+  // rate is a true fraction in [0,1]. Without the dedupe a habit logged twice
+  // on one day inflates dowCount and the rate can exceed 1.
+  const seenHabitDay = new Set<string>();
+  for (let hi = 0; hi < arr.length; hi++) {
+    const c = arr[hi].completions ?? [];
     for (const e of c) {
       if (!e || typeof e.ts !== 'number' || e.ts < windowStart || e.ts > now) continue;
-      dowCount[new Date(e.ts).getDay()]++;
+      const d = new Date(e.ts);
+      const dow = d.getDay();
+      const dayKey = `${hi}|${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+      if (seenHabitDay.has(dayKey)) continue;
+      seenHabitDay.add(dayKey);
+      dowCount[dow]++;
     }
   }
 
+  // Only weekdays that actually occurred in the window have a defined rate.
+  // Resolving peak/valley over the full 0-padded array can otherwise pick a
+  // zero-data weekday as the "valley" (rate 0 by construction, not by data).
+  const covered: number[] = [];
+  for (let i = 0; i < 7; i++) if (dowDays[i] > 0) covered.push(i);
+  if (covered.length < 2) return null;
   const dowRate = dowCount.map((c, i) => dowDays[i] === 0 ? 0 : c / (dowDays[i] * arr.length));
-  const max = Math.max(...dowRate);
-  const min = Math.min(...dowRate.filter((_, i) => dowDays[i] > 0));
+  let peakIdx = covered[0];
+  let valleyIdx = covered[0];
+  for (const i of covered) {
+    if (dowRate[i] > dowRate[peakIdx]) peakIdx = i;
+    if (dowRate[i] < dowRate[valleyIdx]) valleyIdx = i;
+  }
+  const max = dowRate[peakIdx];
+  const min = dowRate[valleyIdx];
   const spread = max - min;
   if (spread < minSpread) return null;
 
   const NAMES = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
-  const peakDow = NAMES[dowRate.indexOf(max)];
-  const valleyDow = NAMES[dowRate.indexOf(min)];
+  const peakDow = NAMES[peakIdx];
+  const valleyDow = NAMES[valleyIdx];
   return {
     pattern: 'friction-signature',
     confidence: spread >= 0.6 ? 'high' : 'medium',
