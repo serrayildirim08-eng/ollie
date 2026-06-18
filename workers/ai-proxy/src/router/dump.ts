@@ -103,9 +103,22 @@ export interface DumpRouteEnv {
   SUPABASE_SERVICE_ROLE?: string;
   ENVELOPE_KEK?: string;
   SERVER_APPLY_ENABLED?: string;
+  /** KV namespace used to dedupe retried dumps (idempotency). A request that
+   *  succeeded server-side but timed out client-side is retried by the client
+   *  with the SAME dumpId; the stored RouterOutput is replayed verbatim so the
+   *  fragments are not routed + cache-written a second time. Optional. */
+  CACHE_KV?: KVNamespace;
 }
 
 const STAGING_TEST_USER_ID = 'staging-test-user';
+
+/** TTL for the idempotency record. Long enough to cover any plausible client
+ *  retry window (network stall + user re-tap) without growing KV unbounded. */
+const IDEMPOTENCY_TTL_SEC = 60 * 60; // 1 hour
+
+function idempotencyKey(userId: string, dumpId: string): string {
+  return `dump:idem:${userId}:${dumpId}`;
+}
 
 export async function handleDumpRoute(
   req: Request,
@@ -181,6 +194,29 @@ export async function handleDumpRoute(
     return json({ error: 'image_too_large' }, 413);
   }
 
+  const dumpId = body.dumpId ?? crypto.randomUUID();
+  const locale = body.locale ?? 'tr';
+
+  // Idempotency replay — a dump that succeeded server-side but timed out
+  // client-side is retried with the SAME dumpId. If we've already produced a
+  // RouterOutput for this (userId, dumpId), replay it verbatim WITHOUT
+  // re-running vision, classify, or any cache write. This is the harness-side
+  // dedupe: same op twice → run once, return the stored result. Best-effort —
+  // a KV read failure (or no binding) just falls through to a normal route.
+  if (env.CACHE_KV && body.dumpId) {
+    try {
+      const replay = await env.CACHE_KV.get(idempotencyKey(userId, dumpId));
+      if (replay) {
+        return new Response(replay, {
+          status: 200,
+          headers: { 'content-type': 'application/json', 'x-ollie-idempotent-replay': '1' },
+        });
+      }
+    } catch (err) {
+      console.error('[route/dump] idempotency lookup failed, routing fresh', err);
+    }
+  }
+
   // Vision pre-pass — if image present, ask Gemini Flash 2.5 to describe
   // what's in it. The description is prepended to the user's text dump
   // (if any) and the combined string flows through Layer 1 + Layer 2.
@@ -204,9 +240,6 @@ export async function handleDumpRoute(
       ? `[image: ${visionDescription} ]\n\n${userText}`
       : `[image: ${visionDescription} ]`
     : userText;
-
-  const dumpId = body.dumpId ?? crypto.randomUUID();
-  const locale = body.locale ?? 'tr';
 
   // PII scrub once on the whole dump; preserves segmentation faithfulness.
   const { scrubbed: cleanDump } = scrubPII(combinedDump);
@@ -467,9 +500,8 @@ export async function handleDumpRoute(
   };
 
   // A6b: server-side durability. Mirror routed fragments into the encrypted
-  // dump_inbox so a dump that arrived while the app was CLOSED (Siri TELL, a
-  // future server brain) survives. Shadow/dual-write — gated by
-  // SERVER_APPLY_ENABLED, fire-and-forget so it never slows the response.
+  // dump_inbox so a dump that arrived while the app was CLOSED survives.
+  // Shadow/dual-write — gated by SERVER_APPLY_ENABLED, fire-and-forget.
   keepAlive(
     writeInbox(
       env,
@@ -478,6 +510,17 @@ export async function handleDumpRoute(
       fragments.map((f) => ({ module: f.module, payload: f.payload })),
     ).catch((err) => console.warn('[route/dump] writeInbox failed (non-fatal)', err)),
   );
+  // #3: persist the result for idempotent replay (kept alive past the Response).
+  // Only when the client supplied a dumpId — a server-minted id can never be
+  // replayed by a retry. Crisis outputs stored too so a retry replays the verdict.
+  if (env.CACHE_KV && body.dumpId) {
+    const serialized = JSON.stringify(output);
+    keepAlive(
+      env.CACHE_KV.put(idempotencyKey(uid, dumpId), serialized, {
+        expirationTtl: IDEMPOTENCY_TTL_SEC,
+      }).catch((e) => console.error('[route/dump] idempotency store failed', e)),
+    );
+  }
 
   return json(output);
 }

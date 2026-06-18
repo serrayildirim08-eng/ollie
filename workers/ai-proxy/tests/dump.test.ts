@@ -19,6 +19,23 @@ vi.mock('../src/clerk-verify', () => ({
   verifyClerkJwt: vi.fn(async () => 'user_smoke_test'),
 }));
 
+/** Minimal in-memory KV stub — enough for the idempotency replay path
+ *  (get / put). TTL is ignored; tests don't advance time. */
+function makeKv(): KVNamespace {
+  const store = new Map<string, string>();
+  return {
+    get: vi.fn(async (key: string) => store.get(key) ?? null),
+    put: vi.fn(async (key: string, value: string) => {
+      store.set(key, value);
+    }),
+    delete: vi.fn(async (key: string) => {
+      store.delete(key);
+    }),
+    list: vi.fn(async () => ({ keys: [], list_complete: true, cacheStatus: null })),
+    getWithMetadata: vi.fn(async () => ({ value: null, metadata: null, cacheStatus: null })),
+  } as unknown as KVNamespace;
+}
+
 function makeVectorize(): VectorizeIndex {
   return {
     query: vi.fn(async () => ({ matches: [], count: 0 })),
@@ -354,5 +371,46 @@ describe('/route/dump — smoke', () => {
     // The primary write payload still goes through; only remindIn is dropped.
     expect(body.fragments[0].payload.text).toBe('do thing');
     expect(body.fragments[0].payload.remindIn).toBeUndefined();
+  });
+
+  it('replays the stored result on a retry with the same dumpId (no second route/write)', async () => {
+    const env = makeEnv({ CACHE_KV: makeKv() });
+
+    // First request: real route. One Voyage embed + one Groq classify.
+    const res1 = await handleDumpRoute(
+      makeReq({ text: 'süt aldım', dumpId: 'dump-retry-1' }),
+      env,
+    );
+    expect(res1.status).toBe(200);
+    expect(res1.headers.get('x-ollie-idempotent-replay')).toBeNull();
+    const body1 = await res1.json();
+    const callsAfterFirst = fetchSpy.mock.calls.length;
+    expect(callsAfterFirst).toBeGreaterThan(0);
+
+    // Retry with the SAME dumpId (client timed out, words still in box).
+    const res2 = await handleDumpRoute(
+      makeReq({ text: 'süt aldım', dumpId: 'dump-retry-1' }),
+      env,
+    );
+    expect(res2.status).toBe(200);
+    // Replay header set, and NO additional upstream calls (no Voyage, no Groq).
+    expect(res2.headers.get('x-ollie-idempotent-replay')).toBe('1');
+    expect(fetchSpy.mock.calls.length).toBe(callsAfterFirst);
+    const body2 = await res2.json();
+    // Identical output — same dumpId, same fragments — so the client dispatch
+    // is byte-for-byte the first result and cannot double-write.
+    expect(body2).toEqual(body1);
+  });
+
+  it('mints distinct ids and routes fresh when dumpId differs', async () => {
+    const env = makeEnv({ CACHE_KV: makeKv() });
+    const res1 = await handleDumpRoute(makeReq({ text: 'süt aldım', dumpId: 'a' }), env);
+    const callsAfterFirst = fetchSpy.mock.calls.length;
+    const res2 = await handleDumpRoute(makeReq({ text: 'süt aldım', dumpId: 'b' }), env);
+    expect(res1.status).toBe(200);
+    expect(res2.status).toBe(200);
+    // Different dumpId → not a replay → second route really runs (more calls).
+    expect(res2.headers.get('x-ollie-idempotent-replay')).toBeNull();
+    expect(fetchSpy.mock.calls.length).toBeGreaterThan(callsAfterFirst);
   });
 });

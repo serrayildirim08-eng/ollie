@@ -23,7 +23,7 @@
  * will surface a Clerk session JWT instead.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Textarea, Button, Text } from '../ui';
 import { Stack, Row } from '../layout';
 import { routeDump } from '../api';
@@ -94,6 +94,14 @@ type SubmitState =
 
 const DEFAULT_PLACEHOLDER = "What's in your head?";
 
+/** Stable per-attempt id for /route/dump. Crash-resistant fallback for the
+ *  rare runtime without crypto.randomUUID. */
+function newDumpId(): string {
+  return typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `d_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
 export function BrainDumpInput({
   getBearer,
   onSubmitted,
@@ -108,6 +116,14 @@ export function BrainDumpInput({
   // Gates the autosave effect until the on-mount restore has run, so we
   // never delete a saved draft before we've had a chance to load it.
   const [restored, setRestored] = useState(false);
+
+  // Stable dumpId for the CURRENT attempt. Minted lazily on the first submit
+  // and REUSED for every retry of the same words, so a request that timed out
+  // client-side but actually succeeded server-side does not double-route or
+  // double-write its fragments — the worker dedupes on this id (idempotency).
+  // Reset to null only after a confirmed success so the NEXT dump gets a fresh
+  // id; a failed/timed-out submit keeps it, which is exactly the retry case.
+  const dumpIdRef = useRef<string | null>(null);
 
   const photo = usePhotoIntake();
 
@@ -185,7 +201,14 @@ export function BrainDumpInput({
       await kv.set(PENDING_DUMP_KEY, { text: trimmed, ts: Date.now() });
     }
 
-    const body: RouteDumpRequest = {};
+    // Mint the attempt id once, then reuse it across retries. A retry of the
+    // same words sends the SAME dumpId, so the worker can recognise a request
+    // it already completed (e.g. one that timed out client-side after the
+    // worker had already routed it) and return the stored result instead of
+    // routing + writing every fragment a second time.
+    if (dumpIdRef.current === null) dumpIdRef.current = newDumpId();
+
+    const body: RouteDumpRequest = { dumpId: dumpIdRef.current };
     if (hasText) body.text = trimmed;
     if (photo.image) body.image = photo.image;
 
@@ -227,6 +250,9 @@ export function BrainDumpInput({
     }
 
     // Success — the dump routed, so the saved draft is no longer needed.
+    // Retire this attempt's dumpId so the NEXT dump mints a fresh one (a new
+    // thought must not collapse into the just-completed one's idempotency key).
+    dumpIdRef.current = null;
     void kv.delete(PENDING_DUMP_KEY);
     setState({ kind: 'idle' });
     if (clearOnSuccess) {

@@ -140,6 +140,52 @@ it('KEEPS the draft on a failed submit', async () => {
   expect(kvDelete).not.toHaveBeenCalled();
 });
 
+it('reuses the SAME dumpId across retries, then mints a fresh one after success', async () => {
+  // First two submits fail (timeout/network) → both must carry the same dumpId
+  // so a server that already routed the first attempt can dedupe the retry.
+  routeDump.mockResolvedValue({ ok: false, error: { code: 'timeout', message: 't' } });
+  await act(async () => {
+    root.render(
+      React.createElement(BrainDumpInput, { getBearer: () => 'tok', initialValue: 'buy milk' }),
+    );
+  });
+  await flush();
+  const btn = container.querySelector('[data-testid="send"]') as HTMLButtonElement;
+
+  await act(async () => { btn.click(); });
+  await flush();
+  await act(async () => { btn.click(); });
+  await flush();
+
+  const id1 = (routeDump.mock.calls[0]![0] as Record<string, unknown>).dumpId;
+  const id2 = (routeDump.mock.calls[1]![0] as Record<string, unknown>).dumpId;
+  expect(typeof id1).toBe('string');
+  expect(id1).toBe(id2); // retry reuses the id → server-side idempotency works
+
+  // Now the retry finally succeeds. The NEXT (different) dump must mint a new id.
+  routeDump.mockResolvedValue({ ok: true, data: { fragments: [] } });
+  await act(async () => { btn.click(); });
+  await flush();
+  const id3 = (routeDump.mock.calls[2]![0] as Record<string, unknown>).dumpId;
+  expect(id3).toBe(id1); // still the same attempt (succeeded this time)
+
+  const ta = container.querySelector('[data-testid="ta"]') as HTMLTextAreaElement;
+  await act(async () => {
+    const setter = Object.getOwnPropertyDescriptor(
+      window.HTMLTextAreaElement.prototype,
+      'value',
+    )!.set!;
+    setter.call(ta, 'second thought');
+    ta.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await flush();
+  await act(async () => { btn.click(); });
+  await flush();
+  const id4 = (routeDump.mock.calls[3]![0] as Record<string, unknown>).dumpId;
+  expect(typeof id4).toBe('string');
+  expect(id4).not.toBe(id1); // a new thought → a fresh idempotency key
+});
+
 it('CLEARS the draft on a successful submit', async () => {
   routeDump.mockResolvedValue({ ok: true, data: { fragments: [] } });
   memStore.set(KEY, { text: 'walked the dog', ts: 1 });
