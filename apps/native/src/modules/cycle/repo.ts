@@ -14,6 +14,7 @@
 
 import { computeCadence, type CadenceEstimate } from '@ollie/cadence';
 import { sql } from '../../storage';
+import { newId } from '../../storage/id';
 import {
   normaliseSymptom,
   type BleedingIntensity,
@@ -37,11 +38,6 @@ interface CycleEventRow {
  *  different cycle and the user is still bleeding. */
 const BLEEDING_WINDOW_MS = 8 * 24 * 60 * 60 * 1000;
 
-function newId(): string {
-  return typeof crypto !== 'undefined' && crypto.randomUUID
-    ? crypto.randomUUID()
-    : `c_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-}
 
 function rowToEvent(r: CycleEventRow): CycleEvent {
   let symptom: string | null = null;
@@ -72,7 +68,7 @@ async function insert(
   kind: CycleEventKind,
   data: Record<string, unknown> | null,
 ): Promise<CycleEvent> {
-  const id = newId();
+  const id = newId('c_');
   const now = Date.now();
   const encoded = data ? JSON.stringify(data) : null;
   await sql.execute(
@@ -128,7 +124,7 @@ export const cycleRepo = {
        WHERE kind = 'bleeding' AND occurred_at >= ? AND occurred_at < ?`,
       [dayStart, dayEnd],
     );
-    const id = newId();
+    const id = newId('c_');
     await sql.execute(
       `INSERT INTO cycle_events (id, kind, data, occurred_at) VALUES (?, 'bleeding', ?, ?)`,
       [id, JSON.stringify({ intensity }), at],
@@ -249,7 +245,7 @@ async function insertAt(
   data: Record<string, unknown> | null,
   at: number,
 ): Promise<CycleEvent> {
-  const id = newId();
+  const id = newId('c_');
   const encoded = data ? JSON.stringify(data) : null;
   await sql.execute(
     `INSERT INTO cycle_events (id, kind, data, occurred_at) VALUES (?, ?, ?, ?)`,

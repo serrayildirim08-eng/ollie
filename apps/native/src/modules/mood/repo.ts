@@ -12,6 +12,7 @@
  */
 
 import { sql } from '../../storage/sqlite';
+import { newId } from '../../storage/id';
 import { startOfTodayMs, type MoodEvent, type MoodEventKind } from './types';
 
 // Index signature satisfies the sql<T extends ShimRow>() constraint; the
@@ -29,11 +30,6 @@ interface CountRow {
   [col: string]: unknown;
 }
 
-function newId(): string {
-  return typeof crypto !== 'undefined' && crypto.randomUUID
-    ? crypto.randomUUID()
-    : `m_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-}
 
 function safeParse(raw: string): Record<string, unknown> {
   try {
@@ -75,7 +71,7 @@ export const events = {
     kind: MoodEventKind;
     data?: Record<string, unknown>;
   }): Promise<MoodEvent> {
-    const id = newId();
+    const id = newId('m_');
     const now = Date.now();
     const payload = input.data ?? {};
     await sql.execute(

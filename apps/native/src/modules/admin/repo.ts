@@ -20,6 +20,7 @@
 
 import { computeCadence, type CadenceEstimate } from '@ollie/cadence';
 import { sql } from '../../storage';
+import { newId } from '../../storage/id';
 import type { AdminRenewal, AdminTask, AdminTaskData, AdminTaskKind, BallState, RecurringDecisionRow } from './types';
 
 // Index signature satisfies the sql<T extends ShimRow>() constraint; the
@@ -45,11 +46,6 @@ interface RenewalRow {
   [col: string]: unknown;
 }
 
-function newId(): string {
-  return typeof crypto !== 'undefined' && crypto.randomUUID
-    ? crypto.randomUUID()
-    : `a_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-}
 
 // ─── tasks ────────────────────────────────────────────────────────────────
 
@@ -76,7 +72,7 @@ export const tasks = {
     dueDate?: string | null;
     ballState?: BallState;
   }): Promise<AdminTask> {
-    const id = newId();
+    const id = newId('a_');
     const now = Date.now();
     const data: AdminTaskData = input.data ?? ({ kind: input.kind } as AdminTaskData);
     const dueDate = input.dueDate ?? null;
@@ -169,7 +165,7 @@ export const renewals = {
    * legitimately log "passport" twice (once for self, once for partner).
    */
   async add(input: { renewalType: string; dueDate?: string | null }): Promise<AdminRenewal> {
-    const id = newId();
+    const id = newId('a_');
     const now = Date.now();
     const dueDate = input.dueDate ?? null;
     await sql.execute(
@@ -283,7 +279,7 @@ export const recurringDecisions = {
    * lands an `admin.recurring_decision` action).
    */
   async add(input: { what: string }): Promise<RecurringDecisionRow> {
-    const id = newId();
+    const id = newId('a_');
     const now = Date.now();
     await sql.execute(
       `INSERT INTO admin_recurring_decisions (id, what, decision, snooze_until_ms, created_at)

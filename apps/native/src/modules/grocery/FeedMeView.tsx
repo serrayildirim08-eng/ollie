@@ -40,7 +40,8 @@ import {
   useState,
   type CSSProperties,
 } from 'react';
-import { useAuth, useUser } from '@clerk/clerk-react';
+import { useUser } from '@clerk/clerk-react';
+import { useBearer } from '../../auth/useBearer';
 import { Stack, Row } from '../../layout';
 import { Text } from '../../ui';
 import { colors, fonts } from '../../theme/tokens';
@@ -109,7 +110,7 @@ export function FeedMeView({
   shopNames,
   onAddToShop,
 }: FeedMeViewProps): JSX.Element {
-  const { getToken } = useAuth();
+  const getBearer = useBearer();
   const { user } = useUser();
 
   const [diet, setDiet] = useState<FeedDietFilter>('all');
@@ -164,7 +165,7 @@ export function FeedMeView({
     if (pantryEmpty || !userId) return;
     setPhase({ kind: 'loading' });
 
-    const bearer = (await getToken()) ?? '';
+    const bearer = (await getBearer()) ?? '';
     if (!bearer) {
       setPhase({ kind: 'error', reason: 'network' });
       return;
@@ -196,7 +197,7 @@ export function FeedMeView({
     // New round of suggestions — clear the previous "cooked" markers so
     // any reused dish names render fresh.
     setCookedIds(new Set());
-  }, [pantryEmpty, userId, getToken, pantryItems, diet, count]);
+  }, [pantryEmpty, userId, getBearer, pantryItems, diet, count]);
 
   const onCookedIt = useCallback(
     async (dishKey: string, suggestion: FeedRecipeSuggestion) => {
@@ -211,7 +212,7 @@ export function FeedMeView({
         return next;
       });
 
-      const bearer = (await getToken()) ?? '';
+      const bearer = (await getBearer()) ?? '';
       if (!bearer) return;
 
       const ingredientsUsed = suggestion.ingredients
@@ -258,7 +259,7 @@ export function FeedMeView({
         // swallow
       }
     },
-    [getToken],
+    [getBearer],
   );
 
   return (

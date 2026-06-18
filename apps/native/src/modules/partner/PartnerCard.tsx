@@ -7,8 +7,8 @@
  * text, never the loudness.
  */
 
-import { useCallback, useEffect, useState } from 'react';
-import { useAuth } from '@clerk/clerk-react';
+import { useEffect, useState } from 'react';
+import { useBearer } from '../../auth/useBearer';
 import { Stack, Row } from '../../layout';
 import { Text } from '../../ui';
 import { colors } from '../../theme/tokens';
@@ -22,8 +22,7 @@ const SMCP: React.CSSProperties = {
 };
 
 export function PartnerCard(): JSX.Element | null {
-  const { getToken } = useAuth();
-  const getBearer = useCallback(async () => (await getToken()) ?? '', [getToken]);
+  const getBearer = useBearer();
   const [pairing, setPairing] = useState<PartnerPairing | null>(null);
   const [state, setState] = useState<InterpretedState | null>(null);
 

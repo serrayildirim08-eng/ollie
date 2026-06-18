@@ -14,11 +14,21 @@
  * browser (vitest, web preview) the dynamic import resolves to a no-op so the
  * hook never throws.
  */
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { useNavigate, type NavigateFunction } from 'react-router';
+import { MODULE_IDS } from './moduleManifest';
 
 /** The stable id set on the dump Textarea so we can focus it after navigating. */
 export const DUMP_INPUT_ID = 'ollie-dump-input';
+
+/**
+ * Cold-start guard at MODULE scope, not per hook-instance (audit #131).
+ * The launch deep link must be consumed exactly once per process — if this
+ * lived in a `useRef`, remounting the hook (StrictMode, route remount, fast
+ * refresh) would re-read `getCurrent()` and re-navigate to the launch link,
+ * yanking the user back to wherever they were first sent.
+ */
+let coldStartHandled = false;
 
 /** Map an incoming ollie:// URL to an in-app path, or null if unrecognised. */
 export function resolveDeepLink(raw: string): { path: string; focusDump?: boolean } | null {
@@ -36,7 +46,12 @@ export function resolveDeepLink(raw: string): { path: string; focusDump?: boolea
 
   if (host === 'dump') return { path: '/', focusDump: true };
   if (host === 'todo') return { path: '/todo' };
-  if (host === 'box' && rest) return { path: `/box/${rest}` };
+  // box/<id>: only a single known module id is allowed. A multi-segment path
+  // ("box/a/b") or an unknown id is rejected so a crafted deep link can't
+  // navigate to an arbitrary route (audit #16).
+  if (host === 'box' && rest && !rest.includes('/') && MODULE_IDS.has(rest)) {
+    return { path: `/box/${rest}` };
+  }
   return null;
 }
 
@@ -56,8 +71,6 @@ function applyDeepLink(raw: string, navigate: NavigateFunction): boolean {
 
 export function useDeepLinks(): void {
   const navigate = useNavigate();
-  // Guard against the cold-start URL being handled twice (StrictMode double-run).
-  const coldHandled = useRef(false);
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -72,9 +85,10 @@ export function useDeepLinks(): void {
       }
       if (cancelled || !mod) return;
 
-      // Cold start: the app was launched by the link.
-      if (!coldHandled.current) {
-        coldHandled.current = true;
+      // Cold start: the app was launched by the link. Module-scoped guard so
+      // a remount never re-consumes the launch link (audit #131).
+      if (!coldStartHandled) {
+        coldStartHandled = true;
         try {
           const current = await mod.getCurrent();
           if (current && current.length) applyDeepLink(current[0], navigate);

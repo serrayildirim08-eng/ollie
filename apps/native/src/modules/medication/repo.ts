@@ -17,6 +17,7 @@
 
 import { computeCadence, type CadenceEstimate } from '@ollie/cadence';
 import { sql } from '../../storage';
+import { newId } from '../../storage/id';
 import {
   coerceKind,
   normaliseName,
@@ -52,11 +53,6 @@ interface EventJoinRow extends EventRow {
   med_name: string;
 }
 
-function newId(): string {
-  return typeof crypto !== 'undefined' && crypto.randomUUID
-    ? crypto.randomUUID()
-    : `m_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-}
 
 // ─── registry ─────────────────────────────────────────────────────────────
 
@@ -94,7 +90,7 @@ export const medications = {
 
     const n = normaliseName(name);
     const now = Date.now();
-    const id = newId();
+    const id = newId('m_');
     await sql.execute(
       `INSERT INTO medications_registry (id, name, created_at, kind, schedule)
        VALUES (?, ?, ?, 'prescription', '[]')`,
@@ -207,7 +203,7 @@ async function writeEvent(
   kind: EventKind,
   payload: Record<string, unknown>,
 ): Promise<MedicationEvent> {
-  const id = newId();
+  const id = newId('m_');
   const now = Date.now();
   const data = JSON.stringify(payload);
   await sql.execute(

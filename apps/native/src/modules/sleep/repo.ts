@@ -13,6 +13,7 @@
 
 import { computeCadence, type CadenceEstimate } from '@ollie/cadence';
 import { sql } from '../../storage';
+import { newId } from '../../storage/id';
 import {
   asSleepFeel,
   hoursBetween,
@@ -35,11 +36,6 @@ interface SleepEventRow {
   [col: string]: unknown;
 }
 
-function newId(): string {
-  return typeof crypto !== 'undefined' && crypto.randomUUID
-    ? crypto.randomUUID()
-    : `s_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-}
 
 // ─── add ──────────────────────────────────────────────────────────────────
 
@@ -58,7 +54,7 @@ export const sleepRepo = {
     feel?: SleepFeel | null;
     occurredAt?: number;
   }): Promise<SleepEvent> {
-    const id = newId();
+    const id = newId('s_');
     const occurredAt = input.occurredAt ?? Date.now();
     const computedHours = hoursBetween(input.bedtime ?? null, input.wake ?? null);
     const data: SleepLogData = {
@@ -95,7 +91,7 @@ export const sleepRepo = {
   },
 
   async addWindDown(input: { note: string; occurredAt?: number }): Promise<SleepEvent> {
-    const id = newId();
+    const id = newId('s_');
     const occurredAt = input.occurredAt ?? Date.now();
     const data: WindDownData = { note: input.note };
     await insertRow(id, 'wind_down', data, occurredAt);
@@ -103,7 +99,7 @@ export const sleepRepo = {
   },
 
   async addDream(input: { text: string; occurredAt?: number }): Promise<SleepEvent> {
-    const id = newId();
+    const id = newId('s_');
     const occurredAt = input.occurredAt ?? Date.now();
     const data: DreamData = { text: input.text };
     await insertRow(id, 'dream', data, occurredAt);
@@ -115,7 +111,7 @@ export const sleepRepo = {
     wokeCount?: number | null;
     occurredAt?: number;
   }): Promise<SleepEvent> {
-    const id = newId();
+    const id = newId('s_');
     const occurredAt = input.occurredAt ?? Date.now();
     const data: InsomniaData = {
       durationAttemptedMin: input.durationAttemptedMin ?? null,

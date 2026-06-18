@@ -12,7 +12,8 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { useAuth, useUser } from '@clerk/clerk-react';
+import { useUser } from '@clerk/clerk-react';
+import { useBearer } from '../../auth/useBearer';
 import { mintPartnerCode } from '../../api';
 import { Stack, Row } from '../../layout';
 import { Text } from '../../ui';
@@ -52,8 +53,7 @@ function codeFromId(id: string | undefined): string {
 
 export function PartnerBox(): JSX.Element {
   const { user } = useUser();
-  const { getToken } = useAuth();
-  const getBearer = useCallback(async () => (await getToken()) ?? '', [getToken]);
+  const getBearer = useBearer();
 
   const [myCode, setMyCode] = useState<string>(() => codeFromId(user?.id));
   const [phase, setPhase] = useState<Phase>('loading');
@@ -74,7 +74,7 @@ export function PartnerBox(): JSX.Element {
     } else {
       setPhase((p) => (p === 'wizard' ? 'wizard' : 'pairing'));
       // Mint a real, shareable pairing code for the pairing screen.
-      const minted = await mintPartnerCode({ bearer: await getBearer() }).catch(() => null);
+      const minted = await mintPartnerCode({ bearer: (await getBearer()) ?? '' }).catch(() => null);
       if (minted?.ok) setMyCode(minted.data.code);
     }
   }, [getBearer]);

@@ -28,19 +28,7 @@ import { Stack, Row } from "../layout";
 import { Text } from "../ui";
 import { colors } from "../theme/tokens";
 import { DumpScreen } from "../dump";
-import { GroceryBox } from "../modules/grocery";
-import { PetsBox } from "../modules/pets";
-import { BodyBox } from "../modules/body";
-import { MoodBox } from "../modules/mood";
-import { WorkBox } from "../modules/work";
-import { FinanceBox } from "../modules/finance";
-import { SleepBox } from "../modules/sleep";
-import { AdminBox } from "../modules/admin";
-import { HabitsBox } from "../modules/habits";
-import { GoalsBox } from "../modules/goals";
-import { MedicationBox } from "../modules/medication";
-import { CycleBox } from "../modules/cycle";
-import { PartnerBox } from "../modules/partner";
+import { MODULE_MANIFEST, MODULE_GROUP_META } from "./moduleRegistry";
 import { TodoScreen } from "../todo/TodoScreen";
 import { useServerReminderBridge } from "../notify/serverReminderBridge";
 
@@ -91,9 +79,12 @@ export function Router() {
   // cron → APNs). Mounted here under <SignedIn> so it always has a Clerk
   // identity to resolve. No-op until a device push token exists.
   useServerReminderBridge();
-  // Partner is deferred out of v1 behind a feature flag (audit #10). The module
-  // stays in the tree; its route only mounts when the flag is on.
+  // Partner is deferred out of v1 behind a feature flag (audit #10). Flagged
+  // manifest entries only mount their route when the flag is on. Read all
+  // flags here (only 'partner' today) so the routes can be derived below.
   const partnerEnabled = useFeature('partner');
+  const flagOn = (entry: (typeof MODULE_MANIFEST)[number]): boolean =>
+    entry.flag == null || (entry.flag === 'partner' && partnerEnabled);
   return (
     <BrowserRouter>
       <DeepLinkBridge />
@@ -102,19 +93,9 @@ export function Router() {
       <Routes>
         <Route element={<Layout />}>
           <Route index element={<DumpScreen />} />
-          <Route path="box/grocery" element={<GroceryBox />} />
-          <Route path="box/pets" element={<PetsBox />} />
-          <Route path="box/body" element={<BodyBox />} />
-          <Route path="box/mood" element={<MoodBox />} />
-          <Route path="box/work" element={<WorkBox />} />
-          <Route path="box/finance" element={<FinanceBox />} />
-          <Route path="box/sleep" element={<SleepBox />} />
-          <Route path="box/admin" element={<AdminBox />} />
-          <Route path="box/habits" element={<HabitsBox />} />
-          <Route path="box/goals" element={<GoalsBox />} />
-          <Route path="box/medication" element={<MedicationBox />} />
-          <Route path="box/cycle" element={<CycleBox />} />
-          {partnerEnabled ? <Route path="box/partner" element={<PartnerBox />} /> : null}
+          {MODULE_MANIFEST.filter(flagOn).map(({ id, Component }) => (
+            <Route key={id} path={`box/${id}`} element={<Component />} />
+          ))}
           <Route path="modules" element={<ModulesIndex />} />
           <Route path="todo" element={<TodoScreen />} />
           <Route path="settings" element={<SettingsScreen />} />
@@ -125,54 +106,6 @@ export function Router() {
     </BrowserRouter>
   );
 }
-
-interface ModuleEntry { id: string; label: string; hint: string }
-
-interface ModuleGroup {
-  id: string;
-  label: string;
-  aside: string;
-  items: ModuleEntry[];
-}
-
-// Three rooms — see memory: project_ollie_4_modules_grouping (2026-05-28).
-// "you / your stuff / your responsibilities" is the user's mental model.
-const MODULE_GROUPS: ModuleGroup[] = [
-  {
-    id: "you",
-    label: "you",
-    aside: "how you are this week.",
-    items: [
-      { id: "body", label: "Body", hint: "water, movement, symptoms" },
-      { id: "mood", label: "Mood", hint: "feelings, energy, self-talk" },
-      { id: "sleep", label: "Sleep", hint: "logs + insomnia" },
-      { id: "cycle", label: "Cycle", hint: "period + symptoms" },
-      { id: "medication", label: "Medication", hint: "doses + side effects" },
-      { id: "habits", label: "Habits", hint: "what you do" },
-      { id: "goals", label: "Goals", hint: "what you're moving toward" },
-      { id: "partner", label: "Partner", hint: "an intimate window" },
-    ],
-  },
-  {
-    id: "your-stuff",
-    label: "your stuff",
-    aside: "what's in the kitchen, who's in the house.",
-    items: [
-      { id: "grocery", label: "Grocery", hint: "pantry + shopping" },
-      { id: "pets", label: "Pets", hint: "tontin + pinpon" },
-    ],
-  },
-  {
-    id: "your-responsibilities",
-    label: "your responsibilities",
-    aside: "things that won't wait.",
-    items: [
-      { id: "work", label: "Work", hint: "tasks + deadlines" },
-      { id: "admin", label: "Admin", hint: "renewals + paperwork" },
-      { id: "finance", label: "Finance", hint: "transactions + bills" },
-    ],
-  },
-];
 
 const ASIDE_STYLE: React.CSSProperties = {
   fontFamily: 'var(--ollie-font-serif)',
@@ -186,9 +119,15 @@ const ASIDE_STYLE: React.CSSProperties = {
 function ModulesIndex() {
   // Hide feature-flagged-off modules (audit #10: Partner deferred from v1).
   const partnerEnabled = useFeature('partner');
-  const groups = MODULE_GROUPS.map((g) => ({
-    ...g,
-    items: g.items.filter((m) => m.id !== 'partner' || partnerEnabled),
+  // Build the three rooms from the shared manifest (audit #178) — group
+  // metadata gives display order + asides; items come from the manifest,
+  // filtered by feature flag.
+  const visible = MODULE_MANIFEST.filter(
+    (m) => m.flag == null || (m.flag === 'partner' && partnerEnabled),
+  );
+  const groups = MODULE_GROUP_META.map((meta) => ({
+    ...meta,
+    items: visible.filter((m) => m.group === meta.id),
   }));
   return (
     <Stack gap={48}>

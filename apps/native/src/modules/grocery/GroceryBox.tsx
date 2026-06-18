@@ -42,6 +42,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import {
+  formatDays,
   daysSinceLast,
   isOverdue,
   medianIntervalDays,
@@ -1348,11 +1349,6 @@ function CadenceHint({ estimate }: { estimate: CadenceEstimate | undefined }): J
   );
 }
 
-function formatDays(d: number): string {
-  if (d < 1) return 'less than a day';
-  const rounded = Math.round(d);
-  return `${rounded} day${rounded === 1 ? '' : 's'}`;
-}
 
 function pluralDays(d: number): string {
   if (d <= 0) return 'today';

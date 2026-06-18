@@ -141,7 +141,17 @@ export function FocusTimer({ onSessionLogged }: FocusTimerProps): JSX.Element {
   useEffect(() => {
     return () => {
       stopInterval();
-      noiseRef.current?.pause();
+      // Fully release the brown-noise element on unmount, not just pause it
+      // (audit #126): clearing src + load() drops the decoded loop buffer the
+      // browser keeps alive, and nulling the ref lets it be GC'd. A bare
+      // pause() leaves the buffer (and the element) resident.
+      const noise = noiseRef.current;
+      if (noise) {
+        noise.pause();
+        noise.removeAttribute('src');
+        noise.load();
+        noiseRef.current = null;
+      }
     };
   }, [stopInterval]);
 

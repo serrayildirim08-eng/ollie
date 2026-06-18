@@ -24,7 +24,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { useAuth } from '@clerk/clerk-react';
+import { useBearer } from '../../auth/useBearer';
 import type { ScoredNoticing, NoticingAction } from '@ollie/logic/brain';
 import { Stack } from '../../layout';
 import { Text } from '../../ui';
@@ -114,8 +114,7 @@ function useTodaysNoticings(getBearer: () => Promise<string | null>): {
 }
 
 export function TodayNoticings(): JSX.Element | null {
-  const { getToken } = useAuth();
-  const getBearer = useCallback(async () => (await getToken().catch(() => null)) ?? null, [getToken]);
+  const getBearer = useBearer();
   const { items, refresh } = useTodaysNoticings(getBearer);
 
   const onPostpone = useCallback(

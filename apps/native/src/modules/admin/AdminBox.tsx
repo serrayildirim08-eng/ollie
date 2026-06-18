@@ -60,6 +60,7 @@ import {
   type ReactNode,
 } from 'react';
 import {
+  formatDays,
   daysSinceLast,
   medianIntervalDays,
   type CadenceEstimate,
@@ -724,11 +725,6 @@ function CadenceHint({
   );
 }
 
-function formatDays(d: number): string {
-  if (d < 1) return 'less than a day';
-  const rounded = Math.round(d);
-  return `${rounded} day${rounded === 1 ? '' : 's'}`;
-}
 
 /**
  * Renewals run on yearly+ cadence, so we humanise the median: anything
