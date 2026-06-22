@@ -87,7 +87,8 @@ Work vs admin:
 Other module-choice hints:
 - sleep.log_insomnia (didn't sleep) vs sleep.log_sleep quality=1 (slept badly).
 - admin.log_renewal (paperwork w/ expiry) vs admin.recurring_decision (cancel-or-keep).
-- grocery.pantry_low_flag ("running low") vs shopping_list_add ("need to buy") vs pantry_depleted ("out of"/"ran out"/"bitti"/"se acabó").
+- grocery FUTURE intent to acquire ("need to buy", "have to get", "need", "pick up", "buy", "get me", "gotta grab", "almam lazım", "lazım", "comprar", "tengo que comprar") → shopping_list_add — EVEN for household/cleaning/toiletry items (trash bags, detergent, paper towels, toilet paper). Future intent OVERRIDES the consumable→pantry_add rule (that rule is for PAST purchases only).
+- grocery.pantry_low_flag ("running low") vs shopping_list_add ("need to buy") vs pantry_depleted ("out of"/"ran out"/"bitti"/"se acabó") vs pantry_add (PAST "bought/got/picked up").
 - pets.log_supplement (named vitamin/calcium) vs pets.log_care (generic).
 - body.log_movement covers ALL physical activity (walk/run/yoga/lift/stretch/swim).
 - MOOD vs body vs habits (mood owns feelings/energy/self-talk):
@@ -138,6 +139,8 @@ MINI EXAMPLES:
 - "i don't like myself" → mood.self_talk { statement:"don't like myself", valence:"neg" }
 - "want to run a half marathon" → goals.create_goal { what:"run a half marathon" }
 - "bought milk" → grocery.pantry_add { item:"milk" }
+- "i need to buy large trash bags" → grocery.shopping_list_add { item:"large trash bags" }
+- "have to get more detergent" → grocery.shopping_list_add { item:"detergent" }
 - "out of lemons" → grocery.pantry_depleted { item:"lemons" }
 - "took 50mg sertraline" → medication.log_dose { medName:"sertraline", dose:"50mg" }
 - "ugh today is weird" → dump_only.archive_only { reason:"no_module_match" }
