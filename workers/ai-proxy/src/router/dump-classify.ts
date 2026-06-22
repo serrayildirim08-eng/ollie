@@ -132,6 +132,8 @@ MINI EXAMPLES:
 - "spent $40 at sephora" → finance.log_transaction { amount:40, currency:"USD", merchant:"sephora" }
 - "maaş geldi" → finance.log_income { source:"salary" }
 - "couldn't sleep so took melatonin" → sleep.log_insomnia { med_taken:"melatonin" }
+- "slept 6 hours last night" → sleep.log_sleep { hours:6 }   (a plain duration, no insomnia signal, is STILL a sleep log — never dump_only)
+- "i slept 6 hours last night i feel tired" → TWO fragments: sleep.log_sleep { hours:6 } + mood.log_energy { level:"low", label:"tired" }
 - "walked buddy 30 min" → body.log_movement { type:"walk", duration_min:30, pet:"buddy" }
 - "meditation done" → habits.complete { habitName:"meditation" }
 - "so tired today" → mood.log_energy { level:"low", label:"tired" }
