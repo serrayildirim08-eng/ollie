@@ -35,6 +35,7 @@ import {
   fontSizes,
   fontWeights,
   letterSpacings,
+  radii,
   shadows,
 } from '../../theme/tokens';
 import { formatRelativeTime } from '../../lib/formatRelativeTime';
@@ -763,8 +764,10 @@ function MedProfileEditor({
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: 6,
-                  border: `1px solid ${colors.hairline}`,
+                  border: 'none',
                   borderRadius: 999,
+                  background: colors.cream,
+                  boxShadow: shadows.raisedSm,
                   padding: '5px 6px 5px 12px',
                   fontSize: fontSizes.caption,
                   color: colors.ink,
@@ -802,13 +805,15 @@ function MedProfileEditor({
             }}
             aria-label="add a time"
             style={{
-              border: `1px solid ${colors.hairline}`,
-              borderRadius: 8,
-              padding: '7px 10px',
+              border: 'none',
+              borderRadius: radii.card,
+              boxShadow: shadows.inset,
+              padding: '9px 12px',
               fontSize: fontSizes.small,
               color: colors.ink,
-              background: colors.paper,
+              background: colors.cream,
               fontFamily: 'inherit',
+              outline: 'none',
             }}
           />
           <button

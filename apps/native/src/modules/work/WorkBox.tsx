@@ -32,7 +32,7 @@ import {
 } from '@ollie/cadence';
 import { Stack, Row, Box } from '../../layout';
 import { Text, Input, Button } from '../../ui';
-import { colors } from '../../theme/tokens';
+import { colors, radii, shadows } from '../../theme/tokens';
 import { WhenCaption } from '../../lib/WhenCaption';
 import { useModuleData } from '../../lib/useModuleData';
 import { PatternCards } from '../../patterns/PatternCards';
@@ -685,13 +685,15 @@ function ScheduleBlockSection({
             style={{
               flex: 1,
               minWidth: 0,
-              background: 'transparent',
+              background: colors.cream,
               border: 'none',
-              borderBottom: `1px solid ${colors.hairline}`,
-              padding: '6px 2px',
+              borderRadius: radii.card,
+              boxShadow: shadows.inset,
+              padding: '10px 14px',
               color: colors.ink,
               fontSize: 14,
               fontFamily: 'inherit',
+              outline: 'none',
             }}
           />
           <Button

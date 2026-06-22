@@ -33,7 +33,7 @@ import {
 } from '@ollie/cadence';
 import { Stack, Row, Box } from '../../layout';
 import { Text } from '../../ui';
-import { colors, fonts } from '../../theme/tokens';
+import { colors, fonts, radii, shadows } from '../../theme/tokens';
 import { WhenCaption } from '../../lib/WhenCaption';
 import { useModuleData } from '../../lib/useModuleData';
 import { PatternCards } from '../../patterns/PatternCards';
@@ -621,10 +621,11 @@ const FIELD_LABEL_STYLE: CSSProperties = {
 const FIELD_INPUT_STYLE: CSSProperties = {
   boxSizing: 'border-box',
   width: '100%',
-  background: 'transparent',
+  background: colors.cream,
   border: 'none',
-  borderBottom: `1px solid ${colors.hairline}`,
-  padding: '6px 2px',
+  borderRadius: radii.card,
+  boxShadow: shadows.inset,
+  padding: '11px 14px',
   fontFamily: fonts.sans,
   fontSize: 15,
   fontWeight: 500,

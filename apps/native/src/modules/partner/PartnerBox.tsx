@@ -17,7 +17,7 @@ import { useBearer } from '../../auth/useBearer';
 import { mintPartnerCode } from '../../api';
 import { Stack, Row, Box } from '../../layout';
 import { Text } from '../../ui';
-import { colors, shadows } from '../../theme/tokens';
+import { colors, radii, shadows } from '../../theme/tokens';
 import { partnerRepo } from './repo';
 import { cardLine, interpret, type RawSignals } from './interpret';
 import {
@@ -509,9 +509,9 @@ function Field({
           appearance: 'none',
           background: colors.cream,
           border: 'none',
-          borderRadius: 10,
+          borderRadius: radii.card,
           boxShadow: shadows.inset,
-          padding: '12px 14px',
+          padding: '14px 16px',
           fontSize: mono ? 22 : 18,
           letterSpacing: mono ? '0.12em' : undefined,
           fontFamily: mono ? 'var(--ollie-font-mono, monospace)' : 'inherit',
@@ -624,7 +624,7 @@ function FauxQR({ seed }: { seed: string }): JSX.Element {
         padding: 12,
         background: colors.cream,
         boxShadow: shadows.inset,
-        borderRadius: 10,
+        borderRadius: radii.card,
         flexShrink: 0,
       }}
     >

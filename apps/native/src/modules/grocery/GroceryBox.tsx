@@ -50,7 +50,7 @@ import {
 } from '@ollie/cadence';
 import { Stack, Row, Box } from '../../layout';
 import { Text } from '../../ui';
-import { colors, shadows } from '../../theme/tokens';
+import { colors, radii, shadows } from '../../theme/tokens';
 import { WhenCaption } from '../../lib/WhenCaption';
 import { useModuleData } from '../../lib/useModuleData';
 import { PatternCards } from '../../patterns/PatternCards';
@@ -407,8 +407,21 @@ function ModeSwitch({
   mode: Mode;
   onChange: (m: Mode) => void;
 }): JSX.Element {
+  // Soft segmented control — the active pill sinks into an inset well with
+  // sageDeep text; the inactive pills sit flush + quiet. The track itself is
+  // a flat cream rail so the pressed tab reads as a pressed key.
   return (
-    <Row gap={28} align="center" style={{ paddingBottom: 2 }}>
+    <Row
+      gap={6}
+      align="center"
+      style={{
+        alignSelf: 'flex-start',
+        padding: 5,
+        borderRadius: radii.pill,
+        background: colors.cream,
+        boxShadow: shadows.raisedSm,
+      }}
+    >
       {MODE_ORDER.map((m) => {
         const on = m === mode;
         return (
@@ -420,12 +433,13 @@ function ModeSwitch({
             style={{
               background: 'transparent',
               border: 'none',
-              borderBottom: `2px solid ${on ? colors.sage : 'transparent'}`,
-              padding: '0 0 7px 0',
+              borderRadius: radii.pill,
+              boxShadow: on ? shadows.inset : 'none',
+              padding: '8px 16px',
               fontSize: 14,
               fontWeight: on ? 600 : 500,
               letterSpacing: '-0.01em',
-              color: on ? colors.ink : colors.inkFaint,
+              color: on ? colors.sageDeep : colors.inkFaint,
               cursor: 'pointer',
               transition: 'color 200ms cubic-bezier(0.18, 0, 0.22, 1)',
             }}
@@ -1092,57 +1106,54 @@ function ArchivedSection({
 
 // ─── cold states ──────────────────────────────────────────────────────────
 
-/** the bare torn-note hero — three hairline rules waiting for lines */
+/** the torn-note hero — a soft raised card holding three waiting-line stubs */
 function EmptyNote(): JSX.Element {
   const STUBS = [96, 64, 78];
   return (
-    <div
-      aria-hidden
+    <Box
+      bg="cream"
+      radius="card"
+      shadow="raised"
       style={{
-        width: 188,
-        display: 'flex',
-        flexDirection: 'column',
+        width: 220,
         marginBottom: 8,
+        padding: '16px 18px',
       }}
     >
-      {STUBS.map((w, i) => (
-        <div
-          key={w}
-          style={{
-            height: 46,
-            borderBottom:
-              i === STUBS.length - 1
-                ? 'none'
-                : `1px dashed ${colors.hairline}`,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 13,
-            padding: '0 4px',
-          }}
-        >
-          <span
+      <div aria-hidden style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {STUBS.map((w) => (
+          <div
+            key={w}
             style={{
-              width: 21,
-              height: 21,
-              borderRadius: '50%',
-              background: colors.cream,
-              boxShadow:
-                'inset 3px 3px 6px rgba(120,140,122,0.45), inset -3px -3px 6px rgba(255,255,255,0.85)',
-              flexShrink: 0,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 13,
             }}
-          />
-          <span
-            style={{
-              flex: `0 0 ${w}px`,
-              height: 6,
-              borderRadius: 3,
-              background: colors.hairline,
-              opacity: 0.7,
-            }}
-          />
-        </div>
-      ))}
-    </div>
+          >
+            <span
+              style={{
+                width: 21,
+                height: 21,
+                borderRadius: '50%',
+                background: colors.cream,
+                boxShadow:
+                  'inset 3px 3px 6px rgba(120,140,122,0.45), inset -3px -3px 6px rgba(255,255,255,0.85)',
+                flexShrink: 0,
+              }}
+            />
+            <span
+              style={{
+                flex: `0 0 ${w}px`,
+                height: 6,
+                borderRadius: 3,
+                background: colors.hairline,
+                opacity: 0.7,
+              }}
+            />
+          </div>
+        ))}
+      </div>
+    </Box>
   );
 }
 

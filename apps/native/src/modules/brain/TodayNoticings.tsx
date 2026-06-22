@@ -28,7 +28,7 @@ import { useBearer } from '../../auth/useBearer';
 import type { ScoredNoticing, NoticingAction } from '@ollie/logic/brain';
 import { Stack } from '../../layout';
 import { Text } from '../../ui';
-import { colors, fontSizes, lineHeights, space, radii, letterSpacings } from '../../theme/tokens';
+import { colors, fontSizes, lineHeights, space, radii, letterSpacings, shadows } from '../../theme/tokens';
 import { store } from '../../store';
 import { useAppLang } from '../../settings/appLang';
 import { selectTodaysNoticings, postponeNoticing, dismissNoticing } from './noticings';
@@ -158,8 +158,8 @@ export function TodayNoticings(): JSX.Element | null {
           key={item.noticing.id}
           style={{
             background: colors.paper,
-            border: `1px solid ${colors.hairlineSoft}`,
-            borderRadius: radii.md,
+            boxShadow: shadows.card,
+            borderRadius: radii.card,
             padding: `${space[4]} ${space[5]}`,
           }}
         >

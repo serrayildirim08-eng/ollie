@@ -30,7 +30,7 @@ import {
 } from 'react';
 import { Stack, Row } from '../../layout';
 import { Text, Input, Textarea, Button } from '../../ui';
-import { colors, fonts, fontWeights, zIndex } from '../../theme/tokens';
+import { colors, fonts, fontWeights, radii, shadows, zIndex } from '../../theme/tokens';
 import { goals as goalsRepo, GoalCapError } from './repo';
 import type { GoalDraft } from './types';
 
@@ -159,9 +159,9 @@ export function GoalCreateModal({
           width: '100%',
           maxWidth: 460,
           background: colors.cream,
-          border: `1px solid ${colors.hairline}`,
-          borderRadius: 14,
-          boxShadow: '0 12px 40px rgba(20, 25, 20, 0.10)',
+          border: 'none',
+          borderRadius: radii.surface,
+          boxShadow: shadows.raised,
           padding: '32px 28px',
           outline: 'none',
         }}
@@ -284,9 +284,10 @@ export function GoalCreateModal({
               aria-live="polite"
               style={{
                 padding: '14px 18px',
-                borderRadius: 10,
+                borderRadius: radii.card,
                 background: colors.paper,
-                border: `1px solid ${colors.hairline}`,
+                border: 'none',
+                boxShadow: shadows.card,
                 fontFamily: fonts.serif,
                 fontStyle: 'italic',
                 fontSize: 15,

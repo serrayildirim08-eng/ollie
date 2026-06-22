@@ -20,7 +20,6 @@ import { useModuleData } from '../../lib/useModuleData';
 import { migrateMood } from './migrate';
 import { events as eventsRepo } from './repo';
 import {
-  getEnergyLevel,
   getLabel,
   getStatement,
   getValence,
@@ -183,20 +182,49 @@ function MoodRow({ event, onRemove }: { event: MoodEvent; onRemove: () => void }
   );
 }
 
+/** Normalize the energy level (the AI sends a word like "low"; older rows may
+ *  hold a 1–5 number) into a label + how many of the 3 calm segments to fill. */
+const ENERGY_WORDS: Record<string, number> = { low: 1, mid: 2, medium: 2, high: 3 };
+function energyMeter(event: MoodEvent): { word: string; filled: number } | null {
+  const raw = (event.data as Record<string, unknown>)['level'];
+  if (typeof raw === 'string' && raw.trim()) {
+    const k = raw.toLowerCase();
+    return { word: k, filled: ENERGY_WORDS[k] ?? 2 };
+  }
+  if (typeof raw === 'number' && Number.isFinite(raw)) {
+    const filled = raw <= 2 ? 1 : raw === 3 ? 2 : 3;
+    return { word: filled === 1 ? 'low' : filled === 2 ? 'mid' : 'high', filled };
+  }
+  return null;
+}
+
 function EnergyRow({ event, onRemove }: { event: MoodEvent; onRemove: () => void }): JSX.Element {
-  const level = getEnergyLevel(event);
-  const label = getLabel(event);
-  const text = label
-    ? `${label}${level != null ? ` · ${level}` : ''}`
-    : level != null
-      ? `energy ${level}`
-      : 'energy';
+  const label = getLabel(event) || 'energy';
+  const meter = energyMeter(event);
   return (
-    <Stack gap={2}>
-      <Row gap={12} align="baseline" justify="space-between">
-        <Text scale="body">{text}</Text>
+    <Stack gap={8}>
+      <Row gap={12} align="center" justify="space-between">
+        <Text scale="body" style={{ fontWeight: 600 }}>{label}</Text>
         <RemoveButton onClick={onRemove} />
       </Row>
+      {meter ? (
+        <Row gap={8} align="center">
+          <div style={{ display: 'flex', gap: 4 }} aria-hidden>
+            {[0, 1, 2].map((i) => (
+              <span
+                key={i}
+                style={{
+                  width: 20,
+                  height: 5,
+                  borderRadius: 3,
+                  background: i < meter.filled ? colors.sageDeep : 'rgba(47, 61, 49, 0.12)',
+                }}
+              />
+            ))}
+          </div>
+          <Text scale="caption" color={colors.inkFaint}>{`${meter.word} energy`}</Text>
+        </Row>
+      ) : null}
       <WhenCaption ts={event.loggedAt} />
     </Stack>
   );

@@ -30,7 +30,7 @@ import {
 } from '@ollie/cadence';
 import { Stack, Row, Box } from '../../layout';
 import { Text } from '../../ui';
-import { colors, fonts } from '../../theme/tokens';
+import { colors, fonts, shadows } from '../../theme/tokens';
 import { WhenCaption } from '../../lib/WhenCaption';
 import { useModuleData } from '../../lib/useModuleData';
 import { PatternCards } from '../../patterns/PatternCards';
@@ -296,8 +296,9 @@ function Hero({
           width: empty ? 78 : 62,
           height: empty ? 78 : 62,
           borderRadius: '50%',
-          background: empty ? 'transparent' : DISC_FILL,
-          border: empty ? `1.5px solid ${colors.hairline}` : 'none',
+          background: empty ? colors.cream : DISC_FILL,
+          border: 'none',
+          boxShadow: empty ? shadows.inset : shadows.raisedSm,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',

@@ -11,19 +11,21 @@
  */
 
 import { useMemo } from 'react';
+import { Stack, Box } from '../../layout';
+import { colors, fonts } from '../../theme/tokens';
 import type { PantryItem } from './types';
 import { ageOf } from './aging';
 import { lookupDays } from './shelfLifeCache';
 
-// Redesign palette (literal, not the app theme — see header note).
+// Olive/sage neumorphic palette — now drawn from the app theme tokens so the
+// Now surface sits flush with the rest of the converted grocery box.
 const C = {
-  ink: '#23211C',
-  soft: '#6B675E',
-  faint: '#A8A29A',
-  hair: '#EAE5DB',
-  sage: '#7C8C6F',
+  ink: colors.ink,
+  soft: colors.inkSoft,
+  faint: colors.inkFaint,
+  sage: colors.sageDeep,
 };
-const SERIF = '"DM Serif Display", Georgia, "Times New Roman", serif';
+const SERIF = fonts.serif;
 const SMCP: React.CSSProperties = {
   fontVariantCaps: 'all-small-caps',
   letterSpacing: '0.13em',
@@ -92,7 +94,7 @@ export function GroceryNow({
   const emptyKitchen = pantryItems.length === 0;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column' }}>
+    <Stack gap={14}>
       {/* heading */}
       <div style={{ marginBottom: 6 }}>
         <div style={{ ...SMCP, marginBottom: 14 }}>grocery</div>
@@ -148,7 +150,9 @@ export function GroceryNow({
         </Band>
       )}
 
-      <Band label="tonight">
+      {/* tonight — the prominent hero, a darker-sage paper card */}
+      <Box bg="paper" radius="card" shadow="card" style={{ padding: '20px 22px' }}>
+        <div style={{ ...SMCP, color: colors.inkSoft, marginBottom: 12 }}>tonight</div>
         <button
           type="button"
           onClick={onGoCook}
@@ -179,17 +183,17 @@ export function GroceryNow({
           </span>
           <span style={{ color: C.sage, fontSize: 20, flexShrink: 0 }}>→</span>
         </button>
-      </Band>
-    </div>
+      </Box>
+    </Stack>
   );
 }
 
 function Band({ label, children }: { label: string; children: React.ReactNode }): JSX.Element {
   return (
-    <div style={{ padding: '22px 0', borderTop: `1px solid ${C.hair}` }}>
+    <Box bg="cream" radius="card" shadow="raised" style={{ padding: '18px 20px' }}>
       <div style={{ ...SMCP, marginBottom: 12 }}>{label}</div>
       {children}
-    </div>
+    </Box>
   );
 }
 

@@ -44,7 +44,7 @@ import { useUser } from '@clerk/clerk-react';
 import { useBearer } from '../../auth/useBearer';
 import { Stack, Row } from '../../layout';
 import { Text } from '../../ui';
-import { colors, fonts } from '../../theme/tokens';
+import { colors, fonts, shadows } from '../../theme/tokens';
 import { kv } from '../../storage';
 import { routeFeedMe, routeCookHistory } from '../../api/workers';
 import type {
@@ -338,8 +338,21 @@ function DietChipRow({
   diet: FeedDietFilter;
   onChoose: (wire: FeedDietFilter) => void;
 }): JSX.Element {
+  // Soft segmented control on a flat cream rail — the active diet sinks into
+  // an inset well with sageDeep text; the rest sit quiet and flush.
   return (
-    <Row gap={10} align="center" wrap>
+    <Row
+      gap={6}
+      align="center"
+      wrap
+      style={{
+        alignSelf: 'flex-start',
+        padding: 5,
+        borderRadius: 999,
+        background: colors.cream,
+        boxShadow: shadows.raisedSm,
+      }}
+    >
       {DIET_CHOICES.map((d) => {
         const on = d.wire === diet;
         return (
@@ -351,9 +364,10 @@ function DietChipRow({
             style={{
               padding: '7px 14px',
               borderRadius: 999,
-              border: `1px solid ${on ? colors.sage : colors.hairline}`,
-              background: on ? withSageTint(colors.sage) : 'transparent',
-              color: on ? colors.sage : colors.inkFaint,
+              border: 'none',
+              background: 'transparent',
+              boxShadow: on ? shadows.inset : 'none',
+              color: on ? colors.sageDeep : colors.inkFaint,
               fontSize: 11,
               fontWeight: 600,
               cursor: 'pointer',
@@ -556,8 +570,9 @@ function RecipeCard({
       style={{
         padding: '20px 22px',
         background: colors.paper,
-        border: `1px solid ${colors.hairline}`,
-        borderRadius: 4,
+        border: 'none',
+        borderRadius: 22,
+        boxShadow: shadows.card,
         display: 'flex',
         flexDirection: 'column',
         gap: 10,
@@ -756,18 +771,21 @@ function RecipeCard({
         </Stack>
       )}
 
-      <Row justify="flex-end" align="center" style={{ marginTop: 4 }}>
+      <Row justify="flex-end" align="center" gap={9} style={{ marginTop: 4 }}>
         {cooked ? (
-          <span
-            style={{
-              fontSize: 11,
-              color: colors.sage,
-              fontWeight: 600,
-              ...SMCP_STYLE,
-            }}
-          >
-            cooked
-          </span>
+          <>
+            <CookTick done />
+            <span
+              style={{
+                fontSize: 11,
+                color: colors.sage,
+                fontWeight: 600,
+                ...SMCP_STYLE,
+              }}
+            >
+              cooked
+            </span>
+          </>
         ) : (
           <button
             type="button"
@@ -777,12 +795,16 @@ function RecipeCard({
               border: 'none',
               padding: 0,
               cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 9,
               fontSize: 11,
               color: colors.sage,
               fontWeight: 600,
               ...SMCP_STYLE,
             }}
           >
+            <CookTick done={false} />
             cooked it
           </button>
         )}
@@ -848,15 +870,40 @@ function RecentStrip({ rows }: { rows: CookHistoryEntry[] }): JSX.Element | null
 
 // ─── helpers ──────────────────────────────────────────────────────────────
 
+/**
+ * The 24px neumorphic round on the "cooked it" affordance. Idle = a pressed
+ * inset well; done = a filled sageDeep disc. No checkmark glyph — the fill
+ * itself is the done signal, matching the editorial restraint elsewhere.
+ */
+function CookTick({ done }: { done: boolean }): JSX.Element {
+  return (
+    <span
+      aria-hidden
+      style={{
+        width: 24,
+        height: 24,
+        borderRadius: '50%',
+        flexShrink: 0,
+        background: done ? colors.sageDeep : colors.cream,
+        boxShadow: done
+          ? shadows.raisedSm
+          : 'inset 3px 3px 6px rgba(120,140,122,0.55), inset -3px -3px 6px rgba(255,255,255,0.85)',
+        transition: 'background 200ms cubic-bezier(0.18, 0, 0.22, 1)',
+      }}
+    />
+  );
+}
+
 function glyphButton(disabled: boolean): CSSProperties {
   return {
-    width: 28,
-    height: 28,
+    width: 32,
+    height: 32,
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
-    border: `1px solid ${colors.hairline}`,
-    background: 'transparent',
+    border: 'none',
+    background: colors.cream,
+    boxShadow: disabled ? shadows.inset : shadows.raisedSm,
     borderRadius: 999,
     cursor: disabled ? 'not-allowed' : 'pointer',
     color: disabled ? colors.inkGhost : colors.inkFaint,
@@ -864,19 +911,6 @@ function glyphButton(disabled: boolean): CSSProperties {
     fontWeight: 400,
     padding: 0,
   };
-}
-
-/**
- * Translucent sage fill for the active diet chip. The token palette doesn't
- * expose a pre-mixed "sageTint" so we layer an alpha right at the call site.
- * Hex stripping is defensive — `colors.sage` is a 7-char hex in both modes.
- */
-function withSageTint(hex: string): string {
-  if (!/^#[0-9a-f]{6}$/i.test(hex)) return 'transparent';
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  return `rgba(${r}, ${g}, ${b}, 0.08)`;
 }
 
 /**

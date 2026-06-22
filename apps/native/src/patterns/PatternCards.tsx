@@ -27,7 +27,7 @@
 import { useMemo, useState } from 'react';
 import { Stack } from '../layout';
 import { Text } from '../ui';
-import { colors, fontSizes, lineHeights, space, radii, letterSpacings } from '../theme/tokens';
+import { colors, fontSizes, lineHeights, space, radii, letterSpacings, shadows } from '../theme/tokens';
 import { usePatterns, type PatternCard } from './usePatterns';
 
 export interface PatternCardsProps {
@@ -94,8 +94,8 @@ export function PatternCards({ module, max = 4 }: PatternCardsProps): JSX.Elemen
             style={{
               position: 'relative',
               background: colors.paper,
-              border: `1px solid ${colors.hairlineSoft}`,
-              borderRadius: radii.md,
+              boxShadow: shadows.card,
+              borderRadius: radii.card,
               padding: `${space[4]} ${space[5]}`,
             }}
           >

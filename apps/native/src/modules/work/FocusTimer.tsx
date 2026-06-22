@@ -19,7 +19,7 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { Stack } from '../../layout';
 import { Text } from '../../ui';
-import { colors, fonts, fontSizes, letterSpacings } from '../../theme/tokens';
+import { colors, fonts, fontSizes, letterSpacings, radii, shadows } from '../../theme/tokens';
 import { events } from './repo';
 import { NotifyPrimeLine } from '../../notify/NotifyPrimeLine';
 
@@ -319,10 +319,11 @@ export function FocusTimer({ onSessionLogged }: FocusTimerProps): JSX.Element {
                   fontFamily: fonts.sans,
                   fontSize: fontSizes.body,
                   color: colors.ink,
-                  background: 'transparent',
+                  background: colors.cream,
                   border: 'none',
-                  borderBottom: `1px solid ${colors.hairline}`,
-                  padding: '2px 4px',
+                  borderRadius: radii.card,
+                  boxShadow: shadows.inset,
+                  padding: '8px 10px',
                   outline: 'none',
                   textAlign: 'center',
                 }}
@@ -356,10 +357,11 @@ export function FocusTimer({ onSessionLogged }: FocusTimerProps): JSX.Element {
             fontFamily: fonts.sans,
             fontSize: fontSizes.body,
             color: colors.ink,
-            background: 'transparent',
+            background: colors.cream,
             border: 'none',
-            borderBottom: `1px solid ${colors.hairline}`,
-            padding: '4px 0',
+            borderRadius: radii.card,
+            boxShadow: shadows.inset,
+            padding: '12px 16px',
             width: '100%',
             outline: 'none',
           }}
@@ -369,8 +371,9 @@ export function FocusTimer({ onSessionLogged }: FocusTimerProps): JSX.Element {
       {/* ── time display ───────────────────────────────────────────────── */}
       <div
         style={{
-          borderTop: `1px solid ${colors.hairline}`,
-          borderBottom: `1px solid ${colors.hairline}`,
+          background: colors.paper,
+          borderRadius: radii.card,
+          boxShadow: shadows.card,
           padding: '32px 0',
           textAlign: 'center',
         }}

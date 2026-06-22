@@ -191,7 +191,7 @@ describe('TodoScreen', () => {
     expect(empty!.textContent).toContain('brain dump something to fill it');
   });
 
-  it('aggregates rows from admin tasks, admin renewals, work, and grocery', async () => {
+  it('aggregates rows from admin tasks, admin renewals, work (grocery excluded)', async () => {
     mockAdminTasksListOpen.mockResolvedValue([
       {
         id: 'a1',
@@ -241,17 +241,19 @@ describe('TodoScreen', () => {
         'todo-row-admin:a1',
         'todo-row-admin:r1',
         'todo-row-work:w1',
-        'todo-row-grocery:g1',
       ]),
     );
-    expect(ids).toHaveLength(4);
+    // Grocery shopping items are intentionally NOT shown on the to-do screen
+    // (product decision 2026-06-23) — they live only in the grocery module.
+    expect(ids).not.toContain('todo-row-grocery:g1');
+    expect(ids).toHaveLength(3);
 
     // Display copy for the phone row is normalized.
     const phoneRow = container.querySelector('[data-testid="todo-row-admin:a1"]');
     expect(phoneRow!.textContent).toContain('call mom about christmas');
   });
 
-  it('clicking a grocery row routes to shopping.markPurchased and fades the row', async () => {
+  it('does NOT show grocery shopping items (they live only in the grocery module)', async () => {
     mockGroceryListOpen.mockResolvedValue([
       {
         id: 'g1',
@@ -264,27 +266,11 @@ describe('TodoScreen', () => {
     renderScreen();
     await settle();
 
-    const trigger = container.querySelector(
-      '[data-testid="todo-row-grocery:g1"] [role="button"]',
-    ) as HTMLElement;
-    expect(trigger).not.toBeNull();
-
-    act(() => {
-      trigger.click();
-    });
-    await settle();
-
-    expect(mockGroceryMarkPurchased).toHaveBeenCalledWith('g1');
-    expect(mockAdminTasksMarkComplete).not.toHaveBeenCalled();
-    expect(mockWorkMarkComplete).not.toHaveBeenCalled();
-
-    // After the FADE_OUT_MS (200ms) timer fires the row drops from state.
-    await act(async () => {
-      vi.advanceTimersByTime(250);
-    });
-    await settle();
-    const stillThere = container.querySelector('[data-testid="todo-row-grocery:g1"]');
-    expect(stillThere).toBeNull();
+    // The grocery row must never render on the to-do surface…
+    const groceryRow = container.querySelector('[data-testid="todo-row-grocery:g1"]');
+    expect(groceryRow).toBeNull();
+    // …and nothing on this screen can trigger a grocery purchase.
+    expect(mockGroceryMarkPurchased).not.toHaveBeenCalled();
   });
 
   it('clicking an admin renewal routes to renewals.markComplete (not tasks)', async () => {

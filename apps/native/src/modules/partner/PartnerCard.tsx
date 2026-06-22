@@ -11,7 +11,7 @@ import { useEffect, useState } from 'react';
 import { useBearer } from '../../auth/useBearer';
 import { Stack, Row } from '../../layout';
 import { Text } from '../../ui';
-import { colors } from '../../theme/tokens';
+import { colors, radii, shadows } from '../../theme/tokens';
 import { partnerRepo } from './repo';
 import { cardLine } from './interpret';
 import type { InterpretedState, PartnerPairing } from './types';
@@ -56,8 +56,9 @@ export function PartnerCard(): JSX.Element | null {
       style={{
         padding: '18px 20px',
         background: colors.paper,
-        border: `1px solid ${colors.hairlineSoft}`,
-        borderRadius: 4,
+        border: 'none',
+        borderRadius: radii.card,
+        boxShadow: shadows.card,
       }}
     >
       <Row justify="space-between" align="baseline">

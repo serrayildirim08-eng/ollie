@@ -257,7 +257,11 @@ export function TodoScreen(): JSX.Element {
     () =>
       bucketTodos(items, today)
         .filter((b) => b.id === 'today' || b.id === 'noDate')
-        .flatMap((b) => b.items),
+        .flatMap((b) => b.items)
+        // Product decision (2026-06-23): grocery shopping items live ONLY in
+        // the grocery module, not the to-do surface. Buying things stays out
+        // of the "today" task list to keep it uncluttered.
+        .filter((it) => it.source !== 'grocery'),
     [items, today],
   );
 

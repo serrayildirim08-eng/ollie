@@ -30,6 +30,8 @@ vi.mock('./repo', () => {
 });
 
 vi.mock('../../layout', () => ({
+  Box: ({ children, style }: { children: React.ReactNode; style?: React.CSSProperties; [k: string]: unknown }) =>
+    React.createElement("div", { style }, children),
   Stack: ({ children }: { children: React.ReactNode }) =>
     React.createElement('div', { 'data-stack': true }, children),
   Row: ({ children }: { children: React.ReactNode }) =>
@@ -42,6 +44,8 @@ vi.mock('../../ui', () => ({
 }));
 
 vi.mock('../../theme/tokens', () => ({
+  radii: { none: "0", xs: "2px", sm: "4px", md: "8px", lg: "12px", small: "10px", card: "22px", surface: "28px", pill: "999px" },
+  shadows: { none: "none", sm: "", md: "", lg: "", raised: "", raisedSm: "", inset: "", card: "" },
   colors: {
     ink: '#14140F',
     inkSoft: '#5A574E',

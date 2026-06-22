@@ -31,6 +31,7 @@ vi.mock('../../ui', () => ({
 }));
 
 vi.mock('../../theme/tokens', () => ({
+  fonts: { serif: "serif", sans: "sans-serif", mono: "monospace" },
   radii: { none: "0", xs: "2px", sm: "4px", md: "8px", lg: "12px", small: "10px", card: "22px", surface: "28px", pill: "999px" },
   shadows: { none: "none", sm: "", md: "", lg: "", raised: "", raisedSm: "", inset: "", card: "" },
   colors: {
