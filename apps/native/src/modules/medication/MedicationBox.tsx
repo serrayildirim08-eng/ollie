@@ -797,23 +797,26 @@ function MedProfileEditor({
 
         <Row gap={8} align="center">
           <input
-            type="time"
+            type="text"
+            inputMode="numeric"
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') addSlot();
             }}
+            placeholder="9:00 or 9am"
             aria-label="add a time"
             style={{
               border: 'none',
               borderRadius: radii.card,
               boxShadow: shadows.inset,
-              padding: '9px 12px',
+              padding: '9px 14px',
               fontSize: fontSizes.small,
               color: colors.ink,
               background: colors.cream,
               fontFamily: 'inherit',
               outline: 'none',
+              width: 120,
             }}
           />
           <button

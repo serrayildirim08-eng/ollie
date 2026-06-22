@@ -74,11 +74,22 @@ export function parseSchedule(raw: unknown): string[] {
 /** Normalise a single time value to zero-padded "HH:MM", or null if invalid. */
 export function normaliseTime(raw: unknown): string | null {
   if (typeof raw !== 'string') return null;
-  const m = /^(\d{1,2}):(\d{2})$/.exec(raw.trim());
+  // Forgiving parse — accepts "09:00", "9", "9:30", "9am", "9 am", "9:30 pm",
+  // "21:00". ADHD-friendly: people type time however feels natural.
+  const s = raw.trim().toLowerCase();
+  const m = /^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/.exec(s);
   if (!m) return null;
-  const h = Number(m[1]);
-  const mn = Number(m[2]);
-  if (h < 0 || h > 23 || mn < 0 || mn > 59) return null;
+  let h = Number(m[1]);
+  const mn = m[2] != null ? Number(m[2]) : 0;
+  const ap = m[3];
+  if (mn < 0 || mn > 59) return null;
+  if (ap) {
+    if (h < 1 || h > 12) return null;
+    if (ap === 'pm' && h !== 12) h += 12;
+    if (ap === 'am' && h === 12) h = 0;
+  } else if (h < 0 || h > 23) {
+    return null;
+  }
   return `${h.toString().padStart(2, '0')}:${mn.toString().padStart(2, '0')}`;
 }
 
