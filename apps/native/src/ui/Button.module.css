@@ -16,7 +16,7 @@
   justify-content: center;
   gap: var(--ollie-space-2);
 
-  border-radius: 0;
+  border-radius: var(--ollie-radius-card);
 
   font-weight: var(--ollie-weight-medium);
   letter-spacing: var(--ollie-tracking-caps);
@@ -46,18 +46,21 @@
 .primary {
   background-color: var(--ollie-color-sage-deep);
   color: var(--ollie-color-cream);
-  border: 1px solid var(--ollie-color-sage-deep);
+  border: none;
+  box-shadow: 6px 6px 14px rgba(86, 111, 51, 0.40), -3px -3px 10px rgba(255, 255, 255, 0.35);
 }
 .primary:hover:not(:disabled):not(.loading) {
   background-color: var(--ollie-color-ink);
-  border-color: var(--ollie-color-ink);
 }
-.primary:active:not(:disabled):not(.loading) { opacity: 0.85; }
+.primary:active:not(:disabled):not(.loading) {
+  box-shadow: inset 4px 4px 9px rgba(60, 80, 35, 0.45), inset -3px -3px 9px rgba(255, 255, 255, 0.20);
+}
 
 .secondary {
-  background-color: transparent;
+  background-color: var(--ollie-color-cream);
   color: var(--ollie-color-ink);
-  border: 1px solid var(--ollie-color-hairline);
+  border: none;
+  box-shadow: var(--ollie-shadow-raised-sm);
 }
 .secondary:hover:not(:disabled):not(.loading) {
   background-color: var(--ollie-color-paper);

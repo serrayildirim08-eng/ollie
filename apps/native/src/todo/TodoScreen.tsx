@@ -31,7 +31,7 @@ import {
 } from 'react';
 import { Row, Stack } from '../layout';
 import { Text } from '../ui';
-import { colors, durations, easings } from '../theme/tokens';
+import { colors, durations, easings, radii, shadows } from '../theme/tokens';
 import {
   migrateAdmin,
   recurringDecisions as adminDecisionsRepo,
@@ -267,9 +267,21 @@ export function TodoScreen(): JSX.Element {
         <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
           to-do
         </Text>
-        <Text scale="display">Today</Text>
+        <Text
+          scale="title"
+          color={colors.ink}
+          style={{
+            fontFamily: 'var(--ollie-font-sans)',
+            fontSize: '26px',
+            fontWeight: 700,
+            lineHeight: 1.15,
+            letterSpacing: '-0.01em',
+          }}
+        >
+          today
+        </Text>
         <Text scale="body" color={colors.inkSoft} style={{ maxWidth: 540 }}>
-          what's on you today.
+          everything due today, in one place.
         </Text>
       </Stack>
 
@@ -284,7 +296,7 @@ export function TodoScreen(): JSX.Element {
             : 'nothing for today. rest easy.'}
         </Text>
       ) : (
-        <Stack gap={0} as="ul" style={LIST_RESET} data-testid="bucket-today">
+        <Stack gap={12} as="ul" style={LIST_RESET} data-testid="bucket-today">
           {todayList.map((item, i) => (
             item.kind === 'decision' ? (
               <DecisionRow
@@ -319,7 +331,7 @@ interface TodoRowProps {
   readonly onComplete: (item: TodoItem) => void | Promise<void>;
 }
 
-function TodoRow({ item, first, fading, onComplete }: TodoRowProps): JSX.Element {
+function TodoRow({ item, fading, onComplete }: TodoRowProps): JSX.Element {
   const [hover, setHover] = useState(false);
   const handleClick = useCallback(() => {
     void onComplete(item);
@@ -338,8 +350,6 @@ function TodoRow({ item, first, fading, onComplete }: TodoRowProps): JSX.Element
     <li
       style={{
         ...LIST_ITEM_RESET,
-        borderTop: first ? `1px solid ${colors.hairline}` : 'none',
-        borderBottom: `1px solid ${colors.hairline}`,
         opacity: fading ? 0 : 1,
         transition: `opacity ${FADE_OUT_MS}ms ${easings.calmOut}`,
       }}
@@ -355,22 +365,28 @@ function TodoRow({ item, first, fading, onComplete }: TodoRowProps): JSX.Element
         onMouseLeave={() => setHover(false)}
         style={{
           cursor: 'pointer',
-          padding: `${ROW_PAD_Y}px 0`,
+          padding: '16px 18px',
           outline: 'none',
+          background: colors.cream,
+          borderRadius: radii.card,
+          boxShadow: shadows.raised,
         }}
       >
-        <Row gap={16} align="baseline" justify="space-between">
-          <Row gap={14} align="baseline" style={{ minWidth: 0, flex: 1 }}>
+        <Row gap={16} align="center" justify="space-between">
+          <Row gap={14} align="center" style={{ minWidth: 0, flex: 1 }}>
             <span
               aria-hidden="true"
               style={{
-                width: BULLET_SIZE,
-                height: BULLET_SIZE,
-                background: hover ? colors.sage : colors.ink,
+                width: 24,
+                height: 24,
+                borderRadius: '50%',
+                background: colors.cream,
+                boxShadow: hover
+                  ? `inset 2px 2px 5px rgba(120,140,122,0.5), inset -2px -2px 5px rgba(255,255,255,0.8)`
+                  : `inset 3px 3px 6px rgba(120,140,122,0.55), inset -3px -3px 6px rgba(255,255,255,0.85)`,
                 display: 'inline-block',
-                marginTop: 8,
                 flexShrink: 0,
-                transition: `background ${durations.tap} ${easings.calmOut}`,
+                transition: `box-shadow ${durations.tap} ${easings.calmOut}`,
               }}
             />
             <Text

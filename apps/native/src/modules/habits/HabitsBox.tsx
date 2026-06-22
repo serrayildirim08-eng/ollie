@@ -20,7 +20,7 @@
  */
 
 import { useCallback, useState, type CSSProperties } from 'react';
-import { Stack, Row } from '../../layout';
+import { Stack, Row, Box } from '../../layout';
 import { Text } from '../../ui';
 import { colors } from '../../theme/tokens';
 import { useModuleData } from '../../lib/useModuleData';
@@ -119,7 +119,19 @@ export function HabitsBox(): JSX.Element {
         <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
           box · habits
         </Text>
-        <Text scale="display">Habits</Text>
+        <Text
+          scale="title"
+          color={colors.ink}
+          style={{
+            fontFamily: 'var(--ollie-font-sans)',
+            fontSize: '26px',
+            fontWeight: 700,
+            lineHeight: 1.15,
+            letterSpacing: '-0.01em',
+          }}
+        >
+          habits
+        </Text>
         <Text scale="body" color={colors.inkSoft} style={{ maxWidth: 460 }}>
           a quiet list of what you do. no streaks, no scoring.
         </Text>
@@ -137,11 +149,32 @@ export function HabitsBox(): JSX.Element {
                 nothing yet today.
               </Text>
             ) : (
-              <Stack gap={4}>
+              <Stack gap={12}>
                 {todayCompletions.map((h) => (
-                  <Row key={h.id} gap={12} align="baseline" style={{ padding: '8px 0' }}>
-                    <Text scale="body">{h.name}</Text>
-                  </Row>
+                  <Box
+                    key={h.id}
+                    bg="cream"
+                    radius="card"
+                    shadow="raised"
+                    style={{ padding: '16px 18px' }}
+                  >
+                    <Row gap={12} align="center">
+                      <span
+                        aria-hidden="true"
+                        style={{
+                          width: 24,
+                          height: 24,
+                          borderRadius: '50%',
+                          background: colors.sageDeep,
+                          boxShadow:
+                            'inset 3px 3px 6px rgba(120,140,122,0.55), inset -3px -3px 6px rgba(255,255,255,0.85)',
+                          display: 'inline-block',
+                          flexShrink: 0,
+                        }}
+                      />
+                      <Text scale="body">{h.name}</Text>
+                    </Row>
+                  </Box>
                 ))}
               </Stack>
             )}
@@ -187,38 +220,46 @@ export function HabitsBox(): JSX.Element {
                 no habits yet — add one above, or dump &lsquo;did yoga&rsquo;.
               </Text>
             ) : (
-              <Stack gap={4}>
+              <Stack gap={12}>
                 {rows.map((r) => (
-                  <Stack key={r.habit.id} gap={6} style={{ padding: '10px 0' }}>
-                    <Row gap={12} align="baseline" justify="space-between">
-                      <Text scale="body">{r.habit.name}</Text>
-                      <Row gap={12} align="baseline">
-                        {!r.doneToday && (
+                  <Box
+                    key={r.habit.id}
+                    bg="cream"
+                    radius="card"
+                    shadow="raised"
+                    style={{ padding: '16px 18px' }}
+                  >
+                    <Stack gap={10}>
+                      <Row gap={12} align="baseline" justify="space-between">
+                        <Text scale="body">{r.habit.name}</Text>
+                        <Row gap={12} align="baseline">
+                          {!r.doneToday && (
+                            <button
+                              type="button"
+                              onClick={() => void handleCheck(r.habit.id)}
+                              style={buttonStyle}
+                              aria-label={`mark ${r.habit.name} done`}
+                            >
+                              mark done
+                            </button>
+                          )}
                           <button
                             type="button"
-                            onClick={() => void handleCheck(r.habit.id)}
+                            onClick={() => void handleRemoveHabit(r.habit.id)}
                             style={buttonStyle}
-                            aria-label={`mark ${r.habit.name} done`}
+                            aria-label={`remove ${r.habit.name}`}
                           >
-                            mark done
+                            remove
                           </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => void handleRemoveHabit(r.habit.id)}
-                          style={buttonStyle}
-                          aria-label={`remove ${r.habit.name}`}
-                        >
-                          remove
-                        </button>
+                        </Row>
                       </Row>
-                    </Row>
-                    <CueChooser
-                      value={r.habit.cue}
-                      onChange={(c) => void handleSetCue(r.habit.id, c)}
-                      ariaPrefix={`${r.habit.name} cue`}
-                    />
-                  </Stack>
+                      <CueChooser
+                        value={r.habit.cue}
+                        onChange={(c) => void handleSetCue(r.habit.id, c)}
+                        ariaPrefix={`${r.habit.name} cue`}
+                      />
+                    </Stack>
+                  </Box>
                 ))}
               </Stack>
             )}
@@ -231,25 +272,27 @@ export function HabitsBox(): JSX.Element {
                 morning&rsquo;.
               </Text>
             ) : (
-              <Stack gap={4}>
+              <Stack gap={12}>
                 {identityEvents.map((ev) => (
-                  <Row
+                  <Box
                     key={ev.id}
-                    gap={12}
-                    align="baseline"
-                    justify="space-between"
-                    style={{ padding: '10px 0' }}
+                    bg="cream"
+                    radius="card"
+                    shadow="raised"
+                    style={{ padding: '16px 18px' }}
                   >
-                    <Text scale="body">{parseIdentity(ev.data)}</Text>
-                    <button
-                      type="button"
-                      onClick={() => void handleRemoveIdentity(ev.id)}
-                      style={buttonStyle}
-                      aria-label="remove identity note"
-                    >
-                      remove
-                    </button>
-                  </Row>
+                    <Row gap={12} align="baseline" justify="space-between">
+                      <Text scale="body">{parseIdentity(ev.data)}</Text>
+                      <button
+                        type="button"
+                        onClick={() => void handleRemoveIdentity(ev.id)}
+                        style={buttonStyle}
+                        aria-label="remove identity note"
+                      >
+                        remove
+                      </button>
+                    </Row>
+                  </Box>
                 ))}
               </Stack>
             )}
@@ -346,10 +389,12 @@ const segmentStyle: CSSProperties = {
 };
 
 const inputStyle: CSSProperties = {
-  background: 'none',
+  background: colors.cream,
   border: 'none',
-  borderBottom: `1px solid ${colors.hairline}`,
-  padding: '6px 0',
+  borderRadius: 10,
+  boxShadow:
+    'inset 5px 5px 12px rgba(120,140,122,0.40), inset -5px -5px 12px rgba(255,255,255,0.78)',
+  padding: '12px 16px',
   color: colors.ink,
   fontSize: 16,
   outline: 'none',

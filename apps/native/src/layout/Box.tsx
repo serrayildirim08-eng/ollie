@@ -7,17 +7,19 @@
  */
 
 import React, { CSSProperties } from 'react';
-import { colors as color, space, radii as radius } from '../theme/tokens';
+import { colors as color, space, radii as radius, shadows as shadow } from '../theme/tokens';
 
 // Token key types derived from the token maps
 type ColorKey  = keyof typeof color;
 type SpaceKey  = keyof typeof space;
 type RadiusKey = keyof typeof radius;
+type ShadowKey = keyof typeof shadow;
 
 // Accept either a token key or an arbitrary CSS string
 type ColorProp  = ColorKey  | (string & {});
 type SpaceProp  = SpaceKey  | (string & {});
 type RadiusProp = RadiusKey | (string & {});
+type ShadowProp = ShadowKey | (string & {});
 
 export interface BoxProps {
   /** background-color: token key or raw CSS */
@@ -44,6 +46,8 @@ export interface BoxProps {
   mb?: SpaceProp | number;
   /** border-radius: token key or raw CSS */
   radius?: RadiusProp;
+  /** box-shadow: token key (e.g. "raised", "inset", "card") or raw CSS */
+  shadow?: ShadowProp;
   /** width — raw CSS string or number (px) */
   width?: string | number;
   /** height — raw CSS string or number (px) */
@@ -91,6 +95,12 @@ function resolveRadius(val: RadiusProp | undefined): string | undefined {
   return val as string;
 }
 
+function resolveShadow(val: ShadowProp | undefined): string | undefined {
+  if (val === undefined) return undefined;
+  if (val in shadow) return shadow[val as ShadowKey];
+  return val as string;
+}
+
 function resolveSize(val: string | number | undefined): string | undefined {
   if (val === undefined) return undefined;
   if (typeof val === 'number') return `${val}px`;
@@ -105,6 +115,7 @@ export function Box({
   margin,
   mt, mb,
   radius: radiusProp,
+  shadow: shadowProp,
   width,
   height,
   minWidth,
@@ -129,6 +140,7 @@ export function Box({
     marginTop:       resolveSpace(mt),
     marginBottom:    resolveSpace(mb),
     borderRadius:    resolveRadius(radiusProp),
+    boxShadow:       resolveShadow(shadowProp),
     width:           resolveSize(width),
     height:          resolveSize(height),
     minWidth:        resolveSize(minWidth),

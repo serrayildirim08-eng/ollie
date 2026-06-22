@@ -30,7 +30,7 @@ import {
   medianIntervalDays,
   type CadenceEstimate,
 } from '@ollie/cadence';
-import { Stack, Row } from '../../layout';
+import { Stack, Row, Box } from '../../layout';
 import { Text, Input, Button } from '../../ui';
 import { colors } from '../../theme/tokens';
 import { WhenCaption } from '../../lib/WhenCaption';
@@ -200,20 +200,28 @@ export function WorkBox(): JSX.Element {
         <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
           box
         </Text>
-        <Text scale="display">Work</Text>
+        <Text
+          scale="title"
+          color={colors.ink}
+          style={{
+            fontFamily: 'var(--ollie-font-sans)',
+            fontSize: '26px',
+            fontWeight: 700,
+            lineHeight: 1.15,
+            letterSpacing: '-0.01em',
+          }}
+        >
+          work
+        </Text>
       </Stack>
 
-      {/* THE WORK CARD — a tall preview block sitting between hairline rules.
-          The v2 face's `borderTop / borderBottom` + 24/26 vertical padding
-          ports straight over; the gutter (62px) holds the matter-stack glyph
-          and the body sits in the rest. */}
-      <div
-        style={{
-          boxSizing: 'border-box',
-          borderTop: `1px solid ${colors.hairline}`,
-          borderBottom: `1px solid ${colors.hairline}`,
-          padding: '24px 2px 26px',
-        }}
+      {/* THE WORK CARD — a tall raised neumorphic block. The gutter (62px)
+          holds the matter-stack glyph and the body sits in the rest. */}
+      <Box
+        bg="cream"
+        radius="surface"
+        shadow="raised"
+        style={{ padding: '24px 20px 26px' }}
       >
         {/* card head — gutter glyph + glance line */}
         <Row gap={16} align="center" style={{ width: '100%' }}>
@@ -340,7 +348,7 @@ export function WorkBox(): JSX.Element {
               once focus_log has enough signal. Renders nothing when empty. */}
           <PatternCards module="work" />
         </div>
-      </div>
+      </Box>
 
       {/* The closing sage note — calm in-voice line about how the box stays
           fed. Mirrors the v2 face's sage-dot tail; passive (no CTA), because
@@ -585,10 +593,14 @@ function Checkbox({
       aria-pressed={checked}
       style={{
         appearance: 'none',
-        background: checked ? colors.sageSoft : 'transparent',
-        border: `1px solid ${colors.sageSoft}`,
-        width: 14,
-        height: 14,
+        width: 24,
+        height: 24,
+        borderRadius: '50%',
+        border: 'none',
+        background: checked ? colors.sageDeep : colors.cream,
+        boxShadow: checked
+          ? 'none'
+          : 'inset 3px 3px 6px rgba(120,140,122,0.55), inset -3px -3px 6px rgba(255,255,255,0.85)',
         padding: 0,
         cursor: 'pointer',
         flexShrink: 0,

@@ -11,7 +11,7 @@
 import { Profiler, type ProfilerOnRenderCallback } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router";
 import { Box } from "../layout";
-import { colors, space } from "../theme/tokens";
+import { colors } from "../theme/tokens";
 import { TabBar } from "./TabBar";
 
 // Measurement sayacı: per-screen render cost. Only logs renders slower than
@@ -86,6 +86,7 @@ const responsiveCss = `
     overflow: hidden;
   }
   .ollie-main {
+    padding: 24px;
     overflow-y: auto;
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
@@ -93,7 +94,10 @@ const responsiveCss = `
   @media (max-width: ${BREAKPOINT_PX - 1}px) {
     .ollie-nav-sidebar { display: none; }
     .ollie-nav-bottom { display: block; }
-    .ollie-main { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
+    .ollie-main {
+      padding-top: calc(24px + env(safe-area-inset-top));
+      padding-bottom: calc(72px + env(safe-area-inset-bottom));
+    }
     .ollie-shell-root { flex-direction: column; }
   }
 `;
@@ -118,7 +122,6 @@ export function Layout(): JSX.Element {
           className="ollie-main"
           style={{
             flex: 1,
-            padding: space[6],
             minWidth: 0,
             minHeight: 0,
           }}

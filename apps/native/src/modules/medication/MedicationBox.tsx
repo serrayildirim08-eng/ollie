@@ -28,13 +28,14 @@
 
 import { useCallback, useState } from 'react';
 import { type CadenceEstimate } from '@ollie/cadence';
-import { Stack, Row } from '../../layout';
+import { Stack, Row, Box } from '../../layout';
 import { Text } from '../../ui';
 import {
   colors,
   fontSizes,
   fontWeights,
   letterSpacings,
+  shadows,
 } from '../../theme/tokens';
 import { formatRelativeTime } from '../../lib/formatRelativeTime';
 import { PatternCards } from '../../patterns/PatternCards';
@@ -164,7 +165,19 @@ export function MedicationBox(): JSX.Element {
         <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
           box
         </Text>
-        <Text scale="display">Medication</Text>
+        <Text
+          scale="title"
+          color={colors.ink}
+          style={{
+            fontFamily: 'var(--ollie-font-sans)',
+            fontSize: '26px',
+            fontWeight: 700,
+            lineHeight: 1.15,
+            letterSpacing: '-0.01em',
+          }}
+        >
+          medication
+        </Text>
       </Stack>
 
       {!ready ? (
@@ -361,9 +374,9 @@ function DoseRing({ time, cold }: { time: string; cold: boolean }): JSX.Element 
         width: 164,
         height: 164,
         borderRadius: '50%',
-        border: `2px solid ${colors.hairline}`,
+        border: 'none',
         background: colors.paper,
-        boxShadow: '0 14px 34px rgba(20, 20, 15, 0.06)',
+        boxShadow: shadows.card,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -505,12 +518,13 @@ function NotebookList({
       <SectionLabel>your meds</SectionLabel>
 
       {meds.length === 0 ? (
-        // cold — one quiet placeholder line in the notebook grammar
-        <div
+        // cold — one quiet placeholder card in the notebook grammar
+        <Box
+          bg="cream"
+          radius="card"
+          shadow="raised"
           style={{
-            borderTop: `1px solid ${colors.hairline}`,
-            borderBottom: `1px solid ${colors.hairline}`,
-            padding: '18px 2px',
+            padding: '16px 18px',
             display: 'flex',
             alignItems: 'center',
             gap: 11,
@@ -520,30 +534,31 @@ function NotebookList({
             aria-hidden
             style={{
               boxSizing: 'border-box',
-              width: 9,
-              height: 9,
+              width: 24,
+              height: 24,
               borderRadius: '50%',
-              border: `1.5px dashed ${colors.hairline}`,
+              background: colors.cream,
+              boxShadow:
+                'inset 3px 3px 6px rgba(120,140,122,0.55), inset -3px -3px 6px rgba(255,255,255,0.85)',
               flexShrink: 0,
             }}
           />
           <Text scale="body" color={colors.inkFaint}>
             no medications yet — your list will gather here
           </Text>
-        </div>
+        </Box>
       ) : (
-        <div>
-          {meds.map((med, i) => (
+        <Stack gap={12}>
+          {meds.map((med) => (
             <MedListRow
               key={med.id}
               med={med}
               lastDoseAt={lastDose[med.id] ?? null}
-              first={i === 0}
               onRemove={() => onRemove(med.id)}
               onSaveProfile={(p) => onSaveProfile(med.id, p)}
             />
           ))}
-        </div>
+        </Stack>
       )}
     </Stack>
   );
@@ -552,13 +567,11 @@ function NotebookList({
 function MedListRow({
   med,
   lastDoseAt,
-  first,
   onRemove,
   onSaveProfile,
 }: {
   med: Medication;
   lastDoseAt: number | null;
-  first: boolean;
   onRemove: () => void;
   onSaveProfile: (profile: { kind: MedicationKind; schedule: string[] }) => void;
 }): JSX.Element {
@@ -572,11 +585,12 @@ function MedListRow({
       : 'no schedule';
 
   return (
-    <div
+    <Box
+      bg="cream"
+      radius="card"
+      shadow="raised"
       style={{
-        borderTop: `1px solid ${colors.hairline}`,
-        borderBottom: first ? 'none' : 'none',
-        padding: '16px 2px',
+        padding: '16px 18px',
         display: 'flex',
         flexDirection: 'column',
         gap: 14,
@@ -586,10 +600,12 @@ function MedListRow({
         <span
           aria-hidden
           style={{
-            width: 9,
-            height: 9,
+            width: 24,
+            height: 24,
             borderRadius: '50%',
             background: colors.sageDeep,
+            boxShadow:
+              'inset 3px 3px 6px rgba(120,140,122,0.55), inset -3px -3px 6px rgba(255,255,255,0.85)',
             flexShrink: 0,
           }}
         />
@@ -666,7 +682,7 @@ function MedListRow({
           }}
         />
       )}
-    </div>
+    </Box>
   );
 }
 
@@ -866,19 +882,13 @@ function ListSection<T>({
     <Stack gap={4}>
       <SectionLabel accent={accent}>{label}</SectionLabel>
       {items.length === 0 ? (
-        <div
-          style={{
-            borderTop: `1px solid ${colors.hairline}`,
-            borderBottom: `1px solid ${colors.hairline}`,
-            padding: '14px 2px',
-          }}
-        >
+        <Box bg="cream" radius="card" shadow="raised" style={{ padding: '16px 18px' }}>
           <Text scale="body" color={colors.inkFaint}>
             {empty}
           </Text>
-        </div>
+        </Box>
       ) : (
-        <div>{items.map(renderItem)}</div>
+        <Stack gap={12}>{items.map(renderItem)}</Stack>
       )}
     </Stack>
   );
@@ -898,10 +908,12 @@ function EventRow({
   onRemove: () => void;
 }): JSX.Element {
   return (
-    <div
+    <Box
+      bg="cream"
+      radius="card"
+      shadow="raised"
       style={{
-        borderTop: `1px solid ${colors.hairline}`,
-        padding: '14px 2px',
+        padding: '16px 18px',
         display: 'flex',
         alignItems: 'center',
         gap: 12,
@@ -911,11 +923,13 @@ function EventRow({
         aria-hidden
         style={{
           boxSizing: 'border-box',
-          width: 9,
-          height: 9,
+          width: 24,
+          height: 24,
           borderRadius: '50%',
           border: accentDot ? `2px solid ${accentDot}` : 'none',
-          background: accentDot ? 'transparent' : colors.inkFaint,
+          background: colors.cream,
+          boxShadow:
+            'inset 3px 3px 6px rgba(120,140,122,0.55), inset -3px -3px 6px rgba(255,255,255,0.85)',
           flexShrink: 0,
         }}
       />
@@ -961,7 +975,7 @@ function EventRow({
         </div>
       </div>
       <RemoveButton onClick={onRemove} />
-    </div>
+    </Box>
   );
 }
 

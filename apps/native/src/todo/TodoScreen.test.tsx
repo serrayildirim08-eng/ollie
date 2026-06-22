@@ -76,6 +76,8 @@ vi.mock('../layout', () => ({
     React.createElement(Tag, { 'data-stack': true, style }, children),
   Row: ({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) =>
     React.createElement('div', { 'data-row': true, style }, children),
+  Box: ({ children, style }: { children: React.ReactNode; style?: React.CSSProperties; [k: string]: unknown }) =>
+    React.createElement('div', { 'data-box': true, style }, children),
 }));
 
 vi.mock('../ui', () => ({
@@ -99,6 +101,8 @@ vi.mock('../theme/tokens', () => ({
   fonts: { sans: 'sans-serif', serif: 'serif', mono: 'monospace' },
   fontWeights: { normal: 400, medium: 500, bold: 700 },
   zIndex: { modal: 100 },
+  radii: { none: '0', xs: '2px', sm: '4px', md: '8px', lg: '12px', small: '10px', card: '22px', surface: '28px', pill: '999px' },
+  shadows: { none: 'none', sm: '', md: '', lg: '', raised: '', raisedSm: '', inset: '', card: '' },
   durations: { tap: '120ms', fade: '200ms' },
   easings: { calmOut: 'cubic-bezier(0.18,0,0.22,1)' },
 }));

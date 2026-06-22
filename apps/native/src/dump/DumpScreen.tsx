@@ -248,11 +248,34 @@ export function DumpScreen(): JSX.Element {
 
   return (
     <Stack gap={32}>
-      <Stack gap={8}>
-        <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
-          dump
+      <Stack gap={6}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+          <svg width={18} height={18} viewBox="0 0 24 24" aria-hidden>
+            <path
+              d="M21 4c-10 0-16 5-16 12 0 1.4.3 2.7.8 3.8C13 19 20 13 21 4z"
+              fill={colors.sageDeep}
+            />
+          </svg>
+          <span style={{ fontWeight: 600, letterSpacing: '0.5px', color: colors.sageDeep, fontSize: 16 }}>
+            ollie
+          </span>
+        </div>
+        <Text scale="caption" color={colors.inkSoft} style={SMCP_STYLE}>
+          good evening
         </Text>
-        <Text scale="display">What's in your head?</Text>
+        <Text
+          scale="title"
+          color={colors.ink}
+          style={{
+            fontFamily: 'var(--ollie-font-sans)',
+            fontSize: '26px',
+            fontWeight: 700,
+            lineHeight: 1.15,
+            letterSpacing: '-0.01em',
+          }}
+        >
+          what's on your mind?
+        </Text>
       </Stack>
 
       <BrainDumpInput

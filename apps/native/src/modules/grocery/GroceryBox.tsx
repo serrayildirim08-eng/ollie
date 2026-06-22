@@ -48,9 +48,9 @@ import {
   medianIntervalDays,
   type CadenceEstimate,
 } from '@ollie/cadence';
-import { Stack, Row } from '../../layout';
+import { Stack, Row, Box } from '../../layout';
 import { Text } from '../../ui';
-import { colors } from '../../theme/tokens';
+import { colors, shadows } from '../../theme/tokens';
 import { WhenCaption } from '../../lib/WhenCaption';
 import { useModuleData } from '../../lib/useModuleData';
 import { PatternCards } from '../../patterns/PatternCards';
@@ -310,7 +310,19 @@ export function GroceryBox(): JSX.Element {
           <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
             box · grocery
           </Text>
-          <Text scale="display">Grocery</Text>
+          <Text
+            scale="title"
+            color={colors.ink}
+            style={{
+              fontFamily: 'var(--ollie-font-sans)',
+              fontSize: '26px',
+              fontWeight: 700,
+              lineHeight: 1.15,
+              letterSpacing: '-0.01em',
+            }}
+          >
+            grocery
+          </Text>
           <Text scale="body" color={colors.inkSoft} style={{ maxWidth: 460 }}>
             a list you talk to, a pantry that watches what you have.
           </Text>
@@ -465,9 +477,9 @@ function ShopList({
             {" on the list · tap one when it's in the basket"}
           </Text>
 
-          {/* THE LIST — a torn-paper note, hairline rules, soft round tick */}
-          <Stack gap={0}>
-            {items.map((row, i) => (
+          {/* THE LIST — raised neumorphic cards, soft round tick well */}
+          <Stack gap={12}>
+            {items.map((row) => (
               <button
                 key={row.id}
                 type="button"
@@ -478,13 +490,11 @@ function ShopList({
                   display: 'flex',
                   alignItems: 'center',
                   gap: 15,
-                  padding: '15px 2px',
-                  borderTop: `1px solid ${colors.hairline}`,
-                  borderBottom:
-                    i === items.length - 1 ? `1px solid ${colors.hairline}` : 'none',
-                  borderLeft: 'none',
-                  borderRight: 'none',
-                  background: 'transparent',
+                  padding: '16px 18px',
+                  border: 'none',
+                  borderRadius: 22,
+                  background: colors.cream,
+                  boxShadow: shadows.raised,
                   cursor: 'pointer',
                   textAlign: 'left',
                   fontFamily: 'inherit',
@@ -568,32 +578,24 @@ function LikelyNeededSection({
   onStillHave: (row: PantryItem) => void;
 }): JSX.Element {
   return (
-    <Stack gap={0} style={{ marginTop: 16 }} aria-label="likely needed">
-      {/* hairline rule above + 11px smcp sage section caption */}
-      <div
+    <Stack gap={12} style={{ marginTop: 16 }} aria-label="likely needed">
+      {/* 11px smcp sage section caption */}
+      <span
         style={{
-          borderTop: `1px solid ${colors.hairline}`,
-          paddingTop: 16,
+          ...SMCP_STYLE,
+          fontSize: 11,
+          color: colors.sage,
+          letterSpacing: '0.08em',
+          fontStyle: 'italic',
         }}
       >
-        <span
-          style={{
-            ...SMCP_STYLE,
-            fontSize: 11,
-            color: colors.sage,
-            letterSpacing: '0.08em',
-            fontStyle: 'italic',
-          }}
-        >
-          {'≈'} likely needed
-        </span>
-      </div>
-      <Stack gap={0} style={{ marginTop: 12 }}>
-        {items.map((row, i) => (
+        {'≈'} likely needed
+      </span>
+      <Stack gap={12}>
+        {items.map((row) => (
           <LikelyNeededRow
             key={row.id}
             row={row}
-            isLast={i === items.length - 1}
             onAdd={onAdd}
             onStillHave={onStillHave}
           />
@@ -605,24 +607,16 @@ function LikelyNeededSection({
 
 function LikelyNeededRow({
   row,
-  isLast,
   onAdd,
   onStillHave,
 }: {
   row: PantryItem;
-  isLast: boolean;
   onAdd: (row: PantryItem) => void;
   onStillHave: (row: PantryItem) => void;
 }): JSX.Element {
   const [open, setOpen] = useState(false);
   return (
-    <div
-      style={{
-        borderTop: `1px solid ${colors.hairline}`,
-        borderBottom: isLast ? `1px solid ${colors.hairline}` : 'none',
-        padding: '13px 2px',
-      }}
-    >
+    <Box bg="cream" radius="card" shadow="raised" style={{ padding: '14px 18px' }}>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -701,7 +695,7 @@ function LikelyNeededRow({
           </button>
         </Row>
       )}
-    </div>
+    </Box>
   );
 }
 
@@ -757,14 +751,13 @@ function PantryList({
             {' in the pantry'}
           </Text>
 
-          <Stack gap={0}>
-            {items.map((item, i) => (
+          <Stack gap={12}>
+            {items.map((item) => (
               <PantryRow
                 key={item.id}
                 item={item}
                 aging={agingByName.get(item.id) ?? 'fresh'}
                 cadence={cadenceByName.get(item.name)}
-                isLast={i === items.length - 1}
                 onRemove={onRemove}
                 onStillHere={onStillHere}
                 onGone={onGone}
@@ -795,7 +788,6 @@ function PantryRow({
   item,
   aging,
   cadence,
-  isLast,
   onRemove,
   onStillHere,
   onGone,
@@ -804,7 +796,6 @@ function PantryRow({
   item: PantryItem;
   aging: AgingState;
   cadence: CadenceEstimate | undefined;
-  isLast: boolean;
   onRemove: (id: string) => void;
   onStillHere: (id: string) => void;
   onGone: (id: string) => void;
@@ -818,18 +809,17 @@ function PantryRow({
   const showStillHere = aging === 'still_here_prompt';
 
   return (
-    <Row
-      gap={14}
-      align="flex-start"
-      justify="space-between"
+    <Box
+      bg="cream"
+      radius="card"
+      shadow="raised"
       style={{
-        padding: '15px 2px',
-        borderTop: `1px solid ${colors.hairline}`,
-        borderBottom: isLast ? `1px solid ${colors.hairline}` : 'none',
+        padding: '16px 18px',
         opacity: faded ? 0.6 : 1,
         transition: 'opacity 240ms cubic-bezier(0.18, 0, 0.22, 1)',
       }}
     >
+    <Row gap={14} align="flex-start" justify="space-between">
       <Stack gap={4} style={{ flex: 1, minWidth: 0 }}>
         <Row gap={10} align="baseline" style={{ flexWrap: 'wrap' }}>
           <span
@@ -894,6 +884,7 @@ function PantryRow({
         <RemoveButton onClick={() => onRemove(item.id)} />
       </Row>
     </Row>
+    </Box>
   );
 }
 
@@ -1031,7 +1022,7 @@ function ArchivedSection({
 }): JSX.Element {
   const [open, setOpen] = useState(false);
   return (
-    <Stack gap={0} style={{ marginTop: 24 }}>
+    <Stack gap={12} style={{ marginTop: 24 }}>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -1039,11 +1030,11 @@ function ArchivedSection({
         style={{
           ...SMCP_STYLE,
           width: '100%',
-          background: 'none',
+          background: colors.cream,
           border: 'none',
-          borderTop: `1px solid ${colors.hairline}`,
-          borderBottom: `1px solid ${colors.hairline}`,
-          padding: '10px 2px',
+          borderRadius: 22,
+          boxShadow: shadows.raisedSm,
+          padding: '12px 18px',
           fontSize: 11,
           color: colors.inkFaint,
           textAlign: 'left',
@@ -1054,20 +1045,16 @@ function ArchivedSection({
         {items.length} archived
       </button>
       {open && (
-        <Stack gap={0}>
-          {items.map((item, i) => (
-            <Row
+        <Stack gap={12}>
+          {items.map((item) => (
+            <Box
               key={item.id}
-              gap={14}
-              align="center"
-              justify="space-between"
-              style={{
-                padding: '12px 2px',
-                borderBottom:
-                  i === items.length - 1 ? `1px solid ${colors.hairline}` : 'none',
-                opacity: 0.6,
-              }}
+              bg="cream"
+              radius="card"
+              shadow="raisedSm"
+              style={{ padding: '12px 18px', opacity: 0.7 }}
             >
+            <Row gap={14} align="center" justify="space-between">
               <span
                 style={{
                   fontSize: 14,
@@ -1095,6 +1082,7 @@ function ArchivedSection({
                 bring back
               </button>
             </Row>
+            </Box>
           ))}
         </Stack>
       )}
@@ -1137,7 +1125,9 @@ function EmptyNote(): JSX.Element {
               width: 21,
               height: 21,
               borderRadius: '50%',
-              border: `1.6px solid ${colors.hairline}`,
+              background: colors.cream,
+              boxShadow:
+                'inset 3px 3px 6px rgba(120,140,122,0.45), inset -3px -3px 6px rgba(255,255,255,0.85)',
               flexShrink: 0,
             }}
           />
@@ -1204,22 +1194,23 @@ function ColdPantry(): JSX.Element {
 
 // ─── tiny shared primitives ───────────────────────────────────────────────
 
-/** the round amber/sage tick on the left of a shopping row */
+/** the round neumorphic tick well on the left of a shopping row */
 function TickCircle(): JSX.Element {
   return (
     <span
       aria-hidden
       style={{
-        width: 23,
-        height: 23,
+        width: 24,
+        height: 24,
         borderRadius: '50%',
-        border: `1.8px solid ${colors.hairline}`,
-        background: 'transparent',
+        background: colors.cream,
+        boxShadow:
+          'inset 3px 3px 6px rgba(120,140,122,0.55), inset -3px -3px 6px rgba(255,255,255,0.85)',
         flexShrink: 0,
         display: 'inline-flex',
         alignItems: 'center',
         justifyContent: 'center',
-        transition: 'border-color 200ms cubic-bezier(0.18, 0, 0.22, 1)',
+        transition: 'box-shadow 200ms cubic-bezier(0.18, 0, 0.22, 1)',
       }}
     />
   );

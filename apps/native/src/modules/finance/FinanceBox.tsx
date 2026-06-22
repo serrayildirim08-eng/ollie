@@ -31,7 +31,7 @@ import {
   medianIntervalDays,
   type CadenceEstimate,
 } from '@ollie/cadence';
-import { Stack, Row } from '../../layout';
+import { Stack, Row, Box } from '../../layout';
 import { Text } from '../../ui';
 import { colors, fonts } from '../../theme/tokens';
 import { WhenCaption } from '../../lib/WhenCaption';
@@ -288,7 +288,19 @@ export function FinanceBox(): JSX.Element {
         <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
           box
         </Text>
-        <Text scale="display">Finance</Text>
+        <Text
+          scale="title"
+          color={colors.ink}
+          style={{
+            fontFamily: 'var(--ollie-font-sans)',
+            fontSize: '26px',
+            fontWeight: 700,
+            lineHeight: 1.15,
+            letterSpacing: '-0.01em',
+          }}
+        >
+          finance
+        </Text>
       </Stack>
 
       {!ready ? (
@@ -297,20 +309,26 @@ export function FinanceBox(): JSX.Element {
         </Text>
       ) : (
         <Stack gap={40}>
-          {/* HERO — this month's true burn in DM Serif Display */}
-          <MonthHero
-            burn={burn}
-            hasData={hasData}
-            recurringDetected={recurringByLeadCurrency}
-          />
+          {/* HERO — this month's true burn, on the darker sage content card */}
+          <Box
+            bg="paper"
+            radius="card"
+            shadow="card"
+            style={{ padding: '28px 22px' }}
+          >
+            <MonthHero
+              burn={burn}
+              hasData={hasData}
+              recurringDetected={recurringByLeadCurrency}
+            />
+          </Box>
 
           {/* TAP-TO-LOG — a quiet spend form so capture isn't dump-only. */}
           <LogSpendForm onLog={(i) => void handleLogTx(i)} />
 
           {/* AREA CARDS — expandable in-place */}
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <Stack gap={12}>
             <AreaCard
-              first
               areaKey="bills"
               value={billsLine}
               open={openCard === 'bills'}
@@ -377,7 +395,7 @@ export function FinanceBox(): JSX.Element {
                 </DetailList>
               )}
             </AreaCard>
-          </div>
+          </Stack>
 
           {/* RECURRING SUGGESTIONS — silent unless detection found a pattern. */}
           {suggestions.length > 0 && (
@@ -813,34 +831,25 @@ function BurnBreakdown({ row }: { row: MonthlyBurn }): JSX.Element | null {
 // ── area card ─────────────────────────────────────────────────────────────
 
 /**
- * AreaCard — the redesign's expandable info-row. Two states (collapsed /
- * expanded); the body slot carries our detail list and remove controls.
- * Top/bottom hairlines mirror money-v2 AreaCard so consecutive cards
- * stack cleanly without double rules.
+ * AreaCard — the redesign's expandable info-row, now a raised neumorphic
+ * card. Two states (collapsed / expanded); the body slot carries our detail
+ * list and remove controls.
  */
 function AreaCard({
   areaKey,
   value,
   open,
   onToggle,
-  first = false,
   children,
 }: {
   areaKey: string;
   value: ReactNode;
   open: boolean;
   onToggle: () => void;
-  first?: boolean;
   children: ReactNode;
 }): JSX.Element {
   return (
-    <div
-      style={{
-        boxSizing: 'border-box',
-        borderTop: first ? `1px solid ${colors.hairline}` : undefined,
-        borderBottom: `1px solid ${colors.hairline}`,
-      }}
-    >
+    <Box bg="cream" radius="card" shadow="raised" style={{ padding: '4px 16px' }}>
       <button
         type="button"
         onClick={onToggle}
@@ -850,7 +859,7 @@ function AreaCard({
           width: '100%',
           background: 'transparent',
           border: 'none',
-          padding: '19px 2px',
+          padding: '15px 2px',
           display: 'flex',
           alignItems: 'baseline',
           gap: 0,
@@ -880,11 +889,11 @@ function AreaCard({
       </button>
 
       {open && (
-        <div style={{ boxSizing: 'border-box', padding: '0 2px 22px' }}>
+        <div style={{ boxSizing: 'border-box', padding: '0 2px 18px' }}>
           {children}
         </div>
       )}
-    </div>
+    </Box>
   );
 }
 

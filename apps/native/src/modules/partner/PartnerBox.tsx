@@ -15,9 +15,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { useUser } from '@clerk/clerk-react';
 import { useBearer } from '../../auth/useBearer';
 import { mintPartnerCode } from '../../api';
-import { Stack, Row } from '../../layout';
+import { Stack, Row, Box } from '../../layout';
 import { Text } from '../../ui';
-import { colors } from '../../theme/tokens';
+import { colors, shadows } from '../../theme/tokens';
 import { partnerRepo } from './repo';
 import { cardLine, interpret, type RawSignals } from './interpret';
 import {
@@ -150,7 +150,19 @@ export function PartnerBox(): JSX.Element {
         <Text scale="caption" color={colors.inkFaint} style={SMCP}>
           box · partner
         </Text>
-        <Text scale="display">Partner</Text>
+        <Text
+          scale="title"
+          color={colors.ink}
+          style={{
+            fontFamily: 'var(--ollie-font-sans)',
+            fontSize: '26px',
+            fontWeight: 700,
+            lineHeight: 1.15,
+            letterSpacing: '-0.01em',
+          }}
+        >
+          partner
+        </Text>
         <Text scale="body" color={colors.inkSoft} style={{ maxWidth: 460 }}>
           a quiet window into each other’s day — not a to-do you share.
         </Text>
@@ -223,15 +235,17 @@ function PairingView({
   return (
     <Stack gap={44}>
       {/* your code — the calm hero of this screen */}
-      <Stack
-        gap={20}
+      <Box
+        bg="paper"
+        radius="surface"
+        shadow="card"
         style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 20,
           alignItems: 'center',
           textAlign: 'center',
           padding: '36px 24px',
-          background: colors.paper,
-          border: `1px solid ${colors.hairlineSoft}`,
-          borderRadius: 10,
         }}
       >
         <Text scale="caption" color={colors.inkFaint} style={SMCP}>
@@ -254,7 +268,7 @@ function PairingView({
             let them scan it side-by-side, or send these six digits any way you like.
           </Text>
         </Stack>
-      </Stack>
+      </Box>
 
       {/* enter theirs */}
       <Stack gap={18}>
@@ -280,7 +294,7 @@ function PairingView({
       </Stack>
 
       {/* no second user yet → see the inside */}
-      <Row gap={8} align="baseline" style={{ borderTop: `1px solid ${colors.hairline}`, paddingTop: 22 }}>
+      <Row gap={8} align="baseline" style={{ paddingTop: 8 }}>
         <Text scale="caption" color={colors.inkFaint}>
           no partner on Ollie yet?
         </Text>
@@ -322,27 +336,25 @@ function WizardView({
         </Text>
       </Stack>
 
-      <Stack gap={0}>
-        {SHARE_KEYS.map((k, i) => (
-          <Row
+      <Stack gap={12}>
+        {SHARE_KEYS.map((k) => (
+          <Box
             key={k}
-            gap={16}
-            align="flex-start"
-            justify="space-between"
-            style={{
-              padding: '18px 0',
-              borderTop: i === 0 ? `1px solid ${colors.hairline}` : 'none',
-              borderBottom: `1px solid ${colors.hairline}`,
-            }}
+            bg="cream"
+            radius="card"
+            shadow="raised"
+            style={{ padding: '16px 18px' }}
           >
-            <Stack gap={4} style={{ flex: 1, minWidth: 0 }}>
-              <Text scale="body">{SHARE_LABELS[k]}</Text>
-              <Text scale="caption" color={colors.inkFaint}>
-                {WIZARD_COPY[k]}
-              </Text>
-            </Stack>
-            <ConsentToggle on={consent[k]} onClick={() => onToggle(k)} />
-          </Row>
+            <Row gap={16} align="flex-start" justify="space-between">
+              <Stack gap={4} style={{ flex: 1, minWidth: 0 }}>
+                <Text scale="body">{SHARE_LABELS[k]}</Text>
+                <Text scale="caption" color={colors.inkFaint}>
+                  {WIZARD_COPY[k]}
+                </Text>
+              </Stack>
+              <ConsentToggle on={consent[k]} onClick={() => onToggle(k)} />
+            </Row>
+          </Box>
         ))}
       </Stack>
 
@@ -376,51 +388,54 @@ function PairedView({
   return (
     <Stack gap={44}>
       {/* their ambient line */}
-      <Stack gap={10}>
-        <Text scale="caption" color={colors.inkFaint} style={SMCP}>
-          {their.crisis ? 'your person' : 'with you'}
-        </Text>
-        <Text scale="title" color={their.crisis ? colors.sageDeep : colors.ink}>
-          {cardLine(name, their)}
-        </Text>
-      </Stack>
+      <Box bg="paper" radius="surface" shadow="card" style={{ padding: '28px 24px' }}>
+        <Stack gap={10}>
+          <Text scale="caption" color={colors.inkFaint} style={SMCP}>
+            {their.crisis ? 'your person' : 'with you'}
+          </Text>
+          <Text scale="title" color={their.crisis ? colors.sageDeep : colors.ink}>
+            {cardLine(name, their)}
+          </Text>
+        </Stack>
+      </Box>
 
       {/* my outflow — asymmetric consent (decision 6) */}
-      <Stack gap={0} style={{ borderTop: `1px solid ${colors.hairline}` }}>
-        <Text scale="caption" color={colors.inkFaint} style={{ ...SMCP, padding: '18px 0 6px' }}>
+      <Stack gap={12}>
+        <Text scale="caption" color={colors.inkFaint} style={SMCP}>
           what you share back
         </Text>
         {SHARE_KEYS.map((k) => (
-          <Row
+          <Box
             key={k}
-            gap={16}
-            align="center"
-            justify="space-between"
-            style={{ padding: '13px 0', borderBottom: `1px solid ${colors.hairline}` }}
+            bg="cream"
+            radius="card"
+            shadow="raised"
+            style={{ padding: '14px 18px' }}
           >
-            <Text scale="body" color={consent[k] ? colors.ink : colors.inkFaint}>
-              {SHARE_LABELS[k]}
-            </Text>
-            <ConsentToggle on={consent[k]} onClick={() => onToggleConsent(k)} />
-          </Row>
+            <Row gap={16} align="center" justify="space-between">
+              <Text scale="body" color={consent[k] ? colors.ink : colors.inkFaint}>
+                {SHARE_LABELS[k]}
+              </Text>
+              <ConsentToggle on={consent[k]} onClick={() => onToggleConsent(k)} />
+            </Row>
+          </Box>
         ))}
       </Stack>
 
       {/* live preview — what your partner sees from you, reacting to the toggles */}
-      <Stack
-        gap={8}
-        style={{ padding: '18px 20px', background: colors.paper, border: `1px solid ${colors.hairlineSoft}`, borderRadius: 4 }}
-      >
-        <Text scale="caption" color={colors.inkFaint} style={SMCP}>
-          they see you as
-        </Text>
-        <Text scale="body" color={colors.ink}>
-          {cardLine('you', interpret(PREVIEW_SIGNALS, consent, { nowMs: Date.now() }))}
-        </Text>
-        <Text scale="caption" color={colors.inkFaint}>
-          a sample of today — flip the toggles above and watch it change.
-        </Text>
-      </Stack>
+      <Box bg="paper" radius="card" shadow="card" style={{ padding: '18px 20px' }}>
+        <Stack gap={8}>
+          <Text scale="caption" color={colors.inkFaint} style={SMCP}>
+            they see you as
+          </Text>
+          <Text scale="body" color={colors.ink}>
+            {cardLine('you', interpret(PREVIEW_SIGNALS, consent, { nowMs: Date.now() }))}
+          </Text>
+          <Text scale="caption" color={colors.inkFaint}>
+            a sample of today — flip the toggles above and watch it change.
+          </Text>
+        </Stack>
+      </Box>
 
       {/* silent go-dark (decision 9) */}
       <Stack gap={8}>
@@ -492,10 +507,11 @@ function Field({
         onChange={(e) => onChange(e.target.value)}
         style={{
           appearance: 'none',
-          background: 'transparent',
+          background: colors.cream,
           border: 'none',
-          borderBottom: `1px solid ${colors.hairline}`,
-          padding: '8px 0',
+          borderRadius: 10,
+          boxShadow: shadows.inset,
+          padding: '12px 14px',
           fontSize: mono ? 22 : 18,
           letterSpacing: mono ? '0.12em' : undefined,
           fontFamily: mono ? 'var(--ollie-font-mono, monospace)' : 'inherit',
@@ -524,10 +540,11 @@ function PrimaryButton({
       style={{
         appearance: 'none',
         alignSelf: 'flex-start',
-        background: disabled ? colors.hairline : colors.sageDeep,
+        background: disabled ? colors.paper : colors.sageDeep,
         color: disabled ? colors.inkFaint : colors.cream,
         border: 'none',
         borderRadius: 999,
+        boxShadow: disabled ? 'none' : shadows.raisedSm,
         padding: '12px 26px',
         fontSize: 13,
         fontWeight: 600,
@@ -606,7 +623,7 @@ function FauxQR({ seed }: { seed: string }): JSX.Element {
         height: 132,
         padding: 12,
         background: colors.cream,
-        border: `1px solid ${colors.hairline}`,
+        boxShadow: shadows.inset,
         borderRadius: 10,
         flexShrink: 0,
       }}

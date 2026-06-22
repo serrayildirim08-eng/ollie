@@ -23,6 +23,8 @@ import { createRoot, type Root } from 'react-dom/client';
 
 // ── stubs (same shape as the other grocery harness files) ─────────────────
 vi.mock('../../layout', () => ({
+  Box: ({ children, style }: { children: React.ReactNode; style?: React.CSSProperties; [k: string]: unknown }) =>
+    React.createElement("div", { style }, children),
   Stack: ({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) =>
     React.createElement('div', { 'data-testid': 'stack', style }, children),
   Row: ({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) =>
@@ -35,6 +37,8 @@ vi.mock('../../ui', () => ({
 }));
 
 vi.mock('../../theme/tokens', () => ({
+  radii: { none: "0", xs: "2px", sm: "4px", md: "8px", lg: "12px", small: "10px", card: "22px", surface: "28px", pill: "999px" },
+  shadows: { none: "none", sm: "", md: "", lg: "", raised: "", raisedSm: "", inset: "", card: "" },
   colors: {
     cream: '#FAFAF7',
     paper: '#F4F1E8',

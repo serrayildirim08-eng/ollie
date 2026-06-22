@@ -28,7 +28,7 @@ import {
   medianIntervalDays,
   type CadenceEstimate,
 } from '@ollie/cadence';
-import { Stack, Row } from '../../layout';
+import { Stack, Row, Box } from '../../layout';
 import { Text } from '../../ui';
 import { colors, fonts } from '../../theme/tokens';
 import { WhenCaption } from '../../lib/WhenCaption';
@@ -146,7 +146,19 @@ export function PetsBox(): JSX.Element {
         <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
           box
         </Text>
-        <Text scale="display">Pets</Text>
+        <Text
+          scale="title"
+          color={colors.ink}
+          style={{
+            fontFamily: 'var(--ollie-font-sans)',
+            fontSize: '26px',
+            fontWeight: 700,
+            lineHeight: 1.15,
+            letterSpacing: '-0.01em',
+          }}
+        >
+          pets
+        </Text>
       </Stack>
 
       {/* the editorial preface — one quiet italic line, v2 grammar */}
@@ -449,29 +461,20 @@ function ListSection<T>({
           {empty}
         </Text>
       ) : (
-        // hairline-bounded list — v2 PetsFace roster grammar, adapted
-        // to the events shape: a top rule on every row + a bottom rule
-        // on the last one, so the section reads as a tidy column.
-        <div
-          style={{ display: 'flex', flexDirection: 'column' }}
-        >
+        // raised neumorphic cards — one per event, calm column.
+        <Stack gap={12}>
           {items.map((item, i) => (
-            <div
+            <Box
               key={i}
-              style={{
-                boxSizing: 'border-box',
-                borderTop: `1px solid ${colors.hairline}`,
-                borderBottom:
-                  i === items.length - 1
-                    ? `1px solid ${colors.hairline}`
-                    : 'none',
-                padding: '12px 2px',
-              }}
+              bg="cream"
+              radius="card"
+              shadow="raised"
+              style={{ padding: '16px 18px' }}
             >
               {renderItem(item)}
-            </div>
+            </Box>
           ))}
-        </div>
+        </Stack>
       )}
     </Stack>
   );

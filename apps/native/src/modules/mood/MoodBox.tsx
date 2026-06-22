@@ -12,7 +12,7 @@
  */
 
 import { useCallback, useState } from 'react';
-import { Stack, Row } from '../../layout';
+import { Stack, Row, Box } from '../../layout';
 import { Text } from '../../ui';
 import { colors, fontWeights } from '../../theme/tokens';
 import { WhenCaption } from '../../lib/WhenCaption';
@@ -68,7 +68,19 @@ export function MoodBox(): JSX.Element {
         <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
           box
         </Text>
-        <Text scale="display">Mood</Text>
+        <Text
+          scale="title"
+          color={colors.ink}
+          style={{
+            fontFamily: 'var(--ollie-font-sans)',
+            fontSize: '26px',
+            fontWeight: 700,
+            lineHeight: 1.15,
+            letterSpacing: '-0.01em',
+          }}
+        >
+          mood
+        </Text>
       </Stack>
 
       {!ready ? (
@@ -145,7 +157,13 @@ function ListSection({
       <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
         {label}
       </Text>
-      <Stack gap={4}>{items.map((e) => children(e))}</Stack>
+      <Stack gap={12}>
+        {items.map((e) => (
+          <Box key={e.id} bg="cream" radius="card" shadow="raised" style={{ padding: '16px 18px' }}>
+            {children(e)}
+          </Box>
+        ))}
+      </Stack>
     </Stack>
   );
 }

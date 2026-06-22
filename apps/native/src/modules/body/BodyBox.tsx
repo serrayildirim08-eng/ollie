@@ -27,7 +27,7 @@ import {
   medianIntervalDays,
   type CadenceEstimate,
 } from '@ollie/cadence';
-import { Stack, Row } from '../../layout';
+import { Stack, Row, Box } from '../../layout';
 import { Text } from '../../ui';
 import { colors, fontSizes, fontWeights, letterSpacings } from '../../theme/tokens';
 import { WhenCaption } from '../../lib/WhenCaption';
@@ -134,7 +134,19 @@ export function BodyBox(): JSX.Element {
         <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
           box
         </Text>
-        <Text scale="display">Body</Text>
+        <Text
+          scale="title"
+          color={colors.ink}
+          style={{
+            fontFamily: 'var(--ollie-font-sans)',
+            fontSize: '26px',
+            fontWeight: 700,
+            lineHeight: 1.15,
+            letterSpacing: '-0.01em',
+          }}
+        >
+          body
+        </Text>
       </Stack>
 
       {!ready ? (
@@ -143,17 +155,24 @@ export function BodyBox(): JSX.Element {
         </Text>
       ) : (
         <Stack gap={48}>
-          <WaterHero
-            count={glassCount}
-            target={glassTarget}
-            cold={isEmpty}
-            onAddGlass={() =>
-              void (async () => {
-                await eventsRepo.add({ kind: 'water', data: { amountMl: 250 } });
-                await refresh();
-              })()
-            }
-          />
+          <Box
+            bg="paper"
+            radius="card"
+            shadow="card"
+            style={{ padding: '28px 24px' }}
+          >
+            <WaterHero
+              count={glassCount}
+              target={glassTarget}
+              cold={isEmpty}
+              onAddGlass={() =>
+                void (async () => {
+                  await eventsRepo.add({ kind: 'water', data: { amountMl: 250 } });
+                  await refresh();
+                })()
+              }
+            />
+          </Box>
 
           <AgeField age={age} onSave={(years) => void handleSaveAge(years)} />
 
@@ -373,12 +392,14 @@ function AgeField({
           }}
           style={{
             width: 64,
-            border: `1px solid ${colors.hairline}`,
-            borderRadius: 8,
+            border: 'none',
+            borderRadius: 10,
             padding: '6px 10px',
             fontSize: 15,
             color: colors.ink,
-            background: colors.paper,
+            background: colors.cream,
+            boxShadow:
+              'inset 3px 3px 6px rgba(120,140,122,0.55), inset -3px -3px 6px rgba(255,255,255,0.85)',
             fontFamily: 'var(--ollie-font-sans)',
           }}
         />
@@ -567,7 +588,13 @@ function ListSection({
       <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
         {label}
       </Text>
-      <Stack gap={4}>{items.map((e) => children(e))}</Stack>
+      <Stack gap={12}>
+        {items.map((e) => (
+          <Box key={e.id} bg="cream" radius="card" shadow="raised" style={{ padding: '16px 18px' }}>
+            {children(e)}
+          </Box>
+        ))}
+      </Stack>
     </Stack>
   );
 }

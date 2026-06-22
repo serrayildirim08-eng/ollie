@@ -91,7 +91,7 @@ function SignInGate() {
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
     <ClerkProvider publishableKey={PUBLISHABLE_KEY}>
-      <ThemeProvider>
+      <ThemeProvider forceMode="light">
         <Gate />
       </ThemeProvider>
     </ClerkProvider>

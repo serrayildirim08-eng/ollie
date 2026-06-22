@@ -24,9 +24,18 @@ import { tasks as adminTasksRepo } from "../modules/admin";
 import { tasks as workTasksRepo } from "../modules/work";
 import { pullGroceryPantry } from "../sync/groceryPull";
 import { useFeature } from "../settings/features";
-import { Stack, Row } from "../layout";
+import { Stack, Row, Box } from "../layout";
 import { Text } from "../ui";
-import { colors } from "../theme/tokens";
+
+// calm sans title (redesign/olive-neumorphic) — replaces the giant editorial serif
+const TITLE_STYLE: React.CSSProperties = {
+  fontFamily: "var(--ollie-font-sans)",
+  fontSize: "26px",
+  fontWeight: 700,
+  lineHeight: 1.15,
+  letterSpacing: "-0.01em",
+};
+import { colors, radii, shadows } from "../theme/tokens";
 import { DumpScreen } from "../dump";
 import { MODULE_MANIFEST, MODULE_GROUP_META } from "./moduleRegistry";
 import { TodoScreen } from "../todo/TodoScreen";
@@ -135,7 +144,7 @@ function ModulesIndex() {
         <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
           modules
         </Text>
-        <Text scale="display">All of it</Text>
+        <Text scale="title" color={colors.ink} style={TITLE_STYLE}>modules</Text>
         <Text scale="body" color={colors.inkSoft} style={{ maxWidth: 540 }}>
           three rooms — yourself, your stuff, the things you owe.
         </Text>
@@ -151,24 +160,21 @@ function ModulesIndex() {
             {group.label}
           </Text>
           <p style={ASIDE_STYLE}>{group.aside}</p>
-          <Stack gap={0}>
-            {group.items.map((m, i) => (
+          <Stack gap={12}>
+            {group.items.map((m) => (
               <Link
                 key={m.id}
                 to={`/box/${m.id}`}
-                style={{
-                  textDecoration: "none",
-                  color: "inherit",
-                  borderTop: i === 0 ? `1px solid ${colors.hairline}` : "none",
-                  borderBottom: `1px solid ${colors.hairline}`,
-                }}
+                style={{ textDecoration: "none", color: "inherit" }}
               >
-                <Row gap={12} align="baseline" justify="space-between" style={{ padding: "16px 0" }}>
-                  <Text scale="body">{m.label}</Text>
-                  <Text scale="caption" color={colors.inkFaint}>
-                    {m.hint}
-                  </Text>
-                </Row>
+                <Box bg="cream" radius="card" shadow="raised" style={{ padding: "16px 18px" }}>
+                  <Row gap={12} align="baseline" justify="space-between">
+                    <Text scale="body">{m.label}</Text>
+                    <Text scale="caption" color={colors.inkFaint}>
+                      {m.hint}
+                    </Text>
+                  </Row>
+                </Box>
               </Link>
             ))}
           </Stack>
@@ -187,29 +193,35 @@ function SettingsScreen() {
         <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
           settings
         </Text>
-        <Text scale="display">Settings</Text>
+        <Text scale="title" color={colors.ink} style={TITLE_STYLE}>settings</Text>
       </Stack>
 
-      <Stack gap={16}>
-        <Stack gap={4}>
-          <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
-            account
-          </Text>
-          <Text scale="body">{user?.primaryEmailAddress?.emailAddress ?? "—"}</Text>
-        </Stack>
+      <Stack gap={12}>
+        <Box bg="cream" radius="card" shadow="raised" style={{ padding: "16px 18px" }}>
+          <Row gap={12} align="center" justify="space-between">
+            <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
+              account
+            </Text>
+            <Text scale="body">{user?.primaryEmailAddress?.emailAddress ?? "—"}</Text>
+          </Row>
+        </Box>
 
         <button
           onClick={() => void signOut()}
           style={{
-            alignSelf: "flex-start",
-            background: "none",
+            padding: "16px 18px",
+            width: "100%",
+            textAlign: "left",
             border: "none",
-            padding: "12px 0",
-            color: colors.inkFaint,
+            borderRadius: radii.card,
+            background: colors.cream,
+            boxShadow: shadows.raised,
             cursor: "pointer",
+            color: colors.sageDeep,
             fontVariantCaps: "all-small-caps",
             letterSpacing: "0.08em",
-            fontSize: 13,
+            fontSize: 14,
+            fontFamily: "var(--ollie-font-sans)",
           }}
         >
           sign out

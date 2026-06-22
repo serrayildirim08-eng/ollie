@@ -27,7 +27,7 @@ import {
   medianIntervalDays,
   type CadenceEstimate,
 } from '@ollie/cadence';
-import { Stack, Row } from '../../layout';
+import { Stack, Row, Box } from '../../layout';
 import { Text } from '../../ui';
 import { colors, fonts } from '../../theme/tokens';
 import { WhenCaption } from '../../lib/WhenCaption';
@@ -116,7 +116,19 @@ export function SleepBox(): JSX.Element {
         <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
           box
         </Text>
-        <Text scale="display">Sleep</Text>
+        <Text
+          scale="title"
+          color={colors.ink}
+          style={{
+            fontFamily: 'var(--ollie-font-sans)',
+            fontSize: '26px',
+            fontWeight: 700,
+            lineHeight: 1.15,
+            letterSpacing: '-0.01em',
+          }}
+        >
+          sleep
+        </Text>
       </Stack>
 
       {!ready ? (
@@ -229,8 +241,14 @@ function HeroSection({
       : null;
 
   return (
-    <Stack gap={24} align="center">
-      <WeekBars bars={weekBars} />
+    <Box
+      bg="paper"
+      radius="card"
+      shadow="card"
+      style={{ padding: '28px 24px', alignSelf: 'stretch' }}
+    >
+      <Stack gap={24} align="center">
+        <WeekBars bars={weekBars} />
 
       <Stack gap={8} align="center">
         <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
@@ -251,7 +269,8 @@ function HeroSection({
         )}
         <CadenceHint estimate={logCadence} />
       </Stack>
-    </Stack>
+      </Stack>
+    </Box>
   );
 }
 
@@ -532,7 +551,13 @@ function ListSection<T>({
           {empty}
         </Text>
       ) : (
-        <Stack gap={4}>{items.map(renderItem)}</Stack>
+        <Stack gap={12}>
+          {items.map((item, i) => (
+            <Box key={i} bg="cream" radius="card" shadow="raised" style={{ padding: '16px 18px' }}>
+              {renderItem(item)}
+            </Box>
+          ))}
+        </Stack>
       )}
     </Stack>
   );

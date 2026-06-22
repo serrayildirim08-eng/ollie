@@ -34,7 +34,7 @@ import {
   medianIntervalDays,
   type CadenceEstimate,
 } from '@ollie/cadence';
-import { Stack, Row } from '../../layout';
+import { Stack, Row, Box } from '../../layout';
 import { Text } from '../../ui';
 import { colors, fonts } from '../../theme/tokens';
 import { WhenCaption } from '../../lib/WhenCaption';
@@ -185,7 +185,19 @@ export function CycleBox(): JSX.Element {
         <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
           box
         </Text>
-        <Text scale="display">Cycle</Text>
+        <Text
+          scale="title"
+          color={colors.ink}
+          style={{
+            fontFamily: 'var(--ollie-font-sans)',
+            fontSize: '26px',
+            fontWeight: 700,
+            lineHeight: 1.15,
+            letterSpacing: '-0.01em',
+          }}
+        >
+          cycle
+        </Text>
       </Stack>
 
       {!ready ? (
@@ -496,17 +508,20 @@ function BleedingChips({
             aria-label={`flow: ${tag}`}
             onClick={() => onSelect(tag)}
             style={{
-              background: active ? UMBER : 'transparent',
-              border: `1px solid ${active ? UMBER : colors.hairline}`,
+              background: active ? UMBER : colors.cream,
+              border: 'none',
               borderRadius: 999,
-              padding: '6px 14px',
+              padding: '8px 16px',
               color: active ? colors.cream : colors.inkSoft,
               cursor: 'pointer',
               fontFamily: fonts.sans,
               fontSize: 13,
               letterSpacing: '0.02em',
               lineHeight: 1.2,
-              transition: 'background 120ms ease, color 120ms ease',
+              boxShadow: active
+                ? 'inset 3px 3px 6px rgba(120,140,122,0.40), inset -3px -3px 6px rgba(255,255,255,0.55)'
+                : '4px 4px 9px rgba(120,140,122,0.55), -4px -4px 9px rgba(255,255,255,0.70)',
+              transition: 'background 120ms ease, color 120ms ease, box-shadow 120ms ease',
             }}
           >
             {tag}
@@ -595,7 +610,7 @@ function ListSection<T>({
           {empty}
         </Text>
       ) : (
-        <Stack gap={4}>{items.map(renderItem)}</Stack>
+        <Stack gap={12}>{items.map(renderItem)}</Stack>
       )}
     </Stack>
   );
@@ -613,13 +628,15 @@ function EventRow({
   onRemove: () => void;
 }): JSX.Element {
   return (
-    <Stack gap={2}>
-      <Row gap={12} align="baseline" justify="space-between">
-        <Text scale="body">{label}</Text>
-        <RemoveButton onClick={onRemove} />
-      </Row>
-      <WhenCaption ts={occurredAt} />
-    </Stack>
+    <Box bg="cream" radius="card" shadow="raised" style={{ padding: '16px 18px' }}>
+      <Stack gap={2}>
+        <Row gap={12} align="baseline" justify="space-between">
+          <Text scale="body">{label}</Text>
+          <RemoveButton onClick={onRemove} />
+        </Row>
+        <WhenCaption ts={occurredAt} />
+      </Stack>
+    </Box>
   );
 }
 
@@ -632,15 +649,17 @@ function HistoryRow({
 }): JSX.Element {
   const label = event.kind === 'period_start' ? 'period start' : 'period end';
   return (
-    <Stack gap={2}>
-      <Row gap={12} align="baseline" justify="space-between">
-        <Text scale="caption" color={colors.inkFaint}>
-          {label}
-        </Text>
-        <RemoveButton onClick={onRemove} />
-      </Row>
-      <WhenCaption ts={event.occurredAt} />
-    </Stack>
+    <Box bg="cream" radius="card" shadow="raised" style={{ padding: '16px 18px' }}>
+      <Stack gap={2}>
+        <Row gap={12} align="baseline" justify="space-between">
+          <Text scale="caption" color={colors.inkFaint}>
+            {label}
+          </Text>
+          <RemoveButton onClick={onRemove} />
+        </Row>
+        <WhenCaption ts={event.occurredAt} />
+      </Stack>
+    </Box>
   );
 }
 

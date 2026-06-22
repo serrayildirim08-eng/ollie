@@ -33,9 +33,9 @@ import {
   medianIntervalDays,
   type CadenceEstimate,
 } from '@ollie/cadence';
-import { Stack, Row } from '../../layout';
+import { Stack, Row, Box } from '../../layout';
 import { Text, Button } from '../../ui';
-import { colors, fonts, fontWeights, zIndex } from '../../theme/tokens';
+import { colors, fonts, fontWeights, shadows, zIndex } from '../../theme/tokens';
 import { WhenCaption } from '../../lib/WhenCaption';
 import { useModuleData } from '../../lib/useModuleData';
 import { PatternCards } from '../../patterns/PatternCards';
@@ -159,7 +159,19 @@ export function GoalsBox(): JSX.Element {
           <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
             box
           </Text>
-          <Text scale="display">Goals</Text>
+          <Text
+            scale="title"
+            color={colors.ink}
+            style={{
+              fontFamily: 'var(--ollie-font-sans)',
+              fontSize: '26px',
+              fontWeight: 700,
+              lineHeight: 1.15,
+              letterSpacing: '-0.01em',
+            }}
+          >
+            goals
+          </Text>
         </Stack>
         {/* a quiet affordance to open the rich create flow */}
         <NewGoalButton onClick={() => setCreating(true)} />
@@ -287,9 +299,9 @@ const OVERLAY_CARD: React.CSSProperties = {
   width: '100%',
   maxWidth: 420,
   background: colors.cream,
-  border: `1px solid ${colors.hairline}`,
-  borderRadius: 14,
-  boxShadow: '0 12px 40px rgba(20, 25, 20, 0.10)',
+  border: 'none',
+  borderRadius: 28,
+  boxShadow: shadows.raised,
   padding: '32px 28px',
   outline: 'none',
 };
@@ -454,10 +466,11 @@ function NewGoalButton({ onClick }: { onClick: () => void }): JSX.Element {
       onClick={onClick}
       aria-label="add a new goal"
       style={{
-        background: 'none',
-        border: `1px solid ${colors.hairline}`,
+        background: colors.cream,
+        border: 'none',
         borderRadius: 999,
-        padding: '8px 16px',
+        boxShadow: shadows.raisedSm,
+        padding: '9px 18px',
         color: colors.sageDeep,
         cursor: 'pointer',
         fontFamily: fonts.sans,
@@ -495,6 +508,12 @@ function FocusHero({ goal, index, total, onFocus }: FocusHeroProps): JSX.Element
   const pct = goal.latestProgress ? 0.5 : null;
 
   return (
+    <Box
+      bg="paper"
+      radius="surface"
+      shadow="card"
+      style={{ padding: '32px 24px' }}
+    >
     <Stack gap={20} align="center">
       <GoalArc pct={pct} />
 
@@ -590,6 +609,7 @@ function FocusHero({ goal, index, total, onFocus }: FocusHeroProps): JSX.Element
         </Row>
       ) : null}
     </Stack>
+    </Box>
   );
 }
 
@@ -658,50 +678,47 @@ function ColdExample(): JSX.Element {
       <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
         the kinds of things that live here
       </Text>
-      <Stack gap={0}>
-        {EXAMPLE_ROWS.map((eg, i) => (
-          <Row
+      <Stack gap={12}>
+        {EXAMPLE_ROWS.map((eg) => (
+          <Box
             key={eg.name}
-            gap={12}
-            align="center"
-            style={{
-              boxSizing: 'border-box',
-              borderTop: `1px solid ${colors.hairline}`,
-              borderBottom:
-                i === EXAMPLE_ROWS.length - 1
-                  ? `1px solid ${colors.hairline}`
-                  : 'none',
-              padding: '14px 2px',
-            }}
+            bg="cream"
+            radius="card"
+            shadow="raised"
+            style={{ padding: '14px 18px' }}
           >
-            <span
-              aria-hidden
-              style={{
-                width: 30,
-                height: 30,
-                borderRadius: 9,
-                background: colors.paper,
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0,
-                color: colors.inkFaint,
-                fontFamily: fonts.serif,
-                fontStyle: 'italic',
-                fontSize: 14,
-              }}
-            >
-              {eg.cat.charAt(0)}
-            </span>
-            <Stack gap={2} style={{ flex: 1 }}>
-              <Text scale="body" color={colors.ink}>
-                {eg.name}
-              </Text>
-              <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
-                {eg.cat}
-              </Text>
-            </Stack>
-          </Row>
+            <Row gap={12} align="center">
+              <span
+                aria-hidden
+                style={{
+                  width: 30,
+                  height: 30,
+                  borderRadius: 10,
+                  background: colors.cream,
+                  boxShadow:
+                    'inset 3px 3px 6px rgba(120,140,122,0.45), inset -3px -3px 6px rgba(255,255,255,0.85)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                  color: colors.sageDeep,
+                  fontFamily: fonts.serif,
+                  fontStyle: 'italic',
+                  fontSize: 14,
+                }}
+              >
+                {eg.cat.charAt(0)}
+              </span>
+              <Stack gap={2} style={{ flex: 1 }}>
+                <Text scale="body" color={colors.ink}>
+                  {eg.name}
+                </Text>
+                <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
+                  {eg.cat}
+                </Text>
+              </Stack>
+            </Row>
+          </Box>
         ))}
       </Stack>
     </Stack>
@@ -731,7 +748,7 @@ function ListSection<T>({
           {empty}
         </Text>
       ) : (
-        <Stack gap={4}>{items.map(renderItem)}</Stack>
+        <Stack gap={12}>{items.map(renderItem)}</Stack>
       )}
     </Stack>
   );
@@ -751,6 +768,7 @@ function GoalRow({
   // when-stamp.
   const whenTs = goal.latestProgress?.loggedAt ?? goal.createdAt;
   return (
+    <Box bg="cream" radius="card" shadow="raised" style={{ padding: '16px 18px' }}>
     <Row gap={12} align="baseline" justify="space-between">
       <Stack gap={2}>
         <Text scale="body" color={colors.ink}>
@@ -781,6 +799,7 @@ function GoalRow({
       </Stack>
       <RemoveButton onClick={onRemove} />
     </Row>
+    </Box>
   );
 }
 
@@ -825,6 +844,7 @@ function EventRow({
   onRemove: () => void;
 }): JSX.Element {
   return (
+    <Box bg="cream" radius="card" shadow="raised" style={{ padding: '16px 18px' }}>
     <Stack gap={2}>
       <Row gap={12} align="baseline" justify="space-between">
         <Text scale="body" color={colors.ink}>
@@ -834,6 +854,7 @@ function EventRow({
       </Row>
       <WhenCaption ts={event.loggedAt} />
     </Stack>
+    </Box>
   );
 }
 

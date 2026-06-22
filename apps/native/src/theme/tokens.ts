@@ -50,20 +50,20 @@ export interface Palette {
 // Values ported 2026-05-28 to align native + web visually.
 export const lightPalette: Palette = {
   // surfaces · bone-anchored
-  cream: '#FAFAF7',   // bone — page background everywhere
-  paper: '#F4F1E8',   // pull-quote bleeds, callouts, inner cards
-  paper2: '#EFEBE0',  // tertiary · menu sections, sticky headers
+  cream: '#C4D2C1',   // olive-grove sage — page background everywhere
+  paper: '#AEC0AB',   // deeper sage — content cards, callouts
+  paper2: '#B8C8B5',  // tertiary · menu sections, sticky headers
 
-  // ink · near-black with editorial warmth
-  ink: '#14140F',
-  inkSoft: '#5A574E',
-  inkFaint: '#9C9890',
-  inkGhost: '#C8C4BA',
+  // ink · dark olive, audit-corrected for contrast on sage
+  ink: '#2F3D31',
+  inkSoft: '#54654F',
+  inkFaint: '#5D6E5C',
+  inkGhost: '#8B9C8A',
 
-  // sage spectrum · single accent role per redesign tokens.css
-  sageDeep: '#2E5D43',
-  sage: '#2E5D43',
-  sageSoft: '#5A574E',
+  // olive spectrum · single accent role
+  sageDeep: '#566F33',
+  sage: '#566F33',
+  sageSoft: '#6D7E70',
 
   // sky · body water glasses ONLY (do not extend per redesign tokens)
   sky: '#5B8FB5',
@@ -73,11 +73,11 @@ export const lightPalette: Palette = {
   amber: '#C9974C',
 
   // hairlines
-  hairline: 'rgba(20, 20, 15, 0.10)',
-  hairlineSoft: 'rgba(20, 20, 15, 0.05)',
+  hairline: 'rgba(47, 61, 49, 0.10)',
+  hairlineSoft: 'rgba(47, 61, 49, 0.05)',
 
-  // shadow base
-  shadow: '20, 20, 15',
+  // shadow base · greenish for neumorphic depth
+  shadow: '120, 140, 122',
 } as const;
 
 export const darkPalette: Palette = {
@@ -221,6 +221,10 @@ export const radii = {
   sm: '4px',     // inputs, small chips
   md: '8px',
   lg: '12px',    // select dropdowns, sheets
+  // soft neumorphic scale (redesign/olive-neumorphic) · 3 steps
+  small: '10px',   // chips, small icon wells
+  card: '22px',    // cards, rows, tiles, inputs
+  surface: '28px', // large surfaces, capture well
   pill: '999px',
 } as const;
 
@@ -232,9 +236,20 @@ export const radii = {
 
 export const shadows = {
   none: 'none',
-  sm: '0 1px 0 rgba(20, 25, 20, 0.04)',
-  md: '0 4px 16px rgba(20, 25, 20, 0.06)',
-  lg: '0 12px 40px rgba(20, 25, 20, 0.08)',
+  sm: '0 1px 0 rgba(120, 140, 122, 0.10)',
+  md: '0 4px 16px rgba(120, 140, 122, 0.18)',
+  lg: '0 12px 40px rgba(120, 140, 122, 0.28)',
+  // neumorphic dual-shadows (redesign/olive-neumorphic)
+  // raised = extruded surface · inset = pressed well
+  raised:
+    '7px 7px 16px rgba(120, 140, 122, 0.55), -7px -7px 16px rgba(255, 255, 255, 0.70)',
+  raisedSm:
+    '4px 4px 9px rgba(120, 140, 122, 0.55), -4px -4px 9px rgba(255, 255, 255, 0.70)',
+  inset:
+    'inset 5px 5px 12px rgba(120, 140, 122, 0.40), inset -5px -5px 12px rgba(255, 255, 255, 0.78)',
+  // darker content card (sage paper) · drop + top highlight
+  card:
+    '7px 9px 20px rgba(110, 130, 112, 0.55), -6px -6px 14px rgba(255, 255, 255, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.40)',
 } as const;
 
 // ─────────────────────────────────────────────────────────────────────

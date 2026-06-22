@@ -64,7 +64,7 @@ import {
   medianIntervalDays,
   type CadenceEstimate,
 } from '@ollie/cadence';
-import { Stack, Row } from '../../layout';
+import { Stack, Row, Box } from '../../layout';
 import { Text } from '../../ui';
 import { colors } from '../../theme/tokens';
 import { WhenCaption } from '../../lib/WhenCaption';
@@ -199,7 +199,19 @@ export function AdminBox(): JSX.Element {
         <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
           box · admin
         </Text>
-        <Text scale="display">Admin</Text>
+        <Text
+          scale="title"
+          color={colors.ink}
+          style={{
+            fontFamily: 'var(--ollie-font-sans)',
+            fontSize: '26px',
+            fontWeight: 700,
+            lineHeight: 1.15,
+            letterSpacing: '-0.01em',
+          }}
+        >
+          admin
+        </Text>
         <Text scale="body" color={colors.inkSoft} style={{ maxWidth: 460 }}>
           the things you forget — passport, lease, taxes, the dentist. ollie
           carries the dates.
@@ -579,8 +591,8 @@ function TaskSection({
 }
 
 /**
- * Render a list of items as hairline-bordered rows (top + bottom rule on
- * the last row). Mirrors the v2 torn-note grammar from admin-cold.html.
+ * Render a list of items as raised neumorphic cards — one per row, with a
+ * calm gap between. Replaces the v2 torn-note hairline grammar.
  */
 function HairlineList<T extends { id: string }>({
   items,
@@ -590,19 +602,17 @@ function HairlineList<T extends { id: string }>({
   renderRow: (item: T, index: number) => ReactNode;
 }): JSX.Element {
   return (
-    <Stack gap={0}>
+    <Stack gap={12}>
       {items.map((item, i) => (
-        <div
+        <Box
           key={item.id}
-          style={{
-            borderTop: `1px solid ${colors.hairline}`,
-            borderBottom:
-              i === items.length - 1 ? `1px solid ${colors.hairline}` : 'none',
-            padding: '14px 2px',
-          }}
+          bg="cream"
+          radius="card"
+          shadow="raised"
+          style={{ padding: '16px 18px' }}
         >
           {renderRow(item, i)}
-        </div>
+        </Box>
       ))}
     </Stack>
   );
@@ -762,8 +772,8 @@ function TaskRow({
 // ─── primitives ───────────────────────────────────────────────────────────
 
 /**
- * Soft round tick — the v2 ShopList grammar, ported. Empty = a thin sage
- * ring; checked = a filled sage disc with a paper-coloured check.
+ * Soft round tick — neumorphic. Empty = a pressed cream well; checked = a
+ * filled sageDeep disc with a cream check.
  */
 function TickCircle({
   done,
@@ -780,10 +790,13 @@ function TickCircle({
       aria-pressed={done}
       style={{
         appearance: 'none',
-        background: done ? colors.sage : 'transparent',
-        border: `1.5px solid ${done ? colors.sage : colors.hairline}`,
-        width: 18,
-        height: 18,
+        background: done ? colors.sageDeep : colors.cream,
+        border: 'none',
+        boxShadow: done
+          ? 'none'
+          : 'inset 3px 3px 6px rgba(120,140,122,0.55), inset -3px -3px 6px rgba(255,255,255,0.85)',
+        width: 24,
+        height: 24,
         padding: 0,
         borderRadius: '50%',
         cursor: 'pointer',
@@ -791,15 +804,15 @@ function TickCircle({
         alignItems: 'center',
         justifyContent: 'center',
         flexShrink: 0,
-        transition: 'background-color 200ms cubic-bezier(0.18, 0, 0.22, 1), border-color 200ms cubic-bezier(0.18, 0, 0.22, 1)',
+        transition: 'background-color 200ms cubic-bezier(0.18, 0, 0.22, 1)',
       }}
     >
       {done && (
-        <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden>
+        <svg width="11" height="11" viewBox="0 0 10 10" aria-hidden>
           <path
             d="M2 5.2 L4.2 7.2 L8 3"
             fill="none"
-            stroke={colors.paper}
+            stroke={colors.cream}
             strokeWidth={1.6}
             strokeLinecap="round"
             strokeLinejoin="round"
