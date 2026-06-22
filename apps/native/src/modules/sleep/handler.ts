@@ -42,8 +42,22 @@ async function getBearer(): Promise<string | null> {
  * Returns the original fragment unchanged on any failure path.
  */
 async function maybeUpgradeFragment(fragment: Fragment): Promise<Fragment> {
+  // A CONFIDENT sleep route still needs Layer 2 for field extraction: Layer 1
+  // only picks module+action (it deliberately leaves detailed fields to Layer
+  // 2), so "i slept 6 hours" lands as a bare log_sleep with no hours and the
+  // screen shows "logged". Detect that bare log and run Layer 2 to pull hours/
+  // quality/bedtime/wake (sleep.config.ts: "Always emit hours when the user
+  // states a duration"). Without this, hours never get captured. #sleep-hours
+  const sp = fragment.payload as { action?: string; hours?: unknown; bedtime?: unknown; wake?: unknown };
+  const isBareSleepLog =
+    fragment.module === 'sleep' &&
+    sp.action === 'log_sleep' &&
+    sp.hours == null &&
+    sp.bedtime == null &&
+    sp.wake == null;
+
   const needsLayer2 =
-    fragment.module === 'dump_only' || fragment.needsConfirm === true;
+    fragment.module === 'dump_only' || fragment.needsConfirm === true || isBareSleepLog;
 
   if (!needsLayer2) return fragment;
 
