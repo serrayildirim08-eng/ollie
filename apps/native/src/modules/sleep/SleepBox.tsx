@@ -3,9 +3,10 @@
  *
  * Extreme-minimal grammar: ONE focus — last night's duration — as a large
  * editorial serif figure inside a calm neumorphic hero card, the Layer-2
- * watcher cards, and a single "recent sleep" list. Everything else (week
- * bars, feel pills, wind-down/dreams/rough-night drills, cadence hint) was
- * removed for a one-focus-per-screen layout.
+ * watcher cards, and ONE calm unified "recent" timeline that shows every
+ * sleep-event kind (sleep · rough nights · dreams · wind-down) newest first
+ * in a single flat list. Everything else (week bars, feel pills, per-kind
+ * drills, cadence hint) was removed for a one-focus-per-screen layout.
  *
  * Storage is untouched: this screen calls `sleepRepo.latestSleep`,
  * `sleepRepo.listByKind`, `sleepRepo.remove` and `migrateSleep` exactly
@@ -28,19 +29,27 @@ const SMCP_STYLE: React.CSSProperties = {
   letterSpacing: '0.08em',
 };
 
-const RECENT_SLEEP_LIMIT = 7;
+/** Per-kind fetch depth; merged + capped to RECENT_LIMIT after sorting. */
+const PER_KIND_LIMIT = 15;
+const RECENT_LIMIT = 15;
 
 export function SleepBox(): JSX.Element {
   const [latest, setLatest] = useState<SleepEvent | null>(null);
-  const [recentSleep, setRecentSleep] = useState<SleepEvent[]>([]);
+  const [recent, setRecent] = useState<SleepEvent[]>([]);
 
   const refresh = useCallback(async () => {
-    const [latestSleep, sleeps] = await Promise.all([
+    const [latestSleep, sleeps, insomnias, dreams, windDowns] = await Promise.all([
       sleepRepo.latestSleep(),
-      sleepRepo.listByKind('sleep', RECENT_SLEEP_LIMIT),
+      sleepRepo.listByKind('sleep', PER_KIND_LIMIT),
+      sleepRepo.listByKind('insomnia', PER_KIND_LIMIT),
+      sleepRepo.listByKind('dream', PER_KIND_LIMIT),
+      sleepRepo.listByKind('wind_down', PER_KIND_LIMIT),
     ]);
+    const merged = [...sleeps, ...insomnias, ...dreams, ...windDowns]
+      .sort((a, b) => b.occurredAt - a.occurredAt)
+      .slice(0, RECENT_LIMIT);
     setLatest(latestSleep);
-    setRecentSleep(sleeps);
+    setRecent(merged);
   }, []);
 
   const { ready } = useModuleData({
@@ -57,7 +66,7 @@ export function SleepBox(): JSX.Element {
     [refresh],
   );
 
-  const anyData = latest !== null || recentSleep.length > 0;
+  const anyData = latest !== null || recent.length > 0;
 
   return (
     <Stack gap={48}>
@@ -98,11 +107,11 @@ export function SleepBox(): JSX.Element {
               drift, revenge bedtime, caffeine×onset, weekday/weekend gap). */}
           <PatternCards module="sleep" />
 
-          {/* recent week as a list */}
+          {/* ONE calm unified timeline — every kind, newest first */}
           <ListSection
-            label="recent sleep"
+            label="recent"
             empty="—"
-            items={recentSleep}
+            items={recent}
             renderItem={(event) => (
               <SleepRow
                 key={event.id}
@@ -262,11 +271,10 @@ function SleepRow({
   event: SleepEvent;
   onRemove: () => void;
 }): JSX.Element {
-  if (event.kind !== 'sleep') return <></>;
   return (
     <Stack gap={6}>
       <Row gap={12} align="baseline" justify="space-between">
-        <Text scale="body">{formatSleepLine(event)}</Text>
+        <Text scale="body">{formatEventLine(event)}</Text>
         <RemoveButton onClick={onRemove} />
       </Row>
       <WhenCaption ts={event.occurredAt} />
@@ -304,6 +312,37 @@ function RemoveButton({ onClick }: { onClick: () => void }): JSX.Element {
 }
 
 // ─── formatters ──────────────────────────────────────────────────────────
+
+/**
+ * One-line, kind-aware summary for a row in the unified timeline. Keeps it
+ * to a single calm line per event — no labels, no scores.
+ */
+function formatEventLine(event: SleepEvent): string {
+  switch (event.kind) {
+    case 'sleep':
+      return formatSleepLine(event);
+    case 'insomnia':
+      return formatInsomniaLine(event);
+    case 'dream':
+      return event.data.text.trim() || 'dream';
+    case 'wind_down':
+      return event.data.note.trim() || 'wind-down';
+  }
+}
+
+/** "rough night" + optional "· 90m" duration + "· woke 3×" detail. */
+function formatInsomniaLine(
+  event: Extract<SleepEvent, { kind: 'insomnia' }>,
+): string {
+  const parts: string[] = ['rough night'];
+  if (event.data.durationAttemptedMin != null) {
+    parts.push(`${event.data.durationAttemptedMin}m`);
+  }
+  if (event.data.wokeCount != null) {
+    parts.push(`woke ${event.data.wokeCount}×`);
+  }
+  return parts.join(' · ');
+}
 
 /** "7.5h · quality 4" / "bed 23:00 → wake 06:30" / "logged" */
 function formatSleepLine(event: Extract<SleepEvent, { kind: 'sleep' }>): string {
