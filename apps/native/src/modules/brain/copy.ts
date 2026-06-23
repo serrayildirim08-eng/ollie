@@ -212,8 +212,13 @@ function dayBucket(now: number): number {
   return Math.floor(now / DAY_MS);
 }
 
+// Bump when the copy logic changes in a way that should invalidate already-
+// cached sentences (e.g. the generic-placeholder fix). v2 retires any stale
+// "you have a generic situation" rows written before the fix.
+const COPY_CACHE_VERSION = 'v2';
+
 function cacheKey(noticingId: string, lang: AppLang, bucket: number): string {
-  return `${noticingId}|${lang}|${bucket}`;
+  return `${COPY_CACHE_VERSION}|${noticingId}|${lang}|${bucket}`;
 }
 
 async function readCache(key: string): Promise<string | null> {
@@ -280,6 +285,15 @@ export async function resolveNoticingCopy(
 
   const bucket = dayBucket(now);
   const key = cacheKey(n.id, lang, bucket);
+
+  // 0. A 'generic' kind means the candidate's category mapped to nothing
+  //    specific — there's nothing meaningful to hand the AI, and asking it to
+  //    phrase "situation: generic" produces meta-garbage ("you have a generic
+  //    situation"). Skip the AI entirely and use the clean fallback. This is a
+  //    hard guarantee the placeholder copy can never reach the surface.
+  if (facts.kind === 'generic') {
+    return fallback;
+  }
 
   // 1. Cached for this (noticing, day, lang)? Use it — no AI re-call on render.
   const cached = await readCache(key);

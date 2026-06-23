@@ -58,6 +58,7 @@ export type CopyKind =
   | 'renewal_cluster' // 2+ renewals land the same month — offer to batch them.
   | 'task_archive' // a date-less task survived the whole reminder ladder — offer to archive.
   | 'chore_due' // a recurring household chore is due by its cadence — offer to mark it done.
+  | 'duplicate' // two charges look like the same purchase (finance ADHD-tax detector).
   | 'generic';
 
 /**
@@ -107,6 +108,8 @@ export function copyKindOf(input: { category?: string | null; module?: string | 
   if (cat.includes('renewal-cluster') || cat.includes('renewal_cluster')) return 'renewal_cluster';
   if (cat.includes('task-archive') || cat.includes('task_archive')) return 'task_archive';
   if (cat.includes('chore')) return 'chore_due';
+  if (cat.includes('duplicate')) return 'duplicate';
+  if (cat.includes('period')) return 'replenish'; // period_products → restock
   if (cat.includes('decision')) return 'decision';
   if (cat.includes('spoiled')) return 'spoiled';
   if (cat.includes('bill') || cat.includes('late')) return 'bill';
@@ -285,6 +288,13 @@ const FALLBACK: Record<CopyKind, Record<AppLang, Phrase>> = {
     en: (f) => `${itemOr(f, 'a chore')}'s about due — want to mark it done?`,
     es: (f) => `${itemOr(f, 'una tarea')} toca pronto — ¿la marco como hecha?`,
     tr: (f) => `${itemOr(f, 'bir iş')} yaklaştı — yaptım diye işaretleyeyim mi?`,
+  },
+  // a possible double-charge — calm, one soft question, no alarm. It's a
+  // guess (confidence-based), so it never asserts you definitely paid twice.
+  duplicate: {
+    en: (f) => `${itemOr(f, 'something')} looks like it might be a double charge — want to check?`,
+    es: (f) => `${itemOr(f, 'algo')} parece un posible cargo doble — ¿lo revisas?`,
+    tr: (f) => `${itemOr(f, 'bir şey')} iki kez ödenmiş olabilir gibi — bakmak ister misin?`,
   },
   generic: {
     en: () => `something might be worth a glance.`,

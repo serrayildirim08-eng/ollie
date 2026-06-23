@@ -54,9 +54,27 @@ describe('copyKindOf', () => {
     expect(copyKindOf({ category: 'late' })).toBe('bill');
     expect(copyKindOf({ category: 'spoiled' })).toBe('spoiled');
   });
+  it('maps the finance duplicate-charge category (no longer generic)', () => {
+    expect(copyKindOf({ category: 'duplicate', module: 'finance' })).toBe('duplicate');
+  });
+  it('maps period products to replenish', () => {
+    expect(copyKindOf({ category: 'period_products', module: 'grocery' })).toBe('replenish');
+  });
   it('falls back to generic', () => {
     expect(copyKindOf({ category: 'who-knows', module: 'work' })).toBe('generic');
     expect(copyKindOf({})).toBe('generic');
+  });
+});
+
+describe('fallbackCopy — duplicate kind is calm + never the generic placeholder', () => {
+  it('phrases a possible double charge as a soft question, never "generic"', () => {
+    const dup = { kind: 'duplicate' as const, item: 'spotify', days: null, otherCount: null, action: null };
+    for (const lang of ['en', 'es', 'tr'] as const) {
+      const s = fallbackCopy(dup, lang);
+      expect(s.length).toBeGreaterThan(0);
+      expect(s.toLowerCase()).not.toContain('generic');
+    }
+    expect(fallbackCopy(dup, 'en')).toContain('spotify');
   });
 });
 
