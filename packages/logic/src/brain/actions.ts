@@ -28,7 +28,9 @@ export type ActionKind =
   // ── wave 2 (richer admin offers) ──
   | 'surface_tasks' // paperwork piling → bring N stalled admin tasks to today.
   | 'break_down_task' // chronic deferral → create one smaller first-step task.
-  | 'batch_block'; // renewal cluster → block one day + schedule a reminder.
+  | 'batch_block' // renewal cluster → block one day + schedule a reminder.
+  // ── dateless escalation ladder (final tier) ──
+  | 'archive_task'; // a date-less task survived the full ladder → archive/remove it.
 
 /** Payload for `add_to_grocery_list`: the item names to put on the list. */
 export interface AddToGroceryListPayload {
@@ -109,6 +111,19 @@ export interface BatchBlockPayload {
   renewalIds?: string[];
 }
 
+/**
+ * Payload for `archive_task` (dateless ladder final tier): the task that
+ * survived the full escalating reminder ladder still open. The executor REMOVES
+ * it from its module repo (admin or work) so it stops haunting /todo. The
+ * module + id are carried so the generic dispatcher knows which repo to call.
+ */
+export interface ArchiveTaskPayload {
+  /** Which task repo the row lives in. */
+  module: 'admin' | 'work';
+  /** The task row id to archive/remove. */
+  taskId: string;
+}
+
 /** Discriminated payload union, keyed by {@link ActionKind}. */
 export type ActionPayload =
   | ({ kind: 'add_to_grocery_list' } & AddToGroceryListPayload)
@@ -117,7 +132,8 @@ export type ActionPayload =
   | ({ kind: 'surface_decision' } & SurfaceDecisionPayload)
   | ({ kind: 'surface_tasks' } & SurfaceTasksPayload)
   | ({ kind: 'break_down_task' } & BreakDownTaskPayload)
-  | ({ kind: 'batch_block' } & BatchBlockPayload);
+  | ({ kind: 'batch_block' } & BatchBlockPayload)
+  | ({ kind: 'archive_task' } & ArchiveTaskPayload);
 
 /**
  * A suggested action attached to a noticing. PURE + serialisable: the native
@@ -168,6 +184,11 @@ const ACCEPT_LABEL: Record<ActionKind, Record<AppLang, string>> = {
     en: 'block a day',
     es: 'aparta un día',
     tr: 'bir gün ayır',
+  },
+  archive_task: {
+    en: 'archive it',
+    es: 'archívalo',
+    tr: 'arşivle',
   },
 };
 
@@ -317,5 +338,23 @@ export function buildBatchBlockAction(
       fireAtMs,
       ...(ids.length > 0 ? { renewalIds: ids } : {}),
     },
+  };
+}
+
+/**
+ * Build the archive-task action descriptor for the dateless-ladder final tier.
+ * Returns null when `module`/`taskId` are missing (nothing concrete to remove).
+ */
+export function buildArchiveTaskAction(
+  module: 'admin' | 'work',
+  taskId: string,
+  lang: AppLang,
+): NoticingAction | null {
+  const id = (taskId ?? '').toString().trim();
+  if (!id || (module !== 'admin' && module !== 'work')) return null;
+  return {
+    kind: 'archive_task',
+    label: actionLabel('archive_task', lang),
+    payload: { kind: 'archive_task', module, taskId: id },
   };
 }

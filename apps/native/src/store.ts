@@ -43,6 +43,7 @@ import { scheduleSystemNotification } from './notify/systemNotify';
 import { runAllSyncs } from './bridge';
 import { recomputeBrain } from './modules/brain';
 import { installRenewalEscalation } from './modules/admin/renewalEscalation';
+import { setLadderStore, sweepDatelessLadders } from './notify/datelessLadder';
 import { enumerateCadences as enumerateGrocery } from './modules/grocery';
 import { enumerateCadences as enumerateBody } from './modules/body';
 import { enumerateCadences as enumerateHabits } from './modules/habits';
@@ -57,6 +58,10 @@ import { enumerateCadences as enumerateMedication } from './modules/medication';
 
 runMigrations(browserAdapter);
 export const store = createStore(browserAdapter);
+
+// Let the date-less ladder clear persisted state without an explicit store arg
+// (e.g. from the notification-action completion path). See notify/datelessLadder.
+setLadderStore(store);
 
 /**
  * Dev-only wrapper around an enumerateCadences adapter. Passes entries
@@ -142,6 +147,15 @@ void runAllSyncs(store)
   .catch((err) => {
     // eslint-disable-next-line no-console
     console.error('[brain] boot recompute failed (non-fatal):', err);
+  })
+  // Advance every date-less task's escalating reminder ladder to the present:
+  // schedule any newly-due tier (app-quit-safe) + surface the archive offer once
+  // the full ladder has elapsed. Idempotent; skips while go-dark. Runs on boot
+  // (here) and after each dump (modules/dispatch.ts). Best-effort.
+  .then(() => sweepDatelessLadders(store))
+  .catch((err) => {
+    // eslint-disable-next-line no-console
+    console.error('[ladder] boot sweep failed (non-fatal):', err);
   });
 
 /**

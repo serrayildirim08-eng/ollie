@@ -37,6 +37,7 @@ import { WhenCaption } from '../../lib/WhenCaption';
 import { useModuleData } from '../../lib/useModuleData';
 import { PatternCards } from '../../patterns/PatternCards';
 import { migrateWork } from './migrate';
+import { onTaskCompleted } from '../../notify/datelessLadderHook';
 import {
   cadence as cadenceRepo,
   events as eventsRepo,
@@ -115,8 +116,10 @@ export function WorkBox(): JSX.Element {
   });
 
   const handleToggleTask = useCallback(
-    async (id: string) => {
+    async (id: string, wasDone: boolean) => {
       await tasksRepo.toggleDone(id);
+      // Toggling an OPEN task to done cancels its date-less ladder tiers.
+      if (!wasDone) await onTaskCompleted('work', id);
       await refresh();
     },
     [refresh],
@@ -306,7 +309,7 @@ export function WorkBox(): JSX.Element {
                     key={item.id}
                     item={item}
                     cadence={taskCadence.get(item.text)}
-                    onToggle={() => void handleToggleTask(item.id)}
+                    onToggle={() => void handleToggleTask(item.id, item.done)}
                     onRemove={() => void handleRemoveTask(item.id)}
                   />
                 )}
@@ -321,7 +324,7 @@ export function WorkBox(): JSX.Element {
                     key={item.id}
                     item={item}
                     cadence={taskCadence.get(item.text)}
-                    onToggle={() => void handleToggleTask(item.id)}
+                    onToggle={() => void handleToggleTask(item.id, item.done)}
                     onRemove={() => void handleRemoveTask(item.id)}
                   />
                 )}

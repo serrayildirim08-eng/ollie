@@ -12,6 +12,7 @@ import { migrateAdmin } from './migrate';
 import { renewals, tasks } from './repo';
 import { inferInitialBallState } from './ballState';
 import { scheduleTaskReminder } from '../../notify/taskReminder';
+import { startDatelessLadderFor } from '../../notify/datelessLadderHook';
 
 export const adminHandler: ModuleHandler<'admin'> = {
   module: 'admin',
@@ -38,6 +39,12 @@ export const adminHandler: ModuleHandler<'admin'> = {
         // computes scheduledAtMs from the user's "in N min/hr" hint.
         scheduleTaskReminder(p.remindIn, task.id, {
           title: 'to do', body: p.text, module: 'admin', actionUrl: 'ollie://todo',
+        });
+        // DATE-LESS escalation ladder: a task with NO dueDate gets a growing
+        // series of gentle reminders so it isn't forgotten. No-op when dated.
+        void startDatelessLadderFor({
+          module: 'admin', taskId: task.id, text: task.text,
+          dueDate: task.dueDate, createdAt: task.createdAt,
         });
         return { ok: true, note: `noted: ${p.text}`, deepLink: '/box/admin', undo: undoTask(task.id) };
       }

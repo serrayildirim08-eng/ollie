@@ -14,6 +14,7 @@ import { migrateBody } from '../body/migrate';
 import { events as bodyEvents } from '../body/repo';
 import { sendSystemNotification } from '../../notify/systemNotify';
 import { scheduleTaskReminder } from '../../notify/taskReminder';
+import { startDatelessLadderFor } from '../../notify/datelessLadderHook';
 
 export const workHandler: ModuleHandler<'work'> = {
   module: 'work',
@@ -73,6 +74,12 @@ export const workHandler: ModuleHandler<'work'> = {
         // scheduledAtMs against its clock; we just hand it to the OS.
         scheduleTaskReminder(p.remindIn, task.id, {
           title: 'to do', body: p.text, module: 'work', actionUrl: 'ollie://box/work',
+        });
+        // DATE-LESS escalation ladder: a work task carries no due date, so it
+        // gets the growing-gap reminder series so it isn't forgotten.
+        void startDatelessLadderFor({
+          module: 'work', taskId: task.id, text: task.text,
+          dueDate: task.dueDate, createdAt: task.createdAt,
         });
         // NOTE: tasks.add upserts on (text, done=0). Undo removes the row
         // regardless of whether it was fresh or refreshed — see finance.add_bill

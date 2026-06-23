@@ -48,6 +48,7 @@ import {
   shopping as groceryShoppingRepo,
 } from '../modules/grocery';
 import { migrateWork, tasks as workTasksRepo } from '../modules/work';
+import { onTaskCompleted } from '../notify/datelessLadderHook';
 import {
   aggregateTodos,
   bucketTodos,
@@ -85,10 +86,13 @@ async function markComplete(item: TodoItem): Promise<void> {
       return;
     }
     await adminTasksRepo.markComplete(item.rowId);
+    // Completing in-app cancels any remaining date-less ladder tiers.
+    await onTaskCompleted('admin', item.rowId);
     return;
   }
   if (item.source === 'work') {
     await workTasksRepo.markComplete(item.rowId);
+    await onTaskCompleted('work', item.rowId);
     return;
   }
   // source === 'grocery'

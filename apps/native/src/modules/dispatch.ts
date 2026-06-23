@@ -22,6 +22,7 @@ import { store } from '../store';
 import { runAllSyncs } from '../bridge';
 import { recomputeBrain } from './brain';
 import { recordMoodFromDump } from '../bridge/mood';
+import { sweepDatelessLadders } from '../notify/datelessLadder';
 
 export interface DispatchOptions {
   /**
@@ -123,6 +124,9 @@ export async function dispatchRouterOutput(
     // dump bumped today's capture load + maybe its mood tag), so recompute
     // harm + capacity AFTER the sync. Best-effort; never blocks the ack.
     .then(() => recomputeBrain(store))
+    // Advance date-less reminder ladders (a fresh task may have just registered
+    // one; an existing one may have crossed a tier). Best-effort, non-blocking.
+    .then(() => sweepDatelessLadders(store))
     .catch((err) => {
 
       console.error('[bridge] post-dispatch sync failed (non-fatal):', err);
@@ -155,6 +159,7 @@ export async function applyFragment(
 
   void runAllSyncs(store)
     .then(() => recomputeBrain(store))
+    .then(() => sweepDatelessLadders(store))
     .catch((err) => {
       console.error('[bridge] post-confirm sync failed (non-fatal):', err);
     });

@@ -22,6 +22,7 @@ import {
 } from "../notify/notificationActions";
 import { tasks as adminTasksRepo } from "../modules/admin";
 import { tasks as workTasksRepo } from "../modules/work";
+import { onTaskCompleted } from "../notify/datelessLadderHook";
 import { pullGroceryPantry } from "../sync/groceryPull";
 import { useFeature } from "../settings/features";
 import { Stack, Row, Box } from "../layout";
@@ -65,13 +66,16 @@ function GrocerySyncBridge(): null {
   return null;
 }
 
-/** Maps a reminder's "got it ✓" tap to the source module's completion write. */
+/** Maps a reminder's "got it ✓" tap to the source module's completion write,
+ *  then cancels any remaining date-less ladder tiers for the row. */
 async function completeReminderTarget(meta: ReminderActionMeta): Promise<void> {
   if (meta.module === 'admin') {
     await adminTasksRepo.markComplete(meta.refId);
   } else {
     await workTasksRepo.markComplete(meta.refId);
   }
+  // Completing via the notification action cancels the rest of the ladder.
+  await onTaskCompleted(meta.module, meta.refId);
 }
 
 /** Registers notification action buttons + routes taps to completion/snooze (A3). */

@@ -56,6 +56,7 @@ export type CopyKind =
   | 'paperwork_piling' // several admin tasks haven't moved — offer to surface them.
   | 'chronic_deferral' // same task put off repeatedly — offer a smaller first step.
   | 'renewal_cluster' // 2+ renewals land the same month — offer to batch them.
+  | 'task_archive' // a date-less task survived the whole reminder ladder — offer to archive.
   | 'generic';
 
 /**
@@ -84,7 +85,8 @@ export type CopyActionKind =
   | 'surface_decision'
   | 'surface_tasks'
   | 'break_down_task'
-  | 'batch_block';
+  | 'batch_block'
+  | 'archive_task';
 
 // ─── kind resolution ─────────────────────────────────────────────────────────
 
@@ -101,6 +103,7 @@ export function copyKindOf(input: { category?: string | null; module?: string | 
   if (cat.includes('paperwork')) return 'paperwork_piling';
   if (cat.includes('chronic-deferral') || cat.includes('chronic_deferral')) return 'chronic_deferral';
   if (cat.includes('renewal-cluster') || cat.includes('renewal_cluster')) return 'renewal_cluster';
+  if (cat.includes('task-archive') || cat.includes('task_archive')) return 'task_archive';
   if (cat.includes('decision')) return 'decision';
   if (cat.includes('spoiled')) return 'spoiled';
   if (cat.includes('bill') || cat.includes('late')) return 'bill';
@@ -127,6 +130,7 @@ const ACTION_DESCRIPTION: Record<CopyActionKind, string> = {
   surface_tasks: "you can offer to bring these to today's focus",
   break_down_task: 'you can offer to break it into a smaller first step',
   batch_block: 'you can offer to batch them into one block',
+  archive_task: 'you can ask whether to keep it or archive it',
 };
 
 /**
@@ -247,6 +251,13 @@ const FALLBACK: Record<CopyKind, Record<AppLang, Phrase>> = {
     en: () => `two renewals land around the same time — batch them one day?`,
     es: () => `dos renovaciones caen por las mismas fechas — ¿las juntamos un día?`,
     tr: () => `iki yenileme aynı zamana denk geliyor — bir günde toplayalım mı?`,
+  },
+  // Dateless ladder final tier: the task has gone un-acted for a month of
+  // reminders. Ask once, calmly, whether it's still wanted or should archive.
+  task_archive: {
+    en: (f) => `"${itemOr(f, 'a task')}" has sat untouched for a while — still want it, or archive it?`,
+    es: (f) => `"${itemOr(f, 'una tarea')}" lleva tiempo sin tocarse — ¿la quieres aún o la archivo?`,
+    tr: (f) => `"${itemOr(f, 'bir görev')}" bir süredir el değmeden duruyor — hâlâ istiyor musun, yoksa arşivleyeyim mi?`,
   },
   // Insight-only (B): no offer, no action — just a calm observation. When the
   // detector carried its measured onset delay (in facts.days), name it.

@@ -23,6 +23,9 @@
  *   - batch_block         — the renewal-cluster noticing → creates a dated block
  *     task + schedules an app-closed reminder via the EVENT path (scheduleAt →
  *     emit('ollie-schedule-notif'), never invoke() — ACL-safe on iOS localhost).
+ *   - archive_task        — the dateless-ladder final-tier offer → REMOVES the
+ *     task from its module repo (admin/work) and cancels any remaining ladder
+ *     notifications.
  *
  * Returns whether the action succeeded so the caller can clear the noticing
  * only on success. Best-effort: a thrown repo error is caught + reported false.
@@ -234,6 +237,34 @@ export async function executeAction(action: NoticingAction): Promise<boolean> {
           ballState: 'mine',
         });
         await refreshBridges({ admin: true });
+        return true;
+      }
+
+      case 'archive_task': {
+        // Dateless-ladder final tier: the task survived the whole escalating
+        // reminder ladder still open. Accepting "archive it" REMOVES the row
+        // from its module repo so it stops haunting /todo. Removing also cancels
+        // any remaining ladder notifications (cancelLadder reads the repo state
+        // for the row; a removed row is treated as closed on the next sweep).
+        const { module, taskId } = action.payload;
+        const id = (taskId ?? '').toString().trim();
+        if (!id || (module !== 'admin' && module !== 'work')) return false;
+        if (module === 'admin') {
+          await migrateAdmin();
+          await adminTasks.remove(id);
+          await refreshBridges({ admin: true });
+        } else {
+          await migrateWork();
+          await workTasks.remove(id);
+          await refreshBridges({ work: true });
+        }
+        // Drop any still-pending ladder tiers for this archived task.
+        try {
+          const { cancelLadder } = await import('../../notify/datelessLadder');
+          cancelLadder(module, id);
+        } catch {
+          /* ladder module unavailable (bare test env) — nothing to cancel. */
+        }
         return true;
       }
 

@@ -30,6 +30,7 @@ import {
   buildSurfaceTasksAction,
   buildBreakDownTaskAction,
   buildBatchBlockAction,
+  buildArchiveTaskAction,
   type ScoredNoticing,
   type CopyFacts,
   type CopyActionKind,
@@ -56,6 +57,8 @@ const OFFER_ACTION_KINDS: readonly CopyActionKind[] = [
   'surface_tasks',
   'break_down_task',
   'batch_block',
+  // ── dateless ladder final tier ──
+  'archive_task',
 ] as const;
 
 /** Read the offer action a detector attached directly to the candidate's facts. */
@@ -173,6 +176,13 @@ export function actionForNoticing(n: ScoredNoticing, lang: AppLang): NoticingAct
         factStringArray(n, 'renewalIds'),
         lang,
       );
+    case 'archive_task': {
+      // dateless ladder final tier → archive the long-untouched task. The
+      // ladder attaches the task's module + id to the candidate facts.
+      const mod = factString(n, 'taskModule');
+      if (mod !== 'admin' && mod !== 'work') return null;
+      return buildArchiveTaskAction(mod, factString(n, 'taskId'), lang);
+    }
     default:
       return null;
   }

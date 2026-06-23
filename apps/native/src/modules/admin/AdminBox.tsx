@@ -71,6 +71,7 @@ import { WhenCaption } from '../../lib/WhenCaption';
 import { useModuleData } from '../../lib/useModuleData';
 import { PatternCards } from '../../patterns/PatternCards';
 import { migrateAdmin } from './migrate';
+import { onTaskCompleted } from '../../notify/datelessLadderHook';
 import {
   cadence as cadenceRepo,
   renewals as renewalsRepo,
@@ -163,6 +164,8 @@ export function AdminBox(): JSX.Element {
   const handleToggleTask = useCallback(
     async (id: string, nextDone: boolean) => {
       await tasksRepo.setDone(id, nextDone);
+      // Completing in-app cancels any remaining date-less ladder tiers.
+      if (nextDone) await onTaskCompleted('admin', id);
       await refresh();
     },
     [refresh],

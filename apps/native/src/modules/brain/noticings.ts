@@ -118,6 +118,7 @@ const OFFER_FACT_KEYS = [
   'taskId', // chronic deferral → the source admin task id (→ sourceTaskId).
   'sourceTaskId', // chronic deferral (synthesized) → same, alternate key.
   'batchLabel', // renewal cluster → the batch block + reminder label.
+  'taskModule', // dateless ladder archive → which repo the task lives in.
 ] as const;
 
 /** ARRAY (string[]) offer fields — wave-2 offers carry id lists. */

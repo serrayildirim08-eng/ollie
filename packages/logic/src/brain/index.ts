@@ -81,6 +81,7 @@ export {
   buildSurfaceTasksAction,
   buildBreakDownTaskAction,
   buildBatchBlockAction,
+  buildArchiveTaskAction,
 } from './actions';
 export type {
   ActionKind,
@@ -92,5 +93,6 @@ export type {
   SurfaceTasksPayload,
   BreakDownTaskPayload,
   BatchBlockPayload,
+  ArchiveTaskPayload,
   NoticingAction,
 } from './actions';
