@@ -48,6 +48,21 @@ const MIGRATIONS = [
     ON chore_completion(name, completed_at DESC)`,
 ];
 
+/** Additive column migrations. SQLite has no "ADD COLUMN IF NOT EXISTS", so we
+ *  run each ALTER and swallow the "duplicate column" error on re-boot — the
+ *  table already carries the column on a device that's migrated once. */
+const ADD_COLUMNS: string[] = [
+  // weekdays: JSON array of local weekday ints [0=Sun..6=Sat] for
+  // weekday-anchored recurring chores ("laundry on wednesdays"). NULL for
+  // one-offs + interval chores. Pre-existing rows read back as null.
+  `ALTER TABLE chores ADD COLUMN weekdays TEXT`,
+];
+
+function isDuplicateColumnError(e: unknown): boolean {
+  const msg = e instanceof Error ? e.message : String(e);
+  return /duplicate column name/i.test(msg);
+}
+
 let migrationPromise: Promise<void> | null = null;
 
 export function migrateChores(): Promise<void> {
@@ -55,6 +70,13 @@ export function migrateChores(): Promise<void> {
     migrationPromise = (async () => {
       for (const stmt of MIGRATIONS) {
         await sql.execute(stmt);
+      }
+      for (const stmt of ADD_COLUMNS) {
+        try {
+          await sql.execute(stmt);
+        } catch (e) {
+          if (!isDuplicateColumnError(e)) throw e;
+        }
       }
     })().catch((e) => {
       // A transient SQLite failure must not brick the module for the whole

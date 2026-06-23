@@ -31,7 +31,8 @@ vi.mock('../../storage', () => ({
 }));
 
 import { migrateChores } from './migrate';
-import { chores, cadence, isChoreDue } from './repo';
+import { chores, cadence, isChoreDue, isChoreDueToday } from './repo';
+import { localWeekday } from './types';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -121,6 +122,58 @@ describe('listDueRecurring — cadence-due detection', () => {
     await chores.upsert({ name: 'clean the garage', kind: 'one_off' });
     const c = await chores.getByName('clean the garage');
     expect(isChoreDue(c!, Date.now())).toBe(false);
+  });
+});
+
+describe('weekday-anchored chores — listDueToday + isChoreDueToday', () => {
+  // Anchor on whatever weekday `now` actually is, so the test is independent of
+  // the day it runs.
+  const now = Date.now();
+  const today = localWeekday(now);
+  const otherDay = (today + 1) % 7;
+
+  it('upsert with weekdays stores them and clears interval cadence', async () => {
+    await chores.upsert({
+      name: 'do laundry',
+      kind: 'recurring',
+      cadenceDays: 7,
+      weekdays: [today],
+    });
+    const c = await chores.getByName('do laundry');
+    expect(c?.weekdays).toEqual([today]);
+    expect(c?.cadenceDays).toBeNull(); // weekday-anchored carries no interval
+  });
+
+  it('appears on today only on a matching weekday', async () => {
+    await chores.upsert({ name: 'laundry', kind: 'recurring', weekdays: [today] });
+    await chores.upsert({ name: 'sweep porch', kind: 'recurring', weekdays: [otherDay] });
+
+    const due = await chores.listDueToday(now);
+    const names = due.map((c) => c.name);
+    expect(names).toContain('laundry');
+    expect(names).not.toContain('sweep porch');
+  });
+
+  it('drops off after being marked done today, returns next matching week', async () => {
+    await chores.upsert({ name: 'laundry', kind: 'recurring', weekdays: [today] });
+    const before = await chores.getByName('laundry');
+    expect(isChoreDueToday(before!, now)).toBe(true);
+
+    await chores.markDone('laundry', now);
+    const after = await chores.getByName('laundry');
+    expect(isChoreDueToday(after!, now)).toBe(false); // already done today
+
+    // Same weekday next week → due again.
+    expect(isChoreDueToday(after!, now + 7 * DAY_MS)).toBe(true);
+  });
+
+  it('listDueToday also surfaces interval chores whose clock rolled over', async () => {
+    await chores.upsert({ name: 'vacuum', kind: 'recurring', cadenceDays: 7 });
+    mockDb
+      .prepare(`UPDATE chores SET last_done_at = ? WHERE name = 'vacuum'`)
+      .run(now - 8 * DAY_MS);
+    const due = await chores.listDueToday(now);
+    expect(due.map((c) => c.name)).toContain('vacuum');
   });
 });
 

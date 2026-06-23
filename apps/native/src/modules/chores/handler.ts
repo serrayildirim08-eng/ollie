@@ -10,7 +10,7 @@
 import type { ChoresAction, ModuleHandler, HandlerResult } from '../../router/schema';
 import { migrateChores } from './migrate';
 import { chores } from './repo';
-import { normaliseChoreName } from './types';
+import { normaliseChoreName, normaliseWeekdays, formatWeekdays } from './types';
 
 /** Cadence fallback when "every week"-style language reaches us without a
  *  parsed day count (the Layer-1 classifier should fill `cadenceDays`, but we
@@ -49,18 +49,31 @@ export const choresHandler: ModuleHandler<'chores'> = {
       }
 
       case 'add_recurring_chore': {
+        // Weekday-anchored ("laundry on wednesdays") takes precedence: it recurs
+        // by day-of-week and carries no interval cadence. Otherwise fall back to
+        // an interval cadence (parsed days, or the weekly default).
+        const weekdays = normaliseWeekdays(p.weekdays);
         const cadenceDays =
-          typeof p.cadenceDays === 'number' && Number.isFinite(p.cadenceDays) && p.cadenceDays > 0
-            ? Math.round(p.cadenceDays)
-            : DEFAULT_CADENCE_DAYS;
+          weekdays != null
+            ? null
+            : typeof p.cadenceDays === 'number' &&
+                Number.isFinite(p.cadenceDays) &&
+                p.cadenceDays > 0
+              ? Math.round(p.cadenceDays)
+              : DEFAULT_CADENCE_DAYS;
         const chore = await chores.upsert({
           name: p.chore,
           kind: 'recurring',
           cadenceDays,
+          weekdays,
         });
+        const note =
+          weekdays != null
+            ? `recurring chore: ${normaliseChoreName(p.chore)} on ${formatWeekdays(weekdays)}`
+            : `recurring chore: ${normaliseChoreName(p.chore)} every ${cadenceDays} days`;
         return {
           ok: true,
-          note: `recurring chore: ${normaliseChoreName(p.chore)} every ${cadenceDays} days`,
+          note,
           deepLink: '/box/chores',
           undo: () => chores.remove(chore.id),
         };

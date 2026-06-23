@@ -94,7 +94,8 @@ Other module-choice hints:
 - CHORES = household cleaning/upkeep tasks (vacuuming, dishes, laundry, mopping, taking out trash, cleaning a room, changing sheets, watering plants). DISTINCT from grocery (buying/consuming items) and admin (paperwork/appointments/calls).
   · PAST-TENSE done ("vacuumed", "cleaned the kitchen", "did the dishes", "took out the trash", "süpürdüm", "limpié la cocina") → chores.chore_done { chore } (resets a recurring chore's clock).
   · FUTURE one-off ("need to vacuum", "clean the bathroom", "have to do the dishes", "banyoyu temizlemem lazım") → chores.add_chore { chore }.
-  · RECURRING with a cadence ("do laundry every week", "vacuum every 7 days", "her hafta çamaşır", "mop weekly") → chores.add_recurring_chore { chore, cadenceDays:number }. Map weekly→7, daily→1, every N days→N, monthly→30, biweekly→14.
+  · RECURRING by WEEKDAY ("do laundry on wednesdays", "vacuum on mondays", "çarşambaları çamaşır", "los lunes paso la aspiradora", "trash out on tuesdays") → chores.add_recurring_chore { chore, weekdays:number[] } where weekdays use local 0=Sun..6=Sat (wednesday→[3], "mon & thu"→[1,4], weekdays→[1,2,3,4,5]). Prefer weekdays whenever specific days are named.
+  · RECURRING by INTERVAL ("do laundry every week", "vacuum every 7 days", "her hafta çamaşır", "mop weekly") → chores.add_recurring_chore { chore, cadenceDays:number }. Map weekly→7, daily→1, every N days→N, monthly→30, biweekly→14. Use cadenceDays ONLY when no specific weekday is named.
   · A chore mentioned with a PRICE or a purchased item is NOT a chore (buying a vacuum → finance/grocery, not chores).
 - body.log_movement covers ALL physical activity (walk/run/yoga/lift/stretch/swim).
 - MOOD vs body vs habits (mood owns feelings/energy/self-talk):
@@ -158,6 +159,9 @@ MINI EXAMPLES:
 - "clean the bathroom" → chores.add_chore { chore:"clean the bathroom" }
 - "do laundry every week" → chores.add_recurring_chore { chore:"do laundry", cadenceDays:7 }
 - "vacuum every 7 days" → chores.add_recurring_chore { chore:"vacuum", cadenceDays:7 }
+- "do laundry on wednesdays" → chores.add_recurring_chore { chore:"do laundry", weekdays:[3] }
+- "çarşambaları çamaşır yıkarım" → chores.add_recurring_chore { chore:"do laundry", weekdays:[3] }
+- "take the trash out on mondays and thursdays" → chores.add_recurring_chore { chore:"take the trash out", weekdays:[1,4] }
 - "ugh today is weird" → dump_only.archive_only { reason:"no_module_match" }
 
 Confidence < 0.6 → dump_only.`;

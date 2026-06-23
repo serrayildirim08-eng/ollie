@@ -30,6 +30,7 @@ function record(over: Partial<ChoreRecord>): ChoreRecord {
     name: over.name ?? 'vacuum',
     kind: over.kind ?? 'recurring',
     cadenceDays: over.cadenceDays ?? 7,
+    weekdays: over.weekdays ?? null,
     lastDoneAt: over.lastDoneAt ?? null,
     done: over.done ?? false,
     createdAt: over.createdAt ?? 0,
@@ -99,6 +100,14 @@ describe('chores orchestrator', () => {
     orch.init();
     expect(store.get<ChorePattern[]>('chores', 'patterns', [])).toEqual([]);
   });
+
+  it('weekday-anchored chores never produce an offer (they auto-add silently)', () => {
+    store.set('chores', 'registry', [
+      record({ id: 'c5', name: 'do laundry', cadenceDays: null, weekdays: [3], lastDoneAt: null }),
+    ]);
+    orch.init();
+    expect(store.get<ChorePattern[]>('chores', 'patterns', [])).toEqual([]);
+  });
 });
 
 describe('chores pure helpers', () => {
@@ -107,6 +116,10 @@ describe('chores pure helpers', () => {
     expect(isRecordDue(record({ lastDoneAt: NOW - 2 * DAY_MS }), NOW)).toBe(false);
     expect(isRecordDue(record({ lastDoneAt: null }), NOW)).toBe(true);
     expect(isRecordDue(record({ kind: 'one_off', cadenceDays: null }), NOW)).toBe(false);
+    // weekday-anchored → excluded from offers regardless of last-done.
+    expect(
+      isRecordDue(record({ cadenceDays: null, weekdays: [3], lastDoneAt: null }), NOW),
+    ).toBe(false);
   });
 
   it('buildChoreDueCopy is calm + names the cadence', () => {

@@ -31,8 +31,12 @@ export interface ChoreRecord {
   id: string;
   name: string;
   kind: 'one_off' | 'recurring';
-  /** Cadence in days for recurring chores; null for one-offs. */
+  /** Interval cadence in days; null for one-offs + weekday-anchored chores. */
   cadenceDays: number | null;
+  /** Local weekdays [0=Sun..6=Sat] for weekday-anchored recurring chores; null
+   *  otherwise. Weekday chores AUTO-appear on today's list silently, so the
+   *  watcher emits NO offer card for them (see isRecordDue). */
+  weekdays?: number[] | null;
   /** ms-since-epoch of the most recent completion; null until first done. */
   lastDoneAt: number | null;
   done: boolean;
@@ -65,12 +69,21 @@ export interface ChoresOrchestratorOptions {
   now?: () => number;
 }
 
-/** A recurring chore is "due" once it's been ≥ cadenceDays since last done
- *  (or it has never been done). */
+/**
+ * Does this recurring chore warrant a brain OFFER card?
+ *
+ * Only INTERVAL chores do. Weekday-anchored chores ("laundry on wednesdays")
+ * auto-appear on today's list silently — surfacing a "add to today?" offer for
+ * them would double up, so they're excluded here.
+ *
+ * An interval chore is due once it's been ≥ cadenceDays since last done (or it
+ * has never been done).
+ */
 export function isRecordDue(c: ChoreRecord, now: number): boolean {
-  if (c.kind !== 'recurring' || c.cadenceDays == null || c.cadenceDays <= 0) {
-    return false;
-  }
+  if (c.kind !== 'recurring') return false;
+  // Weekday-anchored → auto-added silently, never offered.
+  if (c.weekdays != null && c.weekdays.length > 0) return false;
+  if (c.cadenceDays == null || c.cadenceDays <= 0) return false;
   if (c.lastDoneAt == null) return true;
   return now >= c.lastDoneAt + c.cadenceDays * DAY_MS;
 }

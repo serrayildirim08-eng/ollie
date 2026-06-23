@@ -34,6 +34,7 @@ export async function syncToStore(store: Store): Promise<void> {
     name: c.name,
     kind: c.kind,
     cadenceDays: c.cadenceDays,
+    weekdays: c.weekdays,
     lastDoneAt: c.lastDoneAt,
     done: c.done,
     createdAt: c.createdAt,

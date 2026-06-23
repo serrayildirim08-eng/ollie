@@ -44,7 +44,7 @@ describe('choresHandler', () => {
 
   it('chore_done: marks the chore done (recurring → clock reset note)', async () => {
     vi.mocked(chores.markDone).mockResolvedValue({
-      id: 'c1', name: 'vacuum', kind: 'recurring', cadenceDays: 7,
+      id: 'c1', name: 'vacuum', kind: 'recurring', cadenceDays: 7, weekdays: null,
       lastDoneAt: Date.now(), done: false, createdAt: 0,
     });
     const result = await choresHandler.apply(frag({ action: 'chore_done', chore: 'vacuumed' }));
@@ -55,7 +55,7 @@ describe('choresHandler', () => {
 
   it('chore_done: one-off → plain done note, no clock reset', async () => {
     vi.mocked(chores.markDone).mockResolvedValue({
-      id: 'c2', name: 'clean the kitchen', kind: 'one_off', cadenceDays: null,
+      id: 'c2', name: 'clean the kitchen', kind: 'one_off', cadenceDays: null, weekdays: null,
       lastDoneAt: Date.now(), done: true, createdAt: 0,
     });
     const result = await choresHandler.apply(frag({ action: 'chore_done', chore: 'cleaned the kitchen' }));
@@ -65,7 +65,7 @@ describe('choresHandler', () => {
 
   it('add_chore: upserts a one_off and undo removes it by id', async () => {
     vi.mocked(chores.upsert).mockResolvedValue({
-      id: 'c3', name: 'clean the bathroom', kind: 'one_off', cadenceDays: null,
+      id: 'c3', name: 'clean the bathroom', kind: 'one_off', cadenceDays: null, weekdays: null,
       lastDoneAt: null, done: false, createdAt: 0,
     });
     const result = await choresHandler.apply(frag({ action: 'add_chore', chore: 'clean the bathroom' }));
@@ -77,14 +77,14 @@ describe('choresHandler', () => {
 
   it('add_recurring_chore: passes cadenceDays through and undo removes', async () => {
     vi.mocked(chores.upsert).mockResolvedValue({
-      id: 'c4', name: 'do laundry', kind: 'recurring', cadenceDays: 7,
+      id: 'c4', name: 'do laundry', kind: 'recurring', cadenceDays: 7, weekdays: null,
       lastDoneAt: null, done: false, createdAt: 0,
     });
     const result = await choresHandler.apply(
       frag({ action: 'add_recurring_chore', chore: 'do laundry', cadenceDays: 7 }),
     );
     expect(vi.mocked(chores.upsert)).toHaveBeenCalledWith({
-      name: 'do laundry', kind: 'recurring', cadenceDays: 7,
+      name: 'do laundry', kind: 'recurring', cadenceDays: 7, weekdays: null,
     });
     expect(result.note).toContain('every 7 days');
     expect(result.undo).toBeTypeOf('function');
@@ -94,12 +94,28 @@ describe('choresHandler', () => {
 
   it('add_recurring_chore: missing cadence defaults to 7 days', async () => {
     vi.mocked(chores.upsert).mockResolvedValue({
-      id: 'c5', name: 'mop', kind: 'recurring', cadenceDays: 7,
+      id: 'c5', name: 'mop', kind: 'recurring', cadenceDays: 7, weekdays: null,
       lastDoneAt: null, done: false, createdAt: 0,
     });
     await choresHandler.apply(frag({ action: 'add_recurring_chore', chore: 'mop' }));
     expect(vi.mocked(chores.upsert)).toHaveBeenCalledWith({
-      name: 'mop', kind: 'recurring', cadenceDays: 7,
+      name: 'mop', kind: 'recurring', cadenceDays: 7, weekdays: null,
     });
+  });
+
+  it('add_recurring_chore: weekday-anchored stores weekdays, no interval cadence', async () => {
+    vi.mocked(chores.upsert).mockResolvedValue({
+      id: 'c6', name: 'do laundry', kind: 'recurring', cadenceDays: null, weekdays: [3],
+      lastDoneAt: null, done: false, createdAt: 0,
+    });
+    const result = await choresHandler.apply(
+      frag({ action: 'add_recurring_chore', chore: 'do laundry', weekdays: [3] }),
+    );
+    // weekdays win → cadenceDays null (recurs by day, not interval).
+    expect(vi.mocked(chores.upsert)).toHaveBeenCalledWith({
+      name: 'do laundry', kind: 'recurring', cadenceDays: null, weekdays: [3],
+    });
+    expect(result.note).toContain('wednesdays');
+    expect(result.note).not.toContain('every');
   });
 });

@@ -22,6 +22,9 @@ import { sql } from '../../storage';
 import { newId } from '../../storage/id';
 import {
   normaliseChoreName,
+  normaliseWeekdays,
+  localWeekday,
+  isSameLocalDay,
   type Chore,
   type ChoreKind,
 } from './types';
@@ -31,6 +34,8 @@ interface ChoreRow {
   name: string;
   kind: string;
   cadence_days: number | null;
+  /** JSON array of weekday ints, or null. */
+  weekdays: string | null;
   last_done_at: number | null;
   done: number;
   created_at: number;
@@ -50,7 +55,7 @@ export const chores = {
   /** Most-recent-first across all kinds. The UI buckets locally. */
   async list(): Promise<Chore[]> {
     const rows = await sql.select<ChoreRow>(
-      `SELECT id, name, kind, cadence_days, last_done_at, done, created_at
+      `SELECT id, name, kind, cadence_days, weekdays, last_done_at, done, created_at
        FROM chores
        ORDER BY created_at DESC`,
     );
@@ -61,7 +66,7 @@ export const chores = {
   async getByName(name: string): Promise<Chore | null> {
     const key = normaliseChoreName(name);
     const rows = await sql.select<ChoreRow>(
-      `SELECT id, name, kind, cadence_days, last_done_at, done, created_at
+      `SELECT id, name, kind, cadence_days, weekdays, last_done_at, done, created_at
        FROM chores WHERE name = ? LIMIT 1`,
       [key],
     );
@@ -81,9 +86,13 @@ export const chores = {
     name: string;
     kind: ChoreKind;
     cadenceDays?: number | null;
+    /** Local weekdays for a weekday-anchored recurring chore. When provided it
+     *  wins over cadenceDays (the chore recurs by day-of-week, not interval). */
+    weekdays?: number[] | null;
   }): Promise<Chore> {
     const name = normaliseChoreName(input.name);
     const now = Date.now();
+    const inWeekdays = normaliseWeekdays(input.weekdays);
     const existing = await chores.getByName(name);
 
     if (existing) {
@@ -94,34 +103,48 @@ export const chores = {
         input.kind === 'recurring' || existing.kind === 'recurring'
           ? 'recurring'
           : 'one_off';
-      const nextCadence =
+      // weekday-anchor wins when newly stated; else keep what's there. A
+      // weekday chore carries no interval cadence (recurs by day, not clock).
+      const nextWeekdays =
         input.kind === 'recurring'
-          ? input.cadenceDays ?? existing.cadenceDays ?? null
-          : existing.cadenceDays;
+          ? inWeekdays ?? existing.weekdays
+          : existing.weekdays;
+      const nextCadence =
+        nextWeekdays != null
+          ? null
+          : input.kind === 'recurring'
+            ? input.cadenceDays ?? existing.cadenceDays ?? null
+            : existing.cadenceDays;
       await sql.execute(
-        `UPDATE chores SET kind = ?, cadence_days = ?, done = 0 WHERE id = ?`,
-        [nextKind, nextCadence, existing.id],
+        `UPDATE chores SET kind = ?, cadence_days = ?, weekdays = ?, done = 0 WHERE id = ?`,
+        [nextKind, nextCadence, serialiseWeekdays(nextWeekdays), existing.id],
       );
       return {
         ...existing,
         kind: nextKind,
         cadenceDays: nextCadence,
+        weekdays: nextWeekdays,
         done: false,
       };
     }
 
     const id = newId('c_');
-    const cadenceDays = input.kind === 'recurring' ? input.cadenceDays ?? null : null;
+    const weekdays = input.kind === 'recurring' ? inWeekdays : null;
+    const cadenceDays =
+      input.kind === 'recurring' && weekdays == null
+        ? input.cadenceDays ?? null
+        : null;
     await sql.execute(
-      `INSERT INTO chores (id, name, kind, cadence_days, last_done_at, done, created_at)
-       VALUES (?, ?, ?, ?, NULL, 0, ?)`,
-      [id, name, input.kind, cadenceDays, now],
+      `INSERT INTO chores (id, name, kind, cadence_days, weekdays, last_done_at, done, created_at)
+       VALUES (?, ?, ?, ?, ?, NULL, 0, ?)`,
+      [id, name, input.kind, cadenceDays, serialiseWeekdays(weekdays), now],
     );
     return {
       id,
       name,
       kind: input.kind,
       cadenceDays,
+      weekdays,
       lastDoneAt: null,
       done: false,
       createdAt: now,
@@ -150,8 +173,8 @@ export const chores = {
       // done one-off so the completion isn't orphaned.
       const id = newId('c_');
       await sql.execute(
-        `INSERT INTO chores (id, name, kind, cadence_days, last_done_at, done, created_at)
-         VALUES (?, ?, 'one_off', NULL, ?, 1, ?)`,
+        `INSERT INTO chores (id, name, kind, cadence_days, weekdays, last_done_at, done, created_at)
+         VALUES (?, ?, 'one_off', NULL, NULL, ?, 1, ?)`,
         [id, key, ts, ts],
       );
       return {
@@ -159,6 +182,7 @@ export const chores = {
         name: key,
         kind: 'one_off',
         cadenceDays: null,
+        weekdays: null,
         lastDoneAt: ts,
         done: true,
         createdAt: ts,
@@ -188,7 +212,7 @@ export const chores = {
    */
   async setDone(id: string, done: boolean): Promise<void> {
     const rows = await sql.select<ChoreRow>(
-      `SELECT id, name, kind, cadence_days, last_done_at, done, created_at
+      `SELECT id, name, kind, cadence_days, weekdays, last_done_at, done, created_at
        FROM chores WHERE id = ? LIMIT 1`,
       [id],
     );
@@ -217,7 +241,7 @@ export const chores = {
    */
   async listDueRecurring(nowMs: number = Date.now()): Promise<Chore[]> {
     const rows = await sql.select<ChoreRow>(
-      `SELECT id, name, kind, cadence_days, last_done_at, done, created_at
+      `SELECT id, name, kind, cadence_days, weekdays, last_done_at, done, created_at
        FROM chores
        WHERE kind = 'recurring' AND cadence_days IS NOT NULL`,
     );
@@ -228,10 +252,28 @@ export const chores = {
     return due;
   },
 
+  /**
+   * Recurring chores DUE TODAY — weekday-anchored ones whose local weekday is
+   * today (and not yet done today), plus interval ones whose clock rolled over.
+   * These AUTO-appear on today's list (silent ↻); the box buckets + tags them.
+   * `nowMs` injectable for tests.
+   */
+  async listDueToday(nowMs: number = Date.now()): Promise<Chore[]> {
+    const rows = await sql.select<ChoreRow>(
+      `SELECT id, name, kind, cadence_days, weekdays, last_done_at, done, created_at
+       FROM chores
+       WHERE kind = 'recurring'`,
+    );
+    return rows
+      .map(rowToChore)
+      .filter((c) => isChoreDueToday(c, nowMs))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  },
+
   /** Open one-off chores (done = 0) for the box "to do" section + /todo. */
   async listOpenOneOff(): Promise<Chore[]> {
     const rows = await sql.select<ChoreRow>(
-      `SELECT id, name, kind, cadence_days, last_done_at, done, created_at
+      `SELECT id, name, kind, cadence_days, weekdays, last_done_at, done, created_at
        FROM chores
        WHERE kind = 'one_off' AND done = 0
        ORDER BY created_at DESC`,
@@ -262,10 +304,28 @@ function dueSlackMs(c: Chore, nowMs: number): number {
   return nowMs - nextDue;
 }
 
-/** A recurring chore is due once it's been at least `cadenceDays` since last done. */
+/** An INTERVAL recurring chore is due once it's been at least `cadenceDays`
+ *  since last done. (Weekday chores use isChoreDueToday instead.) */
 export function isChoreDue(c: Chore, nowMs: number = Date.now()): boolean {
   if (c.kind !== 'recurring' || c.cadenceDays == null) return false;
   return dueSlackMs(c, nowMs) >= 0;
+}
+
+/**
+ * Is this recurring chore due on the local day containing `nowMs`?
+ *   - weekday-anchored → today's local weekday is one of its `weekdays`, and it
+ *     hasn't already been marked done earlier today (so it drops off once ✓).
+ *   - interval         → the cadence clock has rolled over (isChoreDue).
+ * One-offs are never "due today" by this function (they live on their own list).
+ */
+export function isChoreDueToday(c: Chore, nowMs: number = Date.now()): boolean {
+  if (c.kind !== 'recurring') return false;
+  if (c.weekdays != null && c.weekdays.length > 0) {
+    if (!c.weekdays.includes(localWeekday(nowMs))) return false;
+    if (c.lastDoneAt != null && isSameLocalDay(c.lastDoneAt, nowMs)) return false;
+    return true;
+  }
+  return isChoreDue(c, nowMs);
 }
 
 // ─── row mapper ─────────────────────────────────────────────────────────────
@@ -276,10 +336,27 @@ function rowToChore(r: ChoreRow): Chore {
     name: r.name,
     kind: (r.kind as ChoreKind) === 'recurring' ? 'recurring' : 'one_off',
     cadenceDays: r.cadence_days ?? null,
+    weekdays: parseWeekdays(r.weekdays),
     lastDoneAt: r.last_done_at ?? null,
     done: r.done === 1,
     createdAt: r.created_at,
   };
+}
+
+/** weekdays column → number[] | null. Tolerant of legacy null + bad JSON. */
+function parseWeekdays(raw: string | null): number[] | null {
+  if (raw == null) return null;
+  try {
+    return normaliseWeekdays(JSON.parse(raw));
+  } catch {
+    return null;
+  }
+}
+
+/** number[] | null → weekdays column value (JSON text or null). */
+function serialiseWeekdays(weekdays: number[] | null | undefined): string | null {
+  const clean = normaliseWeekdays(weekdays);
+  return clean ? JSON.stringify(clean) : null;
 }
 
 // ─── cadence ────────────────────────────────────────────────────────────────

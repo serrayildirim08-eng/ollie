@@ -366,12 +366,22 @@ export type MedicationAction =
 //   - chore_done           — a chore was done (✓). Resets a recurring chore's
 //                            cadence clock; one-offs drop off the to-do list.
 //   - add_chore            — a one-off chore to do (checkable).
-//   - add_recurring_chore  — a chore with a cadence ("every N days").
+//   - add_recurring_chore  — a chore that recurs, either WEEKDAY-anchored
+//                            ("laundry on wednesdays" → weekdays:[3], local
+//                            0=Sun..6=Sat) or by INTERVAL ("every N days" →
+//                            cadenceDays). weekdays wins when present.
 
 export type ChoresAction =
   | { module: 'chores'; action: 'chore_done'; chore: string }
   | { module: 'chores'; action: 'add_chore'; chore: string }
-  | { module: 'chores'; action: 'add_recurring_chore'; chore: string; cadenceDays?: number };
+  | {
+      module: 'chores';
+      action: 'add_recurring_chore';
+      chore: string;
+      cadenceDays?: number;
+      /** Local weekdays [0=Sun..6=Sat] for a weekday-anchored chore. */
+      weekdays?: number[];
+    };
 
 // ── DUMP_ONLY · catch-all ────────────────────────────────────────────
 

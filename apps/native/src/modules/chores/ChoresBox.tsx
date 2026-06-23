@@ -2,20 +2,22 @@
  * ChoresBox · /box/chores screen.
  *
  * Household cleaning + upkeep. Olive-neumorphic grammar, mirrored from
- * AdminBox / GroceryBox: a kicker + serif title hero, then three sections of
+ * AdminBox / GroceryBox: a kicker + serif title hero, then two sections of
  * raised cream cards —
  *
- *   - "due now"  — recurring chores whose cadence clock has rolled over, each
- *                  with a round neumorphic checkbox (✓ = done → resets clock)
- *                  and a faint "usually every ~N days" cadence line.
- *   - "to do"    — open one-off chores (checkable; ✓ drops them off the list).
+ *   - "today"    — the day's list. Recurring chores DUE TODAY (weekday-anchored
+ *                  "laundry on wednesdays", or interval "every N days") AUTO-
+ *                  appear first, each tagged ↻ with a "you do this wednesdays" /
+ *                  cadence sub-line so it never feels like it came from nowhere;
+ *                  then open one-offs. Round neumorphic checkbox: ✓ on a
+ *                  recurring resets its clock, ✓ on a one-off drops it.
  *   - "recent"   — chores done recently (the calm "you did this" strip).
  *
  * A dump-bar placeholder sits at the bottom — adding a chore is done through
- * the Brain Dump router ("cleaned the kitchen" / "vacuum every week"), not an
- * inline form, so this is a quiet hint, not an input.
+ * the Brain Dump router ("cleaned the kitchen" / "laundry on wednesdays"), not
+ * an inline form, so this is a quiet hint, not an input.
  *
- * Reads via chores.list()/listDueRecurring()/listOpenOneOff() + cadence; writes
+ * Reads via chores.list()/listDueToday()/listOpenOneOff() + cadence; writes
  * via chores.setDone()/markDone()/remove(). Migrates + polls via useModuleData.
  */
 
@@ -40,7 +42,7 @@ import { useModuleData } from '../../lib/useModuleData';
 import { PatternCards } from '../../patterns/PatternCards';
 import { migrateChores } from './migrate';
 import { chores as choresRepo, cadence as cadenceRepo } from './repo';
-import type { Chore } from './types';
+import { formatWeekdays, type Chore } from './types';
 
 const SMCP_STYLE: CSSProperties = {
   fontVariantCaps: 'all-small-caps',
@@ -52,7 +54,7 @@ const RECENT_LIMIT = 6;
 
 export function ChoresBox(): JSX.Element {
   const [all, setAll] = useState<Chore[]>([]);
-  const [due, setDue] = useState<Chore[]>([]);
+  const [dueToday, setDueToday] = useState<Chore[]>([]);
   const [openOneOff, setOpenOneOff] = useState<Chore[]>([]);
   const [cadenceByName, setCadenceByName] = useState<Map<string, CadenceEstimate>>(
     () => new Map(),
@@ -61,11 +63,11 @@ export function ChoresBox(): JSX.Element {
   const refresh = useCallback(async () => {
     const [list, dueList, openList] = await Promise.all([
       choresRepo.list(),
-      choresRepo.listDueRecurring(),
+      choresRepo.listDueToday(),
       choresRepo.listOpenOneOff(),
     ]);
     setAll(list);
-    setDue(dueList);
+    setDueToday(dueList);
     setOpenOneOff(openList);
 
     // Cadence reads for the recurring chores (one per name). Silent until a
@@ -156,41 +158,36 @@ export function ChoresBox(): JSX.Element {
         <ColdState />
       ) : (
         <Stack gap={56}>
-          {/* due now — recurring chores past their cadence */}
-          {due.length > 0 && (
-            <Section label="due now">
-              <CardList
-                items={due}
-                renderRow={(c) => (
-                  <RecurringRow
-                    chore={c}
-                    cadence={cadenceByName.get(c.name)}
-                    onDone={() => void handleMarkRecurringDone(c.name)}
-                    onRemove={() => void handleRemove(c.id)}
-                    due
-                  />
-                )}
-              />
-            </Section>
-          )}
-
-          {/* to do — open one-offs */}
-          <Section label="to do">
-            {openOneOff.length === 0 ? (
+          {/* today — the day's list. Recurring chores due today (weekday-anchored
+              or interval) AUTO-appear first, tagged ↻; then open one-offs. */}
+          <Section label="today">
+            {dueToday.length === 0 && openOneOff.length === 0 ? (
               <Text scale="body" color={colors.inkFaint}>
-                nothing on the list — try dumping &ldquo;clean the bathroom&rdquo;
+                nothing on today&rsquo;s list — try dumping &ldquo;clean the
+                bathroom&rdquo;
               </Text>
             ) : (
-              <CardList
-                items={openOneOff}
-                renderRow={(c) => (
-                  <OneOffRow
-                    chore={c}
-                    onToggle={() => void handleToggleOneOff(c.id, !c.done)}
-                    onRemove={() => void handleRemove(c.id)}
-                  />
-                )}
-              />
+              <Stack gap={12}>
+                {dueToday.map((c) => (
+                  <CardRow key={c.id}>
+                    <RecurringRow
+                      chore={c}
+                      cadence={cadenceByName.get(c.name)}
+                      onDone={() => void handleMarkRecurringDone(c.name)}
+                      onRemove={() => void handleRemove(c.id)}
+                    />
+                  </CardRow>
+                ))}
+                {openOneOff.map((c) => (
+                  <CardRow key={c.id}>
+                    <OneOffRow
+                      chore={c}
+                      onToggle={() => void handleToggleOneOff(c.id, !c.done)}
+                      onRemove={() => void handleRemove(c.id)}
+                    />
+                  </CardRow>
+                ))}
+              </Stack>
             )}
           </Section>
 
@@ -236,6 +233,15 @@ function Section({
   );
 }
 
+/** One raised neumorphic cream card wrapping a single row. */
+function CardRow({ children }: { children: ReactNode }): JSX.Element {
+  return (
+    <Box bg="cream" radius="card" shadow="raised" style={{ padding: '16px 18px' }}>
+      {children}
+    </Box>
+  );
+}
+
 /** Render items as raised neumorphic cream cards — one per row, calm gap. */
 function CardList<T extends { id: string }>({
   items,
@@ -263,19 +269,25 @@ function CardList<T extends { id: string }>({
 
 // ─── rows ───────────────────────────────────────────────────────────────────
 
+/**
+ * A recurring chore that's surfaced on today's list. It got here automatically
+ * (weekday matched, or the interval clock rolled over) — the ↻ tag + "you do
+ * this wednesdays" / cadence sub-line tell the user WHY it's here, so an
+ * auto-added item never feels like it appeared from nowhere.
+ */
 function RecurringRow({
   chore,
   cadence,
   onDone,
   onRemove,
-  due,
 }: {
   chore: Chore;
   cadence?: CadenceEstimate | undefined;
   onDone: () => void;
   onRemove: () => void;
-  due?: boolean;
 }): JSX.Element {
+  const weekdayLabel =
+    chore.weekdays && chore.weekdays.length > 0 ? formatWeekdays(chore.weekdays) : null;
   return (
     <Row gap={12} align="center" justify="space-between">
       <Row gap={11} align="center" style={{ flex: 1, minWidth: 0 }}>
@@ -283,25 +295,27 @@ function RecurringRow({
         <Stack gap={2}>
           <Text scale="body" color={colors.ink}>
             {chore.name}
-            {due && (
-              <Text
-                as="span"
-                scale="caption"
-                color={colors.amber}
-                style={{ marginLeft: 8, fontWeight: 600 }}
-              >
-                · due
-              </Text>
-            )}
-          </Text>
-          {chore.lastDoneAt != null ? (
-            <WhenCaption ts={chore.lastDoneAt} />
-          ) : (
-            <Text scale="caption" color={colors.inkFaint}>
-              not done yet
+            <Text
+              as="span"
+              scale="caption"
+              color={colors.inkFaint}
+              aria-label="recurring"
+              style={{ marginLeft: 8 }}
+            >
+              ↻
             </Text>
+          </Text>
+          {weekdayLabel ? (
+            <Text
+              scale="caption"
+              color={colors.inkFaint}
+              style={{ fontVariantCaps: 'all-small-caps', letterSpacing: '0.06em' }}
+            >
+              you do this {weekdayLabel}
+            </Text>
+          ) : (
+            <CadenceHint estimate={cadence} cadenceDays={chore.cadenceDays} />
           )}
-          <CadenceHint estimate={cadence} cadenceDays={chore.cadenceDays} />
         </Stack>
       </Row>
       <RemoveButton onClick={onRemove} />
