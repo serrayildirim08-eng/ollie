@@ -49,6 +49,9 @@ export type CopyKind =
   | 'deadline' // a deadline slipped / is near.
   | 'bill' // a bill looks due / late.
   | 'spoiled' // something in the kitchen probably turned.
+  | 'sleep_debt' // hours of sleep deficit piled up — may offer to lighten today.
+  | 'decision' // a recurring decision left open — may offer to bring to today.
+  | 'caffeine' // late caffeine ↔ sleep insight (B — insight only, no action).
   | 'generic';
 
 /**
@@ -70,7 +73,11 @@ export interface CopyFacts {
 }
 
 /** What an offered action does — used to phrase the offer ("add to list?"). */
-export type CopyActionKind = 'add_to_grocery_list';
+export type CopyActionKind =
+  | 'add_to_grocery_list'
+  | 'defer_tasks'
+  | 'add_admin_task'
+  | 'surface_decision';
 
 // ─── kind resolution ─────────────────────────────────────────────────────────
 
@@ -82,6 +89,9 @@ export function copyKindOf(input: { category?: string | null; module?: string | 
   const cat = (input.category ?? '').toString().toLowerCase();
   const mod = (input.module ?? '').toString().toLowerCase();
   if (cat.includes('replenish')) return 'replenish';
+  if (cat.includes('sleep-debt') || cat.includes('sleep_debt')) return 'sleep_debt';
+  if (cat.includes('caffeine')) return 'caffeine';
+  if (cat.includes('decision')) return 'decision';
   if (cat.includes('spoiled')) return 'spoiled';
   if (cat.includes('bill') || cat.includes('late')) return 'bill';
   if (cat.includes('deadline') || cat.includes('overdue') || cat.includes('missed') || cat.includes('due')) {
@@ -101,6 +111,9 @@ const LANG_NAME: Record<AppLang, string> = {
 
 const ACTION_DESCRIPTION: Record<CopyActionKind, string> = {
   add_to_grocery_list: 'you can offer to add the item back onto the shopping list',
+  defer_tasks: "you can offer to push today's non-urgent tasks to tomorrow",
+  add_admin_task: 'you can offer to add it to the to-do list',
+  surface_decision: 'you can offer to bring the decision to today',
 };
 
 /**
@@ -178,6 +191,41 @@ const FALLBACK: Record<CopyKind, Record<AppLang, Phrase>> = {
     en: () => `something in the kitchen probably turned — no rush, just a heads up.`,
     es: () => `algo en la cocina seguramente se echó a perder — sin prisa, solo un aviso.`,
     tr: () => `mutfakta bir şey büyük ihtimalle bozuldu — acelesi yok, sadece haber vereyim.`,
+  },
+  sleep_debt: {
+    en: (f) =>
+      typeof f.days === 'number' && f.days > 0
+        ? `about ${Math.round(f.days)} hours of sleep debt have piled up — keep today lighter?`
+        : `a little sleep debt has piled up — keep today lighter?`,
+    es: (f) =>
+      typeof f.days === 'number' && f.days > 0
+        ? `se han acumulado unas ${Math.round(f.days)} horas de sueño — ¿hacemos hoy más ligero?`
+        : `se ha acumulado algo de sueño — ¿hacemos hoy más ligero?`,
+    tr: (f) =>
+      typeof f.days === 'number' && f.days > 0
+        ? `yaklaşık ${Math.round(f.days)} saatlik uyku borcu birikmiş — bugünü hafif tutalım mı?`
+        : `biraz uyku borcu birikmiş — bugünü hafif tutalım mı?`,
+  },
+  decision: {
+    en: () => `a decision has been open for a while — bring it to today?`,
+    es: () => `una decisión lleva un tiempo pendiente — ¿la traemos a hoy?`,
+    tr: () => `bir karar bir süredir açık duruyor — bugüne getirelim mi?`,
+  },
+  // Insight-only (B): no offer, no action — just a calm observation. When the
+  // detector carried its measured onset delay (in facts.days), name it.
+  caffeine: {
+    en: (f) =>
+      typeof f.days === 'number' && f.days > 0
+        ? `late caffeine tends to delay your sleep by about ${Math.round(f.days)} minutes.`
+        : `late caffeine tends to delay your sleep a little.`,
+    es: (f) =>
+      typeof f.days === 'number' && f.days > 0
+        ? `la cafeína tarde suele retrasar tu sueño unos ${Math.round(f.days)} minutos.`
+        : `la cafeína tarde suele retrasar un poco tu sueño.`,
+    tr: (f) =>
+      typeof f.days === 'number' && f.days > 0
+        ? `geç saatte kafein uykunu yaklaşık ${Math.round(f.days)} dakika geciktiriyor.`
+        : `geç saatte kafein uykunu biraz geciktiriyor.`,
   },
   generic: {
     en: () => `something might be worth a glance.`,

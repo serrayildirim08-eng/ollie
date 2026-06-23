@@ -111,20 +111,44 @@ function toCandidate(p: RawPattern, module: string): NoticingCandidate | null {
   };
 }
 
+/** Offer fields a detector may attach to a pattern card for the action layer. */
+const OFFER_FACT_KEYS = ['actionKind', 'taskText', 'dueDate', 'decisionId', 'decisionWhat'] as const;
+
 /**
  * Recover the situation facts the Sprint-3 copy + action layers need from a raw
- * pattern card: the item names involved + the headline item's days-past. The
- * replenish ("milk") detector carries `items: [{name, days}]`; other detectors
- * that attach an items list work too. Returns null when there's nothing.
+ * pattern card:
+ *   - the item names involved + the headline item's days-past (the replenish
+ *     "milk" detector carries `items: [{name, days}]`; the sleep-debt detector
+ *     rides its deficit hours in the same `days` slot via a single synthetic
+ *     item), AND
+ *   - any OFFER fields a C-model detector attached so its noticing can carry an
+ *     action (admin renewal → add_admin_task, admin decision → surface_decision):
+ *     actionKind / taskText / dueDate / decisionId / decisionWhat.
+ *
+ * Returns null only when there is NOTHING to carry — i.e. neither item names nor
+ * an attached offer action. (A bare offer with no items still yields facts, so
+ * the action layer can read its payload — the milk path is unaffected.)
  */
-function factsOf(p: RawPattern): { items: string[]; days: number | null } | null {
+function factsOf(p: RawPattern): Record<string, unknown> | null {
   const list = Array.isArray(p.items) ? p.items : [];
   const items = list
     .map((it) => (it?.name ?? '').toString().trim())
     .filter(Boolean);
-  if (items.length === 0) return null;
   const firstDays = list.find((it) => typeof it?.days === 'number')?.days;
-  return { items, days: typeof firstDays === 'number' ? firstDays : null };
+
+  const offer: Record<string, unknown> = {};
+  for (const k of OFFER_FACT_KEYS) {
+    const v = (p as Record<string, unknown>)[k];
+    if (typeof v === 'string' && v.trim()) offer[k] = v.trim();
+  }
+  const hasOffer = Object.keys(offer).length > 0;
+
+  if (items.length === 0 && !hasOffer) return null;
+  return {
+    items,
+    days: typeof firstDays === 'number' ? firstDays : null,
+    ...offer,
+  };
 }
 
 /** Harm-kind → cold-start category the defer map understands. */

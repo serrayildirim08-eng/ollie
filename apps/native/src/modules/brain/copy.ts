@@ -24,6 +24,9 @@ import {
   fallbackCopy,
   copyKindOf,
   buildAddToGroceryListAction,
+  buildDeferTasksAction,
+  buildAddAdminTaskAction,
+  buildSurfaceDecisionAction,
   type ScoredNoticing,
   type CopyFacts,
   type CopyActionKind,
@@ -40,13 +43,38 @@ const DAY_MS = 86_400_000;
 
 // ─── facts + action derivation (pure mapping over the candidate) ─────────────
 
+/** The recognised offer action kinds a detector can attach via `facts.actionKind`. */
+const OFFER_ACTION_KINDS: readonly CopyActionKind[] = [
+  'add_to_grocery_list',
+  'defer_tasks',
+  'add_admin_task',
+  'surface_decision',
+] as const;
+
+/** Read the offer action a detector attached directly to the candidate's facts. */
+function attachedActionKind(n: ScoredNoticing): CopyActionKind | null {
+  const raw = (n.facts as { actionKind?: unknown } | null | undefined)?.actionKind;
+  if (typeof raw !== 'string') return null;
+  return (OFFER_ACTION_KINDS as readonly string[]).includes(raw)
+    ? (raw as CopyActionKind)
+    : null;
+}
+
 /**
- * The action a noticing can offer, by kind. Today only the grocery replenish
- * ("milk") noticing offers one; the framework is generic so more attach later.
+ * The action a noticing can offer, by kind. Two paths:
+ *   1. an action a detector attached directly (`facts.actionKind` — the admin
+ *      renewal/decision offers carry their own kind + payload data), OR
+ *   2. the kind inferred from the noticing's copy-kind:
+ *        - replenish ("milk")  → add_to_grocery_list
+ *        - sleep_debt          → defer_tasks
+ * The milk path (replenish → add_to_grocery_list) is unchanged.
  */
 function actionKindFor(n: ScoredNoticing): CopyActionKind | null {
+  const attached = attachedActionKind(n);
+  if (attached) return attached;
   const kind = copyKindOf({ category: n.category, module: n.module });
   if (kind === 'replenish') return 'add_to_grocery_list';
+  if (kind === 'sleep_debt') return 'defer_tasks';
   return null;
 }
 
@@ -70,15 +98,44 @@ export function factsForNoticing(n: ScoredNoticing): CopyFacts {
   };
 }
 
+/** Read a string field a detector attached to the candidate's facts bag. */
+function factString(n: ScoredNoticing, key: string): string {
+  const raw = (n.facts as Record<string, unknown> | null | undefined)?.[key];
+  return typeof raw === 'string' ? raw.trim() : '';
+}
+
 /**
  * The suggested action descriptor for a noticing, or null if it offers none.
  * The native dispatcher (executeAction) turns this into a real repo call.
+ *
+ * Each kind builds from the data the detector carried:
+ *   - add_to_grocery_list → the recovered item names (milk path, unchanged).
+ *   - defer_tasks         → no per-task data; the executor resolves the set.
+ *   - add_admin_task      → the renewal's task text + due date.
+ *   - surface_decision    → the recurring-decision row id + what.
  */
 export function actionForNoticing(n: ScoredNoticing, lang: AppLang): NoticingAction | null {
-  if (actionKindFor(n) === 'add_to_grocery_list') {
-    return buildAddToGroceryListAction(itemNames(n), lang);
+  const kind = actionKindFor(n);
+  switch (kind) {
+    case 'add_to_grocery_list':
+      return buildAddToGroceryListAction(itemNames(n), lang);
+    case 'defer_tasks':
+      return buildDeferTasksAction(lang);
+    case 'add_admin_task':
+      return buildAddAdminTaskAction(
+        factString(n, 'taskText'),
+        factString(n, 'dueDate') || null,
+        lang,
+      );
+    case 'surface_decision':
+      return buildSurfaceDecisionAction(
+        factString(n, 'decisionId'),
+        factString(n, 'decisionWhat'),
+        lang,
+      );
+    default:
+      return null;
   }
-  return null;
 }
 
 // ─── per-(noticing, day, lang) cache ─────────────────────────────────────────

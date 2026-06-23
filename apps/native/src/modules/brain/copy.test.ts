@@ -211,3 +211,56 @@ describe('factsForNoticing', () => {
     expect(facts).toEqual({ kind: 'replenish', item: 'milk', days: 1, otherCount: null, action: 'add_to_grocery_list' });
   });
 });
+
+describe('C-model offers attach the right action', () => {
+  it('sleep-debt noticing → defer_tasks (no per-task data)', () => {
+    const n = milkNoticing({
+      id: 'sleep:sleep-debt-high',
+      module: 'sleep',
+      category: 'sleep-debt',
+      facts: { items: ['sleep'], days: 4 },
+    });
+    const facts = factsForNoticing(n);
+    expect(facts.action).toBe('defer_tasks');
+    const action = actionForNoticing(n, 'en');
+    expect(action?.kind).toBe('defer_tasks');
+    expect(action?.payload).toEqual({ kind: 'defer_tasks', scope: 'today' });
+  });
+
+  it('renewal noticing → add_admin_task carrying text + due date', () => {
+    const n = milkNoticing({
+      id: 'admin:renewal-offer:r1',
+      module: 'admin',
+      category: 'renewal_due',
+      facts: { items: [], days: null, actionKind: 'add_admin_task', taskText: 'renew passport', dueDate: '2026-09-01' },
+    });
+    expect(factsForNoticing(n).action).toBe('add_admin_task');
+    const action = actionForNoticing(n, 'en');
+    expect(action?.kind).toBe('add_admin_task');
+    expect(action?.payload).toEqual({ kind: 'add_admin_task', text: 'renew passport', dueDate: '2026-09-01' });
+  });
+
+  it('stale-decision noticing → surface_decision carrying the row id', () => {
+    const n = milkNoticing({
+      id: 'admin:decision-stale:d1',
+      module: 'admin',
+      category: 'pending_decision',
+      facts: { items: [], days: null, actionKind: 'surface_decision', decisionId: 'd1', decisionWhat: 'gym membership' },
+    });
+    expect(factsForNoticing(n).action).toBe('surface_decision');
+    const action = actionForNoticing(n, 'en');
+    expect(action?.kind).toBe('surface_decision');
+    expect(action?.payload).toEqual({ kind: 'surface_decision', decisionId: 'd1', what: 'gym membership' });
+  });
+
+  it('caffeine insight noticing carries NO action (B — insight only)', () => {
+    const n = milkNoticing({
+      id: 'sleep:caffeine_cutoff',
+      module: 'sleep',
+      category: 'caffeine_cutoff',
+      facts: { items: ['caffeine'], days: 30 },
+    });
+    expect(factsForNoticing(n).action).toBeNull();
+    expect(actionForNoticing(n, 'en')).toBeNull();
+  });
+});

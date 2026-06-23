@@ -221,6 +221,9 @@ export const REGISTRY: Registry = {
   'admin:decision_recall':             { payload: '{ rule_id: string, ts: number }' },
   'admin:doc_refs':                    { payload: '{ task_id: string, count: number, ts: number }' },
   'admin:schedule_drift':              { payload: '{ category: string, ts: number }' },
+  // C-model offer signals (brain noticings carrying an accept-to-act action).
+  'admin:renewal_offer':               { payload: '{ renewal_id: string, days_left: number, ts: number }' },
+  'admin:decision_stale':              { payload: '{ decision_id: string, ts: number }' },
 
   // ─── Sprint 3 / D1 burhan life-event tree ───────────────────────
   // Constitutional: tree never decays. Elements are append-only.

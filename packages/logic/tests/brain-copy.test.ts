@@ -145,6 +145,8 @@ describe('action descriptors', () => {
   });
   it('trims + drops empty names', () => {
     const action = buildAddToGroceryListAction(['  milk ', '', 'eggs'], 'en');
+    expect(action!.payload.kind).toBe('add_to_grocery_list');
+    if (action!.payload.kind !== 'add_to_grocery_list') throw new Error('wrong kind');
     expect(action!.payload.names).toEqual(['milk', 'eggs']);
   });
 });

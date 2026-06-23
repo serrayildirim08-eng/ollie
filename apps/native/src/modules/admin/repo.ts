@@ -112,6 +112,19 @@ export const tasks = {
     );
   },
 
+  /**
+   * Set a task's due date (ISO yyyy-mm-dd or null). Used by the brain's
+   * defer_tasks offer to push a non-urgent, due-today task to tomorrow. Only
+   * touches `due_date` — never `ball_state` / `done` / `last_transition_at` —
+   * so deferring a date doesn't move the ball or alter completion.
+   */
+  async setDueDate(id: string, dueDate: string | null): Promise<void> {
+    await sql.execute(
+      `UPDATE admin_tasks SET due_date = ? WHERE id = ?`,
+      [dueDate, id],
+    );
+  },
+
   async remove(id: string): Promise<void> {
     await sql.execute(`DELETE FROM admin_tasks WHERE id = ?`, [id]);
   },
@@ -332,6 +345,18 @@ export const recurringDecisions = {
         [decision, id],
       );
     }
+  },
+
+  /**
+   * Clear any snooze on a decision so it re-enters `listOpen` (and leads
+   * /todo) today. Used by the brain's surface_decision offer — accepting
+   * "bring it to today" un-snoozes the row without recording a decision.
+   */
+  async unsnooze(id: string): Promise<void> {
+    await sql.execute(
+      `UPDATE admin_recurring_decisions SET snooze_until_ms = NULL WHERE id = ?`,
+      [id],
+    );
   },
 
   async remove(id: string): Promise<void> {

@@ -15,6 +15,13 @@
  *                      seed it from native phone-kind rows. The orchestrator's
  *                      A2 sink also appends here (deduped by id), so we
  *                      read-merge rather than overwrite.
+ *   admin.renewals   — open AdminRenewal[] (id/renewalType/dueDate/addedAt).
+ *                      INPUT for the C-model renewal-approaching offer (the
+ *                      orchestrator emits a "renew X — add it to your to-do?"
+ *                      noticing for any renewal due within ~3 months).
+ *   admin.decisions  — open RecurringDecisionRow[] (id/what/createdAt). INPUT
+ *                      for the C-model stale-decision offer (decisions open
+ *                      > ~14 days → "bring it to today?").
  *
  * Fields native SQLite does NOT capture today (flagged, not fabricated):
  *   - ball_state / last_transition_at / due_date: NOW captured (#7) and
@@ -34,8 +41,8 @@
 
 import type { Store } from '@ollie/store';
 import type { AdminTask as LogicAdminTask, TaskState } from '@ollie/logic/admin';
-import { tasks as tasksRepo } from './repo';
-import type { AdminTask, AdminTaskKind } from './types';
+import { tasks as tasksRepo, renewals as renewalsRepo, recurringDecisions as decisionsRepo } from './repo';
+import type { AdminRenewal, AdminTask, AdminTaskKind, RecurringDecisionRow } from './types';
 
 /**
  * Shape of one `admin.phoneTasks` entry — mirrors the orchestrator's
@@ -86,6 +93,15 @@ export async function syncToStore(store: Store): Promise<void> {
   }
   const merged = [...byId.values()].sort((a, b) => a.ts - b.ts);
   store.set<PhoneTaskItem[]>('admin', 'phoneTasks', merged);
+
+  // ── admin.renewals + admin.decisions (offer detector INPUTS) ───────────────
+  // The orchestrator's C-model renewal + stale-decision detectors read these
+  // raw rows; the bridge is the ONLY place they reach the store (the watcher
+  // can't see SQLite directly). Clean overwrite from the source of truth — both
+  // are bridge-owned input keys, distinct from the orchestrator-owned
+  // admin.patterns output.
+  store.set<AdminRenewal[]>('admin', 'renewals', await renewalsRepo.listOpen());
+  store.set<RecurringDecisionRow[]>('admin', 'decisions', await decisionsRepo.listOpen());
 }
 
 /**

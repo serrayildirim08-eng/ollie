@@ -62,6 +62,42 @@ import { appendCapped } from './dedup-store';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type AdminPattern = { signal: string; pattern: string; ts: number } & Record<string, any>;
 
+// ── C-model offer detectors (renewal + stale decision) ───────────────────────
+const DAY_MS = 86_400_000;
+/** Surface a renewal once it's within this many days of its due date. */
+const RENEWAL_OFFER_HORIZON_DAYS = 90;
+/** A recurring decision counts as "stale" once it's been open this many days. */
+const STALE_DECISION_DAYS = 14;
+
+/** Minimal renewal shape mirrored to admin.renewals by the native bridge. */
+interface StoreRenewal {
+  id: string;
+  renewalType: string;
+  /** ISO yyyy-mm-dd or null. */
+  dueDate: string | null;
+  addedAt: number;
+}
+
+/** Minimal recurring-decision shape mirrored to admin.decisions by the bridge. */
+interface StoreDecision {
+  id: string;
+  what: string;
+  createdAt: number;
+}
+
+/**
+ * Whole-day difference between an ISO yyyy-mm-dd due date and `now`. Negative =
+ * overdue, null = no/invalid date. Local copy of the native admin `daysUntil`
+ * (not exported from @ollie/logic/admin) to keep the orchestrator free of a
+ * native dependency. Compares at local-midnight granularity.
+ */
+function daysUntilDue(dueDate: string | null, now: number): number | null {
+  if (!dueDate) return null;
+  const due = Date.parse(dueDate);
+  if (Number.isNaN(due)) return null;
+  return Math.floor(due / DAY_MS) - Math.floor(now / DAY_MS);
+}
+
 /**
  * One entry in the admin "handle by phone" cluster. Append-only — written by
  * the admin:phone_task_detected consumer wired in init(). The UI reads
@@ -462,6 +498,69 @@ export function createAdminOrchestrator(
       }
     }
 
+    // ── C-model offer · renewal approaching → add_admin_task ────────────────
+    // For each open renewal due within ~3 months, surface ONE calm offer:
+    // "renew X — add it to your to-do?". Accepting it creates an admin task
+    // (native executeAction → add_admin_task) so it lands in /todo. Reads the
+    // bridge-mirrored admin.renewals input (raw rows; not the patterns output).
+    // category 'renewal_due' → copyKindOf maps to 'deadline' (protected); the
+    // offer phrasing comes from the attached actionKind. Stable pattern id keyed
+    // on the renewal id so snooze/dismiss persists across recomputes.
+    const adminRenewals = store.get<StoreRenewal[]>('admin', 'renewals', []) ?? [];
+    for (const r of adminRenewals) {
+      if (!r || typeof r.id !== 'string') continue;
+      const d = daysUntilDue(r.dueDate, now);
+      if (d == null || d < 0 || d > RENEWAL_OFFER_HORIZON_DAYS) continue;
+      const months = Math.max(1, Math.round(d / 30));
+      const p = toPattern(
+        {
+          signal: 'admin_renewal_offer',
+          pattern: `renewal-offer:${r.id}`,
+          category: 'renewal_due',
+          copy: `${r.renewalType} renews in ~${months} month${months === 1 ? '' : 's'} — add it to your to-do?`,
+          actionKind: 'add_admin_task',
+          taskText: `renew ${r.renewalType}`,
+          dueDate: r.dueDate,
+          urgencyAt: Date.parse(r.dueDate ?? '') || now,
+        },
+        now,
+      );
+      next.push(p);
+      if (!prevKeys.has(signalKey(p))) {
+        events.emit('admin:renewal_offer', { renewal_id: r.id, days_left: d, ts: now });
+      }
+    }
+
+    // ── C-model offer · stale recurring decision → surface_decision ─────────
+    // For each open decision left untouched > ~14 days, surface ONE calm offer:
+    // "the X decision has been open ~2 weeks — bring it to today?". Accepting it
+    // un-snoozes the decision (native executeAction → surface_decision) so it
+    // leads /todo. Reads the bridge-mirrored admin.decisions input. No urgencyAt
+    // (deferrable judgement, not time-critical); the selector scores it via
+    // deferability. category 'pending_decision' → copyKindOf maps to 'decision'.
+    const adminDecisions = store.get<StoreDecision[]>('admin', 'decisions', []) ?? [];
+    for (const row of adminDecisions) {
+      if (!row || typeof row.id !== 'string' || typeof row.createdAt !== 'number') continue;
+      const ageDays = (now - row.createdAt) / DAY_MS;
+      if (ageDays <= STALE_DECISION_DAYS) continue;
+      const p = toPattern(
+        {
+          signal: 'admin_decision_stale',
+          pattern: `decision-stale:${row.id}`,
+          category: 'pending_decision',
+          copy: `the ${row.what} decision has been open ~2 weeks — bring it to today?`,
+          actionKind: 'surface_decision',
+          decisionId: row.id,
+          decisionWhat: row.what,
+        },
+        now,
+      );
+      next.push(p);
+      if (!prevKeys.has(signalKey(p))) {
+        events.emit('admin:decision_stale', { decision_id: row.id, ts: now });
+      }
+    }
+
     store.set('admin', 'patterns', next);
     store.set('admin', 'patternsLastComputedAt', now);
   }
@@ -560,6 +659,10 @@ export function createAdminOrchestrator(
       catch (err) { console.error('[orchestrator/admin] appointment transition failed', err); }
     }));
     unsubs.push(store.subscribeKey('dump', 'items', () => schedule()));
+    // C-model offer inputs — recompute when the bridge mirrors fresh renewals
+    // or recurring decisions so the renewal / stale-decision offers stay live.
+    unsubs.push(store.subscribeKey('admin', 'renewals', () => schedule()));
+    unsubs.push(store.subscribeKey('admin', 'decisions', () => schedule()));
     unsubs.push(events.on('void:braindump:submitted', onBraindump));
     unsubs.push(events.on('admin:phone_task_detected', onPhoneTaskDetected));
 

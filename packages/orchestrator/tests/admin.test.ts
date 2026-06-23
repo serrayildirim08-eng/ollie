@@ -195,6 +195,67 @@ describe('admin orchestrator', () => {
     expect(store.get('admin', 'phoneTasks', [])).toHaveLength(1);
   });
 
+  it('emits a renewal-approaching offer (add_admin_task) within ~3 months', () => {
+    store.set('admin', 'tasks', [] as AdminTask[]);
+    // Renewal due in ~60 days (inside the 90-day horizon).
+    const due = new Date(NOW + 60 * DAY_MS);
+    const dueDate = `${due.getUTCFullYear()}-${String(due.getUTCMonth() + 1).padStart(2, '0')}-${String(due.getUTCDate()).padStart(2, '0')}`;
+    store.set('admin', 'renewals', [
+      { id: 'r1', renewalType: 'passport', dueDate, addedAt: NOW },
+    ]);
+    orch.init();
+
+    const patterns = store.get<AdminPattern[]>('admin', 'patterns', []) ?? [];
+    const offer = patterns.find((p) => p.pattern === 'renewal-offer:r1');
+    expect(offer).toBeDefined();
+    expect(offer!.signal).toBe('admin_renewal_offer');
+    expect(offer!.actionKind).toBe('add_admin_task');
+    expect(offer!.taskText).toBe('renew passport');
+    expect(offer!.dueDate).toBe(dueDate);
+    expect(offer!.category).toBe('renewal_due');
+  });
+
+  it('does NOT emit a renewal offer beyond the ~3-month horizon', () => {
+    store.set('admin', 'tasks', [] as AdminTask[]);
+    const due = new Date(NOW + 200 * DAY_MS); // far out
+    const dueDate = `${due.getUTCFullYear()}-${String(due.getUTCMonth() + 1).padStart(2, '0')}-${String(due.getUTCDate()).padStart(2, '0')}`;
+    store.set('admin', 'renewals', [
+      { id: 'r2', renewalType: 'lease', dueDate, addedAt: NOW },
+    ]);
+    orch.init();
+
+    const patterns = store.get<AdminPattern[]>('admin', 'patterns', []) ?? [];
+    expect(patterns.some((p) => p.pattern === 'renewal-offer:r2')).toBe(false);
+  });
+
+  it('emits a stale-decision offer (surface_decision) after ~14 days', () => {
+    store.set('admin', 'tasks', [] as AdminTask[]);
+    store.set('admin', 'decisions', [
+      { id: 'd1', what: 'gym membership', createdAt: NOW - 20 * DAY_MS },
+    ]);
+    orch.init();
+
+    const patterns = store.get<AdminPattern[]>('admin', 'patterns', []) ?? [];
+    const offer = patterns.find((p) => p.pattern === 'decision-stale:d1');
+    expect(offer).toBeDefined();
+    expect(offer!.signal).toBe('admin_decision_stale');
+    expect(offer!.actionKind).toBe('surface_decision');
+    expect(offer!.decisionId).toBe('d1');
+    expect(offer!.decisionWhat).toBe('gym membership');
+    expect(offer!.category).toBe('pending_decision');
+  });
+
+  it('does NOT emit a stale-decision offer for a fresh decision', () => {
+    store.set('admin', 'tasks', [] as AdminTask[]);
+    store.set('admin', 'decisions', [
+      { id: 'd2', what: 'netflix', createdAt: NOW - 3 * DAY_MS }, // < 14 days
+    ]);
+    orch.init();
+
+    const patterns = store.get<AdminPattern[]>('admin', 'patterns', []) ?? [];
+    expect(patterns.some((p) => p.pattern === 'decision-stale:d2')).toBe(false);
+  });
+
   it('teardown stops subscriptions and prevents recompute', () => {
     store.set('admin', 'tasks', [] as AdminTask[]);
     orch.init();

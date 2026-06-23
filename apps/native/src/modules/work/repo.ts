@@ -222,6 +222,19 @@ export const tasks = {
     );
   },
 
+  /**
+   * Set a task's due date (ISO yyyy-mm-dd or null). Used by the brain's
+   * defer_tasks offer to push a non-urgent, due-today task to tomorrow. Only
+   * touches `due_date` — leaves `done` / `created_at` / ordering untouched so
+   * the row stays where it is in the list, just dated forward.
+   */
+  async setDueDate(id: string, dueDate: string | null): Promise<void> {
+    await sql.execute(
+      `UPDATE work_tasks SET due_date = ? WHERE id = ?`,
+      [dueDate, id],
+    );
+  },
+
   async remove(id: string): Promise<void> {
     await sql.execute(`DELETE FROM work_tasks WHERE id = ?`, [id]);
   },
