@@ -39,6 +39,7 @@ const TITLE_STYLE: React.CSSProperties = {
 import { colors, radii, shadows } from "../theme/tokens";
 import { DumpScreen } from "../dump";
 import { MODULE_MANIFEST, MODULE_GROUP_META } from "./moduleRegistry";
+import { HouseholdRoom } from "../rooms/HouseholdRoom";
 import { TodoScreen } from "../todo/TodoScreen";
 import { useServerReminderBridge } from "../notify/serverReminderBridge";
 
@@ -110,6 +111,7 @@ export function Router() {
             <Route key={id} path={`box/${id}`} element={<Component />} />
           ))}
           <Route path="modules" element={<ModulesIndex />} />
+          <Route path="room/household" element={<HouseholdRoom />} />
           <Route path="todo" element={<TodoScreen />} />
           <Route path="settings" element={<SettingsScreen />} />
           <Route path="box/:id" element={<BoxPlaceholder />} />
@@ -135,23 +137,50 @@ function ModulesIndex() {
   // Build the three rooms from the shared manifest (audit #178) — group
   // metadata gives display order + asides; items come from the manifest,
   // filtered by feature flag.
+  // grocery + chores now live inside the Household ROOM, so they're lifted out
+  // of the flat module list here (their /box routes still exist, reached from
+  // the room). Other rooms aren't built yet — those modules stay as-is.
+  const ROOMED_IDS = new Set(['grocery', 'chores']);
   const visible = MODULE_MANIFEST.filter(
-    (m) => m.flag == null || (m.flag === 'partner' && partnerEnabled),
+    (m) =>
+      (m.flag == null || (m.flag === 'partner' && partnerEnabled)) && !ROOMED_IDS.has(m.id),
   );
   const groups = MODULE_GROUP_META.map((meta) => ({
     ...meta,
     items: visible.filter((m) => m.group === meta.id),
-  }));
+  })).filter((g) => g.items.length > 0);
   return (
     <Stack gap={48}>
       <Stack gap={12}>
         <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
-          modules
+          rooms
         </Text>
-        <Text scale="title" color={colors.ink} style={TITLE_STYLE}>modules</Text>
+        <Text scale="title" color={colors.ink} style={TITLE_STYLE}>rooms</Text>
         <Text scale="body" color={colors.inkSoft} style={{ maxWidth: 540 }}>
-          three rooms — yourself, your stuff, the things you owe.
+          one calm screen per part of your life.
         </Text>
+      </Stack>
+
+      {/* Built rooms — Household first. */}
+      <Stack gap={8}>
+        <Text
+          scale="caption"
+          color={colors.inkFaint}
+          style={{ ...SMCP_STYLE, letterSpacing: "0.20em" }}
+        >
+          household
+        </Text>
+        <p style={ASIDE_STYLE}>the chores, the shopping, what&rsquo;s on the shelf.</p>
+        <Link to="/room/household" style={{ textDecoration: "none", color: "inherit" }}>
+          <Box bg="cream" radius="card" shadow="raised" style={{ padding: "16px 18px" }}>
+            <Row gap={12} align="baseline" justify="space-between">
+              <Text scale="body">Household</Text>
+              <Text scale="caption" color={colors.inkFaint}>
+                chores · grocery · pantry
+              </Text>
+            </Row>
+          </Box>
+        </Link>
       </Stack>
 
       {groups.map((group) => (
