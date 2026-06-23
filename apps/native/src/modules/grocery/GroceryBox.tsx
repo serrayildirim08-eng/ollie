@@ -40,7 +40,15 @@
  *     which depend on `patterns` selectors not present in this repo
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from 'react';
 import {
   formatDays,
   daysSinceLast,
@@ -64,7 +72,8 @@ import type { PantryItem, ShoppingItem } from './types';
 import { FeedMeView } from './FeedMeView';
 import { GroceryNow } from './GroceryNow';
 import { ageOf, type AgingState } from './aging';
-import { loadShelfLifeTable, lookupDays } from './shelfLifeCache';
+import { loadShelfLifeTable, lookupDays, lookupCategory } from './shelfLifeCache';
+import { aisleFor, AISLE_ORDER, type Aisle } from './aisles';
 
 // ─── style atoms ──────────────────────────────────────────────────────────
 
@@ -715,6 +724,104 @@ function LikelyNeededRow({
 
 // ─── pantry view ──────────────────────────────────────────────────────────
 
+// ─── aisle accordion ──────────────────────────────────────────────────────
+
+/**
+ * One collapsible aisle section in the pantry. Header = a tiny olive dot (the
+ * marker Serra chose over emojis) + the aisle name + item count, with a small
+ * amber dot when anything in the aisle is running low, and a caret that rotates
+ * on open. Defaults OPEN — nothing's hidden by default (hidden = forgotten, bad
+ * for ADHD); the user can fold an aisle they don't care about right now.
+ */
+function AisleAccordion({
+  label,
+  count,
+  hasLow,
+  children,
+}: {
+  label: string;
+  count: number;
+  hasLow: boolean;
+  children: ReactNode;
+}): JSX.Element {
+  const [open, setOpen] = useState(true);
+  return (
+    <Stack gap={open ? 12 : 0}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        style={{
+          appearance: 'none',
+          background: 'transparent',
+          border: 'none',
+          padding: '6px 2px',
+          cursor: 'pointer',
+          width: '100%',
+        }}
+      >
+        <Row gap={9} align="center">
+          {/* the olive dot marker */}
+          <span
+            aria-hidden
+            style={{
+              width: 7,
+              height: 7,
+              borderRadius: '50%',
+              background: colors.sageDeep,
+              flexShrink: 0,
+            }}
+          />
+          <Text
+            scale="caption"
+            color={colors.inkSoft}
+            style={{ fontVariantCaps: 'all-small-caps', letterSpacing: '0.08em', fontWeight: 600 }}
+          >
+            {label}
+          </Text>
+          <Text scale="caption" color={colors.inkFaint}>
+            {count}
+          </Text>
+          {hasLow && (
+            <span
+              aria-label="running low"
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: '50%',
+                background: colors.amber,
+                flexShrink: 0,
+              }}
+            />
+          )}
+          <span style={{ marginLeft: 'auto', display: 'inline-flex' }}>
+            <svg
+              width="11"
+              height="11"
+              viewBox="0 0 10 10"
+              aria-hidden
+              style={{
+                transform: open ? 'rotate(90deg)' : 'rotate(0deg)',
+                transition: 'transform 200ms cubic-bezier(0.18, 0, 0.22, 1)',
+              }}
+            >
+              <path
+                d="M3 1.5 L6.5 5 L3 8.5"
+                fill="none"
+                stroke={colors.inkFaint}
+                strokeWidth={1.4}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </span>
+        </Row>
+      </button>
+      {open && children}
+    </Stack>
+  );
+}
+
 function PantryList({
   items,
   archivedItems,
@@ -754,6 +861,21 @@ function PantryList({
     return map;
   }, [items, shelfTick]);
 
+  // Group the pantry into store aisles (produce → … → household). The worker
+  // ShelfCategory drives it when known; aisleFor falls back to a keyword map.
+  // Computed off `shelfTick` too so it re-buckets once the category table loads.
+  const aislesGrouped = useMemo(() => {
+    const byAisle = new Map<Aisle, PantryItem[]>();
+    for (const it of items) {
+      const aisle = aisleFor(it.name, lookupCategory(it.name));
+      const bucket = byAisle.get(aisle);
+      if (bucket) bucket.push(it);
+      else byAisle.set(aisle, [it]);
+    }
+    void shelfTick;
+    return byAisle;
+  }, [items, shelfTick]);
+
   if (items.length === 0 && archivedItems.length === 0) return <ColdPantry />;
 
   return (
@@ -766,18 +888,33 @@ function PantryList({
           </Text>
 
           <Stack gap={12}>
-            {items.map((item) => (
-              <PantryRow
-                key={item.id}
-                item={item}
-                aging={agingByName.get(item.id) ?? 'fresh'}
-                cadence={cadenceByName.get(item.name)}
-                onRemove={onRemove}
-                onStillHere={onStillHere}
-                onGone={onGone}
-                onSetRemindMe={onSetRemindMe}
-              />
-            ))}
+            {AISLE_ORDER.map(({ key, label }) => {
+              const aisleItems = aislesGrouped.get(key);
+              if (!aisleItems || aisleItems.length === 0) return null;
+              return (
+                <AisleAccordion
+                  key={key}
+                  label={label}
+                  count={aisleItems.length}
+                  hasLow={aisleItems.some((it) => it.lowFlag)}
+                >
+                  <Stack gap={12}>
+                    {aisleItems.map((item) => (
+                      <PantryRow
+                        key={item.id}
+                        item={item}
+                        aging={agingByName.get(item.id) ?? 'fresh'}
+                        cadence={cadenceByName.get(item.name)}
+                        onRemove={onRemove}
+                        onStillHere={onStillHere}
+                        onGone={onGone}
+                        onSetRemindMe={onSetRemindMe}
+                      />
+                    ))}
+                  </Stack>
+                </AisleAccordion>
+              );
+            })}
           </Stack>
         </>
       )}

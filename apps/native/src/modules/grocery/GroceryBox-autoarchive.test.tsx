@@ -50,6 +50,7 @@ vi.mock('../../patterns/PatternCards', () => ({ PatternCards: () => null }));
 vi.mock('./shelfLifeCache', () => ({
   loadShelfLifeTable: () => Promise.resolve(),
   lookupDays: () => 1,
+  lookupCategory: () => null,
 }));
 
 vi.mock('./migrate', () => ({ migrateGrocery: async () => undefined }));

@@ -42,8 +42,21 @@ import {
   __resetForTests,
   loadShelfLifeTable,
   lookupDays,
+  lookupCategory,
   refresh,
 } from './shelfLifeCache';
+
+/** Build a rich-entry items map from a {name: days} shorthand, tagging a
+ *  category so the new wire shape ({ days, category }) is exercised. */
+function entries(
+  spec: Record<string, [number, string]>,
+): Record<string, { days: number; category: string }> {
+  const out: Record<string, { days: number; category: string }> = {};
+  for (const [name, [days, category]] of Object.entries(spec)) {
+    out[name] = { days, category };
+  }
+  return out;
+}
 
 beforeEach(() => {
   kvStore.clear();
@@ -56,7 +69,7 @@ describe('loadShelfLifeTable', () => {
     getShelfLifeAllMock.mockResolvedValue({
       ok: true,
       status: 200,
-      data: { items: { milk: 7 }, aliases: { 'skim milk': 'milk' }, version: 1 },
+      data: { items: entries({ milk: [7, 'dairy'] }), aliases: { 'skim milk': 'milk' }, version: 1 },
       etag: 'W/"abc"',
     });
 
@@ -68,30 +81,32 @@ describe('loadShelfLifeTable', () => {
     expect(getShelfLifeAllMock).toHaveBeenCalledTimes(1);
     expect(getShelfLifeAllMock).toHaveBeenCalledWith({ ifNoneMatch: undefined });
 
-    // After refresh the lookup picks up the new memo.
+    // After refresh the lookup picks up the new memo — days AND category.
     expect(lookupDays('milk')).toBe(7);
     expect(lookupDays('skim milk')).toBe(7);
+    expect(lookupCategory('milk')).toBe('dairy');
+    expect(lookupCategory('skim milk')).toBe('dairy');
   });
 
   it('returns the memo immediately on subsequent calls', async () => {
     getShelfLifeAllMock.mockResolvedValue({
       ok: true,
       status: 200,
-      data: { items: { milk: 7 }, aliases: {}, version: 1 },
+      data: { items: entries({ milk: [7, 'dairy'] }), aliases: {}, version: 1 },
       etag: null,
     });
     await loadShelfLifeTable();
     await new Promise((r) => setTimeout(r, 0));
 
     const second = await loadShelfLifeTable();
-    expect(second.items.milk).toBe(7);
+    expect(second.items.milk).toEqual({ days: 7, category: 'dairy' });
     // No second network call — memo is hot.
     expect(getShelfLifeAllMock).toHaveBeenCalledTimes(1);
   });
 
   it('hydrates from KV first if a previous session persisted a table', async () => {
-    kvStore.set('ollie:shelflife:v1', {
-      items: { rice: 365 },
+    kvStore.set('ollie:shelflife:v2', {
+      items: entries({ rice: [365, 'pantry'] }),
       aliases: {},
       version: 9,
     });
@@ -108,8 +123,8 @@ describe('loadShelfLifeTable', () => {
 
 describe('refresh', () => {
   it('sends If-None-Match when a stored etag exists and is a no-op on 304', async () => {
-    kvStore.set('ollie:shelflife:v1', {
-      items: { milk: 7 },
+    kvStore.set('ollie:shelflife:v2', {
+      items: entries({ milk: [7, 'dairy'] }),
       aliases: {},
       version: 1,
     });
@@ -135,7 +150,7 @@ describe('refresh', () => {
     getShelfLifeAllMock.mockResolvedValue({
       ok: true,
       status: 200,
-      data: { items: { milk: 7, eggs: 21 }, aliases: {}, version: 2 },
+      data: { items: entries({ milk: [7, 'dairy'], eggs: [21, 'dairy'] }), aliases: {}, version: 2 },
       etag: 'W/"v2"',
     });
     await loadShelfLifeTable();
@@ -143,7 +158,7 @@ describe('refresh', () => {
 
     expect(lookupDays('eggs')).toBe(21);
     expect(kvStore.get('ollie:shelflife:etag')).toBe('W/"v2"');
-    expect(kvStore.get('ollie:shelflife:v1')).toMatchObject({ version: 2 });
+    expect(kvStore.get('ollie:shelflife:v2')).toMatchObject({ version: 2 });
   });
 
   it('silently degrades on network failure (empty memo, UI shows no aging)', async () => {
@@ -163,7 +178,7 @@ describe('lookupDays', () => {
       ok: true,
       status: 200,
       data: {
-        items: { 'whole milk': 7, eggs: 21 },
+        items: entries({ 'whole milk': [7, 'dairy'], eggs: [21, 'dairy'] }),
         aliases: { 'milk': 'whole milk', 'large eggs': 'eggs' },
         version: 1,
       },

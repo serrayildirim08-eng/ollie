@@ -72,6 +72,7 @@ vi.mock('../../patterns/PatternCards', () => ({
 vi.mock('./shelfLifeCache', () => ({
   loadShelfLifeTable: () => new Promise(() => {}),
   lookupDays: () => null,
+  lookupCategory: () => null,
 }));
 
 // ── migrate is a no-op in test (the repo is fully mocked) ──────────────────

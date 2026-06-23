@@ -254,12 +254,37 @@ export interface FeedRecipeIngredient {
   unit?: string;
 }
 
+/** One instructive recipe step. `do` is the action; `cue` is the "look for →"
+ *  / "done when →" sensory check that removes guesswork (ADHD-first); `tip` is
+ *  an optional aside; `minutes` an optional per-step time badge. Emitted by the
+ *  feed-me worker as `stepsDetailed`; the plain `steps: string[]` stays for
+ *  back-compat (static fallback + older cache rows) and the detail screen maps
+ *  those into `{ do }` rows when `stepsDetailed` is absent. */
+export interface FeedRecipeStep {
+  do: string;
+  cue?: string;
+  tip?: string;
+  minutes?: number;
+}
+
+/** Optional "before you start" strip on the recipe detail screen. */
+export interface FeedRecipePrep {
+  pan?: string;
+  heat?: string;
+  handsOnMinutes?: number;
+}
+
 export interface FeedRecipeSuggestion {
   dish: string;
   cuisine: string;
   diet: string[];
   ingredients: FeedRecipeIngredient[];
   steps: string[];
+  /** Instructive steps (action + cue + optional tip). Optional — falls back to
+   *  `steps` when the worker/source didn't produce the richer shape. */
+  stepsDetailed?: FeedRecipeStep[];
+  /** Optional pan/heat/hands-on strip for the detail screen. */
+  prep?: FeedRecipePrep;
   prepMinutes: number;
   cookMinutes: number;
   servings: number;
@@ -307,9 +332,23 @@ export interface CookHistoryResponse {
 // version changes. Days are integer days from open/added → mild-faded.
 // `null` would be allowed by the spec but the worker omits null rows.
 
+/** One rich shelf-life row, as the worker actually serialises it on
+ *  /shelf-life/all (workers/ai-proxy/src/router/shelf-life.ts → SHELF_LIFE_DETAIL).
+ *  The client previously typed `items` as a flat number map, which silently
+ *  mismatched the wire shape — lookups read an object where a number was
+ *  expected and fell through to null (the "dead cache"). This matches reality. */
+export interface ShelfLifeEntry {
+  /** Shelf-life days (integer). */
+  days: number;
+  /** Storage bucket — drives the pantry aisle + aging colour. */
+  category: string;
+  /** Once-opened shelf life in days, when it differs materially from sealed. */
+  openedDays?: number;
+}
+
 export interface ShelfLifeAllResponse {
-  /** canonical → shelf-life days (integer) */
-  items: Record<string, number>;
+  /** canonical → rich entry ({ days, category }) */
+  items: Record<string, ShelfLifeEntry>;
   /** alias → canonical name (e.g. "skim milk" → "milk") */
   aliases: Record<string, string>;
   /** monotonic version of the table; bumps invalidate cache */
