@@ -54,6 +54,7 @@ import type {
   FeedRecipeSuggestion,
 } from '../../api/types';
 import { cookHistory as cookHistoryRepo, type CookHistoryEntry } from './repo';
+import { RecipeDetail } from './RecipeDetail';
 import type { PantryItem } from './types';
 
 // ─── tokens ────────────────────────────────────────────────────────────────
@@ -118,6 +119,11 @@ export function FeedMeView({
   const [phase, setPhase] = useState<Phase>({ kind: 'idle' });
   const [recent, setRecent] = useState<CookHistoryEntry[]>([]);
   const [cookedIds, setCookedIds] = useState<Set<string>>(() => new Set());
+  // The recipe currently drilled into ("show me how ›"). When set, the tab
+  // shows the cream RecipeDetail screen instead of the suggestion list.
+  const [detail, setDetail] = useState<{ suggestion: FeedRecipeSuggestion; dishKey: string } | null>(
+    null,
+  );
 
   // Restore the persisted diet preference on mount. We accept either the
   // wire form ("all") or — defensively — a legacy chip label (e.g. an
@@ -262,6 +268,20 @@ export function FeedMeView({
     [getBearer],
   );
 
+  // Drill-in: the recipe detail screen owns the whole tab while open.
+  if (detail) {
+    return (
+      <RecipeDetail
+        suggestion={detail.suggestion}
+        cooked={cookedIds.has(detail.dishKey)}
+        onCookedIt={() => void onCookedIt(detail.dishKey, detail.suggestion)}
+        shopNames={shopNames}
+        onAddToShop={onAddToShop}
+        onBack={() => setDetail(null)}
+      />
+    );
+  }
+
   return (
     <Stack gap={28}>
       <FeedMeHeader />
@@ -293,9 +313,7 @@ export function FeedMeView({
                 key={dishKey}
                 suggestion={s}
                 cooked={cookedIds.has(dishKey)}
-                onCookedIt={() => void onCookedIt(dishKey, s)}
-                shopNames={shopNames}
-                onAddToShop={onAddToShop}
+                onOpen={() => setDetail({ suggestion: s, dishKey })}
               />
             );
           })}
@@ -529,15 +547,12 @@ function NetworkErrorLine(): JSX.Element {
 function RecipeCard({
   suggestion,
   cooked,
-  onCookedIt,
-  shopNames,
-  onAddToShop,
+  onOpen,
 }: {
   suggestion: FeedRecipeSuggestion;
   cooked: boolean;
-  onCookedIt: () => void;
-  shopNames?: Set<string>;
-  onAddToShop?: (name: string, quantity?: number | null, unit?: string | null) => void;
+  /** Open the cream detail screen ("show me how ›"). */
+  onOpen: () => void;
 }): JSX.Element {
   const minutes = suggestion.prepMinutes + suggestion.cookMinutes;
   // Pull the first defined-but-non-generic diet tag for the subtitle. Most
@@ -552,21 +567,24 @@ function RecipeCard({
     .filter((i) => i.have)
     .map((i) => i.name);
 
-  // Collapsed by default — a clean stack of dish names — so the list stays
-  // scannable. Tapping the header reveals the full recipe (ingredients with
-  // quantities + numbered steps). One recipe open at a time keeps focus.
-  const [open, setOpen] = useState(false);
+  // Whether there's a recipe worth drilling into ("show me how ›").
   const hasRecipe = suggestion.steps.length > 0 || suggestion.ingredients.length > 0;
-
-  // Names the user has just tapped onto the shopping list this session — folded
-  // together with the names already on the list (shopNames) so a "need" item
-  // flips to "added" the moment it's tapped and stays that way.
-  const [addedNames, setAddedNames] = useState<Set<string>>(() => new Set());
-  const isAdded = (name: string): boolean =>
-    addedNames.has(name.toLowerCase()) || (shopNames?.has(name.toLowerCase()) ?? false);
 
   return (
     <article
+      role={hasRecipe ? 'button' : undefined}
+      tabIndex={hasRecipe ? 0 : undefined}
+      onClick={hasRecipe ? onOpen : undefined}
+      onKeyDown={
+        hasRecipe
+          ? (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onOpen();
+              }
+            }
+          : undefined
+      }
       style={{
         padding: '20px 22px',
         background: colors.paper,
@@ -576,237 +594,49 @@ function RecipeCard({
         display: 'flex',
         flexDirection: 'column',
         gap: 10,
+        cursor: hasRecipe ? 'pointer' : 'default',
+        textAlign: 'left',
       }}
     >
-      {/* A plain <div role="button"> rather than a real <button>: the header
-          contains block-level layout (<Row> → div, <Text scale="body"> → p),
-          which is invalid inside a <button> and makes browsers reparent the DOM
-          — that broke click handling on the whole card. */}
-      <div
-        role={hasRecipe ? 'button' : undefined}
-        tabIndex={hasRecipe ? 0 : undefined}
-        aria-expanded={hasRecipe ? open : undefined}
-        onClick={hasRecipe ? () => setOpen((v) => !v) : undefined}
-        onKeyDown={
-          hasRecipe
-            ? (e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  setOpen((v) => !v);
-                }
-              }
-            : undefined
-        }
+      <span
         style={{
-          textAlign: 'left',
-          cursor: hasRecipe ? 'pointer' : 'default',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 10,
-          width: '100%',
+          fontFamily: fonts.serif,
+          fontSize: 24,
+          lineHeight: 1.1,
+          letterSpacing: '-0.012em',
+          fontWeight: 400,
+          color: colors.ink,
         }}
       >
-        <Row justify="space-between" align="baseline" gap={12} style={{ width: '100%' }}>
-          <span
-            style={{
-              fontFamily: fonts.serif,
-              fontSize: 24,
-              lineHeight: 1.1,
-              letterSpacing: '-0.012em',
-              fontWeight: 400,
-              color: colors.ink,
-            }}
-          >
-            {suggestion.dish}
-          </span>
-          {hasRecipe && (
-            <span
-              aria-hidden
-              style={{
-                flexShrink: 0,
-                fontSize: 11,
-                color: colors.inkFaint,
-                ...SMCP_STYLE,
-              }}
-            >
-              {open ? 'hide' : 'recipe'}
-            </span>
-          )}
-        </Row>
+        {suggestion.dish}
+      </span>
 
-        <Text scale="caption" color={colors.inkFaint}>
-          {minutes > 0 ? `about ${minutes} min` : 'a few minutes'}
-          {specificDiet && ` · ${specificDiet}`}
-        </Text>
+      <Text scale="caption" color={colors.inkFaint}>
+        {minutes > 0 ? `about ${minutes} min` : 'a few minutes'}
+        {specificDiet && ` · ${specificDiet}`}
+      </Text>
 
-        {!open && usedIngredients.length > 0 && (
-          <span
-            style={{
-              fontSize: 11,
-              color: colors.inkSoft,
-              ...SMCP_STYLE,
-            }}
-          >
-            {usedIngredients.join(' · ')}
-          </span>
-        )}
-      </div>
-
-      {open && hasRecipe && (
-        <Stack gap={14} style={{ marginTop: 4 }}>
-          {suggestion.ingredients.length > 0 && (
-            <Stack gap={6}>
-              <span style={{ fontSize: 11, color: colors.inkFaint, ...SMCP_STYLE }}>
-                ingredients{suggestion.servings > 0 ? ` · serves ${suggestion.servings}` : ''}
-              </span>
-              {suggestion.ingredients.map((ing, i) => {
-                const label = [ing.qty ? String(ing.qty) : '', ing.unit ?? '', ing.name]
-                  .filter(Boolean)
-                  .join(' ');
-                const key = `${ing.name}-${i}`;
-
-                // Have it already → plain line, no affordance.
-                if (ing.have) {
-                  return (
-                    <Text key={key} scale="caption" color={colors.ink}>
-                      {label}
-                    </Text>
-                  );
-                }
-
-                const added = isAdded(ing.name);
-
-                // Missing + already on the list (or no add handler) → static
-                // "added"/"need" tag, nothing to tap.
-                if (added || !onAddToShop) {
-                  return (
-                    <Row key={key} gap={6} align="baseline">
-                      <Text scale="caption" color={added ? colors.sage : colors.inkSoft}>
-                        {label}
-                      </Text>
-                      <span
-                        style={{
-                          fontSize: 11,
-                          color: added ? colors.sage : colors.inkFaint,
-                          fontWeight: added ? 600 : 400,
-                          ...SMCP_STYLE,
-                        }}
-                      >
-                        {added ? 'added' : 'need'}
-                      </span>
-                    </Row>
-                  );
-                }
-
-                // Missing → tap the row to add it to the shopping list.
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    aria-label={`add ${ing.name} to shopping list`}
-                    onClick={() => {
-                      onAddToShop(ing.name, ing.qty ?? null, ing.unit ?? null);
-                      setAddedNames((prev) => {
-                        const next = new Set(prev);
-                        next.add(ing.name.toLowerCase());
-                        return next;
-                      });
-                    }}
-                    style={{
-                      appearance: 'none',
-                      background: 'transparent',
-                      border: 'none',
-                      padding: 0,
-                      margin: 0,
-                      textAlign: 'left',
-                      cursor: 'pointer',
-                      display: 'inline-flex',
-                      alignItems: 'baseline',
-                      gap: 6,
-                    }}
-                  >
-                    <Text scale="caption" color={colors.inkSoft}>
-                      {label}
-                    </Text>
-                    <span
-                      style={{
-                        fontSize: 11,
-                        color: colors.sage,
-                        fontWeight: 600,
-                        ...SMCP_STYLE,
-                      }}
-                    >
-                      + add
-                    </span>
-                  </button>
-                );
-              })}
-            </Stack>
-          )}
-
-          {suggestion.steps.length > 0 && (
-            <Stack gap={8}>
-              <span style={{ fontSize: 11, color: colors.inkFaint, ...SMCP_STYLE }}>
-                steps
-              </span>
-              {suggestion.steps.map((step, i) => (
-                <Row key={i} gap={10} align="baseline">
-                  <span
-                    style={{
-                      flexShrink: 0,
-                      fontFamily: fonts.serif,
-                      fontSize: 13,
-                      color: colors.inkFaint,
-                    }}
-                  >
-                    {i + 1}
-                  </span>
-                  <Text scale="body" color={colors.ink}>
-                    {step}
-                  </Text>
-                </Row>
-              ))}
-            </Stack>
-          )}
-        </Stack>
+      {usedIngredients.length > 0 && (
+        <span style={{ fontSize: 11, color: colors.inkSoft, ...SMCP_STYLE }}>
+          {usedIngredients.join(' · ')}
+        </span>
       )}
 
-      <Row justify="flex-end" align="center" gap={9} style={{ marginTop: 4 }}>
+      <Row justify="space-between" align="center" gap={9} style={{ marginTop: 4 }}>
         {cooked ? (
-          <>
+          <Row gap={7} align="center">
             <CookTick done />
-            <span
-              style={{
-                fontSize: 11,
-                color: colors.sage,
-                fontWeight: 600,
-                ...SMCP_STYLE,
-              }}
-            >
+            <span style={{ fontSize: 11, color: colors.sage, fontWeight: 600, ...SMCP_STYLE }}>
               cooked
             </span>
-          </>
+          </Row>
         ) : (
-          <button
-            type="button"
-            onClick={onCookedIt}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              padding: 0,
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 9,
-              fontSize: 11,
-              color: colors.sage,
-              fontWeight: 600,
-              ...SMCP_STYLE,
-            }}
-          >
-            <CookTick done={false} />
-            cooked it
-          </button>
+          <span />
+        )}
+        {hasRecipe && (
+          <span style={{ fontSize: 13, color: colors.sage, fontWeight: 600 }}>
+            show me how ›
+          </span>
         )}
       </Row>
     </article>

@@ -679,6 +679,8 @@ function parseRecipeBatch(raw: unknown): RecipeBatch {
       diet: Array.isArray(r.diet) ? r.diet.filter((x): x is string => typeof x === 'string') : [],
       ingredients: Array.isArray(r.ingredients) ? coerceIngredients(r.ingredients) : [],
       steps: Array.isArray(r.steps) ? r.steps.filter((x): x is string => typeof x === 'string') : [],
+      stepsDetailed: coerceStepsDetailed(r.stepsDetailed),
+      prep: coercePrep(r.prep),
       prepMinutes: typeof r.prepMinutes === 'number' ? r.prepMinutes : 0,
       cookMinutes: typeof r.cookMinutes === 'number' ? r.cookMinutes : 0,
       servings: typeof r.servings === 'number' ? r.servings : 1,
@@ -686,6 +688,36 @@ function parseRecipeBatch(raw: unknown): RecipeBatch {
     });
   }
   return { suggestions, language };
+}
+
+/** Coerce the instructive steps array; returns undefined when absent/empty so
+ *  the field simply doesn't serialise (client falls back to plain `steps`). */
+function coerceStepsDetailed(raw: unknown): RecipeSuggestion['stepsDetailed'] {
+  if (!Array.isArray(raw)) return undefined;
+  const out: NonNullable<RecipeSuggestion['stepsDetailed']> = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const s = item as Record<string, unknown>;
+    if (typeof s.do !== 'string') continue;
+    out.push({
+      do: s.do,
+      cue: typeof s.cue === 'string' ? s.cue : undefined,
+      tip: typeof s.tip === 'string' ? s.tip : undefined,
+      minutes: typeof s.minutes === 'number' ? s.minutes : undefined,
+    });
+  }
+  return out.length > 0 ? out : undefined;
+}
+
+/** Coerce the optional prep strip; undefined when nothing usable. */
+function coercePrep(raw: unknown): RecipeSuggestion['prep'] {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const p = raw as Record<string, unknown>;
+  const prep: NonNullable<RecipeSuggestion['prep']> = {};
+  if (typeof p.pan === 'string') prep.pan = p.pan;
+  if (typeof p.heat === 'string') prep.heat = p.heat;
+  if (typeof p.handsOnMinutes === 'number') prep.handsOnMinutes = p.handsOnMinutes;
+  return prep.pan || prep.heat || typeof prep.handsOnMinutes === 'number' ? prep : undefined;
 }
 
 function coerceIngredients(raw: unknown[]): RecipeSuggestion['ingredients'] {

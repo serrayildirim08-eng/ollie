@@ -261,8 +261,16 @@ describe('FeedMeView', () => {
     });
     await flush();
 
-    // The recipe card has rendered with its "cooked it" affordance.
-    const cookedBtn = findButton('cooked it');
+    // The recipe card "show me how ›" drills into the cream detail screen,
+    // which is where "i cooked it" now lives.
+    const card = container.querySelector('article');
+    if (!card) throw new Error('recipe card not found');
+    await act(async () => {
+      card.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    });
+    await flush();
+
+    const cookedBtn = findButton('i cooked it ✓');
     await act(async () => {
       cookedBtn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
     });
