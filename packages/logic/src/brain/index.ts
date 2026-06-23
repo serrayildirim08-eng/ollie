@@ -78,6 +78,9 @@ export {
   buildDeferTasksAction,
   buildAddAdminTaskAction,
   buildSurfaceDecisionAction,
+  buildSurfaceTasksAction,
+  buildBreakDownTaskAction,
+  buildBatchBlockAction,
 } from './actions';
 export type {
   ActionKind,
@@ -86,5 +89,8 @@ export type {
   DeferTasksPayload,
   AddAdminTaskPayload,
   SurfaceDecisionPayload,
+  SurfaceTasksPayload,
+  BreakDownTaskPayload,
+  BatchBlockPayload,
   NoticingAction,
 } from './actions';

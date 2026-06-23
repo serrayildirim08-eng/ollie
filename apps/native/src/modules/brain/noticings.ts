@@ -111,8 +111,25 @@ function toCandidate(p: RawPattern, module: string): NoticingCandidate | null {
   };
 }
 
-/** Offer fields a detector may attach to a pattern card for the action layer. */
-const OFFER_FACT_KEYS = ['actionKind', 'taskText', 'dueDate', 'decisionId', 'decisionWhat'] as const;
+/** STRING offer fields a detector may attach to a pattern card. */
+const OFFER_FACT_KEYS = [
+  'actionKind', 'taskText', 'dueDate', 'decisionId', 'decisionWhat',
+  // wave 2 — extra string offer facts:
+  'taskId', // chronic deferral → the source admin task id (→ sourceTaskId).
+  'sourceTaskId', // chronic deferral (synthesized) → same, alternate key.
+  'batchLabel', // renewal cluster → the batch block + reminder label.
+] as const;
+
+/** ARRAY (string[]) offer fields — wave-2 offers carry id lists. */
+const OFFER_FACT_ARRAY_KEYS = [
+  'taskIds', // paperwork piling → the stalled admin task ids to surface.
+  'renewalIds', // renewal cluster → the renewal ids the block covers.
+] as const;
+
+/** NUMERIC offer fields — wave-2 offers carry an absolute fire time. */
+const OFFER_FACT_NUMBER_KEYS = [
+  'batchFireAtMs', // renewal cluster → when the batch reminder should fire.
+] as const;
 
 /**
  * Recover the situation facts the Sprint-3 copy + action layers need from a raw
@@ -140,6 +157,19 @@ function factsOf(p: RawPattern): Record<string, unknown> | null {
   for (const k of OFFER_FACT_KEYS) {
     const v = (p as Record<string, unknown>)[k];
     if (typeof v === 'string' && v.trim()) offer[k] = v.trim();
+  }
+  // wave 2 — array offer facts (id lists): keep only non-empty trimmed strings.
+  for (const k of OFFER_FACT_ARRAY_KEYS) {
+    const v = (p as Record<string, unknown>)[k];
+    if (Array.isArray(v)) {
+      const clean = v.map((x) => (x ?? '').toString().trim()).filter(Boolean);
+      if (clean.length > 0) offer[k] = clean;
+    }
+  }
+  // wave 2 — numeric offer facts (e.g. an absolute fire time).
+  for (const k of OFFER_FACT_NUMBER_KEYS) {
+    const v = (p as Record<string, unknown>)[k];
+    if (typeof v === 'number' && Number.isFinite(v)) offer[k] = v;
   }
   const hasOffer = Object.keys(offer).length > 0;
 
@@ -216,6 +246,12 @@ export async function gatherCandidates(store: Store): Promise<NoticingCandidate[
   } catch (err) {
     console.error('[brain] gather harm failed (non-fatal):', err);
   }
+
+  // NOTE — CHRONIC DEFERRAL (break_down_task offer) is emitted by the admin
+  // ORCHESTRATOR (packages/orchestrator/src/admin.ts), not synthesized here: it
+  // rides the normal `admin.patterns` → toCandidate pipeline above carrying
+  // `actionKind:'break_down_task'` + `taskText` + `taskId`. Keeping it there
+  // avoids double-offering the same task from two sources.
 
   return out;
 }

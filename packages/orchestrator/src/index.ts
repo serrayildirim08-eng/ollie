@@ -38,6 +38,12 @@ import {
 
 export type { Orchestrator } from './types';
 export { appendCapped, DEFAULT_DEDUP_CAP } from './dedup-store';
+// Re-export the in-process event bus so native consumers (which depend on
+// @ollie/orchestrator, not @ollie/events directly) can subscribe to the SAME
+// singleton the orchestrators emit on — e.g. the wave-2 renewal-escalation
+// consumer listening for admin:renewal_notify_due / admin:renewal_autotodo_due.
+export { on as onEvent, emit as emitEvent } from '@ollie/events';
+export type { Unsubscribe } from '@ollie/events';
 export { createCycleOrchestrator } from './cycle';
 export { createPetsOrchestrator } from './pets';
 export { createBodyOrchestrator } from './body';

@@ -222,8 +222,18 @@ export const REGISTRY: Registry = {
   'admin:doc_refs':                    { payload: '{ task_id: string, count: number, ts: number }' },
   'admin:schedule_drift':              { payload: '{ category: string, ts: number }' },
   // C-model offer signals (brain noticings carrying an accept-to-act action).
-  'admin:renewal_offer':               { payload: '{ renewal_id: string, days_left: number, ts: number }' },
+  'admin:renewal_offer':               { payload: '{ renewal_id: string, days_left: number, tier: "card"|"notify", ts: number }' },
   'admin:decision_stale':              { payload: '{ decision_id: string, ts: number }' },
+  // Wave-2 renewal 3-tier escalation + clustered offers. The two *_due signals
+  // are consumed native-side (renewalEscalation.ts) to schedule a real local
+  // notification (~1mo) / auto-add to /todo (~1wk); the pile/cluster/chronic
+  // signals are telemetry for the surface_tasks / batch_block / break_down_task
+  // offers respectively.
+  'admin:renewal_notify_due':          { payload: '{ renewal_id: string, renewalType: string, dueDate?: string, days_left: number, ts: number }' },
+  'admin:renewal_autotodo_due':        { payload: '{ renewal_id: string, renewalType: string, dueDate?: string, ts: number }' },
+  'admin:paperwork_pile':              { payload: '{ count: number, ts: number }' },
+  'admin:renewal_cluster':             { payload: '{ month: string, count: number, ts: number }' },
+  'admin:chronic_defer':               { payload: '{ task_id: string, ts: number }' },
 
   // ─── Sprint 3 / D1 burhan life-event tree ───────────────────────
   // Constitutional: tree never decays. Elements are append-only.

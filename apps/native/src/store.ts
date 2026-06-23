@@ -42,6 +42,7 @@ import { isOverdue } from '@ollie/cadence';
 import { scheduleSystemNotification } from './notify/systemNotify';
 import { runAllSyncs } from './bridge';
 import { recomputeBrain } from './modules/brain';
+import { installRenewalEscalation } from './modules/admin/renewalEscalation';
 import { enumerateCadences as enumerateGrocery } from './modules/grocery';
 import { enumerateCadences as enumerateBody } from './modules/body';
 import { enumerateCadences as enumerateHabits } from './modules/habits';
@@ -155,6 +156,16 @@ const patternPushUnsub = initPatternDetectedSubscriber({
   scheduleNotification,
 });
 
+/**
+ * Wave-2 renewal escalation: the admin orchestrator emits
+ * admin:renewal_notify_due (~1 month → app-closed local notification) and
+ * admin:renewal_autotodo_due (~1 week → auto-add to /todo). This native
+ * consumer performs those side effects (the orchestrator can't — no native
+ * dep). Idempotent via persisted markers; torn down on quit. See
+ * modules/admin/renewalEscalation.ts.
+ */
+const renewalEscalationUnsub = installRenewalEscalation(store);
+
 if (typeof window !== 'undefined') {
   // Tauri windows fire `beforeunload` on app quit / dev-server reload —
   // this lets the scanner cancel its boot timer / interval / visibility
@@ -162,6 +173,7 @@ if (typeof window !== 'undefined') {
   window.addEventListener('beforeunload', () => {
     orchestrator.teardown();
     patternPushUnsub();
+    renewalEscalationUnsub();
   });
 }
 

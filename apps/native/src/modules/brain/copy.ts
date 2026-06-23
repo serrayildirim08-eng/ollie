@@ -27,6 +27,9 @@ import {
   buildDeferTasksAction,
   buildAddAdminTaskAction,
   buildSurfaceDecisionAction,
+  buildSurfaceTasksAction,
+  buildBreakDownTaskAction,
+  buildBatchBlockAction,
   type ScoredNoticing,
   type CopyFacts,
   type CopyActionKind,
@@ -49,6 +52,10 @@ const OFFER_ACTION_KINDS: readonly CopyActionKind[] = [
   'defer_tasks',
   'add_admin_task',
   'surface_decision',
+  // ── wave 2 ──
+  'surface_tasks',
+  'break_down_task',
+  'batch_block',
 ] as const;
 
 /** Read the offer action a detector attached directly to the candidate's facts. */
@@ -104,6 +111,19 @@ function factString(n: ScoredNoticing, key: string): string {
   return typeof raw === 'string' ? raw.trim() : '';
 }
 
+/** Read a string[] field a detector attached (wave-2 id lists). Empty when absent. */
+function factStringArray(n: ScoredNoticing, key: string): string[] {
+  const raw = (n.facts as Record<string, unknown> | null | undefined)?.[key];
+  if (!Array.isArray(raw)) return [];
+  return raw.map((x) => (x ?? '').toString().trim()).filter(Boolean);
+}
+
+/** Read a finite-number field a detector attached (wave-2 fire time). NaN when absent. */
+function factNumber(n: ScoredNoticing, key: string): number {
+  const raw = (n.facts as Record<string, unknown> | null | undefined)?.[key];
+  return typeof raw === 'number' && Number.isFinite(raw) ? raw : NaN;
+}
+
 /**
  * The suggested action descriptor for a noticing, or null if it offers none.
  * The native dispatcher (executeAction) turns this into a real repo call.
@@ -131,6 +151,26 @@ export function actionForNoticing(n: ScoredNoticing, lang: AppLang): NoticingAct
       return buildSurfaceDecisionAction(
         factString(n, 'decisionId'),
         factString(n, 'decisionWhat'),
+        lang,
+      );
+    case 'surface_tasks':
+      // paperwork piling → the stalled admin task ids to bring to today.
+      return buildSurfaceTasksAction(factStringArray(n, 'taskIds'), lang);
+    case 'break_down_task':
+      // chronic deferral → break the repeatedly-deferred task into a first step.
+      // The orchestrator carries the source id as `taskId`; accept `sourceTaskId`
+      // too for any future synthesized path.
+      return buildBreakDownTaskAction(
+        factString(n, 'taskText'),
+        factString(n, 'taskId') || factString(n, 'sourceTaskId'),
+        lang,
+      );
+    case 'batch_block':
+      // renewal cluster → batch the renewals into one day + an app-closed reminder.
+      return buildBatchBlockAction(
+        factString(n, 'batchLabel'),
+        factNumber(n, 'batchFireAtMs'),
+        factStringArray(n, 'renewalIds'),
         lang,
       );
     default:

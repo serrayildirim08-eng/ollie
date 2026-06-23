@@ -52,6 +52,10 @@ export type CopyKind =
   | 'sleep_debt' // hours of sleep deficit piled up — may offer to lighten today.
   | 'decision' // a recurring decision left open — may offer to bring to today.
   | 'caffeine' // late caffeine ↔ sleep insight (B — insight only, no action).
+  // ── wave 2 (richer admin offers) ──
+  | 'paperwork_piling' // several admin tasks haven't moved — offer to surface them.
+  | 'chronic_deferral' // same task put off repeatedly — offer a smaller first step.
+  | 'renewal_cluster' // 2+ renewals land the same month — offer to batch them.
   | 'generic';
 
 /**
@@ -77,7 +81,10 @@ export type CopyActionKind =
   | 'add_to_grocery_list'
   | 'defer_tasks'
   | 'add_admin_task'
-  | 'surface_decision';
+  | 'surface_decision'
+  | 'surface_tasks'
+  | 'break_down_task'
+  | 'batch_block';
 
 // ─── kind resolution ─────────────────────────────────────────────────────────
 
@@ -91,6 +98,9 @@ export function copyKindOf(input: { category?: string | null; module?: string | 
   if (cat.includes('replenish')) return 'replenish';
   if (cat.includes('sleep-debt') || cat.includes('sleep_debt')) return 'sleep_debt';
   if (cat.includes('caffeine')) return 'caffeine';
+  if (cat.includes('paperwork')) return 'paperwork_piling';
+  if (cat.includes('chronic-deferral') || cat.includes('chronic_deferral')) return 'chronic_deferral';
+  if (cat.includes('renewal-cluster') || cat.includes('renewal_cluster')) return 'renewal_cluster';
   if (cat.includes('decision')) return 'decision';
   if (cat.includes('spoiled')) return 'spoiled';
   if (cat.includes('bill') || cat.includes('late')) return 'bill';
@@ -114,6 +124,9 @@ const ACTION_DESCRIPTION: Record<CopyActionKind, string> = {
   defer_tasks: "you can offer to push today's non-urgent tasks to tomorrow",
   add_admin_task: 'you can offer to add it to the to-do list',
   surface_decision: 'you can offer to bring the decision to today',
+  surface_tasks: "you can offer to bring these to today's focus",
+  break_down_task: 'you can offer to break it into a smaller first step',
+  batch_block: 'you can offer to batch them into one block',
 };
 
 /**
@@ -210,6 +223,30 @@ const FALLBACK: Record<CopyKind, Record<AppLang, Phrase>> = {
     en: () => `a decision has been open for a while — bring it to today?`,
     es: () => `una decisión lleva un tiempo pendiente — ¿la traemos a hoy?`,
     tr: () => `bir karar bir süredir açık duruyor — bugüne getirelim mi?`,
+  },
+  paperwork_piling: {
+    en: (f) =>
+      typeof f.otherCount === 'number' && f.otherCount > 0
+        ? `${f.otherCount} admin things haven't moved in a while — bring them to today?`
+        : `a few admin things haven't moved in a while — bring them to today?`,
+    es: (f) =>
+      typeof f.otherCount === 'number' && f.otherCount > 0
+        ? `${f.otherCount} cosas administrativas llevan tiempo sin moverse — ¿las traemos a hoy?`
+        : `algunas cosas administrativas llevan tiempo sin moverse — ¿las traemos a hoy?`,
+    tr: (f) =>
+      typeof f.otherCount === 'number' && f.otherCount > 0
+        ? `${f.otherCount} idari iş bir süredir kıpırdamadı — bugüne getirelim mi?`
+        : `birkaç idari iş bir süredir kıpırdamadı — bugüne getirelim mi?`,
+  },
+  chronic_deferral: {
+    en: () => `you've put this off a few times — want to break it into a smaller first step?`,
+    es: () => `lo has pospuesto varias veces — ¿lo dividimos en un primer paso más pequeño?`,
+    tr: () => `bunu birkaç kez erteledin — daha küçük bir ilk adıma bölelim mi?`,
+  },
+  renewal_cluster: {
+    en: () => `two renewals land around the same time — batch them one day?`,
+    es: () => `dos renovaciones caen por las mismas fechas — ¿las juntamos un día?`,
+    tr: () => `iki yenileme aynı zamana denk geliyor — bir günde toplayalım mı?`,
   },
   // Insight-only (B): no offer, no action — just a calm observation. When the
   // detector carried its measured onset delay (in facts.days), name it.

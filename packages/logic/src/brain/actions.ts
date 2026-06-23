@@ -24,7 +24,11 @@ export type ActionKind =
   | 'add_to_grocery_list'
   | 'defer_tasks'
   | 'add_admin_task'
-  | 'surface_decision';
+  | 'surface_decision'
+  // ── wave 2 (richer admin offers) ──
+  | 'surface_tasks' // paperwork piling → bring N stalled admin tasks to today.
+  | 'break_down_task' // chronic deferral → create one smaller first-step task.
+  | 'batch_block'; // renewal cluster → block one day + schedule a reminder.
 
 /** Payload for `add_to_grocery_list`: the item names to put on the list. */
 export interface AddToGroceryListPayload {
@@ -66,12 +70,54 @@ export interface SurfaceDecisionPayload {
   what?: string;
 }
 
+/**
+ * Payload for `surface_tasks` (paperwork piling): the set of stalled admin task
+ * ids to bring to today. The executor sets each task's due date to today so it
+ * leads /todo (the same date-bucketing mechanism `defer_tasks` already relies
+ * on). Distinct from `surface_decision`, which acts on a recurring-decision row.
+ */
+export interface SurfaceTasksPayload {
+  /** The admin_tasks row ids to surface (set due date → today). */
+  taskIds: string[];
+}
+
+/**
+ * Payload for `break_down_task` (chronic deferral): the text of the task she's
+ * put off repeatedly. The executor creates ONE small "first step" admin task
+ * dated today — deterministic, no AI call (mirrors goals' heuristic
+ * smallest-next-step, which also asks the question without a network call).
+ */
+export interface BreakDownTaskPayload {
+  /** The repeatedly-deferred task's text (e.g. "file the visa renewal"). */
+  taskText: string;
+  /** Optional id of the source task the breakdown came from (for traceability). */
+  sourceTaskId?: string;
+}
+
+/**
+ * Payload for `batch_block` (renewal cluster): batch 2+ renewals landing the
+ * same month into one blocked day plus an app-closed reminder. The executor
+ * creates a dated admin task AND schedules a local notification via the EVENT
+ * path (`scheduleAt` → `emit('ollie-schedule-notif')`), never invoke().
+ */
+export interface BatchBlockPayload {
+  /** Human label for the block + reminder (e.g. "renewals: passport, license"). */
+  label: string;
+  /** Absolute wall-clock ms the reminder should fire at. */
+  fireAtMs: number;
+  /** Optional renewal ids the block covers (for traceability / dedupe). */
+  renewalIds?: string[];
+}
+
 /** Discriminated payload union, keyed by {@link ActionKind}. */
 export type ActionPayload =
   | ({ kind: 'add_to_grocery_list' } & AddToGroceryListPayload)
   | ({ kind: 'defer_tasks' } & DeferTasksPayload)
   | ({ kind: 'add_admin_task' } & AddAdminTaskPayload)
-  | ({ kind: 'surface_decision' } & SurfaceDecisionPayload);
+  | ({ kind: 'surface_decision' } & SurfaceDecisionPayload)
+  | ({ kind: 'surface_tasks' } & SurfaceTasksPayload)
+  | ({ kind: 'break_down_task' } & BreakDownTaskPayload)
+  | ({ kind: 'batch_block' } & BatchBlockPayload);
 
 /**
  * A suggested action attached to a noticing. PURE + serialisable: the native
@@ -107,6 +153,21 @@ const ACCEPT_LABEL: Record<ActionKind, Record<AppLang, string>> = {
     en: 'bring to today',
     es: 'traer a hoy',
     tr: 'bugüne getir',
+  },
+  surface_tasks: {
+    en: 'bring to today',
+    es: 'traer a hoy',
+    tr: 'bugüne getir',
+  },
+  break_down_task: {
+    en: 'break it down',
+    es: 'divídelo',
+    tr: 'küçült',
+  },
+  batch_block: {
+    en: 'block a day',
+    es: 'aparta un día',
+    tr: 'bir gün ayır',
   },
 };
 
@@ -179,5 +240,82 @@ export function buildSurfaceDecisionAction(
     kind: 'surface_decision',
     label: actionLabel('surface_decision', lang),
     payload: { kind: 'surface_decision', decisionId: id, what: (what ?? '').toString().trim() },
+  };
+}
+
+/**
+ * Build the surface-tasks action descriptor for the paperwork-piling noticing.
+ * Returns null when there are no task ids (nothing to surface). Cleans + dedupes
+ * the id list so re-accepting is harmless.
+ */
+export function buildSurfaceTasksAction(taskIds: string[], lang: AppLang): NoticingAction | null {
+  const clean = Array.from(
+    new Set(
+      (Array.isArray(taskIds) ? taskIds : [])
+        .map((id) => (id ?? '').toString().trim())
+        .filter(Boolean),
+    ),
+  );
+  if (clean.length === 0) return null;
+  return {
+    kind: 'surface_tasks',
+    label: actionLabel('surface_tasks', lang),
+    payload: { kind: 'surface_tasks', taskIds: clean },
+  };
+}
+
+/**
+ * Build the break-down-task action descriptor for the chronic-deferral
+ * noticing. Returns null when `taskText` is blank (nothing to break down).
+ */
+export function buildBreakDownTaskAction(
+  taskText: string,
+  sourceTaskId: string,
+  lang: AppLang,
+): NoticingAction | null {
+  const text = (taskText ?? '').toString().trim();
+  if (!text) return null;
+  const src = (sourceTaskId ?? '').toString().trim();
+  return {
+    kind: 'break_down_task',
+    label: actionLabel('break_down_task', lang),
+    payload: {
+      kind: 'break_down_task',
+      taskText: text,
+      ...(src ? { sourceTaskId: src } : {}),
+    },
+  };
+}
+
+/**
+ * Build the batch-block action descriptor for the renewal-cluster noticing.
+ * Returns null when `fireAtMs` isn't a finite number or `label` is blank (the
+ * reminder would have nothing to fire / show).
+ */
+export function buildBatchBlockAction(
+  label: string,
+  fireAtMs: number,
+  renewalIds: string[],
+  lang: AppLang,
+): NoticingAction | null {
+  const clean = (label ?? '').toString().trim();
+  if (!clean) return null;
+  if (typeof fireAtMs !== 'number' || !Number.isFinite(fireAtMs)) return null;
+  const ids = Array.from(
+    new Set(
+      (Array.isArray(renewalIds) ? renewalIds : [])
+        .map((id) => (id ?? '').toString().trim())
+        .filter(Boolean),
+    ),
+  );
+  return {
+    kind: 'batch_block',
+    label: actionLabel('batch_block', lang),
+    payload: {
+      kind: 'batch_block',
+      label: clean,
+      fireAtMs,
+      ...(ids.length > 0 ? { renewalIds: ids } : {}),
+    },
   };
 }

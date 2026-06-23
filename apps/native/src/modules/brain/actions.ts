@@ -16,6 +16,13 @@
  *     surfaces in /todo.
  *   - surface_decision    — the stale-decision noticing → un-snoozes a recurring
  *     decision so it leads /todo today.
+ *   - surface_tasks       — the paperwork-piling noticing → dates each stalled
+ *     admin task to today so they lead /todo (distinct from surface_decision).
+ *   - break_down_task     — the chronic-deferral noticing → creates ONE small
+ *     "first step" admin task dated today (deterministic, no AI call).
+ *   - batch_block         — the renewal-cluster noticing → creates a dated block
+ *     task + schedules an app-closed reminder via the EVENT path (scheduleAt →
+ *     emit('ollie-schedule-notif'), never invoke() — ACL-safe on iOS localhost).
  *
  * Returns whether the action succeeded so the caller can clear the noticing
  * only on success. Best-effort: a thrown repo error is caught + reported false.
@@ -32,6 +39,8 @@ import { tasks as adminTasks, recurringDecisions } from '../admin/repo';
 import { migrateAdmin } from '../admin/migrate';
 import { syncToStore as syncAdminToStore } from '../admin/bridge';
 import { listHarmEvents } from './harm';
+import { scheduleAt } from '../../notify/systemNotify';
+import { OLLIE_REMINDER_CATEGORY } from '../../notify/notificationActions';
 
 /**
  * Lazily resolve the app store singleton. Imported on demand (not at module
@@ -184,6 +193,79 @@ export async function executeAction(action: NoticingAction): Promise<boolean> {
         if (!id) return false;
         await migrateAdmin();
         await recurringDecisions.unsnooze(id);
+        await refreshBridges({ admin: true });
+        return true;
+      }
+
+      case 'surface_tasks': {
+        // Paperwork-piling offer: date each stalled admin task to today so the
+        // /todo date-bucketing leads them today — the same surface mechanism
+        // defer_tasks uses (setDueDate), but acting on admin TASKS (not a
+        // recurring decision). Clears the noticing only if ≥1 task was dated.
+        const ids = Array.from(
+          new Set(action.payload.taskIds.map((i) => (i ?? '').toString().trim()).filter(Boolean)),
+        );
+        if (ids.length === 0) return false;
+        await migrateAdmin();
+        const today = isoLocalDay(0);
+        let surfaced = 0;
+        for (const id of ids) {
+          await adminTasks.setDueDate(id, today);
+          surfaced += 1;
+        }
+        if (surfaced === 0) return false;
+        await refreshBridges({ admin: true });
+        return true;
+      }
+
+      case 'break_down_task': {
+        // Chronic-deferral offer: create ONE small first-step admin task dated
+        // today. Deterministic — mirrors goals' heuristic "smallest doing step"
+        // (which also asks the question without any AI/network call). The new
+        // task is a FRESH noticing id, so the deferral history clears naturally.
+        const text = (action.payload.taskText ?? '').toString().trim();
+        if (!text) return false;
+        await migrateAdmin();
+        await adminTasks.add({
+          kind: 'task',
+          text: `first step: ${text}`,
+          data: { kind: 'task' },
+          dueDate: isoLocalDay(0),
+          ballState: 'mine',
+        });
+        await refreshBridges({ admin: true });
+        return true;
+      }
+
+      case 'batch_block': {
+        // Renewal-cluster offer: (1) create a dated block task so it shows in
+        // /todo, and (2) schedule an app-closed reminder via the EVENT path.
+        // scheduleAt internally emits 'ollie-schedule-notif' (NOT invoke()), so
+        // it is ACL-safe over the iOS localhost webview and survives app-quit.
+        const label = (action.payload.label ?? '').toString().trim();
+        const fireAt = action.payload.fireAtMs;
+        if (!label || typeof fireAt !== 'number' || !Number.isFinite(fireAt)) return false;
+        await migrateAdmin();
+        const created = await adminTasks.add({
+          kind: 'task',
+          text: label,
+          data: { kind: 'task' },
+          dueDate: isoLocalDay(0, fireAt),
+          ballState: 'mine',
+        });
+        // Stable id → idempotent / cancelable; scheduleAt guards past-fire +
+        // the 1-year horizon, so a bogus fireAt silently no-ops rather than
+        // arming garbage.
+        scheduleAt(
+          fireAt,
+          {
+            title: 'renewals to batch',
+            body: label,
+            actionTypeId: OLLIE_REMINDER_CATEGORY,
+            extra: { module: 'admin', refId: created.id },
+          },
+          `batch:${created.id}`,
+        );
         await refreshBridges({ admin: true });
         return true;
       }

@@ -228,6 +228,119 @@ describe('admin orchestrator', () => {
     expect(patterns.some((p) => p.pattern === 'renewal-offer:r2')).toBe(false);
   });
 
+  // ── Wave 2 · renewal 3-tier escalation ────────────────────────────────────
+
+  /** Build an ISO yyyy-mm-dd `days` out from NOW (UTC). */
+  const isoFromNow = (days: number): string => {
+    const d = new Date(NOW + days * DAY_MS);
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+  };
+
+  it('renewal ~1 month out (≤30d) emits admin:renewal_notify_due AND keeps the card', () => {
+    store.set('admin', 'tasks', [] as AdminTask[]);
+    store.set('admin', 'renewals', [
+      { id: 'rN', renewalType: 'license', dueDate: isoFromNow(20), addedAt: NOW },
+    ]);
+    let notified: { renewal_id?: string; days_left?: number } | null = null;
+    on('admin:renewal_notify_due', (raw) => { notified = raw as typeof notified; });
+    orch.init();
+
+    expect(notified).not.toBeNull();
+    expect(notified!.renewal_id).toBe('rN');
+    const patterns = store.get<AdminPattern[]>('admin', 'patterns', []) ?? [];
+    const card = patterns.find((p) => p.pattern === 'renewal-offer:rN');
+    expect(card).toBeDefined();
+    expect(card!.tier).toBe('notify');
+    expect(card!.actionKind).toBe('add_admin_task');
+  });
+
+  it('renewal ~1 week out (≤7d) emits admin:renewal_autotodo_due and NO card', () => {
+    store.set('admin', 'tasks', [] as AdminTask[]);
+    store.set('admin', 'renewals', [
+      { id: 'rA', renewalType: 'passport', dueDate: isoFromNow(5), addedAt: NOW },
+    ]);
+    let auto: { renewal_id?: string; renewalType?: string } | null = null;
+    on('admin:renewal_autotodo_due', (raw) => { auto = raw as typeof auto; });
+    orch.init();
+
+    expect(auto).not.toBeNull();
+    expect(auto!.renewal_id).toBe('rA');
+    expect(auto!.renewalType).toBe('passport');
+    const patterns = store.get<AdminPattern[]>('admin', 'patterns', []) ?? [];
+    // No surfaced add-to-todo card at the auto tier (the auto-add replaces it).
+    expect(patterns.some((p) => p.pattern === 'renewal-offer:rA')).toBe(false);
+  });
+
+  it('renewal escalation events fire ONCE across recomputes (idempotent)', () => {
+    store.set('admin', 'tasks', [] as AdminTask[]);
+    store.set('admin', 'renewals', [
+      { id: 'rA', renewalType: 'passport', dueDate: isoFromNow(5), addedAt: NOW },
+    ]);
+    let autoCount = 0;
+    on('admin:renewal_autotodo_due', () => { autoCount += 1; });
+    orch.init();
+    // Trigger another recompute synchronously by re-setting the input.
+    store.set('admin', 'renewals', [
+      { id: 'rA', renewalType: 'passport', dueDate: isoFromNow(5), addedAt: NOW },
+    ]);
+
+    expect(autoCount).toBe(1);
+  });
+
+  // ── Wave 2 · paperwork piling ─────────────────────────────────────────────
+
+  it('emits a paperwork-pile offer when ≥3 paperwork tasks stalled ~2 weeks', () => {
+    const stale = NOW - 20 * DAY_MS;
+    store.set('admin', 'tasks', [
+      { id: 'p1', label: 'tax form', kind: 'paperwork', state: 'active', last_transition_at: stale },
+      { id: 'p2', label: 'visa form', kind: 'paperwork', state: 'active', last_transition_at: stale },
+      { id: 'p3', label: 'insurance form', kind: 'paperwork', state: 'active', last_transition_at: stale },
+    ] as AdminTask[]);
+    orch.init();
+
+    const patterns = store.get<AdminPattern[]>('admin', 'patterns', []) ?? [];
+    const pile = patterns.find((p) => p.pattern === 'paperwork-pile');
+    expect(pile).toBeDefined();
+    expect(pile!.actionKind).toBe('surface_tasks');
+    expect(pile!.taskIds).toEqual(['p1', 'p2', 'p3']);
+  });
+
+  it('does NOT emit a paperwork-pile offer with fewer than 3 stalled', () => {
+    const stale = NOW - 20 * DAY_MS;
+    store.set('admin', 'tasks', [
+      { id: 'p1', label: 'tax form', kind: 'paperwork', state: 'active', last_transition_at: stale },
+      { id: 'p2', label: 'visa form', kind: 'paperwork', state: 'active', last_transition_at: stale },
+    ] as AdminTask[]);
+    orch.init();
+
+    const patterns = store.get<AdminPattern[]>('admin', 'patterns', []) ?? [];
+    expect(patterns.some((p) => p.pattern === 'paperwork-pile')).toBe(false);
+  });
+
+  // ── Wave 2 · renewal cluster ──────────────────────────────────────────────
+
+  it('emits a renewal-cluster offer when 2+ renewals land the same month', () => {
+    store.set('admin', 'tasks', [] as AdminTask[]);
+    // NOW = 2026-05-09; +35d = 2026-06-13, +38d = 2026-06-16 → same month.
+    const a = isoFromNow(35);
+    const b = isoFromNow(38);
+    const monthKey = a.slice(0, 7);
+    expect(b.slice(0, 7)).toBe(monthKey); // guard: same month for the fixture
+    store.set('admin', 'renewals', [
+      { id: 'c1', renewalType: 'passport', dueDate: a, addedAt: NOW },
+      { id: 'c2', renewalType: 'license', dueDate: b, addedAt: NOW },
+    ]);
+    orch.init();
+
+    const patterns = store.get<AdminPattern[]>('admin', 'patterns', []) ?? [];
+    const cluster = patterns.find((p) => p.pattern === `renewal-cluster:${monthKey}`);
+    expect(cluster).toBeDefined();
+    expect(cluster!.actionKind).toBe('batch_block');
+    expect(cluster!.renewalIds).toEqual(['c1', 'c2']);
+    expect(typeof cluster!.batchFireAtMs).toBe('number');
+    expect(Number.isFinite(cluster!.batchFireAtMs)).toBe(true);
+  });
+
   it('emits a stale-decision offer (surface_decision) after ~14 days', () => {
     store.set('admin', 'tasks', [] as AdminTask[]);
     store.set('admin', 'decisions', [
