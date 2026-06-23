@@ -201,6 +201,15 @@ export const DEFAULT_CADENCE_COPY: Record<string, CadenceCopyTemplates> = {
       (l) => ({ title: `${l} window` }),
     ],
   },
+  chores: {
+    category: 'PATTERN_ALERT',
+    actionUrl: '/chores',
+    variants: [
+      (l) => ({ title: `${l} — usually done by now` }),
+      (l) => ({ title: `${l} is about due` }),
+      (l) => ({ title: `time for ${l} again` }),
+    ],
+  },
 };
 
 // ─── persistence ────────────────────────────────────────────────────────

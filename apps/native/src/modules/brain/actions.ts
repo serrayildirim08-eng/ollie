@@ -41,6 +41,9 @@ import { syncToStore as syncWorkToStore } from '../work/bridge';
 import { tasks as adminTasks, recurringDecisions } from '../admin/repo';
 import { migrateAdmin } from '../admin/migrate';
 import { syncToStore as syncAdminToStore } from '../admin/bridge';
+import { chores as choresRepo } from '../chores/repo';
+import { migrateChores } from '../chores/migrate';
+import { syncToStore as syncChoresToStore } from '../chores/bridge';
 import { listHarmEvents } from './harm';
 import { scheduleAt } from '../../notify/systemNotify';
 import { OLLIE_REMINDER_CATEGORY } from '../../notify/notificationActions';
@@ -59,7 +62,7 @@ async function getStore() {
 /** Re-run the work + admin bridges so module stores + the brain surface
  *  recompute off freshly-mutated rows. Best-effort: a mirror failure never
  *  undoes the underlying write. */
-async function refreshBridges(opts: { work?: boolean; admin?: boolean }): Promise<void> {
+async function refreshBridges(opts: { work?: boolean; admin?: boolean; chores?: boolean }): Promise<void> {
   try {
     const store = await getStore();
     if (opts.work) {
@@ -67,6 +70,9 @@ async function refreshBridges(opts: { work?: boolean; admin?: boolean }): Promis
     }
     if (opts.admin) {
       try { await syncAdminToStore(store); } catch { /* non-fatal */ }
+    }
+    if (opts.chores) {
+      try { await syncChoresToStore(store); } catch { /* non-fatal */ }
     }
   } catch {
     // store unavailable (e.g. unit test) — the DB write already landed.
@@ -298,6 +304,24 @@ export async function executeAction(action: NoticingAction): Promise<boolean> {
           `batch:${created.id}`,
         );
         await refreshBridges({ admin: true });
+        return true;
+      }
+
+      case 'mark_chore_done': {
+        // Chore-due offer: mark the recurring chore done — appends a completion
+        // event + resets its cadence clock so it stops surfacing until the next
+        // window. Re-running the chores bridge re-mirrors the registry so the
+        // watcher drops the (now satisfied) offer on its next recompute.
+        const id = (action.payload.choreId ?? '').toString().trim();
+        if (!id) return false;
+        await migrateChores();
+        // markDone keys off the chore NAME (it's the cadence key); resolve the
+        // name from the id so the completion lands on the right row.
+        const all = await choresRepo.list();
+        const target = all.find((c) => c.id === id);
+        if (!target) return false;
+        await choresRepo.markDone(target.name);
+        await refreshBridges({ chores: true });
         return true;
       }
 

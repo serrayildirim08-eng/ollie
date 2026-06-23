@@ -31,6 +31,7 @@ import {
   buildBreakDownTaskAction,
   buildBatchBlockAction,
   buildArchiveTaskAction,
+  buildMarkChoreDoneAction,
   type ScoredNoticing,
   type CopyFacts,
   type CopyActionKind,
@@ -59,6 +60,8 @@ const OFFER_ACTION_KINDS: readonly CopyActionKind[] = [
   'batch_block',
   // ── dateless ladder final tier ──
   'archive_task',
+  // ── chores ──
+  'mark_chore_done',
 ] as const;
 
 /** Read the offer action a detector attached directly to the candidate's facts. */
@@ -183,6 +186,14 @@ export function actionForNoticing(n: ScoredNoticing, lang: AppLang): NoticingAct
       if (mod !== 'admin' && mod !== 'work') return null;
       return buildArchiveTaskAction(mod, factString(n, 'taskId'), lang);
     }
+    case 'mark_chore_done':
+      // chore-due offer → mark the recurring chore done (resets its clock).
+      // The chores orchestrator attaches the registry id + name to the facts.
+      return buildMarkChoreDoneAction(
+        factString(n, 'choreId'),
+        factString(n, 'choreName'),
+        lang,
+      );
     default:
       return null;
   }

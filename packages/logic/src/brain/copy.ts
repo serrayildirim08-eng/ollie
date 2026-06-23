@@ -57,6 +57,7 @@ export type CopyKind =
   | 'chronic_deferral' // same task put off repeatedly — offer a smaller first step.
   | 'renewal_cluster' // 2+ renewals land the same month — offer to batch them.
   | 'task_archive' // a date-less task survived the whole reminder ladder — offer to archive.
+  | 'chore_due' // a recurring household chore is due by its cadence — offer to mark it done.
   | 'generic';
 
 /**
@@ -86,7 +87,8 @@ export type CopyActionKind =
   | 'surface_tasks'
   | 'break_down_task'
   | 'batch_block'
-  | 'archive_task';
+  | 'archive_task'
+  | 'mark_chore_done';
 
 // ─── kind resolution ─────────────────────────────────────────────────────────
 
@@ -104,6 +106,7 @@ export function copyKindOf(input: { category?: string | null; module?: string | 
   if (cat.includes('chronic-deferral') || cat.includes('chronic_deferral')) return 'chronic_deferral';
   if (cat.includes('renewal-cluster') || cat.includes('renewal_cluster')) return 'renewal_cluster';
   if (cat.includes('task-archive') || cat.includes('task_archive')) return 'task_archive';
+  if (cat.includes('chore')) return 'chore_due';
   if (cat.includes('decision')) return 'decision';
   if (cat.includes('spoiled')) return 'spoiled';
   if (cat.includes('bill') || cat.includes('late')) return 'bill';
@@ -131,6 +134,7 @@ const ACTION_DESCRIPTION: Record<CopyActionKind, string> = {
   break_down_task: 'you can offer to break it into a smaller first step',
   batch_block: 'you can offer to batch them into one block',
   archive_task: 'you can ask whether to keep it or archive it',
+  mark_chore_done: 'you can offer to mark the chore done for today',
 };
 
 /**
@@ -274,6 +278,13 @@ const FALLBACK: Record<CopyKind, Record<AppLang, Phrase>> = {
       typeof f.days === 'number' && f.days > 0
         ? `geç saatte kafein uykunu yaklaşık ${Math.round(f.days)} dakika geciktiriyor.`
         : `geç saatte kafein uykunu biraz geciktiriyor.`,
+  },
+  // A recurring household chore has reached its cadence. Name it + offer to
+  // mark it done — calm, one question, no nagging.
+  chore_due: {
+    en: (f) => `${itemOr(f, 'a chore')}'s about due — want to mark it done?`,
+    es: (f) => `${itemOr(f, 'una tarea')} toca pronto — ¿la marco como hecha?`,
+    tr: (f) => `${itemOr(f, 'bir iş')} yaklaştı — yaptım diye işaretleyeyim mi?`,
   },
   generic: {
     en: () => `something might be worth a glance.`,

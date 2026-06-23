@@ -82,6 +82,7 @@ export {
   buildBreakDownTaskAction,
   buildBatchBlockAction,
   buildArchiveTaskAction,
+  buildMarkChoreDoneAction,
 } from './actions';
 export type {
   ActionKind,
@@ -94,5 +95,6 @@ export type {
   BreakDownTaskPayload,
   BatchBlockPayload,
   ArchiveTaskPayload,
+  MarkChoreDonePayload,
   NoticingAction,
 } from './actions';

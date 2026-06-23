@@ -9,6 +9,7 @@
  */
 import type { ComponentType } from 'react';
 import { GroceryBox } from '../modules/grocery';
+import { ChoresBox } from '../modules/chores';
 import { PetsBox } from '../modules/pets';
 import { BodyBox } from '../modules/body';
 import { MoodBox } from '../modules/mood';
@@ -36,6 +37,7 @@ const COMPONENTS: Record<string, ComponentType> = {
   goals: GoalsBox,
   partner: PartnerBox,
   grocery: GroceryBox,
+  chores: ChoresBox,
   pets: PetsBox,
   work: WorkBox,
   admin: AdminBox,

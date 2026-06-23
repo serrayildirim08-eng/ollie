@@ -33,6 +33,7 @@ import { habitsHandler } from './habits';
 import { goalsHandler } from './goals';
 import { medicationHandler } from './medication';
 import { cycleHandler } from './cycle';
+import { choresHandler } from './chores';
 
 // ─── helpers ──────────────────────────────────────────────────────────────
 
@@ -104,6 +105,7 @@ export const stubHandlers: Record<Module, ModuleHandler<Module>> = {
   goals: goalsHandler as unknown as ModuleHandler<Module>,
   medication: medicationHandler as unknown as ModuleHandler<Module>,
   cycle: cycleHandler as unknown as ModuleHandler<Module>,
+  chores: choresHandler as unknown as ModuleHandler<Module>,
   crisis: crisisHandler as unknown as ModuleHandler<Module>,
   dump_only: dumpOnlyHandler as unknown as ModuleHandler<Module>,
 };

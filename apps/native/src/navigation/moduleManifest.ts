@@ -35,6 +35,7 @@ export const MODULE_META: ModuleMeta[] = [
   { id: 'partner', label: 'Partner', hint: 'an intimate window', group: 'you', flag: 'partner' },
   // ─── your stuff ──────────────────────────────────────────────────────────
   { id: 'grocery', label: 'Grocery', hint: 'pantry + shopping', group: 'your-stuff' },
+  { id: 'chores', label: 'Chores', hint: 'cleaning + upkeep', group: 'your-stuff' },
   { id: 'pets', label: 'Pets', hint: 'tontin + pinpon', group: 'your-stuff' },
   // ─── your responsibilities ───────────────────────────────────────────────
   { id: 'work', label: 'Work', hint: 'tasks + deadlines', group: 'your-responsibilities' },

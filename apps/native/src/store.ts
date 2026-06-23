@@ -55,6 +55,7 @@ import { enumerateCadences as enumerateGoals } from './modules/goals';
 import { enumerateCadences as enumerateAdmin } from './modules/admin';
 import { enumerateCadences as enumerateCycle } from './modules/cycle';
 import { enumerateCadences as enumerateMedication } from './modules/medication';
+import { enumerateCadences as enumerateChores } from './modules/chores';
 
 runMigrations(browserAdapter);
 export const store = createStore(browserAdapter);
@@ -102,6 +103,7 @@ const cadenceSources: Record<string, CadenceSourceFn> = {
   admin: withDevLog('admin', enumerateAdmin),
   cycle: withDevLog('cycle', enumerateCycle),
   medication: withDevLog('medication', enumerateMedication),
+  chores: withDevLog('chores', enumerateChores),
 };
 
 /**

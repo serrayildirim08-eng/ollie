@@ -39,7 +39,7 @@ export const POSTPONE_MS = DAY_MS;
 const PATTERN_NAMESPACES = [
   'admin', 'body', 'goals', 'grocery', 'habits',
   'journal', 'pets', 'work', 'sleep', 'finance',
-  'cycle', 'medication',
+  'cycle', 'medication', 'chores',
 ] as const;
 
 /** A tolerant pattern-card row as stored under `<ns>.patterns`. */
@@ -119,6 +119,8 @@ const OFFER_FACT_KEYS = [
   'sourceTaskId', // chronic deferral (synthesized) → same, alternate key.
   'batchLabel', // renewal cluster → the batch block + reminder label.
   'taskModule', // dateless ladder archive → which repo the task lives in.
+  'choreId', // chore-due offer → the chores registry id to mark done.
+  'choreName', // chore-due offer → the chore name (for copy / traceability).
 ] as const;
 
 /** ARRAY (string[]) offer fields — wave-2 offers carry id lists. */

@@ -30,7 +30,9 @@ export type ActionKind =
   | 'break_down_task' // chronic deferral → create one smaller first-step task.
   | 'batch_block' // renewal cluster → block one day + schedule a reminder.
   // ── dateless escalation ladder (final tier) ──
-  | 'archive_task'; // a date-less task survived the full ladder → archive/remove it.
+  | 'archive_task' // a date-less task survived the full ladder → archive/remove it.
+  // ── chores ──
+  | 'mark_chore_done'; // a recurring chore is due → mark it done (resets its clock).
 
 /** Payload for `add_to_grocery_list`: the item names to put on the list. */
 export interface AddToGroceryListPayload {
@@ -124,6 +126,18 @@ export interface ArchiveTaskPayload {
   taskId: string;
 }
 
+/**
+ * Payload for `mark_chore_done` (chore-due offer): the registry id of the
+ * recurring chore that's due. The executor marks it done, which appends a
+ * completion event + resets the chore's cadence clock.
+ */
+export interface MarkChoreDonePayload {
+  /** The chores registry row id to mark done. */
+  choreId: string;
+  /** The chore name (e.g. "vacuum") — for copy / traceability. */
+  choreName?: string;
+}
+
 /** Discriminated payload union, keyed by {@link ActionKind}. */
 export type ActionPayload =
   | ({ kind: 'add_to_grocery_list' } & AddToGroceryListPayload)
@@ -133,7 +147,8 @@ export type ActionPayload =
   | ({ kind: 'surface_tasks' } & SurfaceTasksPayload)
   | ({ kind: 'break_down_task' } & BreakDownTaskPayload)
   | ({ kind: 'batch_block' } & BatchBlockPayload)
-  | ({ kind: 'archive_task' } & ArchiveTaskPayload);
+  | ({ kind: 'archive_task' } & ArchiveTaskPayload)
+  | ({ kind: 'mark_chore_done' } & MarkChoreDonePayload);
 
 /**
  * A suggested action attached to a noticing. PURE + serialisable: the native
@@ -189,6 +204,11 @@ const ACCEPT_LABEL: Record<ActionKind, Record<AppLang, string>> = {
     en: 'archive it',
     es: 'archívalo',
     tr: 'arşivle',
+  },
+  mark_chore_done: {
+    en: 'mark it done',
+    es: 'marcar como hecho',
+    tr: 'yaptım işaretle',
   },
 };
 
@@ -356,5 +376,24 @@ export function buildArchiveTaskAction(
     kind: 'archive_task',
     label: actionLabel('archive_task', lang),
     payload: { kind: 'archive_task', module, taskId: id },
+  };
+}
+
+/**
+ * Build the mark-chore-done action descriptor for the chore-due offer. Returns
+ * null when `choreId` is blank (nothing concrete to mark done).
+ */
+export function buildMarkChoreDoneAction(
+  choreId: string,
+  choreName: string,
+  lang: AppLang,
+): NoticingAction | null {
+  const id = (choreId ?? '').toString().trim();
+  if (!id) return null;
+  const name = (choreName ?? '').toString().trim();
+  return {
+    kind: 'mark_chore_done',
+    label: actionLabel('mark_chore_done', lang),
+    payload: { kind: 'mark_chore_done', choreId: id, ...(name ? { choreName: name } : {}) },
   };
 }

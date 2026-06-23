@@ -31,6 +31,7 @@ const MODULES: Module[] = [
   'goals',
   'grocery',
   'medication',
+  'chores',
   'dump_only',
 ];
 
@@ -59,6 +60,7 @@ MODULES → ACTIONS
 - goals: progress_note | create_goal | milestone_hit | obstacle_note
 - grocery: pantry_add | pantry_use | pantry_depleted | shopping_list_add | pantry_low_flag | meal_request | recipe_cooked
 - medication: log_dose | missed_dose | side_effect_note
+- chores: chore_done | add_chore | add_recurring_chore
 - dump_only: archive_only
 
 ROUTING RULES (drive MODULE choice; Layer 2 owns full field extraction)
@@ -89,7 +91,11 @@ Other module-choice hints:
 - admin.log_renewal (paperwork w/ expiry) vs admin.recurring_decision (cancel-or-keep).
 - grocery FUTURE intent to acquire ("need to buy", "have to get", "need", "pick up", "buy", "get me", "gotta grab", "almam lazım", "lazım", "comprar", "tengo que comprar") → shopping_list_add — EVEN for household/cleaning/toiletry items (trash bags, detergent, paper towels, toilet paper). Future intent OVERRIDES the consumable→pantry_add rule (that rule is for PAST purchases only).
 - grocery.pantry_low_flag ("running low") vs shopping_list_add ("need to buy") vs pantry_depleted ("out of"/"ran out"/"bitti"/"se acabó") vs pantry_add (PAST "bought/got/picked up").
-- pets.log_supplement (named vitamin/calcium) vs pets.log_care (generic).
+- CHORES = household cleaning/upkeep tasks (vacuuming, dishes, laundry, mopping, taking out trash, cleaning a room, changing sheets, watering plants). DISTINCT from grocery (buying/consuming items) and admin (paperwork/appointments/calls).
+  · PAST-TENSE done ("vacuumed", "cleaned the kitchen", "did the dishes", "took out the trash", "süpürdüm", "limpié la cocina") → chores.chore_done { chore } (resets a recurring chore's clock).
+  · FUTURE one-off ("need to vacuum", "clean the bathroom", "have to do the dishes", "banyoyu temizlemem lazım") → chores.add_chore { chore }.
+  · RECURRING with a cadence ("do laundry every week", "vacuum every 7 days", "her hafta çamaşır", "mop weekly") → chores.add_recurring_chore { chore, cadenceDays:number }. Map weekly→7, daily→1, every N days→N, monthly→30, biweekly→14.
+  · A chore mentioned with a PRICE or a purchased item is NOT a chore (buying a vacuum → finance/grocery, not chores).
 - body.log_movement covers ALL physical activity (walk/run/yoga/lift/stretch/swim).
 - MOOD vs body vs habits (mood owns feelings/energy/self-talk):
   · Transient EMOTION (anxious, sad, happy, numb, overwhelmed, scared, "X is scaring me", "did nothing today" as a feeling) → mood.log_mood { label, valence:"pos"|"neu"|"neg" }.
@@ -145,6 +151,13 @@ MINI EXAMPLES:
 - "have to get more detergent" → grocery.shopping_list_add { item:"detergent" }
 - "out of lemons" → grocery.pantry_depleted { item:"lemons" }
 - "took 50mg sertraline" → medication.log_dose { medName:"sertraline", dose:"50mg" }
+- "cleaned the kitchen" → chores.chore_done { chore:"clean the kitchen" }
+- "vacuumed" → chores.chore_done { chore:"vacuum" }
+- "did the dishes" → chores.chore_done { chore:"do the dishes" }
+- "need to vacuum" → chores.add_chore { chore:"vacuum" }
+- "clean the bathroom" → chores.add_chore { chore:"clean the bathroom" }
+- "do laundry every week" → chores.add_recurring_chore { chore:"do laundry", cadenceDays:7 }
+- "vacuum every 7 days" → chores.add_recurring_chore { chore:"vacuum", cadenceDays:7 }
 - "ugh today is weird" → dump_only.archive_only { reason:"no_module_match" }
 
 Confidence < 0.6 → dump_only.`;

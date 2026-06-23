@@ -21,6 +21,7 @@ export type Module =
   | 'goals'
   | 'grocery'
   | 'medication'
+  | 'chores'
   | 'dump_only';
 
 export type FragmentLanguage = 'tr' | 'en' | 'es' | 'mixed' | 'unknown';

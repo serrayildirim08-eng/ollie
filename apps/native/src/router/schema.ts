@@ -31,6 +31,7 @@ export type Module =
   | 'goals'
   | 'grocery'
   | 'medication'
+  | 'chores'
   | 'dump_only';  // catch-all: archive only, no module action
 
 // ─────────────────────────────────────────────────────────────────────
@@ -144,6 +145,7 @@ export type ActionPayload =
   | GoalsAction
   | GroceryAction
   | MedicationAction
+  | ChoresAction
   | DumpOnlyAction;
 
 // ── BODY ─────────────────────────────────────────────────────────────
@@ -356,6 +358,20 @@ export type MedicationAction =
   | { module: 'medication'; action: 'log_dose'; medName: string; dose?: string }
   | { module: 'medication'; action: 'missed_dose'; medName: string }
   | { module: 'medication'; action: 'side_effect_note'; medName: string; note: string };
+
+// ── CHORES ───────────────────────────────────────────────────────────
+// Household cleaning / upkeep tasks. Distinct from grocery (buying/using
+// items) and admin (paperwork/appointments). `chore` is the free-text name
+// ("vacuum", "clean the kitchen", "do laundry").
+//   - chore_done           — a chore was done (✓). Resets a recurring chore's
+//                            cadence clock; one-offs drop off the to-do list.
+//   - add_chore            — a one-off chore to do (checkable).
+//   - add_recurring_chore  — a chore with a cadence ("every N days").
+
+export type ChoresAction =
+  | { module: 'chores'; action: 'chore_done'; chore: string }
+  | { module: 'chores'; action: 'add_chore'; chore: string }
+  | { module: 'chores'; action: 'add_recurring_chore'; chore: string; cadenceDays?: number };
 
 // ── DUMP_ONLY · catch-all ────────────────────────────────────────────
 

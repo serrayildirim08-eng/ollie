@@ -26,6 +26,7 @@ import { createWorkOrchestrator } from './work';
 import { createGoalsOrchestrator } from './goals';
 import { createBurhanOrchestrator } from './burhan';
 import { createMedicationOrchestrator } from './medication';
+import { createChoresOrchestrator } from './chores';
 import { scheduleWeeklyReview } from './body-weekly';
 import { scheduleBodyCorrelationPass, runBodyCorrelationPass } from './body-correlations';
 import { createOrphanCueBridge } from './orphan-cue-bridge';
@@ -59,6 +60,12 @@ export { createWorkOrchestrator } from './work';
 export { createGoalsOrchestrator } from './goals';
 export { createBurhanOrchestrator } from './burhan';
 export { createMedicationOrchestrator } from './medication';
+export {
+  createChoresOrchestrator,
+  isRecordDue,
+  buildChoreDueCopy,
+} from './chores';
+export type { ChoreRecord, ChorePattern, ChoresOrchestratorOptions } from './chores';
 export {
   createOrphanCueBridge,
   appendCueTelemetry,
@@ -164,6 +171,7 @@ export interface RootOrchestrator extends Orchestrator {
   goals: ReturnType<typeof createGoalsOrchestrator>;
   burhan: ReturnType<typeof createBurhanOrchestrator>;
   medication: ReturnType<typeof createMedicationOrchestrator>;
+  chores: ReturnType<typeof createChoresOrchestrator>;
   orphanCueBridge: ReturnType<typeof createOrphanCueBridge>;
   matterRouting: ReturnType<typeof createMatterRoutingOrchestrator>;
   cadenceScanner: CadenceScanner;
@@ -229,6 +237,7 @@ export function createOrchestrator(
   const medicationOrch = createMedicationOrchestrator(store, {
     scheduleNotification: opts.scheduleNotification,
   });
+  const choresOrch = createChoresOrchestrator(store);
   // Audit #3: gives every orphan cross-module cue a real consumer.
   const orphanCueBridge = createOrphanCueBridge(store);
   // WORK-VISION Phase 2: batches dumps → matters (deterministic, no AI).
@@ -272,6 +281,7 @@ export function createOrchestrator(
     goals: goalsOrch,
     burhan: burhanOrch,
     medication: medicationOrch,
+    chores: choresOrch,
     orphanCueBridge,
     matterRouting: matterRoutingOrch,
     cadenceScanner,
@@ -291,6 +301,7 @@ export function createOrchestrator(
       goalsOrch.init();
       burhanOrch.init();
       medicationOrch.init();
+      choresOrch.init();
       orphanCueBridge.init();
       matterRoutingOrch.init();
       cadenceScanner.init();
@@ -333,6 +344,7 @@ export function createOrchestrator(
       goalsOrch.teardown();
       burhanOrch.teardown();
       medicationOrch.teardown();
+      choresOrch.teardown();
       orphanCueBridge.teardown();
       matterRoutingOrch.teardown();
       cadenceScanner.teardown();
