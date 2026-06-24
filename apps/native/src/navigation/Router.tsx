@@ -41,6 +41,9 @@ import { DumpScreen } from "../dump";
 import { MODULE_MANIFEST, MODULE_GROUP_META } from "./moduleRegistry";
 import { HouseholdRoom } from "../rooms/HouseholdRoom";
 import { HealthRoom } from "../rooms/HealthRoom";
+import { GrowthRoom } from "../rooms/GrowthRoom";
+import { ResponsibilitiesRoom } from "../rooms/ResponsibilitiesRoom";
+import { MoneyRoom } from "../rooms/MoneyRoom";
 import { TodoScreen } from "../todo/TodoScreen";
 import { useServerReminderBridge } from "../notify/serverReminderBridge";
 
@@ -114,6 +117,9 @@ export function Router() {
           <Route path="modules" element={<ModulesIndex />} />
           <Route path="room/household" element={<HouseholdRoom />} />
           <Route path="room/health" element={<HealthRoom />} />
+          <Route path="room/growth" element={<GrowthRoom />} />
+          <Route path="room/responsibilities" element={<ResponsibilitiesRoom />} />
+          <Route path="room/money" element={<MoneyRoom />} />
           <Route path="todo" element={<TodoScreen />} />
           <Route path="settings" element={<SettingsScreen />} />
           <Route path="box/:id" element={<BoxPlaceholder />} />
@@ -139,10 +145,11 @@ function ModulesIndex() {
   // Build the three rooms from the shared manifest (audit #178) — group
   // metadata gives display order + asides; items come from the manifest,
   // filtered by feature flag.
-  // grocery + chores live inside the Household ROOM; sleep + cycle + body +
-  // medication + mood live inside the Health ROOM. All are lifted out of the
-  // flat module list here (their /box routes still exist, reached from the
-  // room). Other rooms aren't built yet — those modules stay as-is.
+  // Every module now lives in a room (their /box routes still exist, reached
+  // from the room). Household = grocery + chores; Health = sleep + cycle +
+  // body + medication + mood; Growth = habits + goals; Responsibilities =
+  // work + admin; Money = finance. All are lifted out of the flat module list
+  // here, so the flat groups render empty/near-empty by design.
   const ROOMED_IDS = new Set([
     'grocery',
     'chores',
@@ -151,6 +158,11 @@ function ModulesIndex() {
     'body',
     'medication',
     'mood',
+    'habits',
+    'goals',
+    'work',
+    'admin',
+    'finance',
   ]);
   const visible = MODULE_MANIFEST.filter(
     (m) =>
@@ -209,6 +221,69 @@ function ModulesIndex() {
               <Text scale="body">Household</Text>
               <Text scale="caption" color={colors.inkFaint}>
                 chores · grocery · pantry
+              </Text>
+            </Row>
+          </Box>
+        </Link>
+      </Stack>
+
+      <Stack gap={8}>
+        <Text
+          scale="caption"
+          color={colors.inkFaint}
+          style={{ ...SMCP_STYLE, letterSpacing: "0.20em" }}
+        >
+          growth
+        </Text>
+        <p style={ASIDE_STYLE}>your habits + what you&rsquo;re moving toward.</p>
+        <Link to="/room/growth" style={{ textDecoration: "none", color: "inherit" }}>
+          <Box bg="cream" radius="card" shadow="raised" style={{ padding: "16px 18px" }}>
+            <Row gap={12} align="baseline" justify="space-between">
+              <Text scale="body">Growth</Text>
+              <Text scale="caption" color={colors.inkFaint}>
+                habits · goals
+              </Text>
+            </Row>
+          </Box>
+        </Link>
+      </Stack>
+
+      <Stack gap={8}>
+        <Text
+          scale="caption"
+          color={colors.inkFaint}
+          style={{ ...SMCP_STYLE, letterSpacing: "0.20em" }}
+        >
+          responsibilities
+        </Text>
+        <p style={ASIDE_STYLE}>the things that won&rsquo;t wait — to-dos, focus, renewals.</p>
+        <Link to="/room/responsibilities" style={{ textDecoration: "none", color: "inherit" }}>
+          <Box bg="cream" radius="card" shadow="raised" style={{ padding: "16px 18px" }}>
+            <Row gap={12} align="baseline" justify="space-between">
+              <Text scale="body">Responsibilities</Text>
+              <Text scale="caption" color={colors.inkFaint}>
+                to-do · work · admin
+              </Text>
+            </Row>
+          </Box>
+        </Link>
+      </Stack>
+
+      <Stack gap={8}>
+        <Text
+          scale="caption"
+          color={colors.inkFaint}
+          style={{ ...SMCP_STYLE, letterSpacing: "0.20em" }}
+        >
+          money
+        </Text>
+        <p style={ASIDE_STYLE}>what&rsquo;s moving — the week and the bills, no budgets.</p>
+        <Link to="/room/money" style={{ textDecoration: "none", color: "inherit" }}>
+          <Box bg="cream" radius="card" shadow="raised" style={{ padding: "16px 18px" }}>
+            <Row gap={12} align="baseline" justify="space-between">
+              <Text scale="body">Money</Text>
+              <Text scale="caption" color={colors.inkFaint}>
+                spending · bills
               </Text>
             </Row>
           </Box>
