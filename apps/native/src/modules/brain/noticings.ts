@@ -16,7 +16,7 @@
  * failure yields an empty surface rather than throwing into the UI.
  */
 
-import { selectNoticings } from '@ollie/logic/brain';
+import { selectNoticings, copyKindOf } from '@ollie/logic/brain';
 import type { NoticingCandidate, ScoredNoticing } from '@ollie/logic/brain';
 import type { Store } from '@ollie/store';
 
@@ -382,11 +382,20 @@ export async function selectTodaysNoticings(
       loadLearnedMap(),
     ]);
     const capacity = store.get<CapacityState>('shared', 'capacity', {})?.level ?? 'medium';
-    return selectNoticings(candidates, now, {
+    const selected = selectNoticings(candidates, now, {
       capacity,
       excludeIds: exclude,
       // USER PIN > learned (if confident) > cold-start, applied per candidate.
       resolveDeferability: makeDeferabilityResolver(learnedMap),
+    });
+    // Drop "generic" noise: a candidate whose category maps to no specific copy
+    // kind would only ever render the vague fallback ("something might be worth
+    // a glance") — that's not worth a card. Keep one only if it carries a real
+    // offered action (then the fallback copy + an accept affordance is useful).
+    return selected.filter((n) => {
+      if (copyKindOf({ category: n.category, module: n.module }) !== 'generic') return true;
+      const ak = (n.facts as { actionKind?: unknown } | null | undefined)?.actionKind;
+      return typeof ak === 'string' && ak.length > 0;
     });
   } catch (err) {
     console.error('[brain] selectTodaysNoticings failed (non-fatal):', err);
