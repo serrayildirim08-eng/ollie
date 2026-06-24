@@ -46,6 +46,7 @@ import { ResponsibilitiesRoom } from "../rooms/ResponsibilitiesRoom";
 import { MoneyRoom } from "../rooms/MoneyRoom";
 import { TodoScreen } from "../todo/TodoScreen";
 import { useServerReminderBridge } from "../notify/serverReminderBridge";
+import { useApnsPushRegistration } from "../notify/apnsPushRegistration";
 
 const SMCP_STYLE: React.CSSProperties = {
   fontVariantCaps: "all-small-caps",
@@ -97,6 +98,9 @@ export function Router() {
   // cron → APNs). Mounted here under <SignedIn> so it always has a Clerk
   // identity to resolve. No-op until a device push token exists.
   useServerReminderBridge();
+  // On native iOS, register the APNs device token to the push worker once
+  // signed in (no-op in browser / when unconfigured).
+  useApnsPushRegistration();
   // Partner is deferred out of v1 behind a feature flag (audit #10). Flagged
   // manifest entries only mount their route when the flag is on. Read all
   // flags here (only 'partner' today) so the routes can be derived below.
