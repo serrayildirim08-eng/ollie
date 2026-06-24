@@ -80,6 +80,23 @@ const ADDRESS_REGEX =
 // JS supports lookbehind in modern engines; keep pattern simple.
 const NUMERIC_REGEX = /(?<![$€₺£¥])(?<!\d[.,])\b\d{4,}\b(?![.,]\d|%|k\b|M\b)/g;
 
+// Year-context cues, checked around a 4-digit number before treating it as a
+// calendar year rather than a secret code. Covers EN/ES/TR keywords ("year",
+// "since", "año", "yıl"…), the © symbol, month names, and a leading "in".
+const YEAR_WORD_REGEX =
+  /(?:©|copyright|\b(?:year|years|since|circa|fy|in|by|during|established|est|founded|born|died|a[ñn]o|a[ñn]os|desde|yıl|yili|yılında|ocak|şubat|mart|nisan|mayıs|haziran|temmuz|ağustos|eylül|ekim|kasım|aralık|jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?|ene(?:ro)?|abr(?:il)?|ago(?:sto)?|dic(?:iembre)?)\b)/i;
+
+// True when text immediately around `match` (at `offset`, length `len`)
+// corroborates it being a calendar year: a year-cue word within a small window
+// on either side, or an adjacent date separator forming a Y-M-D / D-M-Y date.
+function isYearContext(full: string, offset: number, len: number): boolean {
+  const before = full.slice(Math.max(0, offset - 16), offset);
+  const after = full.slice(offset + len, offset + len + 16);
+  // Adjacent date separator with another numeric part → "2024-01-05", "01/02/2024".
+  if (/[-/.]\s*\d{1,4}\s*$/.test(before) || /^\s*[-/.]\s*\d{1,2}\b/.test(after)) return true;
+  return YEAR_WORD_REGEX.test(before) || YEAR_WORD_REGEX.test(after);
+}
+
 // ─── sensitive-category regexes ───────────────────────────────────────────────
 //
 // These fire BEFORE the name pass so a phrase like "cancer diagnosis for John"
@@ -294,10 +311,15 @@ export function scrubPII(text: string, locale: Locale): ScrubResult {
   });
 
   // 6. Numeric — 4+ digit sequences not adjacent to currency
-  out = out.replace(NUMERIC_REGEX, (match) => {
-    // Skip if this is clearly a year (1900-2099) — those are research signal
+  out = out.replace(NUMERIC_REGEX, (match: string, offset: number, full: string) => {
+    // A bare 4-digit number in the year range (1900-2099) is research signal
+    // ONLY when surrounding text corroborates it as a year. Without context a
+    // 4-digit number is just as likely to be a PIN, OTP, or 2FA code, so we
+    // redact it like any other number to avoid leaking secrets (audit #171).
     const n = parseInt(match, 10);
-    if (match.length === 4 && n >= 1900 && n <= 2099) return match;
+    if (match.length === 4 && n >= 1900 && n <= 2099 && isYearContext(full, offset, match.length)) {
+      return match;
+    }
     redactions.push({ type: 'NUMERIC', original: match });
     return '[NUMERIC]';
   });

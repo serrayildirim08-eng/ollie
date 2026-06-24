@@ -90,12 +90,15 @@ export interface CrisisSignal {
   tier: CrisisTier;
   /** Which lexicons fired. */
   languages: CrisisLanguage[];
-  /** First matched entry per lexicon, for audit. */
+  /**
+   * First matched entry per lexicon, for audit. Lexicon coordinates ONLY
+   * (tier + language + pattern id) — the worker never sends the matched
+   * raw text, so the client never receives crisis-dump content (audit #77).
+   */
   matches: Array<{
     language: CrisisLanguage;
     tier: CrisisTier;
     pattern: string;
-    line: string;
   }>;
 }
 
