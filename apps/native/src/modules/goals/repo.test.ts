@@ -101,6 +101,41 @@ describe('goals.create', () => {
   });
 });
 
+describe('goals.ensure (active-goal cap — audit #69)', () => {
+  it('throws GoalCapError when inserting a NEW goal at ACTIVE_GOAL_CAP', async () => {
+    for (let i = 0; i < ACTIVE_GOAL_CAP; i++) {
+      await goals.create({ name: `goal ${i}` });
+    }
+    expect(await goals.activeCount()).toBe(ACTIVE_GOAL_CAP);
+
+    await expect(goals.ensure('one too many')).rejects.toBeInstanceOf(GoalCapError);
+    // Nothing slipped past the cap via ensure().
+    expect(await goals.activeCount()).toBe(ACTIVE_GOAL_CAP);
+  });
+
+  it('still matches an EXISTING goal at cap (no new active goal added)', async () => {
+    for (let i = 0; i < ACTIVE_GOAL_CAP; i++) {
+      await goals.create({ name: `goal ${i}` });
+    }
+    // Re-ensuring an existing name is fine even at cap — it adds nothing.
+    const got = await goals.ensure('goal 0');
+    expect(got.name).toBe('goal 0');
+    expect(await goals.activeCount()).toBe(ACTIVE_GOAL_CAP);
+  });
+
+  it('backfills why on an existing goal at cap without throwing', async () => {
+    await goals.create({ name: 'learn french' }); // no why
+    for (let i = 1; i < ACTIVE_GOAL_CAP; i++) {
+      await goals.create({ name: `goal ${i}` });
+    }
+    expect(await goals.activeCount()).toBe(ACTIVE_GOAL_CAP);
+
+    const got = await goals.ensure('learn french', 'move to paris');
+    expect(got.why).toBe('move to paris');
+    expect(await goals.activeCount()).toBe(ACTIVE_GOAL_CAP);
+  });
+});
+
 describe('goals.canDelete (low-mood gate)', () => {
   it('fails open (allowed) with an empty mood log', async () => {
     const g = await goals.create({ name: 'learn spanish' });

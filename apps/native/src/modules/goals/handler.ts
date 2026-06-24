@@ -13,7 +13,7 @@
 
 import type { GoalsAction, ModuleHandler, HandlerResult } from '../../router/schema';
 import { migrateGoals } from './migrate';
-import { goals, events } from './repo';
+import { goals, events, GoalCapError } from './repo';
 
 export const goalsHandler: ModuleHandler<'goals'> = {
   module: 'goals',
@@ -27,13 +27,27 @@ export const goalsHandler: ModuleHandler<'goals'> = {
 
     switch (p.action) {
       case 'create_goal': {
-        const goal = await goals.ensure(p.what, p.why ?? null);
-        return {
-          ok: true,
-          note: `added goal "${goal.name}"`,
-          deepLink: '/box/goals',
-          undo: () => goals.remove(goal.id),
-        };
+        try {
+          const goal = await goals.ensure(p.what, p.why ?? null);
+          return {
+            ok: true,
+            note: `added goal "${goal.name}"`,
+            deepLink: '/box/goals',
+            undo: () => goals.remove(goal.id),
+          };
+        } catch (err) {
+          // At the active-goal cap a dump must NOT silently create another
+          // goal (it would skip the required why/obstacle/premortem capture).
+          // Refuse and point the user at the goals box to make room (brief G2).
+          if (err instanceof GoalCapError) {
+            return {
+              ok: false,
+              note: 'already at your goal limit — finish or drop one first',
+              deepLink: '/box/goals',
+            };
+          }
+          throw err;
+        }
       }
 
       case 'progress_note': {
@@ -89,8 +103,16 @@ export const goalsHandler: ModuleHandler<'goals'> = {
  */
 async function resolveGoalId(goalName: string | undefined): Promise<string | null> {
   if (!goalName || !goalName.trim()) return null;
-  const goal = await goals.ensure(goalName);
-  return goal.id;
+  try {
+    const goal = await goals.ensure(goalName);
+    return goal.id;
+  } catch (err) {
+    // At the active-goal cap `ensure` refuses to auto-create. For a note
+    // (progress / milestone / obstacle) that's fine — let it land in the
+    // unassigned bucket rather than dropping it or breaching the cap.
+    if (err instanceof GoalCapError) return null;
+    throw err;
+  }
 }
 
 function exhaustive(p: never): never {
