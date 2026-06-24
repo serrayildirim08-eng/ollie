@@ -40,6 +40,8 @@ import { colors, fonts } from '../../theme/tokens';
 import { WhenCaption } from '../../lib/WhenCaption';
 import { useModuleData } from '../../lib/useModuleData';
 import { PatternCards } from '../../patterns/PatternCards';
+import { CycleTree } from './CycleTree';
+import { cycleVisual } from './cycleVisual';
 import { migrateCycle } from './migrate';
 import { cycleCadence, cycleRepo } from './repo';
 import {
@@ -208,7 +210,11 @@ export function CycleBox(): JSX.Element {
         <PausedView onResume={() => void handleEndPregnancy()} />
       ) : isEmpty ? (
         <Stack gap={32} align="center">
-          <CycleRing day={1} phase="still learning" length={RING_LENGTH} bleeding={false} />
+          <CycleTree
+            {...cycleVisual(1, 'still learning', false)}
+            day={1}
+            phase="still learning"
+          />
           <span style={COLD_NOTE_STYLE}>
             <b style={{ fontWeight: 600 }}>nothing tracked yet.</b>{' '}
             <span style={{ color: colors.inkFaint }}>
@@ -219,14 +225,12 @@ export function CycleBox(): JSX.Element {
         </Stack>
       ) : (
         <Stack gap={56}>
-          {/* HERO — the phase ring */}
+          {/* HERO — the living olive tree (day + phase render below it) */}
           <Stack gap={20} align="center">
-            <CycleRing
+            <CycleTree
+              {...cycleVisual(ringDay, phaseLabel, current?.bleeding ?? false)}
               day={ringDay}
               phase={phaseLabel}
-              length={RING_LENGTH}
-              bleeding={current?.bleeding ?? false}
-              showLutealArc={(current?.daysSinceStart ?? 0) >= BLEEDING_WINDOW_DAYS}
             />
             <NowLine current={current} />
             <CadenceHint estimate={periodCadence} />
@@ -289,177 +293,6 @@ export function CycleBox(): JSX.Element {
         </Stack>
       )}
     </Stack>
-  );
-}
-
-// ─── ring ────────────────────────────────────────────────────────────────
-//
-// Geometry follows the cycle-v2 web ring exactly: 236×236 viewBox, r=100,
-// centre (118, 118). Day N rides the ring at angle -90° + (N/length)*360°
-// — 0 at the top, clockwise.
-
-const VIEW = 236;
-const CX = 118;
-const CY = 118;
-const R = 100;
-const CIRC = 2 * Math.PI * R;
-
-function ringPoint(day: number, length: number): { x: number; y: number } {
-  const frac = Math.max(0, Math.min(1, (day - 1) / Math.max(1, length)));
-  const angle = -Math.PI / 2 + frac * 2 * Math.PI;
-  return {
-    x: CX + R * Math.cos(angle),
-    y: CY + R * Math.sin(angle),
-  };
-}
-
-function CycleRing({
-  day,
-  phase,
-  length,
-  bleeding,
-  showLutealArc = false,
-  size = 236,
-}: {
-  day: number;
-  phase: string;
-  length: number;
-  bleeding: boolean;
-  showLutealArc?: boolean;
-  size?: number;
-}): JSX.Element {
-  const safeLength = Math.max(1, length);
-  const marker = ringPoint(day, safeLength);
-
-  // luteal arc covers the back half of the ring — drawn only once we're
-  // past the bleeding window so it never overlaps the bleeding-day ink.
-  // Mirrors the v2 web treatment where the arc only shows when warmed.
-  const lutealStartDay = Math.floor(safeLength / 2) + 1;
-  let arcDash: string | undefined;
-  let arcOffset: number | undefined;
-  if (showLutealArc) {
-    const startFrac = (lutealStartDay - 1) / safeLength;
-    const arcStart = startFrac * CIRC;
-    const arcLen = CIRC - arcStart;
-    arcDash = `${arcLen} ${arcStart}`;
-    arcOffset = -arcStart;
-  }
-
-  // ovulation point sits at ~mid-cycle, drawn only once warmed
-  const ovulationDay = Math.floor(safeLength / 2);
-  const ov = showLutealArc ? ringPoint(ovulationDay + 0.5, safeLength) : null;
-
-  // bleeding days carry the umber ink; the rest of the cycle sits in sage.
-  const markerInk = bleeding ? UMBER : colors.sage;
-
-  return (
-    <div
-      style={{
-        boxSizing: 'border-box',
-        position: 'relative',
-        width: size,
-        height: size,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}
-    >
-      <svg
-        width={size}
-        height={size}
-        viewBox={`0 0 ${VIEW} ${VIEW}`}
-        style={{ position: 'absolute', display: 'block' }}
-        aria-hidden
-      >
-        {/* full cycle track — quiet cream hairline ring */}
-        <circle
-          cx={CX}
-          cy={CY}
-          r={R}
-          fill="none"
-          stroke={colors.paper}
-          strokeWidth={9}
-        />
-
-        {/* luteal arc — sage, the back stretch */}
-        {arcDash && (
-          <circle
-            cx={CX}
-            cy={CY}
-            r={R}
-            fill="none"
-            stroke={colors.sage}
-            strokeWidth={9}
-            strokeLinecap="round"
-            strokeDasharray={arcDash}
-            strokeDashoffset={arcOffset}
-            transform={`rotate(-90 ${CX} ${CY})`}
-            opacity={0.55}
-          />
-        )}
-
-        {/* ovulation point — a small open ink ring */}
-        {ov && (
-          <circle
-            cx={ov.x}
-            cy={ov.y}
-            r={5.5}
-            fill="none"
-            stroke={colors.ink}
-            strokeWidth={2}
-          />
-        )}
-
-        {/* travelling day marker — umber when bleeding, sage otherwise.
-         *  Paper halo lifts it off the track ring without a hard edge. */}
-        <circle cx={marker.x} cy={marker.y} r={8} fill={markerInk} />
-        <circle
-          cx={marker.x}
-          cy={marker.y}
-          r={8}
-          fill="none"
-          stroke={colors.cream}
-          strokeWidth={3.5}
-        />
-      </svg>
-
-      <div
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          position: 'relative',
-        }}
-        role="img"
-        aria-label={`cycle day ${day}, ${phase}`}
-      >
-        <div
-          style={{
-            fontFamily: fonts.serif,
-            fontSize: 56,
-            fontWeight: 400,
-            color: colors.ink,
-            letterSpacing: '-0.03em',
-            lineHeight: 1,
-          }}
-        >
-          {day}
-        </div>
-        <div
-          style={{
-            marginTop: 8,
-            fontFamily: fonts.sans,
-            fontSize: 12,
-            color: colors.inkFaint,
-            fontWeight: 500,
-            letterSpacing: '0.10em',
-            textTransform: 'uppercase',
-          }}
-        >
-          {phase}
-        </div>
-      </div>
-    </div>
   );
 }
 
