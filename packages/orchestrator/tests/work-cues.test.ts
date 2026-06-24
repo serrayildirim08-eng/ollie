@@ -235,4 +235,114 @@ describe('work orchestrator · notification cues', () => {
     expect(captured.length).toBe(0);
     orch.teardown();
   });
+
+  // audit #8 — narrow time windows must fire on the clock tick, not only on a
+  // store-key change. The meeting is written OUTSIDE its 28–32 min window; no
+  // further store write occurs. Only the 60s tick can move `now` into the
+  // window and deliver the cue.
+  it('#5 meeting_30m fires on the clock tick with no store change (audit #8)', () => {
+    const captured: Captured[] = [];
+    const store = createStore(createMemoryAdapter());
+    let nowMs = NOW;
+    const orch = createWorkOrchestrator(store, {
+      now: () => nowMs,
+      scheduleNotification: (spec, fireAt) => { captured.push({ spec, fireAt }); },
+    });
+
+    // Meeting starts 45 min out — well outside the 28–32 min window right now.
+    const meeting: Meeting = {
+      id: 'm-tick',
+      start_at: NOW + 45 * MIN,
+      end_at: NOW + 75 * MIN,
+    };
+    store.set('work', 'meetings', [meeting]);
+    orch.init();
+    vi.advanceTimersByTime(600); // boot scan — meeting still 45 min away
+
+    expect(
+      captured.filter((c) => c.spec.dedupe_key.startsWith('work:meeting_30m:')).length,
+    ).toBe(0);
+
+    // Advance wall-clock + drive the 60s ticks until the meeting is ~30 min
+    // away (15 min later). No store write happens — the tick must catch it.
+    for (let i = 0; i < 15; i++) {
+      nowMs += MIN;
+      vi.advanceTimersByTime(MIN);
+    }
+
+    const hit = captured.find((c) => c.spec.dedupe_key.startsWith('work:meeting_30m:'));
+    expect(hit).toBeDefined();
+    expect(hit?.spec.title).toBe(WORK_NOTIFICATION_COPY.meeting_30m);
+
+    orch.teardown();
+  });
+
+  it('clock tick stops after teardown (audit #8)', () => {
+    const captured: Captured[] = [];
+    const store = createStore(createMemoryAdapter());
+    let nowMs = NOW;
+    const orch = createWorkOrchestrator(store, {
+      now: () => nowMs,
+      scheduleNotification: (spec, fireAt) => { captured.push({ spec, fireAt }); },
+    });
+    store.set('work', 'meetings', [
+      { id: 'm-td', start_at: NOW + 45 * MIN, end_at: NOW + 75 * MIN } as Meeting,
+    ]);
+    orch.init();
+    vi.advanceTimersByTime(600);
+    orch.teardown();
+
+    // After teardown the interval must be cleared — advancing into the window
+    // fires nothing.
+    for (let i = 0; i < 15; i++) {
+      nowMs += MIN;
+      vi.advanceTimersByTime(MIN);
+    }
+    expect(
+      captured.filter((c) => c.spec.dedupe_key.startsWith('work:meeting_30m:')).length,
+    ).toBe(0);
+  });
+
+  it('does not re-fire a cue after restart — dedupe persists in the store (audit #96)', () => {
+    // A meeting exactly 30 min out — fires meeting_30m on the cold-start scan.
+    const meeting: Meeting = {
+      id: 'm-restart',
+      title: 'standup',
+      start_at: NOW + 30 * MIN,
+      end_at: NOW + 45 * MIN,
+    };
+    const store = createStore(createMemoryAdapter());
+    store.set('work', 'meetings', [meeting]);
+
+    // First process: instance A fires once.
+    const capturedA: Captured[] = [];
+    const orchA = createWorkOrchestrator(store, {
+      now: () => NOW,
+      scheduleNotification: (spec, fireAt) => { capturedA.push({ spec, fireAt }); },
+    });
+    orchA.init();
+    vi.advanceTimersByTime(600);
+    orchA.teardown();
+    expect(
+      capturedA.filter((c) => c.spec.dedupe_key === 'work:meeting_30m:m-restart').length,
+    ).toBe(1);
+    // The fired key must be persisted so a restart can honor it.
+    expect(store.get<string[]>('work', '_firedCueKeys', [])).toContain(
+      'work:meeting_30m:m-restart',
+    );
+
+    // Restart: a brand-new instance B over the SAME store (in-memory Set is
+    // gone). It must NOT re-fire the already-sent cue.
+    const capturedB: Captured[] = [];
+    const orchB = createWorkOrchestrator(store, {
+      now: () => NOW,
+      scheduleNotification: (spec, fireAt) => { capturedB.push({ spec, fireAt }); },
+    });
+    orchB.init();
+    vi.advanceTimersByTime(600);
+    orchB.teardown();
+    expect(
+      capturedB.filter((c) => c.spec.dedupe_key === 'work:meeting_30m:m-restart').length,
+    ).toBe(0);
+  });
 });

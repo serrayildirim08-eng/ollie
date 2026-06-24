@@ -49,6 +49,17 @@ const DEBOUNCE_MS = 500;
 const MIN = 60_000;
 
 /**
+ * Clock-tick cadence for the cue scan (audit #8). The narrow time-windowed
+ * cues — meeting_30m (28–32m, a 4-min window), session_end (~3 min),
+ * session_90_warn (85–90m, a 5-min window) — only fired when a store key
+ * happened to change inside the window, so they were effectively never
+ * delivered. A 60s foreground tick re-evaluates the windows independently
+ * of store writes, mirroring cycle.ts's recomputeCycleTime tick. 60s is well
+ * under the narrowest 3-min window, so each window is sampled ≥2×.
+ */
+const CUE_TICK_MS = 60_000;
+
+/**
  * Audit-locked work notification copy. Lowercase, factual, no streak
  * guilt — see CLAUDE.md "Notification Scope". `session_90_warn` uses a
  * typographic apostrophe (’) on purpose; keep it byte-for-byte.
@@ -142,10 +153,16 @@ export function createWorkOrchestrator(
   const unsubs: Unsubscribe[] = [];
   let timer: ReturnType<typeof setTimeout> | null = null;
   let cueTimer: ReturnType<typeof setTimeout> | null = null;
+  let cueTick: ReturnType<typeof setInterval> | null = null;
   let pomodoroTimer: ReturnType<typeof setTimeout> | null = null;
 
-  /** Module-instance dedupe — one dispatch per logical cue. */
-  const firedCues = new Set<string>();
+  // Persisted cue dedupe (audit #96). The in-memory Set gives fast lookups
+  // within an instance; it is seeded from — and written back to — the store
+  // so a process restart does not re-fire cues that already went out. Keys
+  // embed a timestamp or record id, so appendCapped eviction is safe.
+  const firedCues = new Set<string>(
+    store.get<string[]>('work', '_firedCueKeys', []) ?? [],
+  );
 
   function recomputePatterns(): void {
     try {
@@ -265,6 +282,7 @@ export function createWorkOrchestrator(
     if (!scheduleNotification) return;
     if (firedCues.has(spec.dedupe_key)) return;
     firedCues.add(spec.dedupe_key);
+    store.set('work', '_firedCueKeys', appendCapped([...firedCues], [spec.dedupe_key]));
     try {
       scheduleNotification(spec, getNow());
     } catch { /* non-fatal */ }
@@ -415,6 +433,12 @@ export function createWorkOrchestrator(
     unsubs.push(store.subscribeKey('work', 'scheduled_blocks', scheduleCueScan));
     unsubs.push(store.subscribeKey('work', 'focus_log', scheduleCueScan));
 
+    // Clock tick (audit #8). Store-key changes alone never land inside the
+    // narrow cue windows (meeting_30m, session_end, session_90_warn), so the
+    // tick re-evaluates them on wall-clock time. scanCues is idempotent
+    // (firedCues dedupe), so re-running it costs nothing once a cue has fired.
+    cueTick = setInterval(() => scanCues(), CUE_TICK_MS);
+
     // Pomodoro break state recomputes whenever the focus log changes.
     unsubs.push(store.subscribeKey('work', 'focus_log', schedulePomodoro));
 
@@ -445,6 +469,7 @@ export function createWorkOrchestrator(
     unsubs.splice(0).forEach((fn) => fn());
     if (timer) { clearTimeout(timer); timer = null; }
     if (cueTimer) { clearTimeout(cueTimer); cueTimer = null; }
+    if (cueTick) { clearInterval(cueTick); cueTick = null; }
     if (pomodoroTimer) { clearTimeout(pomodoroTimer); pomodoroTimer = null; }
     firedCues.clear();
     initialized = false;
