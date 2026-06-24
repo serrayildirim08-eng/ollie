@@ -140,6 +140,32 @@ describe('apns-push worker', () => {
     expect(authHeader).toMatch(/^bearer [\w-]+\.[\w-]+\.[\w-]+$/);
   });
 
+  it('uses the shared @ollie/apns-jwt signer (correct ES256 header + claims)', async () => {
+    // Proves the worker delegates to @ollie/apns-jwt rather than a local
+    // signer: the emitted token must carry the env keyId/teamId in the exact
+    // shape the shared package produces (audit #19).
+    let authHeader = '';
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string | URL, init?: RequestInit) => {
+        authHeader = new Headers(init?.headers).get('authorization') ?? '';
+        return new Response('', { status: 200 });
+      }),
+    );
+
+    const res = await worker.fetch(pushReq(goodBody), makeEnv());
+    expect(res.status).toBe(200);
+
+    const jwt = authHeader.replace(/^bearer /, '');
+    const [headerB64, claimsB64] = jwt.split('.');
+    const decode = (s: string) =>
+      JSON.parse(Buffer.from(s.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString());
+    expect(decode(headerB64)).toEqual({ alg: 'ES256', kid: 'ABC1234567' });
+    const claims = decode(claimsB64) as { iss: string; iat: number };
+    expect(claims.iss).toBe('TEAM123456');
+    expect(typeof claims.iat).toBe('number');
+  });
+
   it('429s once the per-user rate limit (5/sec) is exceeded (KV fallback)', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 200 })));
     const env = makeEnv(); // no RATE_LIMITER → KV fallback path; shared KV across the loop

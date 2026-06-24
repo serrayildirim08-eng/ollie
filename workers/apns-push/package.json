@@ -3,6 +3,9 @@
   "version": "0.0.1",
   "private": true,
   "type": "module",
+  "dependencies": {
+    "@ollie/apns-jwt": "workspace:*"
+  },
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",

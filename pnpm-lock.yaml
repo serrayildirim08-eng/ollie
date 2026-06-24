@@ -417,6 +417,10 @@ importers:
         version: 4.90.1(@cloudflare/workers-types@4.20260510.1)
 
   workers/apns-push:
+    dependencies:
+      '@ollie/apns-jwt':
+        specifier: workspace:*
+        version: link:../../packages/apns-jwt
     devDependencies:
       '@cloudflare/workers-types':
         specifier: ^4.20250906.0
