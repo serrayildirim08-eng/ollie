@@ -409,27 +409,25 @@ export function installNotifyListener(target?: Window): () => void {
  * Adapter matching the orchestrator's `scheduleNotification` signature
  * `(spec: NotificationSpec, fireAt: number) => void`.
  *
- * Strategy:
- *   - If `fireAt` is in the past or within ~1s, deliver immediately via
- *     the system path AND fall through so the caller's existing
- *     @ollie/notifications log path still runs.
- *   - Otherwise, schedule an in-process timer (matches the existing
- *     `@ollie/notifications` fallback shape — Tauri's plugin has no
- *     native scheduler in 2.x, so timer is the canonical approach).
+ * Strategy: delegate to `scheduleAt`, the canonical durable scheduler.
+ * It already owns both halves of audit #71:
+ *   - overflow guard — drops fire times beyond MAX_SCHEDULE_HORIZON_MS so a
+ *     bare setTimeout delay never overflows the 32-bit signed-int ceiling
+ *     (~24.8d) and fires IMMEDIATELY.
+ *   - persistence-aware path — on Tauri it EMITs to the Rust scheduler, which
+ *     hands the fire time to the OS and survives app-quit. A multi-day finance
+ *     bill reminder routed here is therefore NOT lost when the app closes; the
+ *     in-process setTimeout is only a fallback for web preview / vitest where
+ *     no native scheduler exists.
  *
- * No persistence here — the dispatcher in @ollie/notifications already
- * persists `schedule_at` records across reloads. This adapter is the
- * thin glue between "orchestrator wants a notification at time X" and
- * the OS-level surface.
+ * The orchestrator's `dedupe_key` is the natural stable id — it's also what
+ * the native cancel path keys on, so reusing it keeps dedup/cancel coherent.
+ * Past or near-immediate fires deliver now (scheduleAt handles that too).
  */
 export function scheduleSystemNotification(spec: NotificationSpec, fireAt: number): void {
-  const now = Date.now();
-  const delay = Math.max(0, fireAt - now);
-  if (delay <= 0) {
-    void sendSystemNotification({ title: spec.title, body: spec.body });
-    return;
-  }
-  setTimeout(() => {
-    void sendSystemNotification({ title: spec.title, body: spec.body });
-  }, delay);
+  scheduleAt(
+    fireAt,
+    { title: spec.title, body: spec.body },
+    spec.dedupe_key ?? `notif:${spec.title}:${fireAt}`,
+  );
 }

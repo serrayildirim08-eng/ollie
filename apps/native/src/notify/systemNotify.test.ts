@@ -306,6 +306,31 @@ describe('scheduleSystemNotification', () => {
       );
     });
   });
+
+  it('drops a fireAt beyond the schedule horizon instead of firing immediately (#48)', async () => {
+    // A bare setTimeout delay past the 32-bit ceiling (~24.8d) overflows and
+    // fires instantly; the horizon guard must skip it, not ping now.
+    setTauriContext(true);
+    pluginMock.isPermissionGranted.mockResolvedValue(true);
+
+    const spec: NotificationSpec = {
+      title: 'far future',
+      category: 'REMINDER',
+      dedupe_key: 'test:overflow',
+    };
+    // ~100 days out — past MAX_SCHEDULE_HORIZON_MS (365d guard) is too far to
+    // prove overflow, but the overflow ceiling is ~24.8d, so 100d exercises
+    // both: above the 24.8d overflow point AND below 365d horizon is firing
+    // territory — use 400 days to be unambiguously beyond the horizon.
+    scheduleSystemNotification(spec, Date.now() + 400 * 24 * 60 * 60 * 1000);
+
+    // Nothing fires now (no immediate-overflow ping).
+    expect(pluginMock.sendNotification).not.toHaveBeenCalled();
+
+    // Advancing well past the 32-bit ceiling must NOT trigger a fire either.
+    await vi.advanceTimersByTimeAsync(2_147_483_648);
+    expect(pluginMock.sendNotification).not.toHaveBeenCalled();
+  });
 });
 
 // ─── scheduleAt (ad-hoc reminders) ────────────────────────────────────────
