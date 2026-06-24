@@ -40,6 +40,7 @@ import { colors, radii, shadows } from "../theme/tokens";
 import { DumpScreen } from "../dump";
 import { MODULE_MANIFEST, MODULE_GROUP_META } from "./moduleRegistry";
 import { HouseholdRoom } from "../rooms/HouseholdRoom";
+import { HealthRoom } from "../rooms/HealthRoom";
 import { TodoScreen } from "../todo/TodoScreen";
 import { useServerReminderBridge } from "../notify/serverReminderBridge";
 
@@ -112,6 +113,7 @@ export function Router() {
           ))}
           <Route path="modules" element={<ModulesIndex />} />
           <Route path="room/household" element={<HouseholdRoom />} />
+          <Route path="room/health" element={<HealthRoom />} />
           <Route path="todo" element={<TodoScreen />} />
           <Route path="settings" element={<SettingsScreen />} />
           <Route path="box/:id" element={<BoxPlaceholder />} />
@@ -137,10 +139,19 @@ function ModulesIndex() {
   // Build the three rooms from the shared manifest (audit #178) — group
   // metadata gives display order + asides; items come from the manifest,
   // filtered by feature flag.
-  // grocery + chores now live inside the Household ROOM, so they're lifted out
-  // of the flat module list here (their /box routes still exist, reached from
-  // the room). Other rooms aren't built yet — those modules stay as-is.
-  const ROOMED_IDS = new Set(['grocery', 'chores']);
+  // grocery + chores live inside the Household ROOM; sleep + cycle + body +
+  // medication + mood live inside the Health ROOM. All are lifted out of the
+  // flat module list here (their /box routes still exist, reached from the
+  // room). Other rooms aren't built yet — those modules stay as-is.
+  const ROOMED_IDS = new Set([
+    'grocery',
+    'chores',
+    'sleep',
+    'cycle',
+    'body',
+    'medication',
+    'mood',
+  ]);
   const visible = MODULE_MANIFEST.filter(
     (m) =>
       (m.flag == null || (m.flag === 'partner' && partnerEnabled)) && !ROOMED_IDS.has(m.id),
@@ -161,7 +172,28 @@ function ModulesIndex() {
         </Text>
       </Stack>
 
-      {/* Built rooms — Household first. */}
+      {/* Built rooms — Health first, then Household. */}
+      <Stack gap={8}>
+        <Text
+          scale="caption"
+          color={colors.inkFaint}
+          style={{ ...SMCP_STYLE, letterSpacing: "0.20em" }}
+        >
+          health
+        </Text>
+        <p style={ASIDE_STYLE}>sleep, energy, your cycle, water, the meds.</p>
+        <Link to="/room/health" style={{ textDecoration: "none", color: "inherit" }}>
+          <Box bg="cream" radius="card" shadow="raised" style={{ padding: "16px 18px" }}>
+            <Row gap={12} align="baseline" justify="space-between">
+              <Text scale="body">Health</Text>
+              <Text scale="caption" color={colors.inkFaint}>
+                sleep · cycle · body · medication
+              </Text>
+            </Row>
+          </Box>
+        </Link>
+      </Stack>
+
       <Stack gap={8}>
         <Text
           scale="caption"

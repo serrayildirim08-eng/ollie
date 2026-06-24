@@ -110,4 +110,24 @@ export const events = {
     );
     return rows.map(rowToEvent);
   },
+
+  /**
+   * Single most-recent mood-OR-energy event, or null when none logged.
+   *
+   * The Health room's read-only "energy" tile is the mood log's one real
+   * consumer (it gives the dead mood log a surface). Energy is the primary
+   * signal; if no energy has ever been logged we fall back to the latest
+   * mood reading so the tile still reflects how the person is doing. Pure
+   * read — no write, no mood screen.
+   */
+  async latestEnergyOrMood(): Promise<MoodEvent | null> {
+    const rows = await sql.select<MoodEventRow>(
+      `SELECT id, kind, data, logged_at
+       FROM mood_events
+       WHERE kind = 'energy' OR kind = 'mood'
+       ORDER BY logged_at DESC
+       LIMIT 1`,
+    );
+    return rows.length > 0 ? rowToEvent(rows[0]!) : null;
+  },
 };
