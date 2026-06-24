@@ -190,11 +190,11 @@ describe('sync · inbound', () => {
     sync.stop();
   });
 
-  it('LWW: skips remote row older than local edit ts', async () => {
+  it('LWW: skips remote when there is an unpushed local edit (dirty flag)', async () => {
     const { api } = makeFakeApi();
-    // Pre-set a local module + local edit ts in the future
+    // Pre-set a local module + an unpushed local edit (dirty), no remote ts.
     store.setModule('cycle', { items: [{ local: true }] });
-    store.set('_sync', 'local_ts.cycle', 10_000);
+    store.set('_sync', 'dirty.cycle', true);
 
     const enc = await encryptData(key, { items: [{ remote: true }] });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -203,7 +203,8 @@ describe('sync · inbound', () => {
         id: 'r1', user_id: 'u', module: 'cycle',
         ciphertext: bytesToBase64(enc.ciphertext),
         iv: bytesToBase64(enc.iv),
-        updated_at: new Date(5_000).toISOString(), // older than local
+        // Far-future updated_at — even so, a local unpushed edit wins.
+        updated_at: new Date(999_000).toISOString(),
         blob_version: 1,
       }],
     }));
@@ -212,6 +213,67 @@ describe('sync · inbound', () => {
     await sync.start();
     await Promise.resolve();
     expect(store.get('cycle', 'items', [])).toEqual([{ local: true }]);
+    sync.stop();
+  });
+
+  it('#78: a fast local clock cannot beat a genuinely newer remote write', async () => {
+    const { api } = makeFakeApi();
+    // Device with a FAST clock applied an earlier remote row at remote-ts 5000
+    // (recorded in the remote clock domain). It has NO unpushed local edit.
+    store.setModule('cycle', { items: [{ remote: 'v1' }] });
+    store.set('_sync', 'remote_ts.cycle', 5_000);
+    store.set('_sync', 'dirty.cycle', false);
+
+    const enc = await encryptData(key, { items: [{ remote: 'v2' }] });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (api.supabase.rest.get as any) = vi.fn(async () => ({
+      ok: true, status: 200, data: [{
+        id: 'r1', user_id: 'u', module: 'cycle',
+        ciphertext: bytesToBase64(enc.ciphertext),
+        iv: bytesToBase64(enc.iv),
+        // Genuinely newer remote write (6000 > 5000), authored on a correct
+        // clock. The OLD bug compared this against a wall-clock local_ts
+        // (e.g. now()=9_999_999 on a fast clock) and dropped it. The new
+        // remote-vs-remote compare (6000 > 5000) applies it.
+        updated_at: new Date(6_000).toISOString(),
+        blob_version: 1,
+      }],
+    }));
+
+    // now() is wildly ahead — proving the LWW decision no longer touches the
+    // local wall clock at all.
+    const sync = createSyncClient({ store, api, userId: 'u', authJwt: 'jwt', encryptionKey: key, modules: ['cycle'], now: () => 9_999_999 });
+    await sync.start();
+    await vi.runOnlyPendingTimersAsync();
+    await Promise.resolve();
+    expect(store.get('cycle', 'items', [])).toEqual([{ remote: 'v2' }]);
+    expect(store.get('_sync', 'remote_ts.cycle', 0)).toBe(6_000);
+    sync.stop();
+  });
+
+  it('#78: remote-vs-remote — an older remote re-pull is still LWW-skipped', async () => {
+    const { api } = makeFakeApi();
+    store.setModule('cycle', { items: [{ remote: 'current' }] });
+    store.set('_sync', 'remote_ts.cycle', 8_000);
+    store.set('_sync', 'dirty.cycle', false);
+
+    const enc = await encryptData(key, { items: [{ remote: 'stale' }] });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (api.supabase.rest.get as any) = vi.fn(async () => ({
+      ok: true, status: 200, data: [{
+        id: 'r1', user_id: 'u', module: 'cycle',
+        ciphertext: bytesToBase64(enc.ciphertext),
+        iv: bytesToBase64(enc.iv),
+        updated_at: new Date(5_000).toISOString(), // older than last applied remote
+        blob_version: 1,
+      }],
+    }));
+
+    const sync = createSyncClient({ store, api, userId: 'u', authJwt: 'jwt', encryptionKey: key, modules: ['cycle'], now: () => 1 });
+    await sync.start();
+    await vi.runOnlyPendingTimersAsync();
+    await Promise.resolve();
+    expect(store.get('cycle', 'items', [])).toEqual([{ remote: 'current' }]);
     sync.stop();
   });
 
@@ -242,7 +304,7 @@ describe('sync · inbound', () => {
     sync.stop();
   });
 
-  it('#7: watermark is the applied REMOTE ts, not now() — same-row re-pull is LWW-skipped', async () => {
+  it('#7/#78: watermark is the applied REMOTE ts, not now() — same-row re-pull is LWW-skipped', async () => {
     const { api, captured } = makeFakeApi();
     const enc = await encryptData(key, { items: [{ remote: true }] });
     captured.remoteRows = [{
@@ -260,8 +322,8 @@ describe('sync · inbound', () => {
 
     // Watermark must equal the remote ts (5000), NOT nowFn() (6000). If it
     // were clobbered with now(), a later remote row at 5500 would be wrongly
-    // LWW-skipped.
-    expect(store.get('_sync', 'local_ts.cycle', 0)).toBe(5000);
+    // LWW-skipped. Stored in the remote clock domain (audit #78).
+    expect(store.get('_sync', 'remote_ts.cycle', 0)).toBe(5000);
     sync.stop();
   });
 });
@@ -336,7 +398,8 @@ describe('sync · #120 bookkeeping namespacing + coalesced queueDepth', () => {
     });
     await sync.start();
 
-    // An offline edit enqueues a push AND records a local watermark.
+    // An offline edit enqueues a push AND marks the module dirty (audit #78 —
+    // a clock-free flag, no wall-clock watermark).
     store.set('cycle', 'items', [{ v: 1 }]);
     await settleQuiet();
 
@@ -344,9 +407,9 @@ describe('sync · #120 bookkeeping namespacing + coalesced queueDepth', () => {
     // it) — and the old `shared` keys are NOT written.
     const q = store.get<unknown[]>('_sync', 'queue', []) ?? [];
     expect(q.length).toBe(1);
-    expect(store.get<number>('_sync', 'local_ts.cycle', 0)).toBe(7000);
+    expect(store.get<boolean>('_sync', 'dirty.cycle', false)).toBe(true);
     expect(store.get<unknown[]>('shared', '_sync_queue', [])).toEqual([]);
-    expect(store.get<number>('shared', '_sync_local_ts.cycle', 0)).toBe(0);
+    expect(store.get<boolean>('shared', '_sync_dirty.cycle', false)).toBe(false);
     sync.stop();
   });
 

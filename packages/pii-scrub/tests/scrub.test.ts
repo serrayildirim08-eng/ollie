@@ -43,9 +43,21 @@ describe('@ollie/pii-scrub · core regex layer', () => {
     expect(scrubbed).toContain('[NUMERIC]');
   });
 
-  it('preserves years (1900-2099)', () => {
+  it('preserves years (1900-2099) only with year context', () => {
     const { scrubbed } = scrubPII('met him back in 2014, what a year', 'en');
     expect(scrubbed).toContain('2014');
+  });
+
+  it('redacts a bare 4-digit number even in the year range (audit #171)', () => {
+    // No year context → could be a PIN/OTP/2FA code, must not leak.
+    const { scrubbed } = scrubPII('my pin is 2024 do not share', 'en');
+    expect(scrubbed).toContain('[NUMERIC]');
+    expect(scrubbed).not.toContain('2024');
+  });
+
+  it('keeps year-range numbers with a year-cue word (audit #171)', () => {
+    expect(scrubPII('founded in 2024', 'en').scrubbed).toContain('2024');
+    expect(scrubPII('graduated in the year 1999', 'en').scrubbed).toContain('1999');
   });
 
   it('preserves money amounts with currency prefix', () => {

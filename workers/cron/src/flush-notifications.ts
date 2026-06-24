@@ -223,9 +223,22 @@ async function processJob(
   // ── (e) Dispatch to APNs via the service binding ────────────────────────
   const apnsPayload = buildApnsPayload(job, title, body);
   const results = await Promise.all(
-    tokens.map((t) => pushOne(env, t.device_token, job.user_id, apnsPayload)),
+    tokens.map(async (t) => ({
+      token: t.device_token,
+      result: await pushOne(env, t.device_token, job.user_id, apnsPayload),
+    })),
   );
-  const anyOk = results.some((r) => r.ok);
+  const anyOk = results.some((r) => r.result.ok);
+
+  // Prune any token APNs reports as permanently dead (410 Unregistered /
+  // BadDeviceToken) so we stop dispatching to it forever AND drop it from
+  // the user's token cache for the rest of this batch (audit #161).
+  const dead = results.filter((r) => isPermanentPushFailure(r.result));
+  if (dead.length > 0) {
+    await Promise.all(dead.map((r) => pruneToken(env, job.user_id, r.token)));
+    const live = tokens.filter((t) => !dead.some((d) => d.token === t.device_token));
+    tokenCache.set(job.user_id, live);
+  }
 
   // ── (f) Terminal status ─────────────────────────────────────────────────
   if (anyOk) {
@@ -237,10 +250,34 @@ async function processJob(
     stats.sent++;
     // Reflect the new delivery in the local budget cache for this batch.
     sentTodayCache.set(job.user_id, (sentTodayCache.get(job.user_id) ?? 0) + 1);
+  } else if (results.length > 0 && results.every((r) => isPermanentPushFailure(r.result))) {
+    // Every device rejected the token permanently — retrying can never
+    // succeed and the dead tokens have just been pruned. Mark terminal
+    // 'failed' immediately rather than burning the retry budget (audit #161).
+    const reason = results.find((r) => !r.result.ok)?.result.reason ?? 'apns-permanent';
+    await updateJob(env, job.id, { status: 'failed', last_error: reason.slice(0, 200) });
+    stats.failed++;
   } else {
-    const reason = results.find((r) => !r.ok)?.reason ?? 'apns-failed';
+    const reason = results.find((r) => !r.result.ok)?.result.reason ?? 'apns-failed';
     await applyRetry(env, job, stats, reason);
   }
+}
+
+/**
+ * True when an APNs failure is permanent — the device token is dead and
+ * will never accept another push, so retrying is pointless and the token
+ * should be pruned. APNs signals this with HTTP 410 (Unregistered) or a
+ * reason of BadDeviceToken / Unregistered / DeviceTokenNotForTopic.
+ */
+function isPermanentPushFailure(r: PushResult): boolean {
+  if (r.ok) return false;
+  if (r.status === 410) return true;
+  const reason = (r.reason ?? '').toLowerCase();
+  return (
+    reason.includes('baddevicetoken') ||
+    reason.includes('unregistered') ||
+    reason.includes('devicetokennotfortopic')
+  );
 }
 
 /**
@@ -453,6 +490,32 @@ async function tokensForUser(env: FlushEnv, userId: string): Promise<PushTokenRo
   }
   const rows = (await resp.json()) as PushTokenRow[];
   return Array.isArray(rows) ? rows.filter((r) => typeof r.device_token === 'string') : [];
+}
+
+/**
+ * DELETE a dead device token (audit #161). Called when APNs reports a token
+ * as permanently unregistered (410 / BadDeviceToken) so we stop dispatching
+ * to it forever. Best-effort: a failed prune just leaves the row for the next
+ * tick to retry pruning — it never blocks delivery to the user's live tokens.
+ */
+async function pruneToken(env: FlushEnv, userId: string, deviceToken: string): Promise<void> {
+  const base = env.SUPABASE_URL.replace(/\/$/, '');
+  const qs = new URLSearchParams({
+    user_id: `eq.${userId}`,
+    device_token: `eq.${deviceToken}`,
+  });
+  const url = `${base}/rest/v1/push_tokens?${qs.toString()}`;
+  try {
+    const resp = await fetch(url, {
+      method: 'DELETE',
+      headers: { ...supabaseHeaders(env), prefer: 'return=minimal' },
+    });
+    if (!resp.ok) {
+      console.error('[flush] pruneToken failed', resp.status, await safeText(resp));
+    }
+  } catch (err) {
+    console.error('[flush] pruneToken threw', String(err));
+  }
 }
 
 /**

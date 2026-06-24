@@ -133,6 +133,14 @@ export const goals = {
    * Ensure a goal row exists for `name`. If absent, insert it; if present,
    * leave it alone but backfill `why` when we have one and the existing
    * row doesn't. Either way returns the canonical row.
+   *
+   * Enforces the active-goal cap on the INSERT path only: matching an
+   * existing goal (or backfilling its `why`) never adds an active goal so
+   * it always passes. Creating a new one at `ACTIVE_GOAL_CAP` throws
+   * `GoalCapError` — same gate as `create()` — so a dump can't slip past
+   * the cap (and the required why/obstacle/premortem capture) by going
+   * through `ensure`. Callers that prefer a soft fallback (notes landing in
+   * the unassigned bucket) catch `GoalCapError`.
    */
   async ensure(name: string, why?: string | null): Promise<Goal> {
     const n = normaliseName(name);
@@ -146,6 +154,10 @@ export const goals = {
         return { ...existing, why };
       }
       return existing;
+    }
+    const count = await goals.activeCount();
+    if (count >= ACTIVE_GOAL_CAP) {
+      throw new GoalCapError();
     }
     const id = newId('gl_');
     const now = Date.now();

@@ -23,7 +23,7 @@ const WORKER_SIGNAL: CrisisSignal = {
   detected: true,
   tier: 3,
   languages: ['tr', 'en'],
-  matches: [{ language: 'tr', tier: 3, pattern: 'p', line: 'l' }],
+  matches: [{ language: 'tr', tier: 3, pattern: 'p' }],
 };
 
 it('every app language has non-empty kicker / body / dismiss copy', () => {

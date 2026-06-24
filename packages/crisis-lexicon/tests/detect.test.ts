@@ -96,6 +96,25 @@ describe('@ollie/crisis-lexicon · cross-language detection', () => {
   });
 });
 
+describe('@ollie/crisis-lexicon · zero-storage invariant (audit #77)', () => {
+  it('never leaks the raw matched user text in a match entry', () => {
+    // The unique, identifying words below appear ONLY in the user's dump,
+    // never in any lexicon pattern, so finding them in the signal proves a leak.
+    const RAW = 'last Tuesday near the Brooklyn bridge I want to die';
+    const r = detectCrisis(RAW);
+    expect(r?.detected).toBe(true);
+    for (const m of r!.matches) {
+      // Only lexicon coordinates may cross the wire — no `line` field.
+      expect(m).not.toHaveProperty('line');
+      expect(Object.keys(m).sort()).toEqual(['language', 'pattern', 'tier']);
+    }
+    // The serialised signal must not echo the raw dump's unique words.
+    const serialised = JSON.stringify(r);
+    expect(serialised).not.toContain('Tuesday');
+    expect(serialised).not.toContain('Brooklyn');
+  });
+});
+
 describe('@ollie/crisis-lexicon · false-positive guard', () => {
   it('tier-1 ambiguous matches drop when exclusion is present', () => {
     // "tired of" + matching exclusion-context shouldn't fire alone.
@@ -108,5 +127,23 @@ describe('@ollie/crisis-lexicon · false-positive guard', () => {
   it('tier-2+ matches always fire even with exclusion in the text', () => {
     const r = detectCrisisIn('killing it at work but I want to die', 'en');
     expect(r?.tier).toBe(2);
+  });
+
+  it('tier-1 match survives an UNRELATED exclusion elsewhere in the text (#166)', () => {
+    // "killing it at work" is an exclusion, but the tier-1 hopelessness
+    // signal "nothing matters anymore" lives in a separate span and must
+    // NOT be swallowed by the unrelated exclusion.
+    const r = detectCrisisIn(
+      'killing it at work but nothing matters anymore',
+      'en',
+    );
+    expect(r?.tier).toBe(1);
+  });
+
+  it('tier-1 match IS suppressed when its own span is the excluded phrase', () => {
+    // Here the only candidate is the dance-floor "kill it" sense covered by
+    // the exclusion span itself; nothing real should fire.
+    const r = detectCrisisIn('killing it at the gym today', 'en');
+    expect(r).toBeNull();
   });
 });

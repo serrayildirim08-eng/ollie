@@ -284,27 +284,117 @@ describe('scheduleSystemNotification', () => {
     });
   });
 
-  it('schedules a timer when fireAt is in the future', async () => {
+  it('routes a future fireAt through the durable native scheduler on Tauri (#71)', async () => {
+    // #71: a future notification must NOT ride a bare in-process setTimeout
+    // (lost on app-quit). On Tauri it goes through scheduleAt, which EMITs to
+    // the Rust scheduler so the OS owns the fire time and it survives quit.
     setTauriContext(true);
     pluginMock.isPermissionGranted.mockResolvedValue(true);
 
+    const fireAt = Date.now() + 5000;
     const spec: NotificationSpec = {
       title: 'soon',
       body: 'in a bit',
       category: 'REMINDER',
       dedupe_key: 'test:soon',
     };
-    scheduleSystemNotification(spec, Date.now() + 5000);
+    scheduleSystemNotification(spec, fireAt);
 
+    // Durable native path: schedule emitted to Rust, no immediate ping.
+    await vi.waitFor(() => {
+      expect(emitMock).toHaveBeenCalledWith(
+        'ollie-schedule-notif',
+        expect.objectContaining({
+          id: 'test:soon',
+          title: 'soon',
+          body: 'in a bit',
+          fire_at_ms: fireAt,
+        }),
+      );
+    });
     expect(pluginMock.sendNotification).not.toHaveBeenCalled();
 
+    // No in-process timer was armed — advancing time fires nothing (the OS
+    // owns delivery, so the timer would be a double-fire if it existed).
+    await vi.advanceTimersByTimeAsync(5001);
+    expect(pluginMock.sendNotification).not.toHaveBeenCalled();
+  });
+
+  it('keeps a multi-day fireAt durable instead of a bare setTimeout (#71)', async () => {
+    // The core #71 case: a multi-day finance bill reminder. A bare setTimeout
+    // would be lost the moment the app quits; the durable path hands it to the
+    // OS. ~10 days is below the 365d horizon and above any plausible session.
+    setTauriContext(true);
+    pluginMock.isPermissionGranted.mockResolvedValue(true);
+
+    const fireAt = Date.now() + 10 * 24 * 60 * 60 * 1000;
+    const spec: NotificationSpec = {
+      title: 'rent due',
+      category: 'REMINDER',
+      dedupe_key: 'finance:bill_due_predicted:rent:123',
+    };
+    scheduleSystemNotification(spec, fireAt);
+
+    await vi.waitFor(() => {
+      expect(emitMock).toHaveBeenCalledWith(
+        'ollie-schedule-notif',
+        expect.objectContaining({
+          id: 'finance:bill_due_predicted:rent:123',
+          fire_at_ms: fireAt,
+        }),
+      );
+    });
+    expect(pluginMock.sendNotification).not.toHaveBeenCalled();
+  });
+
+  it('fires immediately on the in-process fallback off Tauri (web preview / vitest)', async () => {
+    // Off Tauri there is no native scheduler, so scheduleAt falls back to a
+    // setTimeout — acceptable here because there is no app-quit-survival to
+    // protect (web preview). Proves the future-fire path still delivers.
+    setTauriContext(false);
+
+    const spec: NotificationSpec = {
+      title: 'soon',
+      body: 'in a bit',
+      category: 'REMINDER',
+      dedupe_key: 'test:soon-web',
+    };
+    scheduleSystemNotification(spec, Date.now() + 5000);
+
+    // Let the async plugin loader settle so the fallback timer is armed.
+    await vi.advanceTimersByTimeAsync(0);
     await vi.advanceTimersByTimeAsync(5001);
 
     await vi.waitFor(() => {
-      expect(pluginMock.sendNotification).toHaveBeenCalledWith(
-        expect.objectContaining({ title: 'soon', body: 'in a bit' }),
-      );
+      // Off Tauri, sendSystemNotification degrades to console.log; assert the
+      // native emit was never used (no native scheduler available).
+      expect(emitMock).not.toHaveBeenCalledWith('ollie-schedule-notif', expect.anything());
     });
+  });
+
+  it('drops a fireAt beyond the schedule horizon instead of firing immediately (#48/#71)', async () => {
+    // A bare setTimeout delay past the 32-bit ceiling (~24.8d) overflows and
+    // fires instantly; scheduleAt's horizon guard must skip it, not ping now.
+    setTauriContext(true);
+    pluginMock.isPermissionGranted.mockResolvedValue(true);
+
+    const spec: NotificationSpec = {
+      title: 'far future',
+      category: 'REMINDER',
+      dedupe_key: 'test:overflow',
+    };
+    // 400 days out — unambiguously beyond MAX_SCHEDULE_HORIZON_MS (365d), so
+    // also past the ~24.8d overflow point. Must be dropped, not fired.
+    scheduleSystemNotification(spec, Date.now() + 400 * 24 * 60 * 60 * 1000);
+
+    // Nothing fires now (no immediate-overflow ping), and nothing is scheduled.
+    expect(pluginMock.sendNotification).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(emitMock).not.toHaveBeenCalledWith('ollie-schedule-notif', expect.anything());
+
+    // Advancing well past the 32-bit ceiling must NOT trigger a fire either.
+    await vi.advanceTimersByTimeAsync(2_147_483_648);
+    expect(pluginMock.sendNotification).not.toHaveBeenCalled();
   });
 });
 

@@ -140,14 +140,88 @@ describe('apns-push worker', () => {
     expect(authHeader).toMatch(/^bearer [\w-]+\.[\w-]+\.[\w-]+$/);
   });
 
-  it('429s once the per-user rate limit (5/sec) is exceeded', async () => {
+  it('uses the shared @ollie/apns-jwt signer (correct ES256 header + claims)', async () => {
+    // Proves the worker delegates to @ollie/apns-jwt rather than a local
+    // signer: the emitted token must carry the env keyId/teamId in the exact
+    // shape the shared package produces (audit #19).
+    let authHeader = '';
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string | URL, init?: RequestInit) => {
+        authHeader = new Headers(init?.headers).get('authorization') ?? '';
+        return new Response('', { status: 200 });
+      }),
+    );
+
+    const res = await worker.fetch(pushReq(goodBody), makeEnv());
+    expect(res.status).toBe(200);
+
+    const jwt = authHeader.replace(/^bearer /, '');
+    const [headerB64, claimsB64] = jwt.split('.');
+    const decode = (s: string) =>
+      JSON.parse(Buffer.from(s.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString());
+    expect(decode(headerB64)).toEqual({ alg: 'ES256', kid: 'ABC1234567' });
+    const claims = decode(claimsB64) as { iss: string; iat: number };
+    expect(claims.iss).toBe('TEAM123456');
+    expect(typeof claims.iat).toBe('number');
+  });
+
+  it('429s once the per-user rate limit (5/sec) is exceeded (KV fallback)', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 200 })));
-    const env = makeEnv(); // shared KV across the loop
+    const env = makeEnv(); // no RATE_LIMITER → KV fallback path; shared KV across the loop
     let saw429 = false;
     for (let i = 0; i < 7; i++) {
       const res = await worker.fetch(pushReq(goodBody), env);
       if (res.status === 429) { saw429 = true; break; }
     }
     expect(saw429).toBe(true);
+  });
+
+  it('prefers the native (atomic) limiter over the racy KV counter when present', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 200 })));
+    // Native binding that admits the first 2 calls then denies — atomic, so it
+    // cannot be defeated by concurrency the way the KV read-modify-write is.
+    let admitted = 0;
+    const limiter = { limit: vi.fn(async () => ({ success: admitted++ < 2 })) };
+    const kv = makeKv();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const env = makeEnv({ RATE_LIMITER: limiter as any, RATE_KV: kv });
+
+    const r1 = await worker.fetch(pushReq(goodBody), env);
+    const r2 = await worker.fetch(pushReq(goodBody), env);
+    const r3 = await worker.fetch(pushReq(goodBody), env);
+
+    expect(r1.status).toBe(200);
+    expect(r2.status).toBe(200);
+    expect(r3.status).toBe(429);
+    // The native binding decided every call; the racy KV counter was never touched.
+    expect(limiter.limit).toHaveBeenCalledTimes(3);
+    expect(kv.get).not.toHaveBeenCalled();
+    expect(kv.put).not.toHaveBeenCalled();
+  });
+
+  it('atomic limiter holds the ceiling under a concurrent burst', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 200 })));
+    // Real atomic counter: each call increments before deciding, so even a
+    // simultaneous burst cannot over-admit past the ceiling (the KV path could).
+    let count = 0;
+    const CEILING = 5;
+    const limiter = {
+      limit: vi.fn(async () => {
+        count += 1;
+        return { success: count <= CEILING };
+      }),
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const env = makeEnv({ RATE_LIMITER: limiter as any });
+
+    const results = await Promise.all(
+      Array.from({ length: 20 }, () => worker.fetch(pushReq(goodBody), env)),
+    );
+    const ok = results.filter((r) => r.status === 200).length;
+    const limited = results.filter((r) => r.status === 429).length;
+
+    expect(ok).toBe(CEILING);
+    expect(limited).toBe(20 - CEILING);
   });
 });

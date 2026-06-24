@@ -50,6 +50,8 @@ interface Harness {
   env: FlushEnv;
   patches: Array<{ id: string; body: Record<string, unknown> }>;
   apnsCalls: Array<{ deviceToken: string; authorization: string }>;
+  /** push_tokens rows DELETEd via the prune path (audit #161). */
+  prunedTokens: Array<{ userId: string; deviceToken: string }>;
 }
 
 const APNS_SECRET = 'apns-internal-secret-fake';
@@ -66,6 +68,7 @@ function makeHarness(opts: {
 }): Harness {
   const patches: Array<{ id: string; body: Record<string, unknown> }> = [];
   const apnsCalls: Array<{ deviceToken: string; authorization: string }> = [];
+  const prunedTokens: Array<{ userId: string; deviceToken: string }> = [];
   const tokensByUser = opts.tokensByUser ?? { 'user-1': ['tok-aaa'] };
   const sentTodayByUser = opts.sentTodayByUser ?? {};
   const apns = opts.apns ?? (() => ({ status: 200 }));
@@ -100,6 +103,17 @@ function makeHarness(opts: {
       }
       // due-jobs select
       return new Response(JSON.stringify(opts.dueJobs), { status: 200 });
+    }
+
+    // DELETE push_tokens?user_id=eq.<id>&device_token=eq.<tok> — prune (audit #161)
+    if (method === 'DELETE' && url.includes('/rest/v1/push_tokens')) {
+      const um = url.match(/user_id=eq\.([^&]+)/);
+      const tm = url.match(/device_token=eq\.([^&]+)/);
+      prunedTokens.push({
+        userId: um ? um[1] : '',
+        deviceToken: tm ? decodeURIComponent(tm[1]) : '',
+      });
+      return new Response(null, { status: 204 });
     }
 
     // GET push_tokens?user_id=eq.<id>
@@ -141,7 +155,7 @@ function makeHarness(opts: {
     } as unknown as Fetcher,
   };
 
-  return { env, patches, apnsCalls };
+  return { env, patches, apnsCalls, prunedTokens };
 }
 
 // ─── tests ──────────────────────────────────────────────────────────────────
@@ -257,17 +271,19 @@ describe('flushNotificationQueue · banned-phrase gate', () => {
 describe('flushNotificationQueue · retry + failure', () => {
   beforeEach(() => vi.restoreAllMocks());
 
-  it('APNs failure on a fresh job → stays pending, attempts bumped to 1', async () => {
+  it('transient APNs failure on a fresh job → stays pending, attempts bumped to 1', async () => {
     const j = job({ attempts: 0 });
     const h = makeHarness({
       dueJobs: [j],
-      apns: () => ({ status: 400, reason: 'BadDeviceToken' }),
+      // 503 is transient (APNs overloaded) — retryable, NOT a dead token.
+      apns: () => ({ status: 503, reason: 'ServiceUnavailable' }),
     });
 
     const stats = await flushNotificationQueue(h.env);
 
     expect(stats.retried).toBe(1);
     expect(stats.failed).toBe(0);
+    expect(h.prunedTokens).toHaveLength(0);
     const patch = h.patches.find((p) => p.id === j.id);
     expect(patch?.body.status).toBe('pending');
     expect(patch?.body.attempts).toBe(1);
@@ -304,6 +320,77 @@ describe('flushNotificationQueue · retry + failure', () => {
     expect(stats.retried).toBe(0);
     const patch = h.patches.find((p) => p.id === j.id);
     expect(patch?.body.status).toBe('failed');
+  });
+});
+
+describe('flushNotificationQueue · permanent token failure (audit #161)', () => {
+  beforeEach(() => vi.restoreAllMocks());
+
+  it('410 Unregistered on a fresh job → prunes the token AND fails immediately (no retry)', async () => {
+    const j = job({ user_id: 'user-dead', attempts: 0 });
+    const h = makeHarness({
+      dueJobs: [j],
+      tokensByUser: { 'user-dead': ['tok-dead'] },
+      apns: () => ({ status: 410, reason: 'Unregistered' }),
+    });
+
+    const stats = await flushNotificationQueue(h.env);
+
+    // Dead token pruned from push_tokens.
+    expect(h.prunedTokens).toEqual([{ userId: 'user-dead', deviceToken: 'tok-dead' }]);
+    // Terminal on the FIRST attempt — retrying a dead token can never succeed.
+    expect(stats.failed).toBe(1);
+    expect(stats.retried).toBe(0);
+    const patch = h.patches.find((p) => p.id === j.id);
+    expect(patch?.body.status).toBe('failed');
+    expect(patch?.body.attempts).toBeUndefined();
+  });
+
+  it('BadDeviceToken reason (any status) is treated as permanent → pruned + failed', async () => {
+    const j = job({ user_id: 'user-bad', attempts: 0 });
+    const h = makeHarness({
+      dueJobs: [j],
+      tokensByUser: { 'user-bad': ['tok-bad'] },
+      apns: () => ({ status: 400, reason: 'BadDeviceToken' }),
+    });
+
+    const stats = await flushNotificationQueue(h.env);
+
+    expect(h.prunedTokens).toEqual([{ userId: 'user-bad', deviceToken: 'tok-bad' }]);
+    expect(stats.failed).toBe(1);
+    expect(stats.retried).toBe(0);
+  });
+
+  it('multi-device: prunes ONLY the dead token, still delivers + sends via the live one', async () => {
+    const j = job({ user_id: 'user-mix' });
+    const h = makeHarness({
+      dueJobs: [j],
+      tokensByUser: { 'user-mix': ['tok-live', 'tok-dead'] },
+      apns: (t) => (t === 'tok-dead' ? { status: 410, reason: 'Unregistered' } : { status: 200 }),
+    });
+
+    const stats = await flushNotificationQueue(h.env);
+
+    // The live token delivered → job is 'sent', not failed.
+    expect(stats.sent).toBe(1);
+    expect(stats.failed).toBe(0);
+    // Only the dead token is pruned.
+    expect(h.prunedTokens).toEqual([{ userId: 'user-mix', deviceToken: 'tok-dead' }]);
+  });
+
+  it('transient failure does NOT prune the token (retryable)', async () => {
+    const j = job({ user_id: 'user-trans', attempts: 0 });
+    const h = makeHarness({
+      dueJobs: [j],
+      tokensByUser: { 'user-trans': ['tok-trans'] },
+      apns: () => ({ status: 500, reason: 'InternalServerError' }),
+    });
+
+    const stats = await flushNotificationQueue(h.env);
+
+    expect(h.prunedTokens).toHaveLength(0);
+    expect(stats.retried).toBe(1);
+    expect(stats.failed).toBe(0);
   });
 });
 

@@ -267,9 +267,19 @@ export function createSyncClient(initialDeps: SyncDeps): SyncClient {
       drainScheduler.reset();
       // Remove ONLY the exact entries we shipped — match on the unique seq,
       // never object identity nor the non-unique (module, updated_at) key.
-      writeQueue(
-        readQueue().filter((e) => !shippedSeqs.has(e.seq)),
-      );
+      const remaining = readQueue().filter((e) => !shippedSeqs.has(e.seq));
+      writeQueue(remaining);
+      // Clear the dirty flag (audit #78) for each module we shipped — UNLESS a
+      // newer un-shipped write for that module is still queued (it landed
+      // during the in-flight upsert and carries a higher seq). Clearing only
+      // when nothing remains keeps inbound LWW correctly deferring to a still-
+      // pending local edit.
+      const stillQueued = new Set(remaining.map((e) => e.module));
+      for (const e of batch) {
+        if (!stillQueued.has(e.module)) {
+          deps.store.set(SYNC_NS, `dirty.${e.module}`, false);
+        }
+      }
       try {
         events.emit('sync:outbound_flushed', { count: rows.length, ts: nowFn() });
       } catch { /* registry warn ok */ }
@@ -300,10 +310,24 @@ export function createSyncClient(initialDeps: SyncDeps): SyncClient {
     if (!r.ok) return;
     for (const row of r.data ?? []) {
       try {
-        // LWW: skip remote if our local module was edited after row.updated_at.
-        const localTs = deps.store.get<number>(SYNC_NS, `local_ts.${row.module}`, 0) ?? 0;
+        // LWW (audit #78): the OLD rule compared incoming `remoteTs` (the
+        // writing device's wall-clock, via row.updated_at) against a
+        // `local_ts` watermark that was seeded from THIS device's wall-clock
+        // on every local edit (see subscribe handler). Those are two different
+        // clock domains: a fast local clock seeds a large watermark, so a
+        // genuinely newer remote write from a correct-clock device carries a
+        // SMALLER updated_at and is silently dropped — a fast clock always
+        // wins. Fix: never compare across clock domains.
+        //   1. If we have an unpushed local edit (dirty flag), local wins —
+        //      keep the user's own work regardless of remote ts.
+        //   2. Otherwise compare remote-vs-remote: the incoming ts against the
+        //      ts of the LAST remote row we applied (`remote_ts`, same clock
+        //      domain as updated_at). Apply only if strictly newer.
         const remoteTs = Date.parse(row.updated_at);
-        if (Number.isFinite(remoteTs) && remoteTs <= localTs) continue;
+        const dirty = deps.store.get<boolean>(SYNC_NS, `dirty.${row.module}`, false) ?? false;
+        if (dirty) continue;
+        const lastRemoteTs = deps.store.get<number>(SYNC_NS, `remote_ts.${row.module}`, 0) ?? 0;
+        if (Number.isFinite(remoteTs) && remoteTs <= lastRemoteTs) continue;
 
         const ciphertext = pgHexToBytes(row.ciphertext);
         const iv = pgHexToBytes(row.iv);
@@ -317,9 +341,12 @@ export function createSyncClient(initialDeps: SyncDeps): SyncClient {
         } finally {
           applyingModules.delete(row.module);
         }
-        // Watermark = the applied REMOTE ts (audit #7), not nowFn(). Set after
-        // the apply so a same-module re-pull is LWW-skipped correctly.
-        deps.store.set(SYNC_NS, `local_ts.${row.module}`, remoteTs);
+        // Watermark = the applied REMOTE ts (audit #7, #78), in the REMOTE
+        // clock domain, not nowFn(). Set after the apply so a same-module
+        // re-pull is LWW-skipped correctly (remote-vs-remote).
+        if (Number.isFinite(remoteTs)) {
+          deps.store.set(SYNC_NS, `remote_ts.${row.module}`, remoteTs);
+        }
       } catch (err) {
         console.warn('[sync] decrypt failed for module', row.module, err);
       }
@@ -342,13 +369,16 @@ export function createSyncClient(initialDeps: SyncDeps): SyncClient {
       // Subscribe by module — every key change inside that module re-pushes.
       const unsub = deps.store.subscribe(m, () => {
         // Re-entrancy guard (audit #7): the write that just fired came from
-        // syncIn applying an inbound row. Do NOT record a local edit ts (the
-        // watermark is set to the remote ts inside syncIn) and do NOT enqueue
-        // a push — otherwise every inbound apply echoes straight back out
-        // (ping-pong) and clobbers the LWW watermark with nowFn().
+        // syncIn applying an inbound row. Do NOT mark dirty (the remote
+        // watermark is set inside syncIn) and do NOT enqueue a push —
+        // otherwise every inbound apply echoes straight back out (ping-pong).
         if (applyingModules.has(m)) return;
-        // Record local edit ts before debounce — drives LWW.
-        deps.store.set(SYNC_NS, `local_ts.${m}`, nowFn());
+        // Mark the module dirty (audit #78) instead of stamping a wall-clock
+        // edit ts. A wall-clock `local_ts` was incomparable with remote
+        // `updated_at` (cross-clock-domain) and let a fast clock win every
+        // LWW; a boolean dirty flag is clock-free. It is cleared once this
+        // module's write is successfully pushed (drainOnce).
+        deps.store.set(SYNC_NS, `dirty.${m}`, true);
         debouncedPush(m);
       });
       unsubs.push(unsub);

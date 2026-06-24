@@ -13,10 +13,12 @@ import {
   makeCode,
   checkInviteRate,
 } from '../src/invites';
+import { deriveUserHash } from '../src/telemetry';
 
 const SUPABASE_URL = 'https://example.supabase.co';
 const SUPABASE_SERVICE_ROLE = 'service-role-fake';
 const SUPABASE_ANON_KEY = 'anon-fake';
+const USER_HASH_SALT = 'test-salt';
 
 function makeKv(): KVNamespace {
   const store = new Map<string, string>();
@@ -43,6 +45,7 @@ function makeEnv() {
     SUPABASE_ANON_KEY,
     INVITE_BASE_URL: 'https://ollie.app',
     RATE_KV: makeKv(),
+    USER_HASH_SALT,
   };
 }
 
@@ -113,31 +116,42 @@ describe('handleGenerateInvite', () => {
     fetchSpy.mockRestore();
   });
 
-  it('rejects missing inviter_user_hash with 400', async () => {
+  it('succeeds with NO inviter_user_hash in the body (it is server-derived)', async () => {
+    const expectedHash = await deriveUserHash('user-1', USER_HASH_SALT);
     const fetchSpy = scriptFetch([
       async () => new Response(JSON.stringify({ id: 'user-1' }), { status: 200 }),
+      async (_url, init) => {
+        const body = JSON.parse(String(init.body)) as { inviter_user_hash: string };
+        expect(body.inviter_user_hash).toBe(expectedHash);
+        return new Response(JSON.stringify([{ id: 1, code: 'olli-abcd-efgh' }]), { status: 201 });
+      },
     ]);
     const resp = await handleGenerateInvite(
       makeReq('/generate-invite', {}, { 'x-user-jwt': 'good' }),
       env,
     );
-    expect(resp.status).toBe(400);
+    expect(resp.status).toBe(200);
     fetchSpy.mockRestore();
   });
 
-  it('returns code + share_url + expires_at on success', async () => {
+  // ── Audit #85 IDOR: the inviter hash must come from the verified JWT, never
+  //    from the request body, so a caller can't attribute an invite to someone else.
+  it('IGNORES a client-supplied inviter_user_hash and derives it from the JWT', async () => {
+    const expectedHash = await deriveUserHash('user-1', USER_HASH_SALT);
     const fetchSpy = scriptFetch([
       async () => new Response(JSON.stringify({ id: 'user-1' }), { status: 200 }),
       async (url, init) => {
         expect(url).toBe('https://example.supabase.co/rest/v1/invites');
         const body = JSON.parse(String(init.body)) as { code: string; inviter_user_hash: string };
         expect(body.code).toMatch(/^olli-[a-z0-9]{4}-[a-z0-9]{4}$/);
-        expect(body.inviter_user_hash).toBe('hash-abc');
+        // The spoofed "victim" hash is NOT used; the JWT-derived hash is.
+        expect(body.inviter_user_hash).toBe(expectedHash);
+        expect(body.inviter_user_hash).not.toBe('victim-hash');
         return new Response(JSON.stringify([{ id: 1, code: body.code }]), { status: 201 });
       },
     ]);
     const resp = await handleGenerateInvite(
-      makeReq('/generate-invite', { inviter_user_hash: 'hash-abc' }, { 'x-user-jwt': 'good' }),
+      makeReq('/generate-invite', { inviter_user_hash: 'victim-hash' }, { 'x-user-jwt': 'good' }),
       env,
     );
     expect(resp.status).toBe(200);
@@ -251,7 +265,8 @@ describe('handleClaimInvite', () => {
     expect(resp.status).toBe(401);
   });
 
-  it('returns success=true when PATCH matches a row', async () => {
+  it('returns success=true when PATCH matches a row, with a server-derived invitee hash', async () => {
+    const expectedHash = await deriveUserHash('user-2', USER_HASH_SALT);
     const fetchSpy = scriptFetch([
       // auth
       async () => new Response(JSON.stringify({ id: 'user-2' }), { status: 200 }),
@@ -262,14 +277,40 @@ describe('handleClaimInvite', () => {
         expect(init.method).toBe('PATCH');
         const body = JSON.parse(String(init.body)) as { used_at: string; invitee_user_hash: string };
         expect(typeof body.used_at).toBe('string');
-        expect(body.invitee_user_hash).toBe('hash-invitee');
+        expect(body.invitee_user_hash).toBe(expectedHash);
         return new Response(JSON.stringify([{ code: 'olli-abcd-efgh' }]), { status: 200 });
       },
     ]);
     const resp = await handleClaimInvite(
       makeReq(
         '/claim-invite',
-        { code: 'olli-abcd-efgh', invitee_user_hash: 'hash-invitee' },
+        { code: 'olli-abcd-efgh' },
+        { 'x-user-jwt': 'good' },
+      ),
+      env,
+    );
+    const data = await resp.json() as { success: boolean };
+    expect(data.success).toBe(true);
+    fetchSpy.mockRestore();
+  });
+
+  // ── Audit #85 IDOR: the invitee hash must come from the verified JWT, never
+  //    the request body, so a caller can't claim an invite as another user.
+  it('IGNORES a client-supplied invitee_user_hash and derives it from the JWT', async () => {
+    const expectedHash = await deriveUserHash('user-2', USER_HASH_SALT);
+    const fetchSpy = scriptFetch([
+      async () => new Response(JSON.stringify({ id: 'user-2' }), { status: 200 }),
+      async (_url, init) => {
+        const body = JSON.parse(String(init.body)) as { invitee_user_hash: string };
+        expect(body.invitee_user_hash).toBe(expectedHash);
+        expect(body.invitee_user_hash).not.toBe('victim-hash');
+        return new Response(JSON.stringify([{ code: 'olli-abcd-efgh' }]), { status: 200 });
+      },
+    ]);
+    const resp = await handleClaimInvite(
+      makeReq(
+        '/claim-invite',
+        { code: 'olli-abcd-efgh', invitee_user_hash: 'victim-hash' },
         { 'x-user-jwt': 'good' },
       ),
       env,

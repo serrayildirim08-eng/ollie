@@ -64,12 +64,16 @@ export interface CrisisSignal {
   tier: SeverityTier;
   /** Which lexicons fired. */
   languages: LexiconLanguage[];
-  /** First matched entry per lexicon, for audit. */
+  /**
+   * First matched entry per lexicon, for audit. Carries ONLY the lexicon
+   * coordinates (tier + language + pattern id) — never the raw user text.
+   * Returning the matched `line` would leak crisis-dump content to the
+   * client and violate the zero-storage invariant (audit #77).
+   */
   matches: Array<{
     language: LexiconLanguage;
     tier: SeverityTier;
     pattern: string;
-    line: string;
   }>;
 }
 

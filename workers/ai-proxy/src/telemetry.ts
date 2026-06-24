@@ -78,6 +78,35 @@ const ALLOWED_TABLES = new Set([
   'consent_audit',
 ]);
 
+// audit #155 — per-table column whitelist. /ingest-event forwards the client
+// row straight to the Supabase REST endpoint, so without this the only thing
+// stopping an arbitrary key from being written is the DB schema. Mirror each
+// telemetry table's columns here and drop anything not on the list before
+// forwarding. Keep in sync with supabase/migrations/*. `id` is omitted on
+// purpose — it is server-generated (gen_random_uuid default).
+const ALLOWED_COLUMNS: Record<string, Set<string>> = {
+  retention_events: new Set([
+    'user_hash', 'event_type', 'event_at', 'session_count',
+    'hours_since_install', 'country', 'locale', 'device_id', 'app_version',
+  ]),
+  session_events: new Set([
+    'user_hash', 'session_id', 'started_at', 'ended_at', 'duration_seconds',
+    'modules_opened', 'voice_used', 'text_used', 'brain_dumps_count',
+    'country', 'device_id', 'app_version',
+  ]),
+  module_events: new Set([
+    'user_hash', 'session_id', 'module', 'opened_at', 'closed_at',
+    'duration_seconds', 'actions_count', 'country',
+  ]),
+  crisis_events: new Set([
+    'event_at', 'country', 'hotline_shown', 'app_version',
+  ]),
+  consent_audit: new Set([
+    'user_hash', 'consent_necessary', 'consent_marketing', 'consented_at',
+    'event_source', 'ip_country', 'user_agent', 'app_version',
+  ]),
+};
+
 // 3 days — long enough that a wedged cron can still catch up after a weekend.
 const QUEUE_TTL_SEC = 60 * 60 * 24 * 3;
 /** Bound the raw dump text before scrubbing + queuing (audit #84). A brain
@@ -264,6 +293,15 @@ export async function handleIngestEvent(
     return json({ error: 'supabase_not_configured' }, 500);
   }
 
+  // audit #155 — column whitelist. Drop any key the target table does not own
+  // so a caller can never write to (or probe for) columns outside the
+  // anonymized telemetry shape; we no longer rely on the DB to reject them.
+  const allowedColumns = ALLOWED_COLUMNS[body.table];
+  const row: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(body.row)) {
+    if (allowedColumns.has(key)) row[key] = value;
+  }
+
   const url = `${env.SUPABASE_URL.replace(/\/$/, '')}/rest/v1/${body.table}`;
   const resp = await fetch(url, {
     method: 'POST',
@@ -273,7 +311,7 @@ export async function handleIngestEvent(
       authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE}`,
       prefer: 'return=minimal',
     },
-    body: JSON.stringify(body.row),
+    body: JSON.stringify(row),
   });
 
   if (resp.ok) {
