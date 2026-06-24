@@ -214,13 +214,19 @@ export function RecipeDetail({
         </>
       )}
 
-      {/* i cooked it */}
+      {/* i cooked it — generous bottom margin + raised z-index so the bottom
+          button always clears the fixed bottom tab bar's hit area (it was
+          landing under the nav on tall recipes → taps went to the nav, not the
+          button). position relative keeps it above any sibling in the stack. */}
       <button
         type="button"
         onClick={cooked ? undefined : onCookedIt}
         disabled={cooked}
         style={{
+          position: 'relative',
+          zIndex: 2,
           marginTop: 20,
+          marginBottom: 32,
           appearance: 'none',
           border: 'none',
           borderRadius: 16,
@@ -229,6 +235,7 @@ export function RecipeDetail({
           fontSize: 15,
           fontWeight: 600,
           letterSpacing: '0.02em',
+          touchAction: 'manipulation',
           cursor: cooked ? 'default' : 'pointer',
           background: cooked ? 'transparent' : colors.sageDeep,
           color: cooked ? colors.sage : '#f3f6ee',
