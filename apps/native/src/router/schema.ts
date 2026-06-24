@@ -354,10 +354,35 @@ export type GroceryAction =
 
 // ── MEDICATION ───────────────────────────────────────────────────────
 
+// Schedule events (the "today" tab) + cabinet inventory (the "cabinet" tab).
+//   - log_dose / missed_dose / side_effect_note — schedule-side dose events.
+//     `log_dose` also auto-decrements the cabinet qty for that med (count-down).
+//   - add_to_cabinet      — stock a med/supplement ("started X"). Optional
+//                           `purpose` (sleep|mood|pain|digestion|vitamins|other;
+//                           else derived from the name), `doseLabel` ("400mg"),
+//                           `qty` (units on hand), and a `schedule` of "HH:MM"
+//                           slots — when a time is given the schedule registry
+//                           gains that slot so it appears on the today tab.
+//   - set_low / set_have  — manual "running low" override and its clear.
+//   - mark_taken          — log a dose AND count down the cabinet (the cabinet's
+//                           own tick; equivalent to log_dose for inventory).
 export type MedicationAction =
   | { module: 'medication'; action: 'log_dose'; medName: string; dose?: string }
   | { module: 'medication'; action: 'missed_dose'; medName: string }
-  | { module: 'medication'; action: 'side_effect_note'; medName: string; note: string };
+  | { module: 'medication'; action: 'side_effect_note'; medName: string; note: string }
+  | {
+      module: 'medication';
+      action: 'add_to_cabinet';
+      medName: string;
+      purpose?: 'sleep' | 'mood' | 'pain' | 'digestion' | 'vitamins' | 'other';
+      doseLabel?: string;
+      qty?: number;
+      /** "HH:MM" 24h-local slots; non-empty → med also lands on the schedule. */
+      schedule?: string[];
+    }
+  | { module: 'medication'; action: 'set_low'; medName: string }
+  | { module: 'medication'; action: 'set_have'; medName: string }
+  | { module: 'medication'; action: 'mark_taken'; medName: string; dose?: string };
 
 // ── CHORES ───────────────────────────────────────────────────────────
 // Household cleaning / upkeep tasks. Distinct from grocery (buying/using

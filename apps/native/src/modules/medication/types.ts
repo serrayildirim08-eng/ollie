@@ -121,3 +121,32 @@ export interface MedicationEventWithName extends MedicationEvent {
 export function normaliseName(raw: string): string {
   return raw.toLowerCase().trim().replace(/\s+/g, ' ');
 }
+
+// ─── cabinet inventory ──────────────────────────────────────────────────────
+//
+// The "cabinet" tab is a STOCK view, separate from the schedule (the "today"
+// tab). One row per med / supplement the user keeps, grouped BY PURPOSE in the
+// UI. The schedule registry (medications_registry) answers "what do I take and
+// when"; the cabinet answers "what do I have, and is it running low".
+//
+// `qty` is optional — when present + a daily schedule is known the low-stock
+// logic can auto-count-down; when absent the cabinet degrades to the manual
+// `lowFlag` only. See lowStock.ts.
+
+import type { MedPurpose } from './purposeMap';
+
+/** One row in the medication cabinet (stock inventory). */
+export interface CabinetItem {
+  id: string;
+  /** Normalised lowercase name — what we key on (matches registry naming). */
+  name: string;
+  /** Which purpose bucket the cabinet groups it under. */
+  purpose: MedPurpose;
+  /** Free-text dose label ("400mg", "2000 IU"), or null. */
+  doseLabel: string | null;
+  /** Units remaining, or null when the user never entered a count (manual-only). */
+  qty: number | null;
+  /** Manual "running low" override — wins over the auto count-down. */
+  lowFlag: boolean;
+  createdAt: number; // ms since epoch
+}

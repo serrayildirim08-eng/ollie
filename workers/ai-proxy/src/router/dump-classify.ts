@@ -59,7 +59,7 @@ MODULES → ACTIONS
 - habits: complete | identity_statement   (streak_break_note FORBIDDEN; Ollie has no streaks)
 - goals: progress_note | create_goal | milestone_hit | obstacle_note
 - grocery: pantry_add | pantry_use | pantry_depleted | shopping_list_add | pantry_low_flag | meal_request | recipe_cooked
-- medication: log_dose | missed_dose | side_effect_note
+- medication: log_dose | missed_dose | side_effect_note | add_to_cabinet | set_low | set_have | mark_taken
 - chores: chore_done | add_chore | add_recurring_chore
 - dump_only: archive_only
 
@@ -104,6 +104,13 @@ Other module-choice hints:
   · SELF-TALK / self-evaluation ("don't like myself", "I'm failing", "I'm lazy", "habits all empty this week", "hate myself") → mood.self_talk { statement, valence:"pos"|"neg" }.
   · habits.identity_statement is now ONLY a DELIBERATE positive identity goal ("I'm becoming someone who reads daily"). Negative self-judgment → mood.self_talk, NOT habits.
 - cycle.pill_logged is BIRTH CONTROL pill. Generic Rx → medication.log_dose.
+- MEDICATION (meds, vitamins, supplements — the medicine cabinet):
+  · PAST-TENSE took ("took my magnesium", "took 50mg sertraline", "had my vitamin d", "tomé melatonina", "ilacımı aldım") → medication.mark_taken { medName, dose? }. (mark_taken both logs the dose AND counts the cabinet down; plain log_dose is equivalent.)
+  · DID NOT take / skipped ("skipped my meds", "forgot my sertraline", "almadım", "no tomé") → medication.missed_dose { medName }.
+  · STARTED / now taking / began ("started magnesium 400mg at night for sleep", "began taking vitamin d", "now on sertraline 50mg in the morning", "magnezyuma başladım") → medication.add_to_cabinet { medName, doseLabel? (e.g. "400mg"), purpose? one of sleep|mood|pain|digestion|vitamins|other, qty? (units on hand), schedule? array of "HH:MM" when a time of day is given ("at night"→["21:00"], "in the morning"→["09:00"], "9am"→["09:00"]) }. Infer purpose from the name when obvious (melatonin/magnesium/l-theanine→sleep, sertraline/omega-3→mood, ibuprofen/acetaminophen→pain, omeprazole/probiotic→digestion, vitamin d/b12/iron→vitamins) else omit.
+  · RUNNING LOW ("running low on vitamin d", "almost out of my magnesium", "low on melatonin", "vitaminim bitmek üzere") → medication.set_low { medName }. (Distinct from grocery.pantry_low_flag — meds/vitamins/supplements route to MEDICATION, not grocery.)
+  · RESTOCKED / have it again ("got more vitamin d", "restocked my magnesium", "have melatonin again") → medication.set_have { medName }.
+  · SIDE EFFECT ("sertraline making me nauseous", "dizzy from my meds") → medication.side_effect_note { medName, note }.
 - habits.streak_break_note FORBIDDEN. "Broke X habit" / "missed 5 days" said as self-judgment → mood.self_talk; as neutral observation → dump_only. NEVER identity_statement for negative habit talk.
 - TIME-DEFERRED REMINDER ("remind me to X in N", "Y dakika sonra hatırlat", "recuérdame X en N"): classify by what to do (e.g. "remind me to call mama in 1 min" → admin.create_phone_task person="mama"), add top-level \`remindIn: { amount: number, unit: "sec"|"min"|"hr"|"day" }\`. Never a separate reminder fragment, never dump_only when remindIn present. "Remind me to take <med> in N" → admin.create_task text="take <med>" + remindIn (NOT medication.log_dose — that is past-tense).
 
@@ -152,6 +159,12 @@ MINI EXAMPLES:
 - "have to get more detergent" → grocery.shopping_list_add { item:"detergent" }
 - "out of lemons" → grocery.pantry_depleted { item:"lemons" }
 - "took 50mg sertraline" → medication.log_dose { medName:"sertraline", dose:"50mg" }
+- "took my magnesium" → medication.mark_taken { medName:"magnesium" }
+- "started magnesium 400mg at night for sleep" → medication.add_to_cabinet { medName:"magnesium", doseLabel:"400mg", purpose:"sleep", schedule:["21:00"] }
+- "began taking vitamin d in the morning" → medication.add_to_cabinet { medName:"vitamin d", purpose:"vitamins", schedule:["09:00"] }
+- "running low on vitamin d" → medication.set_low { medName:"vitamin d" }
+- "got more melatonin" → medication.set_have { medName:"melatonin" }
+- "forgot to take my sertraline" → medication.missed_dose { medName:"sertraline" }
 - "cleaned the kitchen" → chores.chore_done { chore:"clean the kitchen" }
 - "vacuumed" → chores.chore_done { chore:"vacuum" }
 - "did the dishes" → chores.chore_done { chore:"do the dishes" }

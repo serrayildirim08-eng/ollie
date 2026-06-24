@@ -1,58 +1,45 @@
 /**
  * MedicationBox · /box/medication screen.
  *
- * Ported visually from the redesign/money-v2 web MedicationFace (apps/web/
- * src/modules/medication-v2/screens/MedicationFace.tsx) on 2026-05-28. The
- * web face is the live module hub (a take-circle hero, dose dots, a
- * notebook list of meds, drill rows). This native surface keeps the
- * editorial hero + notebook list but stays a review-and-cleanup screen —
- * the AI router still does all the writing.
+ * Two tabs (rooms redesign · Health room, 2026-06-24):
+ *   - TODAY   — the schedule. Scheduled doses grouped morning / evening, a
+ *               soft tick = taken, an "N of M taken" count. As-needed meds are
+ *               NOT pre-listed (they're logged via dump); a calm one-liner
+ *               points there instead.
+ *   - CABINET — the stock inventory, grouped BY PURPOSE in collapsible
+ *               accordions (olive dot + count + amber low-dot), each row an
+ *               olive pill + name + dose + a "running low / have" affordance.
+ *               A per-screen dump-bar hint sits at the bottom.
  *
- * Visual structure:
- *   1. kicker + display title — section opener
- *   2. DoseHero — a large ink-outline circle showing today's most recent
- *      dose time (or "—" cold). DoseDots beneath show one sage dot per
- *      dose taken today, one amber-ring dot per missed dose. Empty state
- *      gets the cold-start dot-and-sentence invitation.
- *   3. your meds — notebook list of registered medications with last-dose
- *      timestamps, one per line in the editorial hairline grammar.
- *   4. missed doses — recent missed log (amber accent), with remove.
- *   5. side effects — recent side-effect notes, with remove.
+ * The AI router still does all the writing — taps here are review affordances
+ * (tick a scheduled dose, flip a low flag). This is health data: calm tone, no
+ * streaks, no scoring, no advice.
  *
- * This is health data — tone is calm, no streaks, no scoring, no advice.
- *
- * Auto-refreshes on focus + every 6s so additions made from a dump while
- * the page is open show up. Polling stays in place — there is no
- * observable layer over SQLite yet.
+ * Auto-refreshes on focus + every 6s (no observable layer over SQLite yet).
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { type CadenceEstimate } from '@ollie/cadence';
 import { Stack, Row, Box } from '../../layout';
 import { Text } from '../../ui';
-import {
-  colors,
-  fontSizes,
-  fontWeights,
-  letterSpacings,
-  radii,
-  shadows,
-} from '../../theme/tokens';
+import { colors, fontSizes, fontWeights, shadows } from '../../theme/tokens';
 import { formatRelativeTime } from '../../lib/formatRelativeTime';
 import { PatternCards } from '../../patterns/PatternCards';
 import { useModuleData } from '../../lib/useModuleData';
 import { migrateMedication } from './migrate';
 import {
+  cabinet as cabinetRepo,
   cadence as cadenceRepo,
   events as eventsRepo,
   medications as medsRepo,
 } from './repo';
+import { isLow, daysOfSupply } from './lowStock';
+import { PURPOSE_ORDER, type MedPurpose } from './purposeMap';
 import {
-  MEDICATION_KINDS,
-  normaliseTime,
+  normaliseName,
+  type CabinetItem,
   type Medication,
   type MedicationEventWithName,
-  type MedicationKind,
 } from './types';
 
 const SMCP_STYLE: React.CSSProperties = {
@@ -62,8 +49,11 @@ const SMCP_STYLE: React.CSSProperties = {
 
 const RECENT_LIMIT = 8;
 
+type Tab = 'today' | 'cabinet';
+
 interface BoxState {
   meds: Medication[];
+  cabinet: CabinetItem[];
   lastDose: Record<string, number>;
   todayDoses: MedicationEventWithName[];
   todayMissed: MedicationEventWithName[];
@@ -75,6 +65,7 @@ interface BoxState {
 
 const EMPTY_STATE: BoxState = {
   meds: [],
+  cabinet: [],
   lastDose: {},
   todayDoses: [],
   todayMissed: [],
@@ -85,20 +76,20 @@ const EMPTY_STATE: BoxState = {
 
 export function MedicationBox(): JSX.Element {
   const [state, setState] = useState<BoxState>(EMPTY_STATE);
+  const [tab, setTab] = useState<Tab>('today');
 
   const refresh = useCallback(async () => {
     const startOfToday = startOfLocalDay(Date.now());
-    const [meds, lastDose, todayDoses, todayMissed, recentMissed, recentSideEffects] =
+    const [meds, cabinet, lastDose, todayDoses, todayMissed, recentMissed, recentSideEffects] =
       await Promise.all([
         medsRepo.list(),
+        cabinetRepo.list(),
         medsRepo.lastDoseMap(),
         eventsRepo.listByKindSince('dose', startOfToday),
         eventsRepo.listByKindSince('missed', startOfToday),
         eventsRepo.recentByKind('missed', RECENT_LIMIT),
         eventsRepo.recentByKind('side_effect', RECENT_LIMIT),
       ]);
-    // Fan-out cadence reads — one per registered medication. Cheap: each
-    // is a filtered range scan on (med_id, kind='dose').
     const cadencePairs = await Promise.all(
       meds.map(
         async (med) =>
@@ -108,6 +99,7 @@ export function MedicationBox(): JSX.Element {
     const doseCadence = new Map(cadencePairs);
     setState({
       meds,
+      cabinet,
       lastDose,
       todayDoses,
       todayMissed,
@@ -123,45 +115,38 @@ export function MedicationBox(): JSX.Element {
     refresh,
   });
 
-  const handleRemoveMed = useCallback(
+  // Tick a scheduled dose — logs a dose event (which the today tab reads back
+  // as "taken") + counts the cabinet down for that med.
+  const handleTake = useCallback(
+    async (medName: string, alreadyTaken: boolean) => {
+      // Idempotent: re-tapping an already-taken dose must NOT log another dose
+      // event or decrement the cabinet again (would double-count + over-deplete).
+      if (alreadyTaken) return;
+      await eventsRepo.logDose({ medName });
+      await cabinetRepo.decrementOnTaken(medName);
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const handleSetLow = useCallback(
+    async (id: string, low: boolean) => {
+      await cabinetRepo.setLow(id, low);
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const handleRemoveCabinet = useCallback(
     async (id: string) => {
-      await medsRepo.remove(id);
+      await cabinetRepo.remove(id);
       await refresh();
     },
     [refresh],
   );
-
-  const handleSaveProfile = useCallback(
-    async (id: string, profile: { kind: MedicationKind; schedule: string[] }) => {
-      await medsRepo.updateProfile(id, profile);
-      await refresh();
-    },
-    [refresh],
-  );
-
-  const handleRemoveEvent = useCallback(
-    async (id: string) => {
-      await eventsRepo.remove(id);
-      await refresh();
-    },
-    [refresh],
-  );
-
-  const isCold =
-    state.meds.length === 0 &&
-    state.todayDoses.length === 0 &&
-    state.todayMissed.length === 0 &&
-    state.recentMissed.length === 0 &&
-    state.recentSideEffects.length === 0;
-
-  // Most recent dose today drives the hero clock; if none yet, show "—".
-  const latestToday = state.todayDoses[0] ?? null;
-  const heroLabel = latestToday ? 'last dose today' : 'next dose';
-  const heroTime = latestToday ? formatClock(latestToday.loggedAt) : '—';
-  const heroName = latestToday ? latestToday.medName : 'nothing logged today';
 
   return (
-    <Stack gap={48}>
+    <Stack gap={32}>
       <Stack gap={8}>
         <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
           box
@@ -181,142 +166,524 @@ export function MedicationBox(): JSX.Element {
         </Text>
       </Stack>
 
+      <TabSwitch tab={tab} onChange={setTab} />
+
       {!ready ? (
         <Text scale="caption" color={colors.inkFaint}>
           loading…
         </Text>
+      ) : tab === 'today' ? (
+        <TodayTab
+          meds={state.meds}
+          todayDoses={state.todayDoses}
+          todayMissed={state.todayMissed}
+          recentMissed={state.recentMissed}
+          recentSideEffects={state.recentSideEffects}
+          onTake={(name, alreadyTaken) => void handleTake(name, alreadyTaken)}
+        />
       ) : (
-        <Stack gap={48}>
-          <DoseHero
-            kicker={heroLabel}
-            time={heroTime}
-            name={heroName}
-            dosesTaken={state.todayDoses.length}
-            dosesMissed={state.todayMissed.length}
-            cold={isCold}
-          />
-
-          {/* Layer-2 noticings — fed by the SQLite→store bridge + medication watcher. */}
-          <PatternCards module="medication" />
-
-          <NotebookList
-            meds={state.meds}
-            lastDose={state.lastDose}
-            onRemove={(id) => void handleRemoveMed(id)}
-            onSaveProfile={(id, p) => void handleSaveProfile(id, p)}
-          />
-
-          <ListSection
-            label="missed doses"
-            empty="none recent"
-            items={state.recentMissed}
-            accent={colors.amber}
-            renderItem={(ev) => (
-              <EventRow
-                key={ev.id}
-                title={ev.medName}
-                detail={null}
-                whenMs={ev.loggedAt}
-                accentDot={colors.amber}
-                onRemove={() => void handleRemoveEvent(ev.id)}
-              />
-            )}
-          />
-
-          <ListSection
-            label="side effects"
-            empty="none recent"
-            items={state.recentSideEffects}
-            renderItem={(ev) => (
-              <EventRow
-                key={ev.id}
-                title={ev.medName}
-                detail={ev.note}
-                whenMs={ev.loggedAt}
-                onRemove={() => void handleRemoveEvent(ev.id)}
-              />
-            )}
-          />
-
-          {isCold && (
-            <Text
-              scale="caption"
-              color={colors.inkFaint}
-              style={{ textAlign: 'center', lineHeight: 1.55 }}
-            >
-              no streaks, no scoring — just what you take, and when, kept for
-              you and your doctor.
-            </Text>
-          )}
-        </Stack>
+        <CabinetTab
+          items={state.cabinet}
+          meds={state.meds}
+          onSetLow={(id, low) => void handleSetLow(id, low)}
+          onRemove={(id) => void handleRemoveCabinet(id)}
+        />
       )}
     </Stack>
   );
 }
 
-// ─── hero ────────────────────────────────────────────────────────────────
-//
-// Editorial centerpiece, ported from medication-v2's TakeCircle + DoseDots.
-// Centered column: a small kicker line, the dose-time (oversized serif),
-// the medication name in a calm sub-line, the ink-outline ring, then a
-// row of dose dots (sage = taken, amber-ring = missed). Cold = "—" inside
-// the ring + dashed placeholder dots + the sage invitation.
-//
-// This is a review surface — no tappable "take" affordance. The amber
-// glow of the live web variant is intentionally dropped (writes belong
-// to the brain-dump router on native). The amber ACCENT is preserved on
-// the missed-dose dots so the visual language still says "amber = missed
-// surface, sage = taken".
+// ─── tab switch ─────────────────────────────────────────────────────────────
 
-function DoseHero({
-  kicker,
-  time,
-  name,
-  dosesTaken,
-  dosesMissed,
-  cold,
-}: {
-  kicker: string;
-  time: string;
-  name: string;
-  dosesTaken: number;
-  dosesMissed: number;
-  cold: boolean;
-}): JSX.Element {
+function TabSwitch({ tab, onChange }: { tab: Tab; onChange: (t: Tab) => void }): JSX.Element {
   return (
-    <Stack gap={20} align="center">
-      <div
+    <Row
+      gap={0}
+      align="center"
+      style={{
+        background: colors.cream,
+        borderRadius: 999,
+        boxShadow: shadows.inset,
+        padding: 4,
+        alignSelf: 'flex-start',
+      }}
+    >
+      {(['today', 'cabinet'] as const).map((t) => {
+        const active = t === tab;
+        return (
+          <button
+            key={t}
+            type="button"
+            onClick={() => onChange(t)}
+            aria-pressed={active}
+            style={{
+              ...SMCP_STYLE,
+              border: 'none',
+              background: active ? colors.sageDeep : 'transparent',
+              color: active ? colors.paper : colors.inkFaint,
+              borderRadius: 999,
+              padding: '7px 20px',
+              fontSize: 12,
+              fontWeight: fontWeights.medium,
+              cursor: 'pointer',
+              boxShadow: active ? shadows.raisedSm : 'none',
+            }}
+          >
+            {t}
+          </button>
+        );
+      })}
+    </Row>
+  );
+}
+
+// ─── TODAY tab — the schedule ────────────────────────────────────────────────
+//
+// Scheduled doses only, grouped morning (<12:00) / evening (≥12:00). A dose is
+// "taken" when there's a dose event for that med today; the tick reflects it.
+// As-needed meds (no schedule) are NOT pre-listed — a calm one-liner instead.
+
+interface ScheduledDose {
+  medId: string;
+  medName: string;
+  slot: string; // "HH:MM"
+  taken: boolean;
+}
+
+function TodayTab({
+  meds,
+  todayDoses,
+  todayMissed,
+  recentMissed,
+  recentSideEffects,
+  onTake,
+}: {
+  meds: Medication[];
+  todayDoses: MedicationEventWithName[];
+  todayMissed: MedicationEventWithName[];
+  recentMissed: MedicationEventWithName[];
+  recentSideEffects: MedicationEventWithName[];
+  onTake: (medName: string, alreadyTaken: boolean) => void;
+}): JSX.Element {
+  // How many doses landed for each med today. We mark the earliest N scheduled
+  // slots taken (per-slot, not per-name) so a twice-daily med doesn't show both
+  // slots done after a single tap.
+  const takenCountByName = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const ev of todayDoses) {
+      const k = normaliseName(ev.medName);
+      m.set(k, (m.get(k) ?? 0) + 1);
+    }
+    return m;
+  }, [todayDoses]);
+
+  const { morning, evening } = useMemo(() => {
+    const m: ScheduledDose[] = [];
+    const e: ScheduledDose[] = [];
+    for (const med of meds) {
+      const slots = [...med.schedule].sort((a, b) => a.localeCompare(b));
+      const taken = takenCountByName.get(normaliseName(med.name)) ?? 0;
+      slots.forEach((slot, i) => {
+        const dose: ScheduledDose = {
+          medId: med.id,
+          medName: med.name,
+          slot,
+          taken: i < taken, // the earliest `taken` slots count as done
+        };
+        if (hourOf(slot) < 12) m.push(dose);
+        else e.push(dose);
+      });
+    }
+    const bySlot = (a: ScheduledDose, b: ScheduledDose) => a.slot.localeCompare(b.slot);
+    return { morning: m.sort(bySlot), evening: e.sort(bySlot) };
+  }, [meds, takenCountByName]);
+
+  const total = morning.length + evening.length;
+  const takenCount = [...morning, ...evening].filter((d) => d.taken).length;
+  const asNeededCount = meds.filter((m) => m.schedule.length === 0).length;
+
+  return (
+    <Stack gap={32}>
+      {/* the "N of M taken" count line */}
+      {total > 0 ? (
+        <Text scale="caption" color={colors.inkFaint} style={{ letterSpacing: '0.02em' }}>
+          <strong style={{ color: colors.ink, fontWeight: 600 }}>
+            {takenCount} of {total}
+          </strong>{' '}
+          taken today
+          {todayMissed.length > 0 && (
+            <span style={{ color: colors.amber, fontWeight: 600 }}>
+              {' · '}
+              {todayMissed.length} missed
+            </span>
+          )}
+        </Text>
+      ) : null}
+
+      {total === 0 ? (
+        <ColdSchedule asNeededCount={asNeededCount} />
+      ) : (
+        <Stack gap={20}>
+          {morning.length > 0 && (
+            <DoseGroup label="morning" doses={morning} onTake={onTake} />
+          )}
+          {evening.length > 0 && (
+            <DoseGroup label="evening" doses={evening} onTake={onTake} />
+          )}
+        </Stack>
+      )}
+
+      {/* As-needed: a calm one-liner, never a pre-list. */}
+      {asNeededCount > 0 && total > 0 && (
+        <Text scale="caption" color={colors.inkFaint} style={{ lineHeight: 1.5 }}>
+          plus {asNeededCount} as-needed{' '}
+          {asNeededCount === 1 ? 'med' : 'meds'} — just dump &ldquo;took
+          ibuprofen&rdquo; when you do.
+        </Text>
+      )}
+
+      {/* Layer-2 noticings — fed by the SQLite→store bridge + medication watcher. */}
+      <PatternCards module="medication" />
+
+      <ListSection
+        label="missed doses"
+        empty="none recent"
+        items={recentMissed}
+        accent={colors.amber}
+        renderItem={(ev) => (
+          <EventRow
+            key={ev.id}
+            title={ev.medName}
+            detail={null}
+            whenMs={ev.loggedAt}
+            accentDot={colors.amber}
+          />
+        )}
+      />
+
+      <ListSection
+        label="side effects"
+        empty="none recent"
+        items={recentSideEffects}
+        renderItem={(ev) => (
+          <EventRow key={ev.id} title={ev.medName} detail={ev.note} whenMs={ev.loggedAt} />
+        )}
+      />
+    </Stack>
+  );
+}
+
+function DoseGroup({
+  label,
+  doses,
+  onTake,
+}: {
+  label: string;
+  doses: ScheduledDose[];
+  onTake: (medName: string, alreadyTaken: boolean) => void;
+}): JSX.Element {
+  const dueCount = doses.filter((d) => !d.taken).length;
+  return (
+    <Stack gap={10}>
+      <Row gap={8} align="center">
+        <span
+          aria-hidden
+          style={{ width: 7, height: 7, borderRadius: '50%', background: colors.sageDeep, flexShrink: 0 }}
+        />
+        <Text
+          scale="caption"
+          color={colors.inkSoft}
+          style={{ ...SMCP_STYLE, fontWeight: 600 }}
+        >
+          {label}
+        </Text>
+        {dueCount > 0 && (
+          <Text scale="caption" color={colors.inkFaint}>
+            {dueCount} due
+          </Text>
+        )}
+      </Row>
+      <Stack gap={10}>
+        {doses.map((d) => (
+          <DoseRow key={`${d.medId}-${d.slot}`} dose={d} onTake={() => onTake(d.medName, d.taken)} />
+        ))}
+      </Stack>
+    </Stack>
+  );
+}
+
+function DoseRow({ dose, onTake }: { dose: ScheduledDose; onTake: () => void }): JSX.Element {
+  return (
+    <Box
+      bg="cream"
+      radius="card"
+      shadow="raised"
+      style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}
+    >
+      <TickCircle done={dose.taken} onClick={onTake} label={`mark ${dose.medName} taken`} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <span
+          style={{
+            fontSize: fontSizes.small,
+            color: dose.taken ? colors.inkFaint : colors.ink,
+            fontWeight: fontWeights.medium,
+            letterSpacing: '-0.01em',
+            textDecoration: dose.taken ? 'line-through' : 'none',
+          }}
+        >
+          {dose.medName}
+        </span>
+      </div>
+      <Text scale="caption" color={colors.inkFaint}>
+        {formatSlot(dose.slot)}
+      </Text>
+    </Box>
+  );
+}
+
+function ColdSchedule({ asNeededCount }: { asNeededCount: number }): JSX.Element {
+  return (
+    <Stack gap={9} align="start" style={{ maxWidth: 360 }}>
+      <Text scale="caption" color={colors.inkFaint} style={{ letterSpacing: '0.02em' }}>
+        nothing scheduled
+      </Text>
+      <Row gap={9} align="start">
+        <span
+          aria-hidden
+          style={{
+            width: 7,
+            height: 7,
+            borderRadius: '50%',
+            background: colors.sageDeep,
+            flexShrink: 0,
+            marginTop: 6,
+          }}
+        />
+        <Text scale="body" style={{ lineHeight: 1.5 }}>
+          {asNeededCount > 0
+            ? `you keep ${asNeededCount} as-needed ${asNeededCount === 1 ? 'med' : 'meds'} — set a time on one in the cabinet to see it here, or just dump “took my magnesium”.`
+            : 'dump “started magnesium 400mg at night for sleep” and it lands here on a schedule.'}
+        </Text>
+      </Row>
+    </Stack>
+  );
+}
+
+// ─── CABINET tab — stock by purpose ──────────────────────────────────────────
+
+function CabinetTab({
+  items,
+  meds,
+  onSetLow,
+  onRemove,
+}: {
+  items: CabinetItem[];
+  meds: Medication[];
+  onSetLow: (id: string, low: boolean) => void;
+  onRemove: (id: string) => void;
+}): JSX.Element {
+  // doses-per-day per normalised med name, from the schedule registry — feeds
+  // the auto count-down read for the low check + the "~N days left" sub-line.
+  const perDayByName = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const med of meds) m.set(normaliseName(med.name), med.schedule.length);
+    return m;
+  }, [meds]);
+
+  const grouped = useMemo(() => {
+    const byPurpose = new Map<MedPurpose, CabinetItem[]>();
+    for (const it of items) {
+      const bucket = byPurpose.get(it.purpose);
+      if (bucket) bucket.push(it);
+      else byPurpose.set(it.purpose, [it]);
+    }
+    return byPurpose;
+  }, [items]);
+
+  const lowCount = useMemo(
+    () =>
+      items.filter((it) =>
+        isLow({
+          lowFlag: it.lowFlag,
+          qty: it.qty,
+          dosesPerDay: perDayByName.get(it.name) ?? 0,
+        }),
+      ).length,
+    [items, perDayByName],
+  );
+
+  if (items.length === 0) {
+    return (
+      <Stack gap={20}>
+        <ColdCabinet />
+        <DumpBarHint />
+      </Stack>
+    );
+  }
+
+  return (
+    <Stack gap={20}>
+      <Text scale="caption" color={colors.inkFaint} style={{ letterSpacing: '0.02em' }}>
+        <strong style={{ color: colors.ink, fontWeight: 600 }}>{items.length}</strong>
+        {items.length === 1 ? ' thing' : ' things'}
+        {lowCount > 0 && (
+          <span style={{ color: colors.amber, fontWeight: 600 }}>
+            {' · '}
+            {lowCount} running low
+          </span>
+        )}
+      </Text>
+
+      <Stack gap={12}>
+        {PURPOSE_ORDER.map(({ key, label }) => {
+          const bucket = grouped.get(key);
+          if (!bucket || bucket.length === 0) return null;
+          const hasLow = bucket.some((it) =>
+            isLow({ lowFlag: it.lowFlag, qty: it.qty, dosesPerDay: perDayByName.get(it.name) ?? 0 }),
+          );
+          return (
+            <PurposeAccordion key={key} label={label} count={bucket.length} hasLow={hasLow}>
+              <Stack gap={10}>
+                {bucket.map((it) => (
+                  <CabinetRow
+                    key={it.id}
+                    item={it}
+                    dosesPerDay={perDayByName.get(it.name) ?? 0}
+                    onSetLow={(low) => onSetLow(it.id, low)}
+                    onRemove={() => onRemove(it.id)}
+                  />
+                ))}
+              </Stack>
+            </PurposeAccordion>
+          );
+        })}
+      </Stack>
+
+      <DumpBarHint />
+    </Stack>
+  );
+}
+
+function PurposeAccordion({
+  label,
+  count,
+  hasLow,
+  children,
+}: {
+  label: string;
+  count: number;
+  hasLow: boolean;
+  children: React.ReactNode;
+}): JSX.Element {
+  const [open, setOpen] = useState(true);
+  return (
+    <Stack gap={open ? 12 : 0}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
         style={{
-          fontSize: fontSizes.caption,
-          color: colors.inkFaint,
-          fontWeight: fontWeights.medium,
-          letterSpacing: letterSpacings.capsTight,
-          ...SMCP_STYLE,
+          appearance: 'none',
+          background: 'transparent',
+          border: 'none',
+          padding: '6px 2px',
+          cursor: 'pointer',
+          width: '100%',
         }}
       >
-        {kicker}
-      </div>
+        <Row gap={9} align="center">
+          <span
+            aria-hidden
+            style={{ width: 7, height: 7, borderRadius: '50%', background: colors.sageDeep, flexShrink: 0 }}
+          />
+          <Text
+            scale="caption"
+            color={colors.inkSoft}
+            style={{ ...SMCP_STYLE, fontWeight: 600 }}
+          >
+            {label}
+          </Text>
+          <Text scale="caption" color={colors.inkFaint}>
+            {count}
+          </Text>
+          {hasLow && (
+            <span
+              aria-label="running low"
+              style={{ width: 6, height: 6, borderRadius: '50%', background: colors.amber, flexShrink: 0 }}
+            />
+          )}
+          <span style={{ marginLeft: 'auto', display: 'inline-flex' }}>
+            <svg
+              width="11"
+              height="11"
+              viewBox="0 0 10 10"
+              aria-hidden
+              style={{
+                transform: open ? 'rotate(90deg)' : 'rotate(0deg)',
+                transition: 'transform 200ms cubic-bezier(0.18, 0, 0.22, 1)',
+              }}
+            >
+              <path
+                d="M3 1.5 L6.5 5 L3 8.5"
+                fill="none"
+                stroke={colors.inkFaint}
+                strokeWidth={1.4}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </span>
+        </Row>
+      </button>
+      {open && children}
+    </Stack>
+  );
+}
 
-      <div
+function CabinetRow({
+  item,
+  dosesPerDay,
+  onSetLow,
+  onRemove,
+}: {
+  item: CabinetItem;
+  dosesPerDay: number;
+  onSetLow: (low: boolean) => void;
+  onRemove: () => void;
+}): JSX.Element {
+  const low = isLow({ lowFlag: item.lowFlag, qty: item.qty, dosesPerDay });
+  const days = daysOfSupply({ lowFlag: item.lowFlag, qty: item.qty, dosesPerDay });
+
+  // Sub-line: dose label + (if computable) "~N days left".
+  const meta = [
+    item.doseLabel,
+    item.qty != null ? `${item.qty} left` : null,
+    days != null ? `~${days}d` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
+  return (
+    <Box
+      bg="cream"
+      radius="card"
+      shadow="raised"
+      style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}
+    >
+      <span
+        aria-hidden
         style={{
-          fontFamily: 'var(--ollie-font-serif)',
-          fontSize: 34,
-          fontWeight: fontWeights.light,
-          color: colors.ink,
-          letterSpacing: letterSpacings.display,
-          lineHeight: 1.1,
-          textAlign: 'center',
+          width: 22,
+          height: 22,
+          borderRadius: '50%',
+          background: colors.sageDeep,
+          boxShadow:
+            'inset 3px 3px 6px rgba(120,140,122,0.55), inset -3px -3px 6px rgba(255,255,255,0.85)',
+          flexShrink: 0,
         }}
-      >
-        {name}
-      </div>
-
-      <DoseRing time={time} cold={cold} />
-
-      <DoseDots taken={dosesTaken} missed={dosesMissed} cold={cold} />
-
-      {dosesTaken + dosesMissed > 0 && (
-        <div
+      />
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <span
           style={{
             fontSize: fontSizes.small,
             color: colors.ink,
@@ -324,554 +691,128 @@ function DoseHero({
             letterSpacing: '-0.01em',
           }}
         >
-          <span style={{ color: colors.inkFaint }}>today —</span>{' '}
-          {dosesTaken} {dosesTaken === 1 ? 'dose' : 'doses'} taken
-          {dosesMissed > 0 && (
-            <>
-              <span style={{ color: colors.inkFaint }}>, </span>
-              <span style={{ color: colors.amber }}>{dosesMissed} missed</span>
-            </>
-          )}
-        </div>
-      )}
-
-      {cold && (
-        <Row gap={9} align="start" style={{ marginTop: 4, maxWidth: 320 }}>
-          <span
-            aria-hidden
-            style={{
-              width: 7,
-              height: 7,
-              borderRadius: '50%',
-              background: colors.sageDeep,
-              flexShrink: 0,
-              marginTop: 6,
-            }}
-          />
-          <Text
-            scale="body"
-            style={{
-              lineHeight: 1.45,
-              letterSpacing: '-0.01em',
-            }}
-          >
-            this is where your meds, vitamins and supplements live. dump
-            &lsquo;20mg adderall at 9am&rsquo; and ollie keeps the log — no schedule
-            needed, no streaks to chase.
-          </Text>
-        </Row>
-      )}
-    </Stack>
-  );
-}
-
-/** The big ink-outline ring with the dose time inside. Decorative, not a button. */
-function DoseRing({ time, cold }: { time: string; cold: boolean }): JSX.Element {
-  return (
-    <div
-      aria-hidden
-      style={{
-        boxSizing: 'border-box',
-        width: 164,
-        height: 164,
-        borderRadius: '50%',
-        border: 'none',
-        background: colors.paper,
-        boxShadow: shadows.card,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}
-    >
-      <span
-        style={{
-          fontFamily: 'var(--ollie-font-serif)',
-          fontSize: cold ? 56 : 34,
-          fontWeight: cold ? 200 : 300,
-          color: cold ? colors.inkFaint : colors.ink,
-          letterSpacing: '-0.02em',
-          lineHeight: 1,
-        }}
-      >
-        {time}
-      </span>
-    </div>
-  );
-}
-
-/** Per-dose dots: sage = taken, amber outline = missed, dashed = cold. */
-function DoseDots({
-  taken,
-  missed,
-  cold,
-}: {
-  taken: number;
-  missed: number;
-  cold: boolean;
-}): JSX.Element {
-  const DOT = 13;
-  const baseStyle: React.CSSProperties = {
-    boxSizing: 'border-box',
-    width: DOT,
-    height: DOT,
-    borderRadius: '50%',
-  };
-
-  if (cold || (taken === 0 && missed === 0)) {
-    return (
-      <div
-        aria-hidden
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 13,
-        }}
-      >
-        {[0, 1].map((i) => (
-          <span
-            key={i}
-            style={{
-              ...baseStyle,
-              background: 'transparent',
-              border: `1.5px dashed ${colors.hairline}`,
-            }}
-          />
-        ))}
-      </div>
-    );
-  }
-
-  // Cap rendered dots so the row never overflows on heavy days.
-  const MAX_DOTS = 14;
-  const dots: Array<'done' | 'missed'> = [
-    ...Array<'done'>(taken).fill('done'),
-    ...Array<'missed'>(missed).fill('missed'),
-  ].slice(0, MAX_DOTS);
-  const overflow = taken + missed - dots.length;
-
-  return (
-    <div
-      aria-hidden
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 13,
-        flexWrap: 'wrap',
-        justifyContent: 'center',
-        maxWidth: 240,
-      }}
-    >
-      {dots.map((state, i) => {
-        if (state === 'done') {
-          return (
-            <span
-              key={i}
-              style={{ ...baseStyle, background: colors.sageDeep }}
-            />
-          );
-        }
-        return (
-          <span
-            key={i}
-            style={{
-              ...baseStyle,
-              border: `2.2px solid ${colors.amber}`,
-              boxShadow: '0 4px 12px rgba(201, 146, 62, 0.24)',
-            }}
-          />
-        );
-      })}
-      {overflow > 0 && (
-        <span
-          style={{
-            fontSize: fontSizes.caption,
-            color: colors.inkFaint,
-            fontWeight: fontWeights.medium,
-            letterSpacing: '0.02em',
-            marginLeft: 2,
-          }}
-        >
-          +{overflow}
+          {item.name}
         </span>
-      )}
-    </div>
-  );
-}
-
-// ─── notebook list — your meds ───────────────────────────────────────────
-
-function NotebookList({
-  meds,
-  lastDose,
-  onRemove,
-  onSaveProfile,
-}: {
-  meds: Medication[];
-  lastDose: Record<string, number>;
-  onRemove: (id: string) => void;
-  onSaveProfile: (
-    id: string,
-    profile: { kind: MedicationKind; schedule: string[] },
-  ) => void;
-}): JSX.Element {
-  return (
-    <Stack gap={4}>
-      <SectionLabel>your meds</SectionLabel>
-
-      {meds.length === 0 ? (
-        // cold — one quiet placeholder card in the notebook grammar
-        <Box
-          bg="cream"
-          radius="card"
-          shadow="raised"
-          style={{
-            padding: '16px 18px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 11,
-          }}
-        >
-          <span
-            aria-hidden
-            style={{
-              boxSizing: 'border-box',
-              width: 24,
-              height: 24,
-              borderRadius: '50%',
-              background: colors.cream,
-              boxShadow:
-                'inset 3px 3px 6px rgba(120,140,122,0.55), inset -3px -3px 6px rgba(255,255,255,0.85)',
-              flexShrink: 0,
-            }}
-          />
-          <Text scale="body" color={colors.inkFaint}>
-            no medications yet — your list will gather here
-          </Text>
-        </Box>
-      ) : (
-        <Stack gap={12}>
-          {meds.map((med) => (
-            <MedListRow
-              key={med.id}
-              med={med}
-              lastDoseAt={lastDose[med.id] ?? null}
-              onRemove={() => onRemove(med.id)}
-              onSaveProfile={(p) => onSaveProfile(med.id, p)}
-            />
-          ))}
-        </Stack>
-      )}
-    </Stack>
-  );
-}
-
-function MedListRow({
-  med,
-  lastDoseAt,
-  onRemove,
-  onSaveProfile,
-}: {
-  med: Medication;
-  lastDoseAt: number | null;
-  onRemove: () => void;
-  onSaveProfile: (profile: { kind: MedicationKind; schedule: string[] }) => void;
-}): JSX.Element {
-  const [editing, setEditing] = useState(false);
-
-  // A calm one-line summary of the structured profile: kind, then the
-  // schedule slots (or "no schedule" when manual-log-only).
-  const scheduleSummary =
-    med.schedule.length > 0
-      ? med.schedule.map(formatSlot).join(' · ')
-      : 'no schedule';
-
-  return (
-    <Box
-      bg="cream"
-      radius="card"
-      shadow="raised"
-      style={{
-        padding: '16px 18px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 14,
-      }}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <span
-          aria-hidden
-          style={{
-            width: 24,
-            height: 24,
-            borderRadius: '50%',
-            background: colors.sageDeep,
-            boxShadow:
-              'inset 3px 3px 6px rgba(120,140,122,0.55), inset -3px -3px 6px rgba(255,255,255,0.85)',
-            flexShrink: 0,
-          }}
-        />
-        <div
-          style={{
-            flex: 1,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 3,
-            minWidth: 0,
-          }}
-        >
-          <div
-            style={{
-              fontSize: fontSizes.small,
-              color: colors.ink,
-              fontWeight: fontWeights.medium,
-              letterSpacing: '-0.01em',
-            }}
-          >
-            {med.name}
-            <span
-              style={{
-                color: colors.inkFaint,
-                fontWeight: fontWeights.regular,
-                marginLeft: 8,
-                ...SMCP_STYLE,
-              }}
-            >
-              {med.kind}
-            </span>
-          </div>
-          <div
-            style={{
-              fontSize: fontSizes.caption,
-              color: colors.inkFaint,
-              fontWeight: fontWeights.medium,
-              letterSpacing: '0.01em',
-            }}
-          >
-            {scheduleSummary}
-            <span style={{ margin: '0 6px' }}>·</span>
-            {lastDoseAt != null
-              ? `last dose ${formatRelative(lastDoseAt)}`
-              : 'no doses logged'}
-          </div>
-        </div>
-        <button
-          onClick={() => setEditing((v) => !v)}
-          aria-label={editing ? 'close editor' : 'edit schedule'}
-          style={{
-            background: 'none',
-            border: 'none',
-            padding: '4px 8px',
-            color: colors.inkFaint,
-            cursor: 'pointer',
-            fontVariantCaps: 'all-small-caps',
-            letterSpacing: '0.08em',
-            fontSize: 12,
-            flexShrink: 0,
-          }}
-        >
-          {editing ? 'done' : 'edit'}
-        </button>
-        <RemoveButton onClick={onRemove} />
+        {meta && (
+          <span style={{ fontSize: fontSizes.caption, color: colors.inkFaint }}>{meta}</span>
+        )}
       </div>
 
-      {editing && (
-        <MedProfileEditor
-          med={med}
-          onSave={(profile) => {
-            onSaveProfile(profile);
-            setEditing(false);
-          }}
-        />
-      )}
+      {/* low / have toggle — the manual override */}
+      <button
+        type="button"
+        onClick={() => onSetLow(!item.lowFlag)}
+        aria-pressed={item.lowFlag}
+        aria-label={item.lowFlag ? 'mark have' : 'mark running low'}
+        style={{
+          ...SMCP_STYLE,
+          border: 'none',
+          background: 'transparent',
+          color: low ? colors.amber : colors.inkFaint,
+          fontSize: 11,
+          fontWeight: 600,
+          cursor: 'pointer',
+          flexShrink: 0,
+          padding: '4px 4px',
+        }}
+      >
+        {low ? 'running low' : 'have'}
+      </button>
+      <RemoveButton onClick={onRemove} />
     </Box>
   );
 }
 
-// ─── inline profile editor — kind + schedule ───────────────────────────────
-//
-// Expanded under a med row. Lets the user classify the med (kind chips) and
-// build a daily schedule of HH:MM slots. Calm editorial grammar — sage chips
-// for the active kind, hairline pills for slots, no red, no validation shame
-// (an unparseable time simply doesn't add). Saving persists via the repo;
-// once a schedule has a slot the watcher's "remaining doses" path lights up.
-
-function MedProfileEditor({
-  med,
-  onSave,
-}: {
-  med: Medication;
-  onSave: (profile: { kind: MedicationKind; schedule: string[] }) => void;
-}): JSX.Element {
-  const [kind, setKind] = useState<MedicationKind>(med.kind);
-  const [slots, setSlots] = useState<string[]>(med.schedule);
-  const [draft, setDraft] = useState('');
-
-  const addSlot = useCallback(() => {
-    const t = normaliseTime(draft);
-    if (!t) return; // not a valid HH:MM — quietly ignore, no shame
-    setSlots((prev) => (prev.includes(t) ? prev : [...prev, t].sort()));
-    setDraft('');
-  }, [draft]);
-
-  const removeSlot = useCallback((t: string) => {
-    setSlots((prev) => prev.filter((s) => s !== t));
-  }, []);
-
+function ColdCabinet(): JSX.Element {
   return (
-    <Stack gap={16} style={{ paddingLeft: 21 }}>
-      {/* kind chips */}
-      <Stack gap={8}>
-        <SectionLabel>kind</SectionLabel>
-        <Row gap={8} style={{ flexWrap: 'wrap' }}>
-          {MEDICATION_KINDS.map((k) => {
-            const active = k === kind;
-            return (
-              <button
-                key={k}
-                onClick={() => setKind(k)}
-                style={{
-                  ...SMCP_STYLE,
-                  border: `1px solid ${active ? colors.sageDeep : colors.hairline}`,
-                  background: active ? colors.sageDeep : 'transparent',
-                  color: active ? colors.paper : colors.ink,
-                  borderRadius: 999,
-                  padding: '6px 14px',
-                  fontSize: 12,
-                  fontWeight: fontWeights.medium,
-                  cursor: 'pointer',
-                }}
-              >
-                {k}
-              </button>
-            );
-          })}
-        </Row>
-      </Stack>
-
-      {/* schedule slots */}
-      <Stack gap={8}>
-        <SectionLabel>daily schedule</SectionLabel>
-        {slots.length === 0 ? (
-          <Text scale="caption" color={colors.inkFaint}>
-            no times yet — add one below, or leave empty to log by hand
-          </Text>
-        ) : (
-          <Row gap={8} style={{ flexWrap: 'wrap' }}>
-            {slots.map((t) => (
-              <span
-                key={t}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  border: 'none',
-                  borderRadius: 999,
-                  background: colors.cream,
-                  boxShadow: shadows.raisedSm,
-                  padding: '5px 6px 5px 12px',
-                  fontSize: fontSizes.caption,
-                  color: colors.ink,
-                  fontWeight: fontWeights.medium,
-                }}
-              >
-                {formatSlot(t)}
-                <button
-                  onClick={() => removeSlot(t)}
-                  aria-label={`remove ${t}`}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    padding: '0 4px',
-                    color: colors.inkFaint,
-                    cursor: 'pointer',
-                    fontSize: 14,
-                    lineHeight: 1,
-                  }}
-                >
-                  ×
-                </button>
-              </span>
-            ))}
-          </Row>
-        )}
-
-        <Row gap={8} align="center">
-          <input
-            type="text"
-            inputMode="numeric"
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') addSlot();
-            }}
-            placeholder="9:00 or 9am"
-            aria-label="add a time"
-            style={{
-              border: 'none',
-              borderRadius: radii.card,
-              boxShadow: shadows.inset,
-              padding: '9px 14px',
-              fontSize: fontSizes.small,
-              color: colors.ink,
-              background: colors.cream,
-              fontFamily: 'inherit',
-              outline: 'none',
-              width: 120,
-            }}
-          />
-          <button
-            onClick={addSlot}
-            style={{
-              ...SMCP_STYLE,
-              border: `1px solid ${colors.hairline}`,
-              background: 'transparent',
-              color: colors.ink,
-              borderRadius: 8,
-              padding: '7px 14px',
-              fontSize: 12,
-              fontWeight: fontWeights.medium,
-              cursor: 'pointer',
-            }}
-          >
-            add time
-          </button>
-        </Row>
-      </Stack>
-
-      <Row gap={12} align="center">
-        <button
-          onClick={() => onSave({ kind, schedule: slots })}
+    <Stack gap={9} align="start" style={{ maxWidth: 360 }}>
+      <Text scale="caption" color={colors.inkFaint} style={{ letterSpacing: '0.02em' }}>
+        cabinet is empty
+      </Text>
+      <Row gap={9} align="start">
+        <span
+          aria-hidden
           style={{
-            ...SMCP_STYLE,
-            border: 'none',
-            background: colors.ink,
-            color: colors.paper,
-            borderRadius: 8,
-            padding: '9px 18px',
-            fontSize: 12,
-            fontWeight: fontWeights.medium,
-            cursor: 'pointer',
-            letterSpacing: '0.08em',
+            width: 7,
+            height: 7,
+            borderRadius: '50%',
+            background: colors.sageDeep,
+            flexShrink: 0,
+            marginTop: 6,
           }}
-        >
-          save
-        </button>
+        />
+        <Text scale="body" style={{ lineHeight: 1.5 }}>
+          your meds, vitamins and supplements gather here, grouped by what
+          they&rsquo;re for. dump &ldquo;started magnesium 400mg at night for
+          sleep&rdquo; to stock the first one.
+        </Text>
       </Row>
     </Stack>
   );
 }
 
-/** "09:00" → "9:00am" — the same calm clock grammar as the rest of the box. */
-function formatSlot(hhmm: string): string {
-  const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm);
-  if (!m) return hhmm;
-  const h = Number(m[1]);
-  const hh = ((h + 11) % 12) + 1;
-  const ampm = h < 12 ? 'am' : 'pm';
-  return `${hh}:${m[2]}${ampm}`;
+/** A quiet placeholder where the dump bar will sit — adding is via the dump. */
+function DumpBarHint(): JSX.Element {
+  return (
+    <Box bg="cream" radius="card" shadow="raised" style={{ padding: '14px 18px', opacity: 0.7 }}>
+      <Text scale="caption" color={colors.inkFaint}>
+        dump to update — &ldquo;running low on vitamin d&rdquo;, &ldquo;took my
+        magnesium&rdquo;, &ldquo;started omega-3 for mood&rdquo;
+      </Text>
+    </Box>
+  );
 }
 
-// ─── recent-events sections ──────────────────────────────────────────────
+// ─── primitives ───────────────────────────────────────────────────────────
+
+/** Soft round tick — empty = pressed cream well; checked = filled sage disc. */
+function TickCircle({
+  done,
+  onClick,
+  label,
+}: {
+  done: boolean;
+  onClick: () => void;
+  label?: string;
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label ?? (done ? 'mark undone' : 'mark done')}
+      aria-pressed={done}
+      style={{
+        boxSizing: 'border-box',
+        width: 26,
+        height: 26,
+        borderRadius: '50%',
+        border: 'none',
+        flexShrink: 0,
+        cursor: 'pointer',
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: done ? colors.sageDeep : colors.cream,
+        boxShadow: done
+          ? shadows.raisedSm
+          : 'inset 3px 3px 6px rgba(120,140,122,0.55), inset -3px -3px 6px rgba(255,255,255,0.85)',
+      }}
+    >
+      {done && (
+        <svg width="12" height="12" viewBox="0 0 10 10" aria-hidden>
+          <path
+            d="M2 5.2 L4.2 7.2 L8 3"
+            fill="none"
+            stroke={colors.paper}
+            strokeWidth={1.6}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      )}
+    </button>
+  );
+}
 
 function ListSection<T>({
   label,
@@ -907,25 +848,18 @@ function EventRow({
   detail,
   whenMs,
   accentDot,
-  onRemove,
 }: {
   title: string;
   detail: string | null;
   whenMs: number;
   accentDot?: string;
-  onRemove: () => void;
 }): JSX.Element {
   return (
     <Box
       bg="cream"
       radius="card"
       shadow="raised"
-      style={{
-        padding: '16px 18px',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 12,
-      }}
+      style={{ padding: '16px 18px', display: 'flex', alignItems: 'center', gap: 12 }}
     >
       <span
         aria-hidden
@@ -941,15 +875,7 @@ function EventRow({
           flexShrink: 0,
         }}
       />
-      <div
-        style={{
-          flex: 1,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 3,
-          minWidth: 0,
-        }}
-      >
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
         <div
           style={{
             fontSize: fontSizes.small,
@@ -960,13 +886,7 @@ function EventRow({
         >
           {title}
           {detail && (
-            <span
-              style={{
-                color: colors.inkFaint,
-                fontWeight: fontWeights.regular,
-                marginLeft: 8,
-              }}
-            >
+            <span style={{ color: colors.inkFaint, fontWeight: fontWeights.regular, marginLeft: 8 }}>
               · {detail}
             </span>
           )}
@@ -979,10 +899,9 @@ function EventRow({
             letterSpacing: '0.01em',
           }}
         >
-          {formatRelative(whenMs)}
+          {formatRelativeTime(whenMs)}
         </div>
       </div>
-      <RemoveButton onClick={onRemove} />
     </Box>
   );
 }
@@ -995,24 +914,11 @@ function SectionLabel({
   accent?: string;
 }): JSX.Element {
   return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8,
-        marginBottom: 4,
-      }}
-    >
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
       {accent && (
         <span
           aria-hidden
-          style={{
-            width: 6,
-            height: 6,
-            borderRadius: '50%',
-            background: accent,
-            flexShrink: 0,
-          }}
+          style={{ width: 6, height: 6, borderRadius: '50%', background: accent, flexShrink: 0 }}
         />
       )}
       <span
@@ -1060,22 +966,18 @@ function startOfLocalDay(ms: number): number {
   return d.getTime();
 }
 
-function formatClock(ms: number): string {
-  const d = new Date(ms);
-  const h = d.getHours();
-  const m = d.getMinutes();
-  const hh = ((h + 11) % 12) + 1;
-  const mm = m.toString().padStart(2, '0');
-  const ampm = h < 12 ? 'am' : 'pm';
-  return `${hh}:${mm}${ampm}`;
+/** Hour-of-day for an "HH:MM" slot (0..23); used to bucket morning vs evening. */
+function hourOf(hhmm: string): number {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm);
+  return m ? Number(m[1]) : 0;
 }
 
-/**
- * Thin alias over the shared `formatRelativeTime` formatter so the two
- * existing call-sites (notebook row "last dose …" caption + recent-event
- * row caption) continue to read cleanly. Same grammar as every other
- * Box's when-caption.
- */
-function formatRelative(ms: number): string {
-  return formatRelativeTime(ms);
+/** "09:00" → "9:00am" — the calm clock grammar shared across the box. */
+function formatSlot(hhmm: string): string {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm);
+  if (!m) return hhmm;
+  const h = Number(m[1]);
+  const hh = ((h + 11) % 12) + 1;
+  const ampm = h < 12 ? 'am' : 'pm';
+  return `${hh}:${m[2]}${ampm}`;
 }

@@ -50,6 +50,30 @@ const MIGRATIONS = [
   // Per-medication newest-first (last-dose lookups).
   `CREATE INDEX IF NOT EXISTS idx_medications_events_med_logged
     ON medications_events(med_id, logged_at DESC)`,
+
+  // Cabinet inventory — the "stock" view (the cabinet tab), one row per
+  // med/supplement, grouped BY PURPOSE in the UI. Separate from the registry
+  // (which answers "what do I take + when"); this answers "what do I have +
+  // is it low". Keyed unique on normalised name so re-adds dedupe.
+  //   purpose    — sleep | mood | pain | digestion | vitamins | other
+  //   dose_label — free text ("400mg", "2000 IU") or NULL
+  //   qty        — units remaining, or NULL when never counted (manual-only)
+  //   low_flag   — manual "running low" override (0/1), wins over count-down
+  // The append-only "taken" intake log reuses medications_events(kind='dose')
+  // — no separate table; that stream is already chores-completion-log style.
+  `CREATE TABLE IF NOT EXISTS medication_cabinet (
+    id          TEXT PRIMARY KEY,
+    name        TEXT NOT NULL UNIQUE,
+    purpose     TEXT NOT NULL DEFAULT 'other',
+    dose_label  TEXT,
+    qty         INTEGER,
+    low_flag    INTEGER NOT NULL DEFAULT 0,
+    created_at  INTEGER NOT NULL
+  )`,
+
+  // Newest-first cabinet order.
+  `CREATE INDEX IF NOT EXISTS idx_medication_cabinet_created_at
+    ON medication_cabinet(created_at DESC)`,
 ];
 
 let migrationPromise: Promise<void> | null = null;
