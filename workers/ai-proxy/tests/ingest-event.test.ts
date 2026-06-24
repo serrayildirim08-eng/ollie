@@ -151,8 +151,7 @@ describe('handleIngestEvent · Supabase forward', () => {
     expect(posted.user_hash).not.toBe('victim-hash');
   });
 
-  it('overwrites a spoofed user_id field too', async () => {
-    const expected = await deriveUserHash(UID, ENV.USER_HASH_SALT);
+  it('drops a spoofed user_id field — not a real telemetry column (audit #155)', async () => {
     await handleIngestEvent(
       makeReq({ table: 'session_events', row: { user_id: 'someone-else', kind: 'open' } }),
       ENV,
@@ -160,8 +159,10 @@ describe('handleIngestEvent · Supabase forward', () => {
     );
     const init = fetchSpy.mock.calls[0][1] as RequestInit;
     const posted = JSON.parse(init.body as string) as Record<string, unknown>;
-    expect(posted.user_id).toBe(expected);
-    expect(posted.user_id).not.toBe('someone-else');
+    // `user_id` and `kind` are not columns on session_events, so the whitelist
+    // strips them before forwarding to Supabase.
+    expect('user_id' in posted).toBe(false);
+    expect('kind' in posted).toBe(false);
   });
 
   it('derives the same hash for the same user, a different hash for a different user', async () => {
@@ -171,6 +172,41 @@ describe('handleIngestEvent · Supabase forward', () => {
     expect(a).toBe(a2);
     expect(a).not.toBe(b);
     expect(a).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  // ── audit #155 — column whitelist ──────────────────────────────────────────
+  it('drops keys that are not columns of the target table, keeping valid ones', async () => {
+    const row = {
+      event_type: 'installed',          // valid
+      event_at: '2026-05-14T00:00:00Z', // valid
+      country: 'GB',                    // valid
+      is_admin: true,                   // not a column — must be dropped
+      injected_sql: "'; drop table",    // not a column — must be dropped
+      created_at: 'spoof',              // not a column — must be dropped
+    };
+    await handleIngestEvent(makeReq({ table: 'retention_events', row }), ENV, UID);
+    const init = fetchSpy.mock.calls[0][1] as RequestInit;
+    const posted = JSON.parse(init.body as string) as Record<string, unknown>;
+    expect(posted.event_type).toBe('installed');
+    expect(posted.event_at).toBe('2026-05-14T00:00:00Z');
+    expect(posted.country).toBe('GB');
+    expect('is_admin' in posted).toBe(false);
+    expect('injected_sql' in posted).toBe(false);
+    expect('created_at' in posted).toBe(false);
+  });
+
+  it('whitelist is per-table — a column valid on one table is dropped on another', async () => {
+    // `module` is a module_events column but NOT a crisis_events column.
+    await handleIngestEvent(
+      makeReq({ table: 'crisis_events', row: { event_at: 'x', country: 'GB', module: 'cycle' } }),
+      ENV,
+      UID,
+    );
+    const init = fetchSpy.mock.calls[0][1] as RequestInit;
+    const posted = JSON.parse(init.body as string) as Record<string, unknown>;
+    expect(posted.event_at).toBe('x');
+    expect(posted.country).toBe('GB');
+    expect('module' in posted).toBe(false);
   });
 
   it('returns 502 with a GENERIC error code — does NOT leak the PostgREST body', async () => {
