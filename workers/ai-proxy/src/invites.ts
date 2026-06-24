@@ -9,8 +9,10 @@
  *   - generate-invite + claim-invite require a Supabase user JWT in the
  *     `x-user-jwt` header. We verify by calling `/auth/v1/user` against the
  *     anon key and trust the returned user id. The inviter_user_hash and
- *     invitee_user_hash are SHA-256(email + VITE_USER_HASH_SALT) supplied
- *     by the client — same hash the rest of the telemetry pipeline uses.
+ *     invitee_user_hash are derived server-side from that verified user id
+ *     (`deriveUserHash` + `USER_HASH_SALT`) — the same identity source the
+ *     telemetry pipeline uses. Any hash in the request body is IGNORED so a
+ *     caller can never attribute an invite to another user (audit #85 IDOR).
  *   - validate-invite is unauthenticated (the landing page must read it
  *     pre-signup) and returns no PII — only validity + reason.
  *
@@ -25,6 +27,7 @@
 
 import { json, upstreamError } from '@ollie/worker-http';
 import { verifyClerkJwt } from './clerk-verify';
+import { deriveUserHash } from './telemetry';
 
 export interface InvitesEnv {
   SUPABASE_URL: string;
@@ -40,6 +43,8 @@ export interface InvitesEnv {
   CLERK_ISSUER?: string;
   INVITE_BASE_URL?: string;
   RATE_KV: KVNamespace;
+  /** Server-side salt for deriving user_hash from the verified userId. */
+  USER_HASH_SALT?: string;
 }
 
 const SUPABASE_REST_TIMEOUT_MS = 8_000;
@@ -54,7 +59,11 @@ const CODE_ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789';
 // ─── /generate-invite ──────────────────────────────────────────────────────────
 
 interface GenerateInviteRequest {
-  inviter_user_hash: string;
+  /**
+   * IGNORED — kept only for back-compat with existing clients. The inviter
+   * hash is derived server-side from the verified JWT (audit #85 IDOR fix).
+   */
+  inviter_user_hash?: string;
   /** Optional acquisition-channel tag — normalised server-side. */
   channel?: string;
 }
@@ -72,9 +81,13 @@ export async function handleGenerateInvite(req: Request, env: InvitesEnv): Promi
   } catch {
     return json({ error: 'bad_json' }, 400);
   }
-  if (!body || typeof body.inviter_user_hash !== 'string' || !body.inviter_user_hash) {
+  if (!body || typeof body !== 'object') {
     return json({ error: 'invalid_payload' }, 400);
   }
+
+  // Inviter identity is derived server-side from the verified JWT — any
+  // client-supplied `inviter_user_hash` is ignored (audit #85 IDOR fix).
+  const inviterUserHash = await deriveUserHash(userId, env.USER_HASH_SALT);
 
   // Per-user 24h rate limit — keyed on JWT user id, not the hash, so a
   // user that re-hashes (e.g. email change) cannot reset their bucket.
@@ -110,7 +123,7 @@ export async function handleGenerateInvite(req: Request, env: InvitesEnv): Promi
       },
       body: JSON.stringify({
         code,
-        inviter_user_hash: body.inviter_user_hash,
+        inviter_user_hash: inviterUserHash,
         expires_at: expiresAt,
         ...(channel ? { channel } : {}),
       }),
@@ -196,7 +209,11 @@ export async function handleValidateInvite(req: Request, env: InvitesEnv): Promi
 
 interface ClaimInviteRequest {
   code: string;
-  invitee_user_hash: string;
+  /**
+   * IGNORED — kept only for back-compat with existing clients. The invitee
+   * hash is derived server-side from the verified JWT (audit #85 IDOR fix).
+   */
+  invitee_user_hash?: string;
 }
 
 export async function handleClaimInvite(req: Request, env: InvitesEnv): Promise<Response> {
@@ -212,18 +229,16 @@ export async function handleClaimInvite(req: Request, env: InvitesEnv): Promise<
   } catch {
     return json({ error: 'bad_json' }, 400);
   }
-  if (
-    !body ||
-    typeof body.code !== 'string' ||
-    !body.code ||
-    typeof body.invitee_user_hash !== 'string' ||
-    !body.invitee_user_hash
-  ) {
+  if (!body || typeof body.code !== 'string' || !body.code) {
     return json({ error: 'invalid_payload' }, 400);
   }
   if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE) {
     return json({ error: 'supabase_not_configured' }, 500);
   }
+
+  // Invitee identity is derived server-side from the verified JWT — any
+  // client-supplied `invitee_user_hash` is ignored (audit #85 IDOR fix).
+  const inviteeUserHash = await deriveUserHash(userId, env.USER_HASH_SALT);
 
   const code = body.code.trim().toLowerCase();
   const nowIso = new Date().toISOString();
@@ -246,7 +261,7 @@ export async function handleClaimInvite(req: Request, env: InvitesEnv): Promise<
     },
     body: JSON.stringify({
       used_at: nowIso,
-      invitee_user_hash: body.invitee_user_hash,
+      invitee_user_hash: inviteeUserHash,
     }),
   });
   if (!resp.ok) {
