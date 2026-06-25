@@ -33,6 +33,7 @@ pub fn run() {
         // scheme is registered via Info.plist (patched from tauri.conf plugins);
         // on desktop register_all() wires the runtime listener at startup.
         .plugin(tauri_plugin_deep_link::init())
+        .plugin(tauri_plugin_mobile_push::init())
         .setup(|app| {
             #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
             {
