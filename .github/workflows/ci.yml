@@ -2,9 +2,9 @@ name: ci
 
 on:
   push:
-    branches: [main]
+    branches: [main, redesign/olive-neumorphic]
   pull_request:
-    branches: [main]
+    branches: [main, redesign/olive-neumorphic]
 
 jobs:
   voice-library-guard:
@@ -24,6 +24,10 @@ jobs:
   build:
     name: typecheck + test
     runs-on: ubuntu-latest
+    # Run the whole suite in UTC so timezone-sensitive tests in every
+    # workspace package (not just packages/logic) match CI's expectation.
+    env:
+      TZ: UTC
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
