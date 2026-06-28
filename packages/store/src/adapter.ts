@@ -79,13 +79,48 @@ export const browserAdapter: StorageAdapter = {
  *
  * NOT included: `shared`. It is a cross-module blob that also holds the auth
  * passphrase salt/verifier and the research-stream consent + device id — none
- * of which are derivable from SQLite, so evicting it would lock users out /
- * drop consent. (Residual: the dump bridge also merges dump text into
- * `shared.actionLog`; that single field stays on disk because the store writes
- * one blob per module and we cannot evict it without taking auth/consent with
- * it. See the self-review note.)
+ * of which are derivable from SQLite, so evicting the WHOLE blob would lock
+ * users out / drop consent. The single sensitive FIELD inside it
+ * (`shared.actionLog`, which carries raw brain-dump text) is partitioned out
+ * separately — see SENSITIVE_BLOB_FIELDS below.
  */
 export const SENSITIVE_STORE_MODULES = ['cycle', 'medication', 'mood', 'dump', 'journal'] as const;
+
+/**
+ * Sub-fields that are sensitive even though their MODULE blob is not.
+ *
+ * `shared` cannot be RAM-only as a whole (it carries the auth salt/verifier +
+ * consent that are NOT derivable from SQLite). But the dump bridge merges raw
+ * brain-dump text into `shared.actionLog`, so persisting the whole shared blob
+ * to plaintext localStorage leaks that raw text — the exact surface this
+ * blocker closes. `actionLog`'s authoritative copy is the SQLCipher-encrypted
+ * dump archive, and the dump + habits bridges rebuild it from SQLite on every
+ * boot (apps/native/src/modules/{dump,habits}/bridge.ts → syncToStore), so
+ * holding it in RAM-only loses nothing for the watchers. We therefore strip
+ * these fields out of the on-disk blob and keep them in the in-memory overlay,
+ * mirroring the whole-module partition above but at field granularity.
+ *
+ * Keyed by module name; matched against `void.state.<mod>.*` at any version.
+ */
+export const SENSITIVE_BLOB_FIELDS: Readonly<Record<string, readonly string[]>> = {
+  shared: ['actionLog'],
+};
+
+/** Internal mem-overlay key prefix for stripped sensitive sub-fields. The
+ *  prefix does NOT start with `void.state.` so it can never collide with a real
+ *  store key, and it is filtered out of getAllKeys(). */
+const BLOB_FIELD_MEM_PREFIX = '@@sensitive-blob-fields@@:';
+
+/**
+ * If `key` is a module blob that carries sensitive sub-fields, return that
+ * field list; otherwise null. Matches any store version (e.g. `.v4` / `.v5`).
+ */
+export function sensitiveBlobFieldsFor(key: string): readonly string[] | null {
+  for (const mod of Object.keys(SENSITIVE_BLOB_FIELDS)) {
+    if (key.startsWith(`void.state.${mod}.`)) return SENSITIVE_BLOB_FIELDS[mod];
+  }
+  return null;
+}
 
 /**
  * Default sensitivity predicate: matches `void.state.<mod>.*` for any store
@@ -115,22 +150,67 @@ export function isSensitiveStoreKey(key: string): boolean {
  * One-time plaintext eviction: at construction we pull any pre-existing
  * sensitive values that are already sitting in the durable backend (from
  * before this change shipped) into memory and DELETE them from disk — so the
- * old plaintext mirror is actively wiped, not just stopped going forward.
+ * old plaintext mirror is actively wiped, not just stopped going forward. The
+ * same eviction strips sensitive SUB-FIELDS (SENSITIVE_BLOB_FIELDS, e.g.
+ * `shared.actionLog`) out of otherwise-durable blobs already on disk.
  */
 export function partitionedAdapter(
   base: StorageAdapter,
   isSensitive: (key: string) => boolean = isSensitiveStoreKey,
 ): StorageAdapter {
   const mem = new Map<string, string>();
+  const memFieldKey = (key: string) => BLOB_FIELD_MEM_PREFIX + key;
+
+  // Split a module-blob JSON string into { durable, sensitive } where the
+  // sensitive sub-fields are pulled out. Returns null when there is nothing to
+  // split (not an object / no sensitive field present), so callers can fast-path
+  // the unchanged value. Never throws.
+  function splitBlob(
+    key: string,
+    value: string,
+  ): { durable: string; sensitive: string } | null {
+    const fields = sensitiveBlobFieldsFor(key);
+    if (!fields) return null;
+    try {
+      const obj = JSON.parse(value) as Record<string, unknown>;
+      if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return null;
+      const sensitive: Record<string, unknown> = {};
+      let any = false;
+      for (const f of fields) {
+        if (Object.prototype.hasOwnProperty.call(obj, f)) {
+          sensitive[f] = obj[f];
+          delete obj[f];
+          any = true;
+        }
+      }
+      if (!any) return null;
+      return { durable: JSON.stringify(obj), sensitive: JSON.stringify(sensitive) };
+    } catch {
+      // Non-JSON / non-object value can't carry the sensitive object field, so
+      // there is nothing to strip; let it pass through untouched.
+      return null;
+    }
+  }
 
   // One-time eviction of any plaintext sensitive values already on disk.
   // Best-effort + fully guarded: a failure here must never block boot.
   try {
     for (const k of base.getAllKeys()) {
-      if (!isSensitive(k)) continue;
+      if (isSensitive(k)) {
+        const v = base.getItem(k);
+        if (v != null) mem.set(k, v);
+        base.removeItem(k);
+        continue;
+      }
+      // Partially-sensitive blob already on disk → strip the sensitive field
+      // into RAM and rewrite the redacted blob so the old plaintext is wiped.
       const v = base.getItem(k);
-      if (v != null) mem.set(k, v);
-      base.removeItem(k);
+      if (v == null) continue;
+      const split = splitBlob(k, v);
+      if (split) {
+        mem.set(memFieldKey(k), split.sensitive);
+        base.setItem(k, split.durable);
+      }
     }
   } catch {
     /* best-effort — never throw at construction */
@@ -139,13 +219,33 @@ export function partitionedAdapter(
   return {
     getItem(key) {
       if (isSensitive(key)) return mem.get(key) ?? null;
-      return base.getItem(key);
+      const durable = base.getItem(key);
+      const fieldRaw = mem.get(memFieldKey(key));
+      if (fieldRaw == null) return durable; // nothing partitioned out
+      // Merge the RAM-held sensitive fields back so readers (and the store's
+      // cache rehydration) see the complete blob within the session.
+      try {
+        const obj = durable ? (JSON.parse(durable) as Record<string, unknown>) : {};
+        const sensitive = JSON.parse(fieldRaw) as Record<string, unknown>;
+        return JSON.stringify({ ...obj, ...sensitive });
+      } catch {
+        return durable;
+      }
     },
     setItem(key, value) {
       if (isSensitive(key)) {
         mem.set(key, value);
         return;
       }
+      const split = splitBlob(key, value);
+      if (split) {
+        mem.set(memFieldKey(key), split.sensitive);
+        base.setItem(key, split.durable);
+        return;
+      }
+      // No sensitive field present in this write → clear any stale overlay so a
+      // later read doesn't resurrect a removed field, then persist as-is.
+      if (mem.has(memFieldKey(key))) mem.delete(memFieldKey(key));
       base.setItem(key, value);
     },
     removeItem(key) {
@@ -153,13 +253,18 @@ export function partitionedAdapter(
         mem.delete(key);
         return;
       }
+      mem.delete(memFieldKey(key));
       base.removeItem(key);
     },
     getAllKeys() {
       // Union both backends so the migration snapshot (migrations.ts) and any
-      // other enumerator sees sensitive keys too.
+      // other enumerator sees sensitive keys too — but never leak the internal
+      // blob-field overlay keys (they are not real store keys).
       const keys = new Set<string>(base.getAllKeys());
-      for (const k of mem.keys()) keys.add(k);
+      for (const k of mem.keys()) {
+        if (k.startsWith(BLOB_FIELD_MEM_PREFIX)) continue;
+        keys.add(k);
+      }
       return [...keys];
     },
     // Cross-tab change events only make sense for durable keys; sensitive keys

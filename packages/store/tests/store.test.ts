@@ -250,8 +250,8 @@ describe('@ollie/store · migrations', () => {
   // ─── audit item #14 · snapshot works on the memory adapter ────────────────
 
   it('captures a non-empty pre-migration snapshot on the memory adapter', () => {
-    // Seed void.state.* keys — the snapshot must SEE these.
-    adapter.setItem('void.state.cycle.items', '[1,2,3]');
+    // Seed non-sensitive void.state.* keys — the snapshot must SEE these.
+    adapter.setItem('void.state.work.items', '[1,2,3]');
     adapter.setItem('void.state.finance.bills', '{"a":1}');
     adapter.setItem('unrelated.key', 'ignored');
 
@@ -264,20 +264,39 @@ describe('@ollie/store · migrations', () => {
     expect(result.ok).toBe(true);
   });
 
+  it('EXCLUDES RAM-only sensitive module blobs from the plaintext snapshot (GAP 4)', () => {
+    // Sensitive modules must NEVER be folded into the plaintext snapshot blob.
+    adapter.setItem('void.state.cycle.v5', '{"cycles":["secret"]}');
+    adapter.setItem('void.state.dump.v5', '{"items":["secret dump"]}');
+    adapter.setItem('void.state.work.items', '{"a":1}'); // non-sensitive → kept
+
+    const result = runMigrations(adapter, { 1: () => {} });
+
+    // Only the non-sensitive key is snapshotted.
+    expect(result.snapshotKeyCount).toBe(1);
+    const snapKey = adapter
+      .getAllKeys()
+      .find((k) => k.startsWith('void.state._backup.pre_migration.'))!;
+    const snapBlob = adapter.getItem(snapKey)!;
+    expect(snapBlob).not.toContain('secret');
+    expect(snapBlob).not.toContain('cycle');
+    expect(snapBlob).not.toContain('dump');
+  });
+
   it('restores void.state.* keys from snapshot when a migration fails', () => {
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    adapter.setItem('void.state.cycle.items', 'ORIGINAL');
+    adapter.setItem('void.state.work.items', 'ORIGINAL');
 
     const result = runMigrations(adapter, {
       2: (a) => {
         // Migration mutates data, then blows up.
-        a.setItem('void.state.cycle.items', 'CORRUPTED');
+        a.setItem('void.state.work.items', 'CORRUPTED');
         throw new Error('boom');
       },
     });
 
     // Rollback restored the pre-migration value.
-    expect(adapter.getItem('void.state.cycle.items')).toBe('ORIGINAL');
+    expect(adapter.getItem('void.state.work.items')).toBe('ORIGINAL');
     expect(result.ok).toBe(false);
     expect(result.failedVersion).toBe(2);
     // Meta version NOT bumped — next boot retries.

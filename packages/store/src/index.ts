@@ -5,6 +5,8 @@ export {
   partitionedAdapter,
   isSensitiveStoreKey,
   SENSITIVE_STORE_MODULES,
+  SENSITIVE_BLOB_FIELDS,
+  sensitiveBlobFieldsFor,
 } from './adapter';
 
 export type { Store, ModuleState } from './store';

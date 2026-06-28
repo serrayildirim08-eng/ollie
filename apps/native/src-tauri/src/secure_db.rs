@@ -86,6 +86,84 @@ unsafe extern "C" fn key_every_connection(
     )
 }
 
+/// HARD runtime assertion that the linked SQLite is actually SQLCipher.
+///
+/// Why this is load-bearing (alpha blocker #3, GAP 2): vanilla SQLite treats an
+/// unknown `PRAGMA key` as a NO-OP that returns OK. So if Cargo feature
+/// unification ever resolves `libsqlite3-sys` to vanilla instead of SQLCipher,
+/// the auto-extension's `PRAGMA key` silently succeeds and a FRESH install would
+/// run entirely on PLAINTEXT while appearing to work — the migration path's
+/// fail-closed check never fires because there is nothing to migrate. We close
+/// that hole by asserting the *engine* itself: `PRAGMA cipher_version` returns a
+/// non-empty version string ONLY on SQLCipher; on vanilla it returns no row.
+/// This is a library-level capability (independent of any key or db file), so we
+/// check it on a throwaway in-memory connection. Empty/absent ⇒ ABORT.
+fn assert_sqlcipher_engine() -> Result<(), String> {
+    let conn = rusqlite::Connection::open_in_memory()
+        .map_err(|e| format!("open verify connection: {e}"))?;
+    let version: rusqlite::Result<String> =
+        conn.query_row("PRAGMA cipher_version", [], |r| r.get(0));
+    match version {
+        Ok(v) if !v.trim().is_empty() => Ok(()),
+        _ => Err(
+            "SQLCipher engine not active: `PRAGMA cipher_version` was empty. \
+             The linked sqlite is vanilla, not SQLCipher — refusing to run on \
+             plaintext (fail-closed)."
+                .to_string(),
+        ),
+    }
+}
+
+/// Verify that a just-written encrypted DB file actually opens, keys, and reads
+/// with our key — and that the engine is SQLCipher. Used before we trust the
+/// migrated copy enough to swap it in and delete the plaintext backup (GAP 3).
+fn verify_encrypted_readable(path: &PathBuf, key_pragma: &str) -> Result<(), String> {
+    let conn =
+        rusqlite::Connection::open(path).map_err(|e| format!("verify open: {e}"))?;
+    conn.execute_batch(&format!(
+        "PRAGMA key = \"{key}\"; PRAGMA cipher_compatibility = 4;",
+        key = key_pragma,
+    ))
+    .map_err(|e| format!("verify key: {e}"))?;
+    let cv: rusqlite::Result<String> =
+        conn.query_row("PRAGMA cipher_version", [], |r| r.get(0));
+    match cv {
+        Ok(v) if !v.trim().is_empty() => {}
+        _ => return Err("verify: cipher_version empty on migrated db".to_string()),
+    }
+    conn.query_row("SELECT count(*) FROM sqlite_master", [], |r| r.get::<_, i64>(0))
+        .map_err(|e| format!("verify read keyed db: {e}"))?;
+    Ok(())
+}
+
+/// Best-effort secure deletion of a plaintext artifact. On copy-on-write
+/// filesystems (APFS, the iOS/macOS default) overwriting in place is NOT a
+/// guaranteed scrub — the FS may write the zeros to fresh extents — but it
+/// removes the plaintext file and zeroes the current extents where the OS
+/// allows, which is the most we can do from std without platform-specific
+/// secure-erase APIs. The real protection is that the durable copy is now
+/// SQLCipher-encrypted; this just stops the leftover plaintext from lingering.
+fn secure_delete(path: &PathBuf) {
+    use std::io::Write;
+    if let Ok(meta) = std::fs::metadata(path) {
+        let len = meta.len();
+        if let Ok(mut f) = std::fs::OpenOptions::new().write(true).open(path) {
+            let zeros = [0u8; 64 * 1024];
+            let mut remaining = len;
+            while remaining > 0 {
+                let n = remaining.min(zeros.len() as u64) as usize;
+                if f.write_all(&zeros[..n]).is_err() {
+                    break;
+                }
+                remaining -= n as u64;
+            }
+            let _ = f.flush();
+            let _ = f.sync_all();
+        }
+    }
+    let _ = std::fs::remove_file(path);
+}
+
 /// Resolve the on-disk path of `ollie.db`, mirroring tauri-plugin-sql's
 /// `path_mapper`: it pushes the connection-string suffix onto `app_config_dir`.
 fn db_path<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
@@ -202,6 +280,14 @@ fn migrate_plaintext_if_needed(db: &PathBuf, key_pragma: &str) -> Result<(), Str
         .map_err(|e| format!("sqlcipher_export: {e}"))?;
     drop(plaintext_conn);
 
+    // Step 2.5: VERIFY the encrypted copy is readable with our key BEFORE we
+    // touch the original. If verification fails we abort with the plaintext
+    // original still in place (rollback safety) and remove the bad enc file.
+    if let Err(e) = verify_encrypted_readable(&enc_path, key_pragma) {
+        let _ = std::fs::remove_file(&enc_path);
+        return Err(format!("encrypted copy failed verification, kept plaintext: {e}"));
+    }
+
     // Step 3: backup + atomic swap + marker.
     let bak_path = db.with_file_name("ollie.db.bak");
     std::fs::rename(db, &bak_path).map_err(|e| format!("backup rename: {e}"))?;
@@ -211,6 +297,19 @@ fn migrate_plaintext_if_needed(db: &PathBuf, key_pragma: &str) -> Result<(), Str
         return Err(format!("swap encrypted db: {e}"));
     }
     std::fs::write(&marker, b"migrated").map_err(|e| format!("write marker: {e}"))?;
+
+    // Step 4: the swap is done and the encrypted db verified readable, so the
+    // plaintext `ollie.db.bak` is now a pure RESIDUAL plaintext copy of all the
+    // sensitive data on disk (GAP 3). Re-verify the live db once more (belt &
+    // suspenders), then securely delete the backup. We only delete after
+    // success is confirmed; if the re-verify fails we KEEP the backup so the
+    // user can roll back, and surface the error.
+    if let Err(e) = verify_encrypted_readable(db, key_pragma) {
+        return Err(format!(
+            "post-swap verification failed, kept plaintext backup for rollback: {e}"
+        ));
+    }
+    secure_delete(&bak_path);
     Ok(())
 }
 
@@ -228,6 +327,11 @@ fn install_auto_extension() {
 /// wrong (no keychain, bad key, failed migration) it returns Err so the caller
 /// aborts startup with a visible error instead of silently running on plaintext.
 pub fn install<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
+    // GAP 2 (fail-closed on a vanilla-SQLite build): assert the engine is
+    // SQLCipher BEFORE anything else. On vanilla, `PRAGMA key` is a silent
+    // no-op, so a fresh install would otherwise run on plaintext undetected.
+    assert_sqlcipher_engine()?;
+
     let key_pragma = get_or_create_key_pragma()?;
 
     if let Some(db) = db_path(app) {

@@ -14,6 +14,7 @@
  */
 
 import type { StorageAdapter } from './adapter';
+import { isSensitiveStoreKey, sensitiveBlobFieldsFor } from './adapter';
 import { STORE_VERSION, STORE_META_KEY } from './store';
 
 export type Migration = (adapter: StorageAdapter) => void;
@@ -80,6 +81,14 @@ export function writeMeta(adapter: StorageAdapter, meta: StoreMeta): void {
  * adapter and the rollback restored nothing. It now uses the
  * `getAllKeys()` method that is part of the StorageAdapter contract and
  * implemented by both adapters.
+ *
+ * Privacy (alpha blocker #3, GAP 4): the snapshot blob is itself written to a
+ * NON-sensitive key (`void.state._backup.pre_migration.<ts>`), so any sensitive
+ * value folded into it would be re-leaked to plaintext localStorage. We
+ * therefore EXCLUDE the RAM-only sensitive module blobs and STRIP the sensitive
+ * sub-fields (e.g. `shared.actionLog`) before snapshotting. This loses nothing:
+ * those values are not migrated through localStorage anyway — they are held in
+ * RAM and rebuilt from the encrypted SQLite DB by the native bridges on boot.
  */
 function snapshotVoidNamespace(adapter: StorageAdapter): { key: string; value: string }[] {
   const snap: { key: string; value: string }[] = [];
@@ -87,8 +96,33 @@ function snapshotVoidNamespace(adapter: StorageAdapter): { key: string; value: s
     if (!k.startsWith('void.state.')) continue;
     // Don't snapshot prior snapshots — they are large and self-referential.
     if (k.startsWith(SNAPSHOT_PREFIX)) continue;
+    // Never copy a fully-sensitive (RAM-only) module blob into the plaintext
+    // snapshot.
+    if (isSensitiveStoreKey(k)) continue;
     const v = adapter.getItem(k);
-    if (v != null) snap.push({ key: k, value: v });
+    if (v == null) continue;
+    // Strip sensitive sub-fields (e.g. shared.actionLog) from partially-
+    // sensitive blobs before they enter the plaintext snapshot.
+    const fields = sensitiveBlobFieldsFor(k);
+    if (fields) {
+      try {
+        const obj = JSON.parse(v) as Record<string, unknown>;
+        if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
+          let stripped = false;
+          for (const f of fields) {
+            if (Object.prototype.hasOwnProperty.call(obj, f)) {
+              delete obj[f];
+              stripped = true;
+            }
+          }
+          snap.push({ key: k, value: stripped ? JSON.stringify(obj) : v });
+          continue;
+        }
+      } catch {
+        /* not JSON object — fall through and store as-is (can't carry the field) */
+      }
+    }
+    snap.push({ key: k, value: v });
   }
   return snap;
 }

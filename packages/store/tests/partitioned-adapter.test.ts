@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   partitionedAdapter,
   isSensitiveStoreKey,
+  sensitiveBlobFieldsFor,
   createMemoryAdapter,
   createStore,
   storeModuleKey,
@@ -127,6 +128,108 @@ describe('partitionedAdapter routing', () => {
       },
     };
     expect(() => partitionedAdapter(hostile)).not.toThrow();
+  });
+});
+
+describe('sensitiveBlobFieldsFor', () => {
+  it('flags shared.actionLog as a sensitive sub-field at any version', () => {
+    expect(sensitiveBlobFieldsFor('void.state.shared.v5')).toEqual(['actionLog']);
+    expect(sensitiveBlobFieldsFor('void.state.shared.v4')).toEqual(['actionLog']);
+  });
+  it('returns null for other blobs', () => {
+    expect(sensitiveBlobFieldsFor('void.state.grocery.v5')).toBeNull();
+    expect(sensitiveBlobFieldsFor('void.state.cycle.v5')).toBeNull();
+  });
+});
+
+describe('partitionedAdapter blob-field partitioning (shared.actionLog)', () => {
+  it('strips actionLog from the on-disk shared blob but serves it through the wrapper', () => {
+    const base = createMemoryAdapter();
+    const a = partitionedAdapter(base);
+
+    const full = {
+      salt: 'keep',
+      consent: true,
+      actionLog: [{ ts: 1, rawText: 'i took my meds and felt low', undone: false }],
+    };
+    a.setItem(storeModuleKey('shared'), JSON.stringify(full));
+
+    // Disk copy must NOT contain the raw dump text.
+    const onDisk = base.getItem(storeModuleKey('shared'))!;
+    expect(onDisk).not.toContain('actionLog');
+    expect(onDisk).not.toContain('took my meds');
+    expect(JSON.parse(onDisk)).toEqual({ salt: 'keep', consent: true });
+
+    // ...but the wrapper still returns the complete blob within the session.
+    expect(JSON.parse(a.getItem(storeModuleKey('shared'))!)).toEqual(full);
+  });
+
+  it('persists non-sensitive shared fields across a simulated reboot, drops actionLog', () => {
+    const base = createMemoryAdapter();
+    const a1 = partitionedAdapter(base);
+    a1.setItem(
+      storeModuleKey('shared'),
+      JSON.stringify({ salt: 'keep', actionLog: [{ ts: 9, rawText: 'secret' }] }),
+    );
+
+    // New process: fresh wrapper over the SAME durable backend.
+    const a2 = partitionedAdapter(base);
+    const blob = JSON.parse(a2.getItem(storeModuleKey('shared'))!);
+    expect(blob.salt).toBe('keep'); // durable field survives
+    expect(blob.actionLog).toBeUndefined(); // RAM-only field is gone (rebuilt from SQLite by bridges)
+    expect(base.getItem(storeModuleKey('shared'))).not.toContain('secret');
+  });
+
+  it('one-time eviction strips actionLog from a pre-existing plaintext shared blob', () => {
+    const base = createMemoryAdapter({
+      [storeModuleKey('shared')]: JSON.stringify({
+        salt: 'keep',
+        actionLog: [{ ts: 1, rawText: 'pre-existing plaintext leak' }],
+      }),
+    });
+    const a = partitionedAdapter(base);
+
+    // Disk is rewritten redacted immediately at construction.
+    expect(base.getItem(storeModuleKey('shared'))).not.toContain('plaintext leak');
+    expect(JSON.parse(base.getItem(storeModuleKey('shared'))!)).toEqual({ salt: 'keep' });
+    // Still readable in-session.
+    expect(JSON.parse(a.getItem(storeModuleKey('shared'))!).actionLog).toEqual([
+      { ts: 1, rawText: 'pre-existing plaintext leak' },
+    ]);
+  });
+
+  it('clears a stale overlay when a later write drops actionLog', () => {
+    const base = createMemoryAdapter();
+    const a = partitionedAdapter(base);
+    a.setItem(storeModuleKey('shared'), JSON.stringify({ salt: 's', actionLog: [{ ts: 1 }] }));
+    // Next write has no actionLog at all.
+    a.setItem(storeModuleKey('shared'), JSON.stringify({ salt: 's' }));
+    expect(JSON.parse(a.getItem(storeModuleKey('shared'))!)).toEqual({ salt: 's' });
+  });
+
+  it('does not expose internal overlay keys via getAllKeys', () => {
+    const base = createMemoryAdapter();
+    const a = partitionedAdapter(base);
+    a.setItem(storeModuleKey('shared'), JSON.stringify({ salt: 's', actionLog: [{ ts: 1 }] }));
+    const keys = a.getAllKeys();
+    expect(keys).toContain(storeModuleKey('shared'));
+    expect(keys.some((k) => k.includes('blob-fields'))).toBe(false);
+  });
+
+  it('store over the adapter keeps actionLog readable for watchers, off disk', () => {
+    const base = createMemoryAdapter();
+    const store = createStore(partitionedAdapter(base));
+    store.set('shared', 'salt', 'keep');
+    store.set('shared', 'actionLog', [{ ts: 1, rawText: 'low mood today', undone: false }]);
+
+    // Watcher read path sees the full actionLog synchronously.
+    expect(store.get('shared', 'actionLog')).toEqual([
+      { ts: 1, rawText: 'low mood today', undone: false },
+    ]);
+    // Auth/consent field still persists to disk.
+    expect(JSON.parse(base.getItem(storeModuleKey('shared'))!).salt).toBe('keep');
+    // Raw dump text never reaches disk.
+    expect(base.getItem(storeModuleKey('shared'))).not.toContain('low mood today');
   });
 });
 

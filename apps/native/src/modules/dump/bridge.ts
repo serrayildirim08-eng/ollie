@@ -19,6 +19,11 @@
  *                     low-mood / obstacle / sunk-cost detectors fold this into
  *                     their dump history. Other modules ALSO write actionLog,
  *                     so we merge-by-ts and never overwrite.
+ *                     PRIVACY: `actionLog` is partitioned to RAM-only on disk
+ *                     (SENSITIVE_BLOB_FIELDS in @ollie/store) so the raw dump
+ *                     text it carries never lands in plaintext localStorage —
+ *                     its durable copy is the SQLCipher dump archive, which is
+ *                     exactly what this bridge rebuilds it from on every boot.
  *
  * OUTPUT (never touched): the dump detector writes `journal.patterns` /
  * `journal.patternsLastComputedAt` — usePatterns('dump') maps 'dump' → the
