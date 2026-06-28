@@ -76,9 +76,9 @@ simple = { limit = 10, period = 60 }
 #      workers/cron/wrangler.toml
 #   4. deploy ai-proxy, then cron
 #
-[[queues.producers]]
-binding = "ENRICH_QUEUE"
-queue = "ollie-enrich-queue"
+# [[queues.producers]]
+# binding = "ENRICH_QUEUE"
+# queue = "ollie-enrich-queue"
 
 # ─── secrets (set with `wrangler secret put`) ──────────────────────────────────
 # ANTHROPIC_API_KEY       — sk-ant-… key. NEVER ship to the client.
@@ -151,6 +151,11 @@ name = "TELEM_RATE_LIMITER"
 namespace_id = "2002"
 simple = { limit = 10, period = 60 }
 
-[[env.staging.queues.producers]]
-binding = "ENRICH_QUEUE"
-queue = "ollie-enrich-queue"
+# COMMENTED OUT (same reason as the top-level [[queues.producers]] above):
+# an uncommented producer pointing at the not-yet-provisioned
+# `ollie-enrich-queue` makes `wrangler deploy --env staging` FAIL. The
+# staging worker falls back to the KV queue (env.ENRICH_QUEUE undefined)
+# until the queue is created. Uncomment in lockstep with the top-level block.
+# [[env.staging.queues.producers]]
+# binding = "ENRICH_QUEUE"
+# queue = "ollie-enrich-queue"

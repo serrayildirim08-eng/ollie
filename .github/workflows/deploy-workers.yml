@@ -32,6 +32,10 @@ jobs:
   deploy-cron:
     name: deploy · cron
     runs-on: ubuntu-latest
+    # cron has [[services]] bindings APNS_PUSH -> ollie-apns-push and
+    # AI_PROXY -> ollie-ai-proxy. A service binding to a worker that does not
+    # yet exist fails `wrangler deploy`, so cron MUST deploy after both targets.
+    needs: [deploy-ai-proxy, deploy-apns-push]
     defaults:
       run:
         working-directory: workers/cron

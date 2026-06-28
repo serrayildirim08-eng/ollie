@@ -55,12 +55,12 @@ service = "ollie-ai-proxy"
 #      workers/ai-proxy/wrangler.toml
 #   4. deploy ai-proxy, then cron
 #
-[[queues.consumers]]
-queue = "ollie-enrich-queue"
-max_batch_size = 25
-max_batch_timeout = 30
-max_retries = 12
-dead_letter_queue = "ollie-enrich-dlq"
+# [[queues.consumers]]
+# queue = "ollie-enrich-queue"
+# max_batch_size = 25
+# max_batch_timeout = 30
+# max_retries = 12
+# dead_letter_queue = "ollie-enrich-dlq"
 
 # ─── secrets (set with `wrangler secret put`) ──────────────────────────────────
 # SUPABASE_URL                — https://<ref>.supabase.co
