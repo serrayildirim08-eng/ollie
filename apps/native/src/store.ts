@@ -26,6 +26,7 @@
 
 import {
   browserAdapter,
+  partitionedAdapter,
   createStore,
   runMigrations,
 } from '@ollie/store';
@@ -57,8 +58,23 @@ import { enumerateCadences as enumerateCycle } from './modules/cycle';
 import { enumerateCadences as enumerateMedication } from './modules/medication';
 import { enumerateCadences as enumerateChores } from './modules/chores';
 
-runMigrations(browserAdapter);
-export const store = createStore(browserAdapter);
+/**
+ * Device-encryption (alpha blocker #3): the four most sensitive module mirrors
+ * (cycle / medication / mood / dump + the derived `journal`) are routed to an
+ * in-memory partition so they never persist as plaintext localStorage. The
+ * durable copy is the SQLCipher-encrypted SQLite DB; these mirrors are rebuilt
+ * from it on every boot by `runAllSyncs` below, so the watchers see live data
+ * with zero behavioural change. The wrapper is fully synchronous + infallible,
+ * so the store's sync read/write contract (and the orchestrator's synchronous
+ * watcher reads) is preserved exactly. See packages/store/src/adapter.ts.
+ *
+ * One adapter instance is shared by runMigrations + createStore so the
+ * one-time plaintext eviction (in the wrapper's constructor) and the
+ * getAllKeys() union are consistent across both.
+ */
+const adapter = partitionedAdapter(browserAdapter);
+runMigrations(adapter);
+export const store = createStore(adapter);
 
 // Let the date-less ladder clear persisted state without an explicit store arg
 // (e.g. from the notification-action completion path). See notify/datelessLadder.

@@ -29,6 +29,22 @@ tauri-plugin-mobile-push = "0.1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
+# ── Device encryption (alpha blocker #3) ────────────────────────────────────
+# rusqlite with the SQLCipher bundle does double duty:
+#   1. Feature-unifies the single `libsqlite3-sys` build (also used by sqlx via
+#      tauri-plugin-sql) to SQLCipher, so the whole DB is encryptable. Verify
+#      on device: `PRAGMA cipher_version` must return a non-empty string.
+#   2. Provides the connection + `rusqlite::ffi` symbols (sqlite3_auto_extension
+#      / sqlite3_exec) used by secure_db.rs to key every connection and to run
+#      the one-shot plaintext->encrypted migration.
+rusqlite = { version = "0.32", features = ["bundled-sqlcipher-vendored-openssl"] }
+# DB key lives in the OS keychain (macOS Security.framework / iOS Keychain
+# Services) -- never a plaintext file. iOS needs the keychain-access-group
+# entitlement (Entitlements.plist) for this to succeed on device.
+keyring = { version = "3", features = ["apple-native"] }
+getrandom = "0.2"
+base64 = "0.22"
+
 # Apple-only: typed bindings to UNUserNotificationCenter for OS-level local
 # notifications that survive the app being quit (macOS 10.14+ and iOS).
 [target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]

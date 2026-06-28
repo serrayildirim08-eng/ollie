@@ -1,5 +1,11 @@
 export type { StorageAdapter, StorageChange } from './adapter';
-export { browserAdapter, createMemoryAdapter } from './adapter';
+export {
+  browserAdapter,
+  createMemoryAdapter,
+  partitionedAdapter,
+  isSensitiveStoreKey,
+  SENSITIVE_STORE_MODULES,
+} from './adapter';
 
 export type { Store, ModuleState } from './store';
 export { createStore, STORE_VERSION, STORE_META_KEY, storeModuleKey } from './store';
