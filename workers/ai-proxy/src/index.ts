@@ -10,9 +10,13 @@
  *   only error counts surface upstream. Bodies are never persisted.
  *
  * Endpoints:
- *   POST /brain-dump       — proxy to https://api.anthropic.com/v1/messages
+ *   POST /brain-dump       — proxy to https://api.anthropic.com/v1/messages.
+ *                            AUTHED: requires a verified Clerk session JWT;
+ *                            the rate-limit key is the verified `sub` (the
+ *                            x-user-id header is ignored). Fails CLOSED.
  *   POST /v1/messages      — legacy alias (existing packages/api/anthropic.ts
  *                            still uses /v1/messages so we accept it too).
+ *                            Same Clerk-JWT auth + sub-keyed rate limit.
  *   POST /enrich-dump      — receive brain-dump, PII-scrub, queue in KV for
  *                            batch enrichment by the cron worker. NO upstream
  *                            Anthropic call here; UX gets zero added latency.
@@ -95,6 +99,9 @@ export interface Env
   ANTHROPIC_API_KEY: string;
   CACHE_KV: KVNamespace;
   RATE_KV: KVNamespace;
+  // Deploy environment tag (e.g. "production"). Used to slam the dev-only
+  // x-user-id rate-limit fallback shut even if T0_JWT_ENFORCED is misset.
+  ENVIRONMENT?: string;
   SUPABASE_URL: string;
   SUPABASE_SERVICE_ROLE: string;
   SUPABASE_ANON_KEY: string;
@@ -437,12 +444,36 @@ export default {
       return withCors(origin, json({ error: 'not_found' }, 404));
     }
 
-    // Per-user rate-limit. Prefer authenticated user id from caller; fall
-    // back to client IP. Bots that omit both will share a single bucket.
-    const userKey =
-      req.headers.get('x-user-id') ||
-      req.headers.get('cf-connecting-ip') ||
-      'anon';
+    // ── Auth gate — fail CLOSED by default ───────────────────────────────────
+    // /brain-dump + /v1/messages are a raw proxy to api.anthropic.com signed
+    // with our ANTHROPIC_API_KEY, so an unauthenticated caller could drain the
+    // key. Require a verified Clerk session JWT unless T0_JWT_ENFORCED is
+    // explicitly "0" (local dev only), mirroring router/route.ts. The verified
+    // `sub` becomes the rate-limit key, so a spoofed x-user-id header can
+    // neither bypass the limit nor poison another user's bucket.
+    let userKey: string;
+    if (env.T0_JWT_ENFORCED !== '0') {
+      const auth = req.headers.get('authorization');
+      if (!auth || !auth.startsWith('Bearer ')) {
+        return withCors(json({ error: 'unauthorized' }, 401));
+      }
+      const sub = await verifyClerkJwt(auth.slice('Bearer '.length), env);
+      if (!sub) {
+        return withCors(json({ error: 'invalid_jwt' }, 401));
+      }
+      userKey = sub;
+    } else {
+      // Dev-only escape hatch (T0_JWT_ENFORCED === '0'). NEVER trust the
+      // caller-supplied x-user-id in production even if the flag is misset —
+      // refuse rather than fall back to a spoofable header (dump.ts audit #43).
+      if (env.ENVIRONMENT === 'production') {
+        return withCors(json({ error: 'unauthorized' }, 401));
+      }
+      userKey =
+        req.headers.get('x-user-id') ||
+        req.headers.get('cf-connecting-ip') ||
+        'anon';
+    }
 
     const allowed = await checkRate(env.AI_RATE_LIMITER, env.RATE_KV, `rl:ai:${userKey}`);
     if (!allowed) {

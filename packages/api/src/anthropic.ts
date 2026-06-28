@@ -181,12 +181,16 @@ export async function routeViaHaiku(
   }
 
   try {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'anthropic-beta': 'prompt-caching-2024-07-31',
+    };
+    // ai-proxy now requires a verified Clerk Bearer; attach it when provided.
+    if (opts?.bearer) headers['authorization'] = `Bearer ${opts.bearer}`;
+
     const resp = await fetch(endpoint, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'anthropic-beta': 'prompt-caching-2024-07-31',
-      },
+      headers,
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 250,

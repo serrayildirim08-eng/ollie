@@ -422,22 +422,24 @@ async function safeText(res: Response): Promise<string | undefined> {
  * Forward a Claude Haiku request through the ai-proxy worker.
  * The worker hides ANTHROPIC_API_KEY; we never see it client-side.
  *
- * x-user-id header is injected if userId is provided — used for per-user
- * rate limiting in the worker (10 req/min).
+ * Auth: the worker now requires a verified Clerk session JWT (Bearer) and
+ * derives the per-user rate-limit key from the verified token `sub` — the
+ * old spoofable x-user-id header is ignored. Pass `bearer` (a Clerk JWT) or
+ * the call will 401. (This helper currently has no live caller; the real
+ * brain-dump flow goes through the Clerk-authed /route/dump endpoint.)
  */
 export function brainDump(
   req: BrainDumpRequest,
-  opts: { userId?: string; timeoutMs?: number } = {},
+  opts: { bearer?: string; timeoutMs?: number } = {},
 ): Promise<ApiResult<BrainDumpResponse>> {
-  const extra: Record<string, string> = {
-    'anthropic-beta': 'prompt-caching-2024-07-31',
-  };
-  if (opts.userId) extra['x-user-id'] = opts.userId;
-
   return post<BrainDumpResponse>(
     `${urls.aiProxy}/brain-dump`,
     req,
-    { extraHeaders: extra, timeoutMs: opts.timeoutMs ?? 10_000 },
+    {
+      extraHeaders: { 'anthropic-beta': 'prompt-caching-2024-07-31' },
+      authJwt: opts.bearer,
+      timeoutMs: opts.timeoutMs ?? 10_000,
+    },
   );
 }
 
