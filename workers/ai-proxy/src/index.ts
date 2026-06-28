@@ -455,11 +455,11 @@ export default {
     if (env.T0_JWT_ENFORCED !== '0') {
       const auth = req.headers.get('authorization');
       if (!auth || !auth.startsWith('Bearer ')) {
-        return withCors(json({ error: 'unauthorized' }, 401));
+        return withCors(origin, json({ error: 'unauthorized' }, 401));
       }
       const sub = await verifyClerkJwt(auth.slice('Bearer '.length), env);
       if (!sub) {
-        return withCors(json({ error: 'invalid_jwt' }, 401));
+        return withCors(origin, json({ error: 'invalid_jwt' }, 401));
       }
       userKey = sub;
     } else {
@@ -467,7 +467,7 @@ export default {
       // caller-supplied x-user-id in production even if the flag is misset —
       // refuse rather than fall back to a spoofable header (dump.ts audit #43).
       if (env.ENVIRONMENT === 'production') {
-        return withCors(json({ error: 'unauthorized' }, 401));
+        return withCors(origin, json({ error: 'unauthorized' }, 401));
       }
       userKey =
         req.headers.get('x-user-id') ||
