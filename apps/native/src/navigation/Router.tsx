@@ -24,7 +24,7 @@ import { tasks as adminTasksRepo } from "../modules/admin";
 import { tasks as workTasksRepo } from "../modules/work";
 import { onTaskCompleted } from "../notify/datelessLadderHook";
 import { pullGroceryPantry } from "../sync/groceryPull";
-import { useFeature } from "../settings/features";
+import { isFeatureEnabled } from "../settings/features";
 import { Stack, Row, Box } from "../layout";
 import { Text } from "../ui";
 
@@ -41,7 +41,6 @@ import { DumpScreen } from "../dump";
 import { MODULE_MANIFEST, MODULE_GROUP_META } from "./moduleRegistry";
 import { HouseholdRoom } from "../rooms/HouseholdRoom";
 import { HealthRoom } from "../rooms/HealthRoom";
-import { GrowthRoom } from "../rooms/GrowthRoom";
 import { ResponsibilitiesRoom } from "../rooms/ResponsibilitiesRoom";
 import { MoneyRoom } from "../rooms/MoneyRoom";
 import { TodoScreen } from "../todo/TodoScreen";
@@ -101,12 +100,11 @@ export function Router() {
   // On native iOS, register the APNs device token to the push worker once
   // signed in (no-op in browser / when unconfigured).
   useApnsPushRegistration();
-  // Partner is deferred out of v1 behind a feature flag (audit #10). Flagged
-  // manifest entries only mount their route when the flag is on. Read all
-  // flags here (only 'partner' today) so the routes can be derived below.
-  const partnerEnabled = useFeature('partner');
+  // Modules can be deferred behind a feature flag (audit #10). Flagged manifest
+  // entries only mount their /box route when the flag is on. Default-OFF today:
+  // partner, goals, habits, pets (see settings/features.ts).
   const flagOn = (entry: (typeof MODULE_MANIFEST)[number]): boolean =>
-    entry.flag == null || (entry.flag === 'partner' && partnerEnabled);
+    entry.flag == null || isFeatureEnabled(entry.flag);
   return (
     <BrowserRouter>
       <DeepLinkBridge />
@@ -121,7 +119,6 @@ export function Router() {
           <Route path="modules" element={<ModulesIndex />} />
           <Route path="room/household" element={<HouseholdRoom />} />
           <Route path="room/health" element={<HealthRoom />} />
-          <Route path="room/growth" element={<GrowthRoom />} />
           <Route path="room/responsibilities" element={<ResponsibilitiesRoom />} />
           <Route path="room/money" element={<MoneyRoom />} />
           <Route path="todo" element={<TodoScreen />} />
@@ -144,16 +141,14 @@ const ASIDE_STYLE: React.CSSProperties = {
 };
 
 function ModulesIndex() {
-  // Hide feature-flagged-off modules (audit #10: Partner deferred from v1).
-  const partnerEnabled = useFeature('partner');
-  // Build the three rooms from the shared manifest (audit #178) — group
-  // metadata gives display order + asides; items come from the manifest,
-  // filtered by feature flag.
-  // Every module now lives in a room (their /box routes still exist, reached
-  // from the room). Household = grocery + chores; Health = sleep + cycle +
-  // body + medication + mood; Growth = habits + goals; Responsibilities =
-  // work + admin; Money = finance. All are lifted out of the flat module list
-  // here, so the flat groups render empty/near-empty by design.
+  // Build the rooms from the shared manifest (audit #178) — group metadata
+  // gives display order + asides; items come from the manifest, filtered by
+  // feature flag (default-OFF modules are hidden, see settings/features.ts).
+  // Roomed modules live in a room (their /box routes still exist, reached from
+  // the room). Household = grocery + chores; Health = sleep + cycle + body +
+  // medication + mood; Responsibilities = work + admin; Money = finance. All
+  // are lifted out of the flat module list here, so the flat groups render
+  // empty by design.
   const ROOMED_IDS = new Set([
     'grocery',
     'chores',
@@ -162,15 +157,12 @@ function ModulesIndex() {
     'body',
     'medication',
     'mood',
-    'habits',
-    'goals',
     'work',
     'admin',
     'finance',
   ]);
   const visible = MODULE_MANIFEST.filter(
-    (m) =>
-      (m.flag == null || (m.flag === 'partner' && partnerEnabled)) && !ROOMED_IDS.has(m.id),
+    (m) => (m.flag == null || isFeatureEnabled(m.flag)) && !ROOMED_IDS.has(m.id),
   );
   const groups = MODULE_GROUP_META.map((meta) => ({
     ...meta,
@@ -225,27 +217,6 @@ function ModulesIndex() {
               <Text scale="body">Household</Text>
               <Text scale="caption" color={colors.inkFaint}>
                 chores · grocery · pantry
-              </Text>
-            </Row>
-          </Box>
-        </Link>
-      </Stack>
-
-      <Stack gap={8}>
-        <Text
-          scale="caption"
-          color={colors.inkFaint}
-          style={{ ...SMCP_STYLE, letterSpacing: "0.20em" }}
-        >
-          growth
-        </Text>
-        <p style={ASIDE_STYLE}>your habits + what you&rsquo;re moving toward.</p>
-        <Link to="/room/growth" style={{ textDecoration: "none", color: "inherit" }}>
-          <Box bg="cream" radius="card" shadow="raised" style={{ padding: "16px 18px" }}>
-            <Row gap={12} align="baseline" justify="space-between">
-              <Text scale="body">Growth</Text>
-              <Text scale="caption" color={colors.inkFaint}>
-                habits · goals
               </Text>
             </Row>
           </Box>

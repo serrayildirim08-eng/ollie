@@ -8,12 +8,14 @@
  * v1 default-OFF features:
  *   - partner: the bilateral "intimate window" module. Mocked + untested + not
  *     brain-dump-routable, so it is deferred out of v1 (kept in the tree).
+ *   - goals / habits / pets: deferred from the current surface per Serra
+ *     (2026-06-28). Code + data stay; flip the flag to bring them back.
  */
 
 import { useEffect, useState } from 'react';
 import { store } from '../store';
 
-export type FeatureFlag = 'partner';
+export type FeatureFlag = 'partner' | 'goals' | 'habits' | 'pets';
 
 const NS = 'settings';
 const KEY = 'features';
@@ -21,6 +23,10 @@ const KEY = 'features';
 /** Flags that are OFF unless the stored map explicitly enables them. */
 const DEFAULTS: Record<FeatureFlag, boolean> = {
   partner: false,
+  // Deferred from the current surface (kept in the tree, reversible).
+  goals: false,
+  habits: false,
+  pets: false,
 };
 
 function readFlags(): Partial<Record<FeatureFlag, boolean>> {

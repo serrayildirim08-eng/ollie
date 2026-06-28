@@ -30,13 +30,13 @@ export const MODULE_META: ModuleMeta[] = [
   { id: 'sleep', label: 'Sleep', hint: 'logs + insomnia', group: 'you' },
   { id: 'cycle', label: 'Cycle', hint: 'period + symptoms', group: 'you' },
   { id: 'medication', label: 'Medication', hint: 'doses + side effects', group: 'you' },
-  { id: 'habits', label: 'Habits', hint: 'what you do', group: 'you' },
-  { id: 'goals', label: 'Goals', hint: "what you're moving toward", group: 'you' },
+  { id: 'habits', label: 'Habits', hint: 'what you do', group: 'you', flag: 'habits' },
+  { id: 'goals', label: 'Goals', hint: "what you're moving toward", group: 'you', flag: 'goals' },
   { id: 'partner', label: 'Partner', hint: 'an intimate window', group: 'you', flag: 'partner' },
   // ─── your stuff ──────────────────────────────────────────────────────────
   { id: 'grocery', label: 'Grocery', hint: 'pantry + shopping', group: 'your-stuff' },
   { id: 'chores', label: 'Chores', hint: 'cleaning + upkeep', group: 'your-stuff' },
-  { id: 'pets', label: 'Pets', hint: 'tontin + pinpon', group: 'your-stuff' },
+  { id: 'pets', label: 'Pets', hint: 'tontin + pinpon', group: 'your-stuff', flag: 'pets' },
   // ─── your responsibilities ───────────────────────────────────────────────
   { id: 'work', label: 'Work', hint: 'tasks + deadlines', group: 'your-responsibilities' },
   { id: 'admin', label: 'Admin', hint: 'renewals + paperwork', group: 'your-responsibilities' },
