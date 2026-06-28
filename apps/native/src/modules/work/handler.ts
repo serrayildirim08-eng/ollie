@@ -13,7 +13,7 @@ import { tasks, events } from './repo';
 import { migrateBody } from '../body/migrate';
 import { events as bodyEvents } from '../body/repo';
 import { sendSystemNotification } from '../../notify/systemNotify';
-import { scheduleTaskReminder } from '../../notify/taskReminder';
+import { planReminder } from '../../notify/taskReminder';
 import { startDatelessLadderFor } from '../../notify/datelessLadderHook';
 
 export const workHandler: ModuleHandler<'work'> = {
@@ -70,17 +70,22 @@ export const workHandler: ModuleHandler<'work'> = {
           project: p.project ?? null,
           kind: 'task',
         });
-        // Time-deferred reminder side-effect (Approach B). The worker resolved
-        // scheduledAtMs against its clock; we just hand it to the OS.
-        scheduleTaskReminder(p.remindIn, task.id, {
+        // Manual one-shot reminder (brain-vs-body split: Layer 1 flags intent +
+        // time; scheduling/cascade is deterministic). Explicit clock time / "in
+        // N min" are scheduled here; a time-less "remind me" returns a cascade
+        // descriptor so DumpScreen can ask "when?".
+        const reminderCascade = planReminder(p, task.id, 'work', {
           title: 'to do', body: p.text, module: 'work', actionUrl: 'ollie://box/work',
         });
-        // DATE-LESS escalation ladder: a work task carries no due date, so it
-        // gets the growing-gap reminder series so it isn't forgotten.
-        void startDatelessLadderFor({
-          module: 'work', taskId: task.id, text: task.text,
-          dueDate: task.dueDate, createdAt: task.createdAt,
-        });
+        // DATE-LESS escalation ladder: a plain (non-reminder) work task carries
+        // no due date, so it gets the growing-gap reminder series. Skipped for
+        // explicit reminders — the cascade / scheduled fire owns those.
+        if (!p.reminder) {
+          void startDatelessLadderFor({
+            module: 'work', taskId: task.id, text: task.text,
+            dueDate: task.dueDate, createdAt: task.createdAt,
+          });
+        }
         // NOTE: tasks.add upserts on (text, done=0). Undo removes the row
         // regardless of whether it was fresh or refreshed — see finance.add_bill
         // comment for the same trade-off rationale.
@@ -89,6 +94,7 @@ export const workHandler: ModuleHandler<'work'> = {
           note: `added task: ${task.text}`,
           deepLink: '/box/work',
           undo: undoTask(task.id),
+          reminderCascade,
         };
       }
 

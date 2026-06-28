@@ -11,7 +11,7 @@ import type { AdminAction, ModuleHandler, HandlerResult } from '../../router/sch
 import { migrateAdmin } from './migrate';
 import { renewals, tasks } from './repo';
 import { inferInitialBallState } from './ballState';
-import { scheduleTaskReminder } from '../../notify/taskReminder';
+import { planReminder } from '../../notify/taskReminder';
 import { startDatelessLadderFor } from '../../notify/datelessLadderHook';
 
 export const adminHandler: ModuleHandler<'admin'> = {
@@ -35,18 +35,21 @@ export const adminHandler: ModuleHandler<'admin'> = {
           // move to `waiting` when the dump clearly signals a hand-off (#7)
           ballState: inferInitialBallState(p.text),
         });
-        // Time-deferred reminder side-effect (Approach B). The worker
-        // computes scheduledAtMs from the user's "in N min/hr" hint.
-        scheduleTaskReminder(p.remindIn, task.id, {
+        // Reminder scheduling (manual one-shot). Brain-vs-body split: Layer 1
+        // only flags intent + extracts a time; ALL scheduling is here.
+        const reminderCascade = planReminder(p, task.id, 'admin', {
           title: 'to do', body: p.text, module: 'admin', actionUrl: 'ollie://todo',
         });
-        // DATE-LESS escalation ladder: a task with NO dueDate gets a growing
-        // series of gentle reminders so it isn't forgotten. No-op when dated.
-        void startDatelessLadderFor({
-          module: 'admin', taskId: task.id, text: task.text,
-          dueDate: task.dueDate, createdAt: task.createdAt,
-        });
-        return { ok: true, note: `noted: ${p.text}`, deepLink: '/box/admin', undo: undoTask(task.id) };
+        // DATE-LESS escalation ladder: a plain (non-reminder) task with NO
+        // dueDate gets a growing series of gentle reminders. Skipped for
+        // explicit reminders — the cascade / scheduled fire owns those.
+        if (!p.reminder) {
+          void startDatelessLadderFor({
+            module: 'admin', taskId: task.id, text: task.text,
+            dueDate: task.dueDate, createdAt: task.createdAt,
+          });
+        }
+        return { ok: true, note: `noted: ${p.text}`, deepLink: '/box/admin', undo: undoTask(task.id), reminderCascade };
       }
 
       case 'create_phone_task': {
@@ -58,12 +61,15 @@ export const adminHandler: ModuleHandler<'admin'> = {
           dueDate: p.dueDate ?? null,
         });
         const note = p.reason ? `call ${p.person} — ${p.reason}` : `call ${p.person}`;
-        // Time-deferred reminder side-effect (Approach B).
+        // Reminder scheduling (manual one-shot). `text` (the person) drives the
+        // "when?" card copy; the body is person · reason.
         const reminderBody = p.reason ? `${p.person} · ${p.reason}` : p.person;
-        scheduleTaskReminder(p.remindIn, task.id, {
-          title: 'call', body: reminderBody, module: 'admin', actionUrl: 'ollie://todo',
-        });
-        return { ok: true, note, deepLink: '/box/admin', undo: undoTask(task.id) };
+        const reminderCascade = planReminder(
+          p, task.id, 'admin',
+          { title: 'call', body: reminderBody, module: 'admin', actionUrl: 'ollie://todo' },
+          `call ${text}`,
+        );
+        return { ok: true, note, deepLink: '/box/admin', undo: undoTask(task.id), reminderCascade };
       }
 
       case 'schedule_appointment': {

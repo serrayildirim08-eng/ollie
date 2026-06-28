@@ -312,3 +312,101 @@ describe('adminHandler — time-deferred reminder (remindIn)', () => {
     expect(vi.mocked(scheduleServerReminder)).not.toHaveBeenCalled();
   });
 });
+
+describe('adminHandler — manual reminder (remindAt + no-time cascade)', () => {
+  // Pin to 9am local so an "at 6pm" reminder resolves to 6pm TODAY.
+  const NOW = new Date(2026, 5, 28, 9, 0, 0, 0).getTime();
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('create_phone_task with remindAt "18:00" schedules at 6pm TODAY and returns no cascade', async () => {
+    const fragment: Fragment = {
+      text: 'remind me to call mom at 6pm',
+      language: 'en',
+      module: 'admin',
+      payload: {
+        module: 'admin',
+        action: 'create_phone_task',
+        person: 'mom',
+        reminder: true,
+        remindAt: '18:00',
+      },
+      confidence: 0.93,
+      source: 'ai',
+    };
+
+    const result = await adminHandler.apply(fragment);
+
+    // No "when?" cascade — the time was explicit.
+    expect(result.reminderCascade).toBeUndefined();
+    expect(vi.mocked(scheduleAt)).toHaveBeenCalledOnce();
+    const [fireAt, payload, id] = vi.mocked(scheduleAt).mock.calls[0]!;
+    expect(new Date(fireAt as number).getHours()).toBe(18);
+    expect(new Date(fireAt as number).getDate()).toBe(28); // today
+    expect(fireAt as number).toBeGreaterThan(NOW);
+    expect(payload).toMatchObject({ title: 'call', body: 'mom' });
+    expect(id).toBe('reminder:task-id');
+    expect(vi.mocked(scheduleServerReminder)).toHaveBeenCalledWith(
+      expect.objectContaining({ dedupe_key: 'reminder:task-id' }),
+      fireAt,
+    );
+  });
+
+  it('remindAt in the past today rolls forward to tomorrow (no past schedule)', async () => {
+    const fragment: Fragment = {
+      text: 'remind me to water plants at 6am',
+      language: 'en',
+      module: 'admin',
+      payload: { module: 'admin', action: 'create_task', text: 'water plants', reminder: true, remindAt: '06:00' },
+      confidence: 0.9,
+      source: 'ai',
+    };
+
+    await adminHandler.apply(fragment);
+
+    const [fireAt] = vi.mocked(scheduleAt).mock.calls[0]!;
+    expect(new Date(fireAt as number).getHours()).toBe(6);
+    expect(new Date(fireAt as number).getDate()).toBe(29); // tomorrow
+    expect(fireAt as number).toBeGreaterThan(NOW);
+  });
+
+  it('create_phone_task reminder with NO time returns a cascade and schedules NOTHING yet', async () => {
+    const fragment: Fragment = {
+      text: 'remind me to call mom',
+      language: 'en',
+      module: 'admin',
+      payload: { module: 'admin', action: 'create_phone_task', person: 'mom', reminder: true },
+      confidence: 0.93,
+      source: 'ai',
+    };
+
+    const result = await adminHandler.apply(fragment);
+
+    expect(result.reminderCascade).toEqual({ taskId: 'task-id', text: 'call mom', module: 'admin' });
+    // Durable to-do exists; the schedule waits for the "when?" answer.
+    expect(vi.mocked(scheduleAt)).not.toHaveBeenCalled();
+    expect(vi.mocked(scheduleServerReminder)).not.toHaveBeenCalled();
+  });
+
+  it('create_task reminder with NO time returns a cascade keyed on the task text', async () => {
+    const fragment: Fragment = {
+      text: 'remind me to submit the form',
+      language: 'en',
+      module: 'admin',
+      payload: { module: 'admin', action: 'create_task', text: 'submit the form', reminder: true },
+      confidence: 0.9,
+      source: 'ai',
+    };
+
+    const result = await adminHandler.apply(fragment);
+
+    expect(result.reminderCascade).toEqual({ taskId: 'task-id', text: 'submit the form', module: 'admin' });
+    expect(vi.mocked(scheduleAt)).not.toHaveBeenCalled();
+  });
+});

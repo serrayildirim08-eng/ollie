@@ -30,10 +30,11 @@
  * fire time from the user-intent `amount`/`unit` against THIS device's clock,
  * and reject anything outside a sane horizon.
  */
-import type { RemindIn } from '../router/schema';
+import type { RemindIn, HandlerResult } from '../router/schema';
 import { scheduleAt } from './systemNotify';
 import { scheduleServerReminder } from './serverReminder';
 import { OLLIE_REMINDER_CATEGORY } from './notificationActions';
+import { resolveTimeOfDayFireAt } from './reminderCascade';
 
 /** No reminder should ever be scheduled more than this far out — a
  *  "remind me" hint that resolves beyond a year is almost certainly a clock
@@ -82,17 +83,30 @@ export interface TaskReminderOptions {
 }
 
 /**
- * Schedule a task reminder if a usable `remindIn` hint is present. No-op
- * otherwise. See module doc for the OS-local + server-push fan-out.
+ * Schedule a one-shot reminder at an ABSOLUTE wall-clock `fireAt` (ms epoch).
+ *
+ * The shared core behind both the relative-hint path (scheduleTaskReminder) and
+ * the manual-reminder cascade (DumpScreen → "remind me to call mom at 6pm" /
+ * the "when?" pick / the 7pm fallback). Fans the same reminder out over all
+ * three delivery paths under ONE stable id (`reminder:<taskId>`):
+ *   - OS-local notification (survives app-quit on Tauri),
+ *   - in-process timer (web preview / open app),
+ *   - server-push job (cron → APNs, fires app-fully-closed).
+ * The notify dispatcher + cron both honor dedupe_key, so whichever lands first
+ * wins — never a double ping.
+ *
+ * No-op (defensive) when `fireAt` is non-finite or already in the past — the
+ * cascade resolvers never return a past time, but a caller bug shouldn't fire a
+ * reminder instantly. Never throws.
  */
-export function scheduleTaskReminder(
-  remindIn: RemindIn | undefined,
+export function scheduleReminderAt(
+  fireAt: number,
   taskId: string,
   { title, body, module, actionUrl }: TaskReminderOptions,
 ): void {
-  if (!remindIn) return;
-  const fireAt = resolveReminderFireAt(remindIn);
-  if (fireAt === null) return;
+  if (typeof fireAt !== 'number' || !Number.isFinite(fireAt)) return;
+  if (fireAt - Date.now() > MAX_REMINDER_HORIZON_MS) return;
+  if (fireAt <= Date.now()) return;
   // Same stable id across all three paths (OS local notification, in-process
   // timer, server-push job) so the dispatcher / cron dedupe to one ping.
   const id = `reminder:${taskId}`;
@@ -112,4 +126,71 @@ export function scheduleTaskReminder(
     },
     fireAt,
   );
+}
+
+/**
+ * Schedule a task reminder if a usable `remindIn` hint is present. No-op
+ * otherwise. See module doc for the OS-local + server-push fan-out.
+ */
+export function scheduleTaskReminder(
+  remindIn: RemindIn | undefined,
+  taskId: string,
+  opts: TaskReminderOptions,
+): void {
+  if (!remindIn) return;
+  const fireAt = resolveReminderFireAt(remindIn);
+  if (fireAt === null) return;
+  scheduleReminderAt(fireAt, taskId, opts);
+}
+
+/** The reminder-hint fields Layer 1 may attach to a reminder-capable action. */
+export interface ReminderPlanInput {
+  reminder?: boolean;
+  remindAt?: string;
+  remindIn?: RemindIn;
+}
+
+/**
+ * Plan + schedule a manual one-shot reminder for a freshly-created to-do row.
+ *
+ * Brain-vs-body split: Layer 1 (the AI router) only flags reminder INTENT and
+ * extracts a time when the user named one. This function is the deterministic
+ * body — it decides what to schedule and when, with NO LLM in the loop:
+ *
+ *   1. explicit clock time ("at 6pm" → remindAt "18:00") → schedule the next
+ *      occurrence (today, else tomorrow) immediately. Returns undefined.
+ *   2. relative hint ("in N min" → remindIn) → existing worker-anchored path.
+ *      Returns undefined.
+ *   3. explicit "remind me" with NO usable time → returns a `reminderCascade`
+ *      descriptor so the caller (DumpScreen) can surface the "when?" card; the
+ *      to-do already exists, nothing is scheduled yet.
+ *   4. not a reminder at all → returns undefined, schedules nothing.
+ *
+ * `cascadeText` overrides the human label used in the "when?" card (e.g. a
+ * phone task's person name); defaults to `opts.body`.
+ */
+export function planReminder(
+  p: ReminderPlanInput,
+  taskId: string,
+  module: 'admin' | 'work',
+  opts: TaskReminderOptions,
+  cascadeText?: string,
+): HandlerResult['reminderCascade'] {
+  if (p.remindAt) {
+    const fireAt = resolveTimeOfDayFireAt(p.remindAt);
+    if (fireAt !== null) {
+      scheduleReminderAt(fireAt, taskId, opts);
+      return undefined;
+    }
+    // Unparseable time string: fall through so an explicit reminder still gets
+    // the "when?" cascade rather than silently losing the reminder.
+  }
+  if (p.remindIn) {
+    scheduleTaskReminder(p.remindIn, taskId, opts);
+    return undefined;
+  }
+  if (p.reminder) {
+    return { taskId, text: cascadeText ?? opts.body, module };
+  }
+  return undefined;
 }

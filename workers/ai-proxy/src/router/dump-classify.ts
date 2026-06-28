@@ -112,7 +112,11 @@ Other module-choice hints:
   · RESTOCKED / have it again ("got more vitamin d", "restocked my magnesium", "have melatonin again") → medication.set_have { medName }.
   · SIDE EFFECT ("sertraline making me nauseous", "dizzy from my meds") → medication.side_effect_note { medName, note }.
 - habits.streak_break_note FORBIDDEN. "Broke X habit" / "missed 5 days" said as self-judgment → mood.self_talk; as neutral observation → dump_only. NEVER identity_statement for negative habit talk.
-- TIME-DEFERRED REMINDER ("remind me to X in N", "Y dakika sonra hatırlat", "recuérdame X en N"): classify by what to do (e.g. "remind me to call mama in 1 min" → admin.create_phone_task person="mama"), add top-level \`remindIn: { amount: number, unit: "sec"|"min"|"hr"|"day" }\`. Never a separate reminder fragment, never dump_only when remindIn present. "Remind me to take <med> in N" → admin.create_task text="take <med>" + remindIn (NOT medication.log_dose — that is past-tense).
+- REMINDER ("remind me to X", "X hatırlat", "recuérdame X"): an explicit reminder request. Classify by what to do (e.g. "call mom" → admin.create_phone_task person="mom"; "take out the trash" → admin.create_task), and ALWAYS add \`reminder: true\`. Then add the TIME the user gave, if any:
+  · RELATIVE ("in N min/hr/days", "N dakika sonra", "en N") → \`remindIn: { amount: number, unit: "sec"|"min"|"hr"|"day" }\`.
+  · ABSOLUTE CLOCK TIME ("at 6pm", "at 9am", "saat 18:00", "a las 6") → \`remindAt: "HH:MM"\` (24h local; 6pm→"18:00", 9am→"09:00", noon→"12:00", midnight→"00:00").
+  · NO TIME ("remind me to call mom") → \`reminder: true\` ONLY (omit remindIn AND remindAt); the app will ask the user when.
+  Never a separate reminder fragment, never dump_only when reminder:true. "Remind me to take <med> at 9pm" → admin.create_task text="take <med>" + reminder:true + remindAt:"21:00" (NOT medication.log_dose — that is past-tense).
 
 CROSS-MODULE HINT FIELDS (Layer 1 emits hint on payload; primary handler mirrors to secondary — never emit a separate fragment):
 - body.log_movement → \`pet\` (proper noun like "buddy"/"tontin"; omit for species-only "the dog") → mirrors pets.log_care.
@@ -120,7 +124,7 @@ CROSS-MODULE HINT FIELDS (Layer 1 emits hint on payload; primary handler mirrors
 - work.log_focus_session → \`skipped_meals: true\` ONLY when hyperfocus is explicitly paired with not eating ("didn't eat"/"forgot lunch"/"hiç yemedim"/"no comí") → mirrors body.log_hunger.
 - finance.log_transaction → \`renewal_for\` ("passport"|"license"|"visa"|"lease"|"insurance"|"id"|"work_permit"|"residency_permit") ONLY when the fragment names the document ("passport fee", "vize ücreti", "lease deposit paid") → mirrors admin.log_renewal. Generic "expedite fee 89" → plain log_transaction.
 - grocery.pantry_add → \`price\` + \`currency\` when stated → mirrors finance.log_transaction.
-- admin.create_task / admin.create_phone_task / work.create_task → \`remindIn\` (per TIME-DEFERRED REMINDER).
+- admin.create_task / admin.create_phone_task / work.create_task → \`reminder: true\` plus \`remindIn\` (relative) OR \`remindAt: "HH:MM"\` (absolute), per the REMINDER rule above.
 
 NEGATION: "did NOT take" / "skipped" / "almadım" / "no tomé" → medication.missed_dose. "no comí nada" → body.log_hunger.
 
@@ -134,13 +138,15 @@ RESPONSE FORMAT — return ONLY a valid JSON object, no prose, no markdown, no c
   "module": one of [${MODULES.join(', ')}],
   "action": one of that module's actions for the chosen module,
   "confidence": a number between 0 and 1,
-  "payload": an object with the obvious fields extracted from the fragment, plus any cross-module hint field listed above, plus optional daysAgo, plus optional remindIn. Use {} when no fields apply.
+  "payload": an object with the obvious fields extracted from the fragment, plus any cross-module hint field listed above, plus optional daysAgo, plus optional reminder / remindIn / remindAt. Use {} when no fields apply.
 }
 
 MINI EXAMPLES:
 - "90 min deep work on atelier" → work.log_focus_session { durationMin:90, project:"atelier" }
 - "fill yeo's ds forms, due tuesday" → work.log_deadline { text:"fill yeo's ds forms", dueDate:"tuesday" }
-- "remind me to call mama in 1 minute" → admin.create_phone_task { person:"mama", remindIn:{ amount:1, unit:"min" } }
+- "remind me to call mama in 1 minute" → admin.create_phone_task { person:"mama", reminder:true, remindIn:{ amount:1, unit:"min" } }
+- "remind me to call mom at 6pm" → admin.create_phone_task { person:"mom", reminder:true, remindAt:"18:00" }
+- "remind me to call mom" → admin.create_phone_task { person:"mom", reminder:true }
 - "fed tontin" → pets.log_feed { petName:"tontin" }
 - "hamileyim" → cycle.set_pregnant {}
 - "spent $40 at sephora" → finance.log_transaction { amount:40, currency:"USD", merchant:"sephora" }

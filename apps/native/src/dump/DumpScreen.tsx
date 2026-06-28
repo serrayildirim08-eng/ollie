@@ -26,6 +26,10 @@ import { useAppLang } from '../settings/appLang';
 import { useFeature } from '../settings/features';
 import { crisisBannerCopy } from './crisisCopy';
 import { NeedsConfirmCard } from './NeedsConfirmCard';
+import { ReminderWhenCard } from './ReminderWhenCard';
+import { scheduleReminderAt } from '../notify/taskReminder';
+import { resolveTimeOfDayFireAt, fallbackFireAt } from '../notify/reminderCascade';
+import type { HandlerResult } from '../router/schema';
 import { TodayNoticings } from '../modules/brain/TodayNoticings';
 import { GoalCreateModal } from '../modules/goals/GoalCreateModal';
 import { PartnerCard } from '../modules/partner';
@@ -55,6 +59,32 @@ interface PendingConfirm {
   fromPhoto: boolean;
 }
 
+/** One pending "when?" reminder card — a time-less "remind me to X" dump. */
+type PendingReminder = NonNullable<HandlerResult['reminderCascade']> & {
+  /** Stable id: dumpId + fragment index in that dispatch. */
+  cardId: string;
+};
+
+/** Deep link a reminder notification opens, per the source task repo. */
+function reminderActionUrl(module: 'admin' | 'work'): string {
+  return module === 'work' ? 'ollie://box/work' : 'ollie://todo';
+}
+
+/**
+ * Schedule a time-less reminder once the user has chosen (or defaulted to) a
+ * fire time. Deterministic harness path — no LLM. Reuses scheduleReminderAt so
+ * the OS-local + in-process + server-push fan-out + dedupe id all match the
+ * inline-scheduled reminders.
+ */
+function scheduleCascadeReminder(reminder: PendingReminder, fireAt: number): void {
+  scheduleReminderAt(fireAt, reminder.taskId, {
+    title: 'reminder',
+    body: reminder.text,
+    module: reminder.module,
+    actionUrl: reminderActionUrl(reminder.module),
+  });
+}
+
 function buildRouteLabel(entry: DispatchEntry): string {
   const { module, payload } = entry.fragment;
   // Every ActionPayload variant carries an `action` string discriminant.
@@ -76,6 +106,9 @@ export function DumpScreen(): JSX.Element {
   const ackTickRef = useRef(0);
   const [crisis, setCrisis] = useState<CrisisSignal | null>(null);
   const [pendingConfirms, setPendingConfirms] = useState<PendingConfirm[]>([]);
+  // Time-less "remind me to X" dumps surface a small "when?" card. The to-do
+  // already exists; choosing a time (or dismissing → 7pm) schedules the ping.
+  const [pendingReminders, setPendingReminders] = useState<PendingReminder[]>([]);
   // Partner is deferred out of v1 (audit #10) — its home ambient card only
   // shows when the feature flag is on.
   const partnerEnabled = useFeature('partner');
@@ -103,6 +136,10 @@ export function DumpScreen(): JSX.Element {
 
   const dismissConfirm = useCallback((id: string) => {
     setPendingConfirms((prev) => prev.filter((c) => c.id !== id));
+  }, []);
+
+  const dismissReminder = useCallback((cardId: string) => {
+    setPendingReminders((prev) => prev.filter((r) => r.cardId !== cardId));
   }, []);
 
   // Force-remount the Ack so its CSS animation restarts on every fire.
@@ -232,6 +269,21 @@ export function DumpScreen(): JSX.Element {
       setPendingConfirms((prev) => [...prev, ...cards]);
     }
 
+    // Time-less reminders ("remind me to call mom" with no time): the handler
+    // already created the durable to-do and handed back a reminderCascade; we
+    // surface a small "when?" card so the user can pick a time (or dismiss to
+    // the 7pm fallback). Scheduling itself is deterministic harness code.
+    const reminders: PendingReminder[] = dispatched.entries
+      .map((e, i) => {
+        const rc = e.result.reminderCascade;
+        return rc ? { ...rc, cardId: `${output.dumpId}-rem-${i}` } : null;
+      })
+      .filter((r): r is PendingReminder => r !== null);
+
+    if (reminders.length > 0) {
+      setPendingReminders((prev) => [...prev, ...reminders]);
+    }
+
     // No ack fired here anymore — it already flashed instantly on submit (see
     // onSubmitted). Goal-intent dumps retract it above (modal owns the ack);
     // crisis dumps are hidden by the `!crisis` render guard once onCrisis sets
@@ -324,6 +376,28 @@ export function DumpScreen(): JSX.Element {
               fromPhoto={card.fromPhoto}
               onKeep={card.onKeep}
               onUndo={card.onUndo}
+            />
+          ))}
+        </Stack>
+      )}
+
+      {!crisis && pendingReminders.length > 0 && (
+        <Stack gap={10}>
+          {pendingReminders.map((reminder) => (
+            <ReminderWhenCard
+              key={reminder.cardId}
+              reminderText={reminder.text}
+              onPick={(hhmm) => {
+                const fireAt = resolveTimeOfDayFireAt(hhmm);
+                // Unparseable preset → fall back to 7pm rather than no-op.
+                scheduleCascadeReminder(reminder, fireAt ?? fallbackFireAt());
+                dismissReminder(reminder.cardId);
+              }}
+              onDismiss={() => {
+                // No answer → 7pm today (rolls to tomorrow if already past 7pm).
+                scheduleCascadeReminder(reminder, fallbackFireAt());
+                dismissReminder(reminder.cardId);
+              }}
             />
           ))}
         </Stack>

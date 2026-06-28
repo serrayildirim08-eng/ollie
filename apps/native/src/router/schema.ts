@@ -195,7 +195,7 @@ export type WorkAction =
    * to body.log_hunger. Approach B (see grocery/handler.ts).
    */
   | { module: 'work'; action: 'log_focus_session'; durationMin?: number; project?: string; skipped_meals?: boolean }
-  | { module: 'work'; action: 'create_task'; text: string; project?: string; remindIn?: RemindIn }
+  | ({ module: 'work'; action: 'create_task'; text: string; project?: string; remindIn?: RemindIn } & ReminderHints)
   | { module: 'work'; action: 'log_deadline'; text: string; dueDate?: string }
   | { module: 'work'; action: 'log_meeting'; with?: string; durationMin?: number }
   | { module: 'work'; action: 'distraction_journal'; what: string }
@@ -222,9 +222,28 @@ export interface RemindIn {
   scheduledAtMs: number;
 }
 
+/**
+ * Manual one-shot reminder hints (Layer 1 "brain" judgment only — the cascade,
+ * fallback, and scheduling math are deterministic harness code in
+ * notify/reminderCascade.ts + the module handlers). Set by the router for
+ * explicit "remind me to X" dumps:
+ *   - `reminder: true`     — the dump is an explicit reminder request. Drives
+ *                            the no-time "when?" cascade in DumpScreen.
+ *   - `remindAt: "HH:MM"`  — an absolute 24h-local clock time the user named
+ *                            ("at 6pm" → "18:00"). Scheduled for the next
+ *                            occurrence of that time (today, else tomorrow).
+ * `remindIn` (relative) stays the existing field for "in N min/hr".
+ */
+export type ReminderHints = {
+  /** True when the dump explicitly asked to be reminded ("remind me to X"). */
+  reminder?: boolean;
+  /** Absolute 24h-local clock time ("HH:MM") the user named, if any. */
+  remindAt?: string;
+};
+
 export type AdminAction =
-  | { module: 'admin'; action: 'create_task'; text: string; dueDate?: string; remindIn?: RemindIn }
-  | { module: 'admin'; action: 'create_phone_task'; person: string; reason?: string; dueDate?: string; remindIn?: RemindIn }
+  | ({ module: 'admin'; action: 'create_task'; text: string; dueDate?: string; remindIn?: RemindIn } & ReminderHints)
+  | ({ module: 'admin'; action: 'create_phone_task'; person: string; reason?: string; dueDate?: string; remindIn?: RemindIn } & ReminderHints)
   | { module: 'admin'; action: 'schedule_appointment'; what: string; date?: string }
   | { module: 'admin'; action: 'log_paperwork'; what: string; dueDate?: string }
   | { module: 'admin'; action: 'recurring_decision'; what: string }
@@ -450,4 +469,20 @@ export interface HandlerResult {
    * the handler did not persist (dump_only, validation reject, etc.).
    */
   undo?: () => Promise<void>;
+  /**
+   * Set by a handler when it created a durable to-do for an explicit reminder
+   * ("remind me to X") that arrived WITHOUT a time. The to-do already exists;
+   * DumpScreen surfaces a small "when?" card so the user can pick a time. If
+   * the user picks one the harness schedules then; if they dismiss it, the
+   * harness falls back to 7pm today (see notify/reminderCascade.ts). Omitted
+   * for reminders that already carried a time (those are scheduled inline).
+   */
+  reminderCascade?: {
+    /** The created task's row id — stable id for the scheduled notification. */
+    taskId: string;
+    /** Human task text, used for the reminder body + the "when?" card copy. */
+    text: string;
+    /** Which task repo the row lives in (drives notification tap routing). */
+    module: 'admin' | 'work';
+  };
 }

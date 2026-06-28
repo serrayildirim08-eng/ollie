@@ -41,6 +41,10 @@ import {
   type SleepSettingsLike,
 } from './suppression';
 
+// Re-export the canonical "HH:MM" parser so reminder scheduling (apps/native ·
+// notify/reminderCascade.ts) shares one time-of-day grammar with quiet-hours.
+export { parseHHMM } from './suppression';
+
 export type {
   NotificationBackend,
   NotificationCategory,
