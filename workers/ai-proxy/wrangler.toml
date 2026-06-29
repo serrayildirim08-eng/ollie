@@ -125,6 +125,13 @@ name = "ollie-ai-proxy-staging"
 [env.staging.vars]
 ENVIRONMENT = "staging"
 
+# NOTE (audit H4): staging shares these KV namespace ids with production.
+# That is safe ONLY because the cache key is env-scoped in code
+# (`cache:ai:<ENVIRONMENT>:<hash>` in index.ts), so staging writes can never
+# be read by production. RATE_KV is the fallback counter only — production
+# uses the native rate-limit binding (split below), so the fallback path is
+# not exercised in prod. For full isolation, provision dedicated staging
+# namespaces and swap the ids here.
 [[env.staging.kv_namespaces]]
 binding = "CACHE_KV"
 id = "6031aea7f9c14f96884e55ec1be527f3"
@@ -133,22 +140,29 @@ id = "6031aea7f9c14f96884e55ec1be527f3"
 binding = "RATE_KV"
 id = "5e222944bc8f450cb3cca05e709e3b88"
 
+# Staging MUST NOT share the production routing-cache index (audit H4): a
+# staging run would write vectors that production then retrieves. Provision
+# once before the first `wrangler deploy --env staging`:
+#   wrangler vectorize create ollie-routing-cache-staging --dimensions=1024 --metric=cosine
 [[env.staging.vectorize]]
 binding = "VECTORIZE_INDEX"
-index_name = "ollie-routing-cache"
+index_name = "ollie-routing-cache-staging"
 
 # Workers AI binding (named envs don't inherit the top-level [ai]).
 [env.staging.ai]
 binding = "AI"
 
+# Distinct namespace_ids from production (2001/2002) so a staging stress test
+# cannot exhaust a production user's rate-limit bucket (audit H4). The id is an
+# arbitrary integer Cloudflare auto-provisions on deploy — no CLI step.
 [[env.staging.ratelimits]]
 name = "AI_RATE_LIMITER"
-namespace_id = "2001"
+namespace_id = "3001"
 simple = { limit = 10, period = 60 }
 
 [[env.staging.ratelimits]]
 name = "TELEM_RATE_LIMITER"
-namespace_id = "2002"
+namespace_id = "3002"
 simple = { limit = 10, period = 60 }
 
 # COMMENTED OUT (same reason as the top-level [[queues.producers]] above):

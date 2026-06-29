@@ -508,7 +508,9 @@ export default {
       return withCors(origin, json({ error: 'body_too_large' }, 413));
     }
 
-    const cacheKey = `cache:ai:${await sha256Hex(bodyText)}`;
+    // Env-scope the cache key (audit H4) so a staging deploy sharing the
+    // CACHE_KV namespace can never poison the production response cache.
+    const cacheKey = `cache:ai:${env.ENVIRONMENT ?? 'dev'}:${await sha256Hex(bodyText)}`;
     const cached = await env.CACHE_KV.get(cacheKey);
     if (cached) {
       return withCors(origin, new Response(cached, {
