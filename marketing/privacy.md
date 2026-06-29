@@ -11,7 +11,7 @@ we wrote this in plain sentences. if anything is unclear, write to support@ollie
 
 ## tl;dr
 
-- most of your data lives on your device, encrypted with a passphrase only you know.
+- most of your data lives on your device, in an encrypted database whose key is held in your device's secure keychain (protected by your device lock — face id, touch id, or passcode).
 - ollie collects crash reports and session replays so the app stays usable. you cannot turn this off and still use the app.
 - ollie collects anonymized text contributions for research **only if you opt in**. the default is off.
 - if you opt in and later change your mind, future contributions stop. past contributions are already anonymized and remain in the research corpus.
@@ -31,7 +31,7 @@ ollie is operated by [TBD: legal entity name, jurisdiction, registered address].
 
 ollie's modules let you log:
 
-- **finance** — bank transactions, account balances, and identity fields fetched via plaid when you connect an account
+- **finance** — bills, subscriptions, transactions, and spending you log manually
 - **cycle** — menstrual cycle dates, symptoms, mood, flow
 - **body** — sleep, weight, food notes, symptoms, body observations
 - **habits** — habit definitions and completion logs
@@ -43,7 +43,7 @@ ollie's modules let you log:
 - **admin** — bills, appointments, documents, reminders
 - **burhan** — chat history with the in-app companion
 
-all of this is stored on your device first. if you choose to sync, it is encrypted on your device before being sent to ollie's server.
+all of this is stored on your device. cloud sync of module content is not enabled in this version — these entries do not leave your device.
 
 ### 2. brain dumps
 
@@ -59,7 +59,7 @@ if research opt-in is off, brain dumps never leave your device.
 
 ### 3. crash analytics and session replay
 
-ollie sends crash reports, error stack traces, and session replays to sentry. session replay records ui interactions, not raw input from sensitive fields (passphrase, plaid auth screens, and journal text are masked).
+ollie sends crash reports, error stack traces, and session replays to sentry. session replay records ui interactions, not raw input from sensitive fields (journal text and other sensitive inputs are masked).
 
 this is collected under "necessary consent". ollie will not run without it. the data is used to diagnose bugs and ship fixes.
 
@@ -69,7 +69,7 @@ ollie may resolve your approximate location from your ip address (bigdatacloud) 
 
 ### 5. account credentials
 
-your email is stored on ollie's server so you can sign in across devices. your **passphrase never leaves your device**. ollie cannot recover it for you. if you forget it, your encrypted data is unreadable.
+your email is stored on ollie's server so you can sign in across devices. the key that encrypts your on-device data is generated on your device and held in its operating-system keychain — it **never leaves your device** and ollie never sees it.
 
 ---
 
@@ -79,12 +79,11 @@ ollie relies on the following third-party providers. each has its own privacy po
 
 | provider | purpose | data shared |
 |---|---|---|
-| plaid | bank authentication, transactions, identity | account credentials (held by plaid, not ollie), transaction history, identity fields |
 | sentry | crash analytics, session replay | error stacks, sanitized session interactions, device + browser metadata |
 | bigdatacloud | ip → approximate city | your ip at request time |
 | open-meteo | weather | resolved city coordinates |
 | anthropic claude | research corpus labeling (only if you opt in) | pii-scrubbed brain dump text |
-| supabase | encrypted data sync, auth, postgres storage | encrypted module rows + email |
+| supabase | auth, account storage, research corpus | email, account + consent metadata, (opt-in) anonymized research rows |
 
 ollie does not sell your data. ollie does not use advertising networks.
 
@@ -94,13 +93,13 @@ ollie does not sell your data. ollie does not use advertising networks.
 
 ### on your device
 
-modules are persisted locally via the browser's storage apis. content is encrypted with `@ollie/crypto` using aes-gcm-256, with a key derived from your passphrase via pbkdf2 (100,000 iterations).
+modules are stored locally in an encrypted sqlite database (sqlcipher, aes-256). the encryption key is generated on your device at first launch and held in your device's operating-system keychain (apple keychain), protected by your device lock — face id, touch id, or passcode. ollie never sees this key and it never leaves your device. the most sensitive modules — cycle, medication, mood, journal, and brain dumps — are additionally never written to the browser's plaintext storage. if device encryption cannot be established, ollie refuses to start rather than run on plaintext.
 
-### on ollie's server (if you sync)
+### on ollie's server
 
-synced rows are stored in supabase postgres. **rows are encrypted on your device before upload**. ollie's server sees ciphertext for your module content. ollie's server can see your email, account metadata, and consent state in plaintext.
+cloud sync of your module content is not enabled in this version — your logged entries, brain dumps, and notes stay on your device. ollie's server (supabase postgres) stores only your email, account metadata, and consent state, plus — if you opt in — anonymized research contributions (see below).
 
-note: this is **not** a zero-knowledge system. ollie's server operators have technical access to the database. while module content is encrypted client-side, ollie cannot promise that no operator has any window into your account.
+note: this is **not** a zero-knowledge system. ollie's server operators have technical access to the database holding your email, account metadata, and consent state.
 
 ### research corpus
 
@@ -111,7 +110,7 @@ if you opt in, anonymized text contributions are stored in a separate `research_
 when you trigger "delete account" from settings, ollie's deletion worker runs a cascade in this order, using a server-side service-role credential that never leaves ollie's infrastructure:
 
 1. it verifies your session token against supabase auth (so a forged token cannot delete anyone's account)
-2. it deletes every row tied to your user id from: `encrypted_state`, `finance_records`, `plaid_inbox`, `plaid_items`, `scheduled_jobs`, `profiles`
+2. it deletes every row tied to your user id from your module, finance, notification, and account-metadata tables
 3. it deletes your row from `auth.users` — this invalidates your session
 4. it returns a per-table row-count receipt so the in-app confirmation surfaces what was erased
 
@@ -173,7 +172,7 @@ regardless of where you live, you can:
 - **export** an encrypted .json backup of your local data from settings → export backup
 - **import** the same backup on any device
 - **toggle research opt-in** from settings at any time
-- **delete your account**: this triggers a server-side cascade that erases every row tied to your account across ollie's database (module blobs, finance records, plaid linkages, scheduled jobs, profile metadata) and then deletes your auth user row. the device you delete from also has every local module key wiped. anonymized research contributions, if you opted in, remain in the research corpus — they carry no identifier linking them back to you and cannot be retroactively scrubbed (see "research corpus" above)
+- **delete your account**: this triggers a server-side cascade that erases every row tied to your account across ollie's database (module blobs, finance records, scheduled jobs, profile metadata) and then deletes your auth user row. the device you delete from also has every local module key wiped. anonymized research contributions, if you opted in, remain in the research corpus — they carry no identifier linking them back to you and cannot be retroactively scrubbed (see "research corpus" above)
 - **request manual data deletion** by emailing support@ollie.app — useful if the in-app flow fails or you want a written confirmation
 
 ### gdpr (eu / uk users)
