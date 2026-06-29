@@ -147,7 +147,7 @@ describe('proxy auth gate · missing / spoofed credentials', () => {
       const net = mockNet({});
       spy = net.spy;
       const resp = await worker.fetch(
-        makeReq(path, { model: 'x', messages: [] }),
+        makeReq(path, { model: 'claude-haiku-4-5-20251001', messages: [] }),
         makeEnv(),
       );
       expect(resp.status).toBe(401);
@@ -163,7 +163,7 @@ describe('proxy auth gate · missing / spoofed credentials', () => {
       const resp = await worker.fetch(
         makeReq(
           path,
-          { model: 'x', messages: [] },
+          { model: 'claude-haiku-4-5-20251001', messages: [] },
           { 'x-user-id': 'victim-user-id' },
         ),
         makeEnv(),
@@ -186,7 +186,7 @@ describe('proxy auth gate · missing / spoofed credentials', () => {
       const resp = await worker.fetch(
         makeReq(
           path,
-          { model: 'x', messages: [] },
+          { model: 'claude-haiku-4-5-20251001', messages: [] },
           { authorization: `Bearer ${tampered}` },
         ),
         makeEnv(),
@@ -215,7 +215,7 @@ describe('proxy auth gate · valid Clerk JWT happy path', () => {
     const resp = await worker.fetch(
       makeReq(
         '/brain-dump',
-        { model: 'x', messages: [] },
+        { model: 'claude-haiku-4-5-20251001', messages: [] },
         { authorization: `Bearer ${jwt}` },
       ),
       makeEnv(),
@@ -239,7 +239,7 @@ describe('proxy auth gate · valid Clerk JWT happy path', () => {
       const resp = await worker.fetch(
         makeReq(
           '/brain-dump',
-          { model: 'x', messages: [`call-${i}`] },
+          { model: 'claude-haiku-4-5-20251001', messages: [`call-${i}`] },
           { authorization: `Bearer ${jwt}`, 'x-user-id': `rotating-${i}` },
         ),
         env,
@@ -267,7 +267,7 @@ describe('proxy auth gate · dev escape hatch', () => {
     const resp = await worker.fetch(
       makeReq(
         '/brain-dump',
-        { model: 'x', messages: [] },
+        { model: 'claude-haiku-4-5-20251001', messages: [] },
         { 'x-user-id': 'dev-user' },
       ),
       makeEnv({ T0_JWT_ENFORCED: '0' }),
@@ -282,7 +282,7 @@ describe('proxy auth gate · dev escape hatch', () => {
     const resp = await worker.fetch(
       makeReq(
         '/brain-dump',
-        { model: 'x', messages: [] },
+        { model: 'claude-haiku-4-5-20251001', messages: [] },
         { 'x-user-id': 'attacker' },
       ),
       makeEnv({ T0_JWT_ENFORCED: '0', ENVIRONMENT: 'production' }),

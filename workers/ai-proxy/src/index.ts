@@ -124,6 +124,44 @@ const CACHE_TTL_SEC = 300;          // 5 min
 const MAX_PROXY_BODY_BYTES = 1024 * 1024;
 const PURCHASE_RATE_MAX = 100;      // req/min — purchase ingestion can burst at checkout
 
+/**
+ * Cost guard for the raw Anthropic proxy (/brain-dump + /v1/messages) — audit
+ * H1. The client controls the forwarded body, so without a cap an authenticated
+ * user could request the most expensive model with a huge max_tokens. The app
+ * only ever sends Haiku at ≤1200 tokens; we allow the cheaper model classes
+ * (haiku/sonnet), reject Opus + unknown models, and clamp max_tokens.
+ */
+const MAX_OUTPUT_TOKENS = 2048;
+function isAllowedModel(model: unknown): boolean {
+  if (typeof model !== 'string') return false;
+  if (/opus/i.test(model)) return false; // most expensive class — always blocked
+  return /haiku|sonnet/i.test(model); // allow the cheaper classes, any naming scheme
+}
+/**
+ * Validate + clamp the proxy body. Returns the (possibly rewritten) body to
+ * forward, or an error string to reject with 400. A body that is not JSON is
+ * passed through untouched — Anthropic will reject it without billing us.
+ */
+function enforceProxyCostCaps(bodyText: string): { body: string } | { error: string } {
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(bodyText) as Record<string, unknown>;
+  } catch {
+    return { body: bodyText }; // not JSON — upstream 400s, no spend
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return { body: bodyText };
+  }
+  if ('model' in parsed && !isAllowedModel(parsed.model)) {
+    return { error: 'model_not_allowed' };
+  }
+  if (typeof parsed.max_tokens === 'number' && parsed.max_tokens > MAX_OUTPUT_TOKENS) {
+    parsed.max_tokens = MAX_OUTPUT_TOKENS;
+    return { body: JSON.stringify(parsed) };
+  }
+  return { body: bodyText };
+}
+
 // ─── CORS helpers ──────────────────────────────────────────────────────────────
 //
 // Called from the Ollie app's WKWebView (iOS) + Tauri webview (macOS), both of
@@ -508,9 +546,16 @@ export default {
       return withCors(origin, json({ error: 'body_too_large' }, 413));
     }
 
+    // Cost guard (audit H1): reject expensive/unknown models, clamp max_tokens.
+    const capped = enforceProxyCostCaps(bodyText);
+    if ('error' in capped) {
+      return withCors(origin, json({ error: capped.error }, 400));
+    }
+    const forwardBody = capped.body;
+
     // Env-scope the cache key (audit H4) so a staging deploy sharing the
     // CACHE_KV namespace can never poison the production response cache.
-    const cacheKey = `cache:ai:${env.ENVIRONMENT ?? 'dev'}:${await sha256Hex(bodyText)}`;
+    const cacheKey = `cache:ai:${env.ENVIRONMENT ?? 'dev'}:${await sha256Hex(forwardBody)}`;
     const cached = await env.CACHE_KV.get(cacheKey);
     if (cached) {
       return withCors(origin, new Response(cached, {
@@ -535,7 +580,7 @@ export default {
     const upstream = await fetch(ANTHROPIC_URL, {
       method: 'POST',
       headers: fwdHeaders,
-      body: bodyText,
+      body: forwardBody,
     });
 
     const respText = await upstream.text();
