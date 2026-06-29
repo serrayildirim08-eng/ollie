@@ -10,7 +10,6 @@ use calendar::{
 use local_notifications::{
     cancel_local_notification, install_notification_actions, schedule_local_notification,
 };
-use tauri::Manager;
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
@@ -59,6 +58,7 @@ pub fn run() {
             install_notification_actions(app.handle().clone());
             // A4/A7: App Group snapshot writer + boot probe.
             group_container::install(app.handle().clone());
+            Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             greet,
