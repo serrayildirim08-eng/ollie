@@ -8,6 +8,9 @@ compatibility_flags = ["nodejs_compat"]
 # the secret is ever misconfigured here (audit #43). Production = "production".
 [vars]
 ENVIRONMENT = "production"
+# Global daily AI-call ceiling across ALL users (audit H2 circuit-breaker).
+# Defaults to 20000 in code when unset; raise/lower here to tune. Not secret.
+# GLOBAL_DAILY_AI_MAX = "20000"
 
 # ─── KV bindings ───────────────────────────────────────────────────────────────
 # Run once:

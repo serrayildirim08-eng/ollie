@@ -79,6 +79,7 @@ import {
 } from './router/shelf-life';
 import { verifyClerkJwt } from './clerk-verify';
 import { checkRate, type RateLimiter } from './rate-limit';
+import { checkGlobalBudget } from './budget';
 
 export type { RateLimiter };
 
@@ -444,6 +445,9 @@ export default {
           return withCors(origin, json({ error: 'rate_limited' }, 429));
         }
       }
+      if (!(await checkGlobalBudget(env.RATE_KV, env))) {
+        return withCors(origin, json({ error: 'budget_exhausted' }, 429));
+      }
       return withCors(origin, await handleBrainCopy(req, env));
     }
 
@@ -467,6 +471,9 @@ export default {
           return withCors(origin, json({ error: 'rate_limited' }, 429));
         }
       }
+      if (!(await checkGlobalBudget(env.RATE_KV, env))) {
+        return withCors(origin, json({ error: 'budget_exhausted' }, 429));
+      }
       return withCors(origin, await handleDumpRoute(req, env, ctx));
     }
 
@@ -488,6 +495,9 @@ export default {
         if (!allowed) {
           return withCors(origin, json({ error: 'rate_limited' }, 429));
         }
+      }
+      if (!(await checkGlobalBudget(env.RATE_KV, env))) {
+        return withCors(origin, json({ error: 'budget_exhausted' }, 429));
       }
       return withCors(origin, await handleRoute(req, env, module));
     }
@@ -530,6 +540,11 @@ export default {
     const allowed = await checkRate(env.AI_RATE_LIMITER, env.RATE_KV, `rl:ai:${userKey}`);
     if (!allowed) {
       return withCors(origin, json({ error: 'rate_limited' }, 429));
+    }
+    // Global daily ceiling (audit H2): bounds total spend across all accounts,
+    // so signup-abuse can't drain the key even within per-user limits.
+    if (!(await checkGlobalBudget(env.RATE_KV, env))) {
+      return withCors(origin, json({ error: 'budget_exhausted' }, 429));
     }
 
     // Body size guard (audit #46). Cheap Content-Length pre-check, then a hard
