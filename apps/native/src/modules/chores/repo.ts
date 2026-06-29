@@ -167,7 +167,7 @@ export const chores = {
     const key = normaliseChoreName(name);
     await logCompletion(key, ts);
 
-    let chore = await chores.getByName(key);
+    const chore = await chores.getByName(key);
     if (!chore) {
       // First time we hear about this chore is a completion — register it as a
       // done one-off so the completion isn't orphaned.
