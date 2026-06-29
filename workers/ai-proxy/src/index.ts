@@ -391,7 +391,21 @@ export default {
     // Client caches per noticing/day/lang and falls back to a trilingual
     // static sentence on any non-ok, so this route is never load-bearing.
     // Auth: Clerk JWT required (same policy as /route/dump).
+    // Rate-limit: calls Groq per request (gpt-oss-120b). Without a cap an
+    // authenticated user can spam it to drain the AI budget — share the AI
+    // bucket (10/min per user) like the other LLM routes (audit H3).
     if (url.pathname === '/brain-copy' && req.method === 'POST') {
+      const copyUserId = await resolveUserIdForRateLimit(req, env);
+      if (copyUserId) {
+        const allowed = await checkRate(
+          env.AI_RATE_LIMITER,
+          env.RATE_KV,
+          `rl:ai:braincopy:${copyUserId}`,
+        );
+        if (!allowed) {
+          return withCors(origin, json({ error: 'rate_limited' }, 429));
+        }
+      }
       return withCors(origin, await handleBrainCopy(req, env));
     }
 

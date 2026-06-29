@@ -104,3 +104,27 @@ describe('audit #2 · /route/dump rate limit', () => {
     expect(statuses[RATE_MAX]).toBe(429);
   });
 });
+
+describe('audit H3 · /brain-copy rate limit', () => {
+  it('429s the 11th request in the window for one user', async () => {
+    const env = makeEnv();
+    const statuses: number[] = [];
+    for (let i = 0; i < RATE_MAX + 1; i++) {
+      const resp = await worker.fetch(makeReq('/brain-copy', 'copyuser-1'), env);
+      statuses.push(resp.status);
+    }
+    // First 10 pass the gate (handler then handles/validates the empty body);
+    // the 11th is rate-limited before any Groq call.
+    expect(statuses.slice(0, RATE_MAX).every((s) => s !== 429)).toBe(true);
+    expect(statuses[RATE_MAX]).toBe(429);
+  });
+
+  it('keys per user — a second user is not blocked by the first', async () => {
+    const env = makeEnv();
+    for (let i = 0; i < RATE_MAX + 1; i++) {
+      await worker.fetch(makeReq('/brain-copy', 'copyuser-A'), env);
+    }
+    const resp = await worker.fetch(makeReq('/brain-copy', 'copyuser-B'), env);
+    expect(resp.status).not.toBe(429);
+  });
+});
