@@ -351,3 +351,161 @@ describe('/route/:module — routing', () => {
     expect(body.error).toBe('groq_classify_failed');
   });
 });
+
+// ─── S2: per-user cache isolation ──────────────────────────────────────────────
+//
+// The cache is namespaced by a salted user_hash derived from the verified user
+// (telemetry deriveUserHash). These tests use a STATEFUL in-memory routing_cache
+// fake that honors the same filter the SQL lookup RPC enforces — a lookup only
+// returns a row whose (module, user_hash) matches the request — so they prove
+// the worker threads the user dimension through write AND lookup end-to-end.
+
+interface FakeRow {
+  module: string;
+  user_hash: string;
+  classification: unknown;
+  language: string;
+}
+
+/** Build a fetch mock backed by an in-memory routing_cache that filters by
+ *  user_hash exactly like the SQL `routing_cache_lookup` RPC does. */
+function makeStatefulCacheFetch(): { fn: FetchMockFn; rows: FakeRow[] } {
+  const rows: FakeRow[] = [];
+  const classification = {
+    intent: 'acquire',
+    language: 'en',
+    items: [
+      { name: 'milk', canonical: 'milk', category: 'dairy', intent: 'acquire', target: 'shopping' },
+    ],
+  };
+  const fn: FetchMockFn = async (url, init) => {
+    if (url.includes('voyageai.com')) {
+      // Fixed embedding — identical text ⇒ identical vector, so a same-user
+      // re-query is a guaranteed similarity hit (the fake matches on user+module).
+      return new Response(JSON.stringify({ data: [{ embedding: Array(1024).fill(0.1) }] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    if (url.includes('rpc/routing_cache_lookup')) {
+      const reqBody = JSON.parse(init!.body as string) as { p_module: string; p_user_hash: string };
+      const hit = rows.find(
+        (r) => r.module === reqBody.p_module && r.user_hash === reqBody.p_user_hash,
+      );
+      return new Response(
+        JSON.stringify(hit ? [{ id: 'row-1', classification: hit.classification, language: hit.language }] : []),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    }
+    if (url.includes('rpc/routing_cache_increment')) {
+      return new Response(null, { status: 204 });
+    }
+    if (url.includes('api.groq.com')) {
+      const groqResp = {
+        choices: [{
+          message: {
+            content: null,
+            tool_calls: [{
+              id: 'call_1',
+              type: 'function',
+              function: { name: 'classify_grocery_items', arguments: JSON.stringify(classification) },
+            }],
+          },
+          finish_reason: 'tool_calls',
+        }],
+      };
+      return new Response(JSON.stringify(groqResp), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    // Cache write (POST /rest/v1/routing_cache, not an rpc/ path).
+    if (url.includes('/rest/v1/routing_cache')) {
+      const reqBody = JSON.parse(init!.body as string) as FakeRow;
+      rows.push({
+        module: reqBody.module,
+        user_hash: reqBody.user_hash,
+        classification: reqBody.classification,
+        language: reqBody.language,
+      });
+      return new Response('', { status: 201 });
+    }
+    return new Response('not found', { status: 404 });
+  };
+  return { fn, rows };
+}
+
+function makeUserReq(text: string, userId: string, module = 'grocery'): Request {
+  return new Request(`https://worker.dev/route/${module}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-user-id': userId },
+    body: JSON.stringify({ text }),
+  });
+}
+
+describe('/route/:module — S2 per-user cache isolation', () => {
+  let fetchSpy: ReturnType<typeof vi.spyOn>;
+  beforeEach(() => { fetchSpy = vi.spyOn(globalThis, 'fetch'); });
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  it('passes p_user_hash on lookup AND tags the write row with user_hash', async () => {
+    const { fn, rows } = makeStatefulCacheFetch();
+    const fetchMock = vi.fn(fn as unknown as typeof fetch);
+    fetchSpy.mockImplementation(fetchMock);
+
+    await handleRoute(makeUserReq('buy milk', 'user_A'), makeEnv(), 'grocery');
+    await new Promise((r) => setTimeout(r, 10)); // let the fire-and-forget write land
+
+    const lookup = fetchMock.mock.calls.find(
+      ([url]) => typeof url === 'string' && url.includes('rpc/routing_cache_lookup'),
+    );
+    expect(lookup).toBeDefined();
+    const lookupBody = JSON.parse((lookup![1] as RequestInit).body as string);
+    expect(typeof lookupBody.p_user_hash).toBe('string');
+    expect(lookupBody.p_user_hash.length).toBeGreaterThan(0);
+
+    // The write row carries a user_hash equal to the one used on lookup.
+    expect(rows).toHaveLength(1);
+    expect(rows[0].user_hash).toBe(lookupBody.p_user_hash);
+  });
+
+  it('same user + identical text → HITS its own cache (per-user cache works)', async () => {
+    const { fn } = makeStatefulCacheFetch();
+    fetchSpy.mockImplementation(vi.fn(fn as unknown as typeof fetch));
+
+    // First dump: miss → groq → write.
+    const first = await handleRoute(makeUserReq('buy milk', 'user_A'), makeEnv(), 'grocery');
+    expect((await first.json() as { source: string }).source).toBe('groq_miss');
+    await new Promise((r) => setTimeout(r, 10));
+
+    // Same user, same text: now a cache hit.
+    const second = await handleRoute(makeUserReq('buy milk', 'user_A'), makeEnv(), 'grocery');
+    expect((await second.json() as { source: string }).source).toBe('cache_hit');
+  });
+
+  it('user A write is NEVER returned to user B (identical text → no cross-hit)', async () => {
+    const { fn } = makeStatefulCacheFetch();
+    fetchSpy.mockImplementation(vi.fn(fn as unknown as typeof fetch));
+
+    // User A warms the cache.
+    await handleRoute(makeUserReq('buy milk', 'user_A'), makeEnv(), 'grocery');
+    await new Promise((r) => setTimeout(r, 10));
+
+    // User B, identical text — must MISS (no cross-user match), not hit A's row.
+    const res = await handleRoute(makeUserReq('buy milk', 'user_B'), makeEnv(), 'grocery');
+    expect((await res.json() as { source: string }).source).toBe('groq_miss');
+  });
+
+  it('two different users produce two DISTINCT user_hash namespaces', async () => {
+    const { fn, rows } = makeStatefulCacheFetch();
+    fetchSpy.mockImplementation(vi.fn(fn as unknown as typeof fetch));
+
+    await handleRoute(makeUserReq('buy milk', 'user_A'), makeEnv(), 'grocery');
+    await new Promise((r) => setTimeout(r, 10));
+    await handleRoute(makeUserReq('buy milk', 'user_B'), makeEnv(), 'grocery');
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(rows).toHaveLength(2);
+    expect(rows[0].user_hash).not.toBe(rows[1].user_hash);
+  });
+});

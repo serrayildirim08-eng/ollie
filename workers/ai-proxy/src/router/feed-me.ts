@@ -27,6 +27,7 @@
 import { json, upstreamError, exceedsContentLength, payloadTooLarge } from '@ollie/worker-http';
 import { scrubPII, type Locale } from '@ollie/pii-scrub';
 import { verifyClerkJwt } from '../clerk-verify';
+import { deriveUserHash } from '../telemetry';
 import { groqChat, type GroqMessage } from '../groq';
 import { cloudflareJson, type CfAiBinding } from '../cloudflare-ai';
 import { openRouterJson } from '../openrouter';
@@ -62,6 +63,11 @@ export interface FeedMeEnv {
   /** 'production' on prod — refuses the x-user-id dev bypass there (audit #25). */
   ENVIRONMENT?: string;
   CLERK_ISSUER?: string;
+  /** Server-side salt for the per-user routing_cache namespace (S2). Same
+   *  derivation as the telemetry tables — routing_cache rows are keyed by
+   *  salted SHA-256 user_hash, never the raw user id. Optional (unsalted but
+   *  still server-derived when absent). */
+  USER_HASH_SALT?: string;
 }
 
 // ─── types ───────────────────────────────────────────────────────────────────
@@ -168,6 +174,12 @@ export async function handleFeedMe(
     }
   }
 
+  // Per-user routing_cache namespace (S2). pathUserId is the verified user
+  // (JWT sub === path param above); derive the same salted user_hash the
+  // telemetry tables use and thread it through every cache lookup + write so
+  // one user's recipe-cache rows can never be returned to another user.
+  const userHash = await deriveUserHash(pathUserId, env.USER_HASH_SALT);
+
   // ── Parse + validate body ────────────────────────────────────────────────
   // Memory-DoS guard (audit #38): reject oversized bodies on Content-Length
   // before buffering via req.json().
@@ -234,7 +246,7 @@ export async function handleFeedMe(
   // ── Cache lookup ─────────────────────────────────────────────────────────
   let cacheRow: CacheRow | null;
   try {
-    cacheRow = await cacheLookup(embedding, moduleLabel, env);
+    cacheRow = await cacheLookup(embedding, moduleLabel, userHash, env);
   } catch (err) {
     console.error('[feed-me] cache lookup failed, falling through to gemini', err);
     cacheRow = null;
@@ -365,6 +377,7 @@ export async function handleFeedMe(
     embedding,
     { suggestions: trimmed, language: batch.language },
     batch.language,
+    userHash,
     env,
   ).catch((e) => console.error('[feed-me] cache write failed', e));
 
@@ -778,6 +791,7 @@ interface CacheRow {
 async function cacheLookup(
   embedding: number[],
   module: string,
+  userHash: string,
   env: FeedMeEnv,
 ): Promise<CacheRow | null> {
   const url = `${env.SUPABASE_URL.replace(/\/$/, '')}/rest/v1/rpc/routing_cache_lookup`;
@@ -792,9 +806,13 @@ async function cacheLookup(
       p_module: module,
       p_embedding: embedding,
       p_threshold: COSINE_THRESHOLD,
+      // Per-user namespace (S2): the RPC filters on this so the lookup can only
+      // match this user's own rows.
+      p_user_hash: userHash,
     }),
   });
   if (!res.ok) {
+    // 404 = per-user lookup overload not yet deployed → no hit, never cross-user.
     if (res.status === 404) return null;
     const detail = await res.text().catch(() => '');
     throw new Error(`routing_cache_lookup ${res.status}: ${detail.slice(0, 200)}`);
@@ -833,6 +851,7 @@ async function cacheWrite(
   embedding: number[],
   classification: unknown,
   language: string,
+  userHash: string,
   env: FeedMeEnv,
 ): Promise<void> {
   const url = `${env.SUPABASE_URL.replace(/\/$/, '')}/rest/v1/routing_cache`;
@@ -846,6 +865,8 @@ async function cacheWrite(
     },
     body: JSON.stringify({
       module,
+      // Per-user namespace (S2) — see route.ts cacheWrite.
+      user_hash: userHash,
       text_sample: text.slice(0, 500),
       embedding,
       classification,

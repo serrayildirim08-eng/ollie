@@ -100,6 +100,7 @@ import {
   WORK_ESCALATE_THRESHOLD,
 } from '../modules/work.config';
 import { verifyClerkJwt } from '../clerk-verify';
+import { deriveUserHash } from '../telemetry';
 import { groqChat } from '../groq';
 
 // ─── env ─────────────────────────────────────────────────────────────────────
@@ -122,6 +123,15 @@ export interface RouteEnv {
    * `invites.verifyJwt`.
    */
   CLERK_ISSUER?: string;
+  /**
+   * Server-side salt for deriving the per-user `user_hash` that namespaces the
+   * routing_cache (S2 cross-user-leakage fix). Same secret + derivation as the
+   * telemetry tables (telemetry.ts deriveUserHash) — every user-keyed Supabase
+   * row in this project is keyed by salted SHA-256 user_hash, never the raw
+   * Clerk id. Optional: when unset the hash is still server-derived (unsalted),
+   * so isolation still holds — it just isn't salted (warned in deriveUserHash).
+   */
+  USER_HASH_SALT?: string;
 }
 
 // ─── module registry ──────────────────────────────────────────────────────────
@@ -245,16 +255,32 @@ export async function handleRoute(
   // against the Clerk JWKS unless T0_JWT_ENFORCED is explicitly set to
   // '0' (local dev only). A missing/unset flag therefore enforces auth,
   // so a misdeploy can never leave this endpoint open.
+  //
+  // The verified user identity is no longer discarded: it namespaces the
+  // routing_cache (S2 — without a user dimension two users with similar text
+  // matched each other's cached classifications). We derive a salted
+  // `user_hash` from it (same derivation as the telemetry tables) and thread
+  // it through every cache lookup + write so a lookup can ONLY match the
+  // caller's own prior entries.
+  let userId: string;
   if (env.T0_JWT_ENFORCED !== '0') {
     const auth = req.headers.get('authorization');
     if (!auth || !auth.startsWith('Bearer ')) {
       return json({ error: 'unauthorized' }, 401);
     }
-    const userId = await verifyClerkJwt(auth.slice('Bearer '.length), env);
-    if (!userId) {
+    const verified = await verifyClerkJwt(auth.slice('Bearer '.length), env);
+    if (!verified) {
       return json({ error: 'invalid_jwt' }, 401);
     }
+    userId = verified;
+  } else {
+    // Local dev only (T0_JWT_ENFORCED==='0', never set in prod). No JWT to
+    // verify, so the user dimension comes from the x-user-id header the dev
+    // client already sends for rate-limiting; fall back to a fixed sentinel so
+    // the cache still partitions deterministically when the header is absent.
+    userId = req.headers.get('x-user-id') || 'dev-anon';
   }
+  const userHash = await deriveUserHash(userId, env.USER_HASH_SALT);
 
   // Module lookup
   const config = MODULE_CONFIGS[module];
@@ -307,7 +333,7 @@ export async function handleRoute(
   // 3. pgvector cache lookup
   let cacheRow: CacheRow | null;
   try {
-    cacheRow = await cacheLookup(embedding, module, env);
+    cacheRow = await cacheLookup(embedding, module, userHash, env);
   } catch (err) {
     // Cache read failure is non-fatal — fall through to Gemini
     console.error('[route] cache lookup failed, falling through to groq', err);
@@ -335,12 +361,13 @@ export async function handleRoute(
   // List context (when provided) is passed through to the config's prompt
   // builder so groceryConfig can append the CURRENT SHOPPING LIST / PANTRY
   // disambiguation block. Context is NOT factored into the cache key — the
-  // text-only embed remains the cache key so identical phrases share cache
-  // rows across users with different lists. Trade-off: a mutation cache hit
-  // returns the model's interpretation against an *empty* context, which
-  // means the downstream applier still has to fuzzy-match against the live
-  // list. That's acceptable because the applier already has a matchItem
-  // fallback for exactly this case.
+  // text-only embed is the cache key, scoped to THIS user's user_hash (S2).
+  // The cache is per-user, so identical phrases from different users no longer
+  // share rows — a lookup can only match the caller's own prior entries.
+  // Trade-off: a mutation cache hit returns the model's interpretation against
+  // an *empty* context, which means the downstream applier still has to
+  // fuzzy-match against the live list. That's acceptable because the applier
+  // already has a matchItem fallback for exactly this case.
   let classification: unknown;
   let language = 'en';
   try {
@@ -359,9 +386,10 @@ export async function handleRoute(
     return upstreamError('groq_classify_failed', 502, detail, { module });
   }
 
-  // 5. Cache write (fire-and-forget)
-  void cacheWrite(module, cleanText, embedding, classification, language, env).catch((e) =>
-    console.error('[route] cache write failed', e),
+  // 5. Cache write (fire-and-forget) — tagged with this user's user_hash so it
+  //    can only ever be returned to the same user (S2 per-user isolation).
+  void cacheWrite(module, cleanText, embedding, classification, language, userHash, env).catch(
+    (e) => console.error('[route] cache write failed', e),
   );
 
   const totalLatencyMs = Date.now() - t0;
@@ -418,13 +446,16 @@ interface CacheRow {
 async function cacheLookup(
   embedding: number[],
   module: string,
+  userHash: string,
   env: RouteEnv,
 ): Promise<CacheRow | null> {
-  // Supabase PostgREST RPC for pgvector cosine similarity lookup.
-  // T1 migration creates the `routing_cache_lookup` SQL function:
+  // Supabase PostgREST RPC for pgvector cosine similarity lookup, scoped to
+  // THIS user (S2 — the cache is per-user, so a lookup can only match the
+  // caller's own prior rows). The migration creates the `routing_cache_lookup`
+  // SQL function:
   //   SELECT id, classification, language
   //   FROM routing_cache
-  //   WHERE module = $1
+  //   WHERE module = $1 AND user_hash = $4
   //     AND 1 - (embedding <=> $2::vector) > $3
   //   ORDER BY embedding <=> $2::vector
   //   LIMIT 1
@@ -440,11 +471,14 @@ async function cacheLookup(
       p_module: module,
       p_embedding: embedding,
       p_threshold: COSINE_THRESHOLD,
+      p_user_hash: userHash,
     }),
   });
 
   if (!res.ok) {
-    // 404 = table/function doesn't exist yet (T1 not yet deployed) — not an error
+    // 404 = function signature not deployed yet (per-user migration not yet
+    // applied — the 4-arg overload doesn't exist) → treat as no hit. Cache
+    // stays cold but NEVER returns a cross-user row. Same tolerance as before.
     if (res.status === 404) return null;
     const detail = await res.text().catch(() => '');
     throw new Error(`routing_cache_lookup ${res.status}: ${detail.slice(0, 200)}`);
@@ -485,6 +519,7 @@ async function cacheWrite(
   embedding: number[],
   classification: unknown,
   language: string,
+  userHash: string,
   env: RouteEnv,
 ): Promise<void> {
   const url = `${env.SUPABASE_URL.replace(/\/$/, '')}/rest/v1/routing_cache`;
@@ -498,6 +533,9 @@ async function cacheWrite(
     },
     body: JSON.stringify({
       module,
+      // Per-user namespace (S2). A row written by user A carries A's user_hash
+      // and the lookup RPC filters on it, so it can never be returned to user B.
+      user_hash: userHash,
       text_sample: text.slice(0, 500),
       embedding,
       classification,
