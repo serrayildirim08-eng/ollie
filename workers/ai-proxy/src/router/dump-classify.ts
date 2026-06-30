@@ -83,7 +83,8 @@ Purchase / past-tense (bought / got / picked up / aldım / compré / paid for): 
 - Consumable (food/drink/toiletry/cleaning/household) → grocery.pantry_add even with a price (grocery mirrors finance — no separate finance fragment).
 - Else (book/electronics/clothes/makeup/furniture/software/service/experience) → finance.log_transaction. Unidentifiable purchase → finance.log_transaction with empty payload.
 - Orphan single noun: pantry/bathroom noun ("milk", "oil", "tampons", "toilet paper") → grocery.pantry_add. Non-grocery orphan ("book", "headphones") or filler ("etc", "and", "stuff") → dump_only.
-- Compound product names stay one item ("mac and cheese", "salt and pepper", "peanut butter", "half and half").
+- GROCERY/SHOPPING LIST (multiple items to buy/bought in one fragment, joined by commas and/or "and"/"ve"/"y"): emit ONE grocery action — shopping_list_add for FUTURE intent ("need", "to buy", "almam lazım", "comprar"), pantry_add for PAST ("bought", "got", "aldım"). \`item\` is a CLEAN COMMA-separated string of EVERY named item, converting list-joiner "and"/"ve"/"y" to commas ("milk, eggs and bread" → item:"milk, eggs, bread"). INCLUDE non-food household items (batteries, detergent, light bulbs, trash bags). NEVER drop a list member, NEVER route any member to dump_only.
+- Compound product names stay one item, NOT split at their internal "and" ("mac and cheese", "salt and pepper", "peanut butter", "half and half").
 
 Finance sub-routing (one fragment → one action):
 - log_transaction: one-off non-grocery spend.
@@ -175,6 +176,10 @@ MINI EXAMPLES:
 - "i don't like myself" → mood.self_talk { statement:"don't like myself", valence:"neg" }
 - "want to run a half marathon" → goals.create_goal { what:"run a half marathon" }
 - "bought milk" → grocery.pantry_add { item:"milk" }
+- "süt, yumurta ve ekmek almam lazım" → grocery.shopping_list_add { item:"süt, yumurta, ekmek" }
+- "I need milk, eggs and bread" → grocery.shopping_list_add { item:"milk, eggs, bread" }
+- "milk, eggs, batteries, detergent to buy" → grocery.shopping_list_add { item:"milk, eggs, batteries, detergent" }
+- "got mac and cheese and milk" → grocery.pantry_add { item:"mac and cheese, milk" }
 - "i need to buy large trash bags" → grocery.shopping_list_add { item:"large trash bags" }
 - "have to get more detergent" → grocery.shopping_list_add { item:"detergent" }
 - "out of lemons" → grocery.pantry_depleted { item:"lemons" }

@@ -61,6 +61,23 @@ describe('splitGroceryList', () => {
   it('drops empty trailing fragments', () => {
     expect(splitGroceryList('milk, eggs,')).toEqual(['milk', 'eggs']);
   });
+  // Compound product names carry an internal "and" — the router normalizes
+  // list joiners to commas but keeps compounds intact, and splitGroceryList
+  // must NEVER break a compound at its "and" (it splits on commas/newlines only).
+  it('keeps a compound name (internal "and") as one item', () => {
+    expect(splitGroceryList('mac and cheese, milk')).toEqual(['mac and cheese', 'milk']);
+    expect(splitGroceryList('salt and pepper')).toEqual(['salt and pepper']);
+  });
+  // The router emits the whole list as ONE comma string; itemizing it here must
+  // recover every member — including non-food household items.
+  it('itemizes a normalized list incl. non-food household items', () => {
+    expect(splitGroceryList('milk, eggs, batteries, detergent')).toEqual([
+      'milk', 'eggs', 'batteries', 'detergent',
+    ]);
+  });
+  it('itemizes a Turkish normalized list', () => {
+    expect(splitGroceryList('süt, yumurta, ekmek')).toEqual(['süt', 'yumurta', 'ekmek']);
+  });
 });
 
 describe('groceryHandler — multi-item itemization', () => {
