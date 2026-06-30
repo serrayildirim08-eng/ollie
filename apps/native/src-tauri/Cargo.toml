@@ -18,7 +18,10 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["devtools"] }
+# `devtools` is NOT forced on here (audit M9): Tauri already enables the
+# WebKit inspector automatically in debug builds, and listing the feature would
+# also ship it in release binaries (an info-disclosure surface on a device).
+tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 tauri-plugin-sql = { version = "2", features = ["sqlite"] }
 tauri-plugin-store = "2"
