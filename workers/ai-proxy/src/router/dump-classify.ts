@@ -35,6 +35,20 @@ const MODULES: Module[] = [
   'dump_only',
 ];
 
+const VALID_MODULES = new Set<string>(MODULES);
+/**
+ * Coerce a model-supplied module to a known value (audit M2). Groq's JSON mode
+ * doesn't enforce the enum, so a hallucinated module would otherwise be written
+ * to the Vectorize cache + dump_inbox and then fail silently at dispatch ("no
+ * handler"). Routing an unknown module to `dump_only` preserves the fragment as
+ * a raw dump instead of losing it.
+ */
+export function coerceModule(module: unknown): Module {
+  return typeof module === 'string' && VALID_MODULES.has(module)
+    ? (module as Module)
+    : 'dump_only';
+}
+
 // LEAN LAYER 1 ROUTER PROMPT (refactor 2026-06-01).
 // Job: fragment → { module, action, confidence, payload }. Pick the right
 // MODULE + the right ACTION enum value, and emit cross-module HINT FIELDS
@@ -253,9 +267,10 @@ export async function classifyFragment(
     throw new Error(`classify groq bad json: ${rawText.slice(0, 300)}`);
   }
 
+  const module = coerceModule(parsed.module);
   return {
-    module: parsed.module,
-    payload: { ...parsed.payload, module: parsed.module, action: parsed.action },
+    module,
+    payload: { ...parsed.payload, module, action: parsed.action },
     confidence: normalizeConfidence(parsed.confidence),
   };
 }
@@ -284,11 +299,14 @@ function parseBatchResults(rawText: string, expected: number, provider: string):
     throw new Error(`classify-batch ${provider} count mismatch: got ${got} want ${expected}`);
   }
 
-  return results.map((r) => ({
-    module: r.module,
-    payload: { ...r.payload, module: r.module, action: r.action },
-    confidence: normalizeConfidence(r.confidence),
-  }));
+  return results.map((r) => {
+    const module = coerceModule(r.module);
+    return {
+      module,
+      payload: { ...r.payload, module, action: r.action },
+      confidence: normalizeConfidence(r.confidence),
+    };
+  });
 }
 
 /**
