@@ -12,7 +12,7 @@
  * `sub` is the user id); fail CLOSED unless T0_JWT_ENFORCED === '0' (dev).
  */
 
-import { json, exceedsContentLength, payloadTooLarge } from '@ollie/worker-http';
+import { json, upstreamError, exceedsContentLength, payloadTooLarge } from '@ollie/worker-http';
 import { verifyClerkJwt } from '../clerk-verify';
 
 export interface PartnerEnv {
@@ -95,7 +95,7 @@ async function mintCode(env: PartnerEnv, me: string): Promise<Response> {
     body: JSON.stringify({ code, user_id: me, expires_at: expires }),
     prefer: 'return=minimal',
   });
-  if (!res.ok) return json({ error: 'mint_failed', detail: (await res.text()).slice(0, 200) }, 502);
+  if (!res.ok) return upstreamError('mint_failed', 502, await res.text(), { endpoint: 'partner' });
   return json({ code, expiresInSec: CODE_TTL_SEC });
 }
 
@@ -128,7 +128,7 @@ async function pair(req: Request, env: PartnerEnv, me: string): Promise<Response
     body: JSON.stringify({ user_lo: lo, user_hi: hi }),
     prefer: 'return=minimal,resolution=merge-duplicates',
   });
-  if (!create.ok) return json({ error: 'pair_failed', detail: (await create.text()).slice(0, 200) }, 502);
+  if (!create.ok) return upstreamError('pair_failed', 502, await create.text(), { endpoint: 'partner' });
   // Burn the used code.
   await sb(env, `partner_codes?code=eq.${encodeURIComponent(code)}`, { method: 'DELETE' });
   return json({ partnerId });
@@ -193,7 +193,7 @@ async function putSnapshot(req: Request, env: PartnerEnv, me: string): Promise<R
     body: JSON.stringify(row),
     prefer: 'return=minimal,resolution=merge-duplicates',
   });
-  if (!res.ok) return json({ error: 'snapshot_failed', detail: (await res.text()).slice(0, 200) }, 502);
+  if (!res.ok) return upstreamError('snapshot_failed', 502, await res.text(), { endpoint: 'partner' });
   return json({ ok: true });
 }
 
