@@ -17,6 +17,7 @@ import { createStore, createMemoryAdapter } from '@ollie/store';
 import { deriveKey, randomSalt } from '@ollie/crypto';
 import { createSyncClient, createFinanceSyncClient } from '../src/index';
 import type { OllieAPI } from '@ollie/api';
+import { settleUntil } from './_timers';
 
 interface CapturedUpsert {
   rows: unknown;
@@ -84,8 +85,11 @@ describe('audit #1 · encrypted_state wire format', () => {
     captured.upserts.length = 0;
 
     store.set('cycle', 'items', [{ ts: 1, action: 'started' }]);
-    await vi.advanceTimersByTimeAsync(500);
-    await vi.runAllTimersAsync();
+    // debounce → pushModule → await encryptData (NATIVE WebCrypto promise the
+    // fake clock can't advance) → enqueue → drain → upsert. A fixed
+    // advance/runAllTimers loses the native resolution on slow CI (Linux), so
+    // poll the upsert outcome instead of guessing a tick budget.
+    await settleUntil(() => captured.upserts.length > 0);
 
     expect(captured.upserts.length).toBe(1);
     const row = (captured.upserts[0].rows as Array<{ ciphertext: string; iv: string }>)[0];
@@ -118,8 +122,11 @@ describe('audit #1 · encrypted_state wire format', () => {
 
     const payload = [{ ts: 7, action: 'symptom', note: 'round-trip' }];
     store.set('cycle', 'items', payload);
-    await vi.advanceTimersByTimeAsync(500);
-    await vi.runAllTimersAsync();
+    // Same native-crypto-vs-fake-timer race as above (this is the test that
+    // went red on Linux CI): the upsert lands only after encryptData's native
+    // promise resolves, which a fixed runAllTimers loses on a loaded runner —
+    // leaving captured.upserts[0] undefined. Poll the outcome.
+    await settleUntil(() => captured.upserts.length > 0);
 
     const wireRow = (captured.upserts[0].rows as Array<{
       ciphertext: string; iv: string; module: string;

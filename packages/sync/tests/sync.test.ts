@@ -11,7 +11,7 @@ import { createStore, createMemoryAdapter } from '@ollie/store';
 import { deriveKey, randomSalt, bytesToBase64, encryptData } from '@ollie/crypto';
 import { createSyncClient } from '../src/index';
 import type { OllieAPI } from '@ollie/api';
-import { settleQuiet } from './_timers';
+import { settleQuiet, settleUntil } from './_timers';
 
 interface CapturedUpsert {
   rows: unknown;
@@ -144,8 +144,13 @@ describe('sync · outbound', () => {
     captured.upserts.length = 0;
 
     store.set('cycle', 'items', [{ x: 1 }]);
-    await vi.advanceTimersByTimeAsync(500);
-    await vi.runAllTimersAsync();
+    // debounce → pushModule → await encryptData (a NATIVE WebCrypto promise the
+    // fake clock can't advance) → enqueue. A fixed advance/runAllTimers loses
+    // that native resolution on slow CI (Linux), so the enqueue lands a tick
+    // late and the queue reads empty (the `expected 0 to be greater than 0`
+    // flake). Poll the actual queue outcome — deterministic across runners.
+    await settleUntil(() => sync._inspect().queueDepth > 0);
+    // Offline → the encrypted write is HELD in the queue, nothing shipped.
     expect(captured.upserts.length).toBe(0);
     expect(sync._inspect().queueDepth).toBeGreaterThan(0);
 
