@@ -6,11 +6,11 @@
  * and POSTs it to the existing worker `/register-token` so it lands in
  * `push_tokens` (the cron drain JOINs on user_id).
  *
- * Auth seam (confirmed): the worker authenticates the register call with a
- * SHARED SECRET (REGISTER_SHARED_SECRET) — NOT the Clerk JWT. So we only need
- * Clerk's `userId` from `useAuth()` to stamp the row; the bearer is the shared
- * secret from the build env. Mirrors serverReminderBridge's compose-at-the-edge
- * style (read env + identity inside the effect, degrade to no-op otherwise).
+ * Auth seam (audit H9): the register call authenticates with the user's Clerk
+ * JWT (sent as `x-user-jwt`); the worker verifies it and derives user_id from
+ * the verified `sub`, so a client can only register a token for itself. We no
+ * longer ship a shared secret in the build. Mirrors serverReminderBridge's
+ * compose-at-the-edge style (read identity inside the effect, degrade to no-op).
  *
  * Guards:
  *   - Tauri-only: bails immediately in a plain browser (no __TAURI_INTERNALS__),
@@ -29,7 +29,7 @@ import { useEffect } from 'react';
 import { useAuth } from '@clerk/clerk-react';
 
 export function useApnsPushRegistration(): void {
-  const { userId } = useAuth();
+  const { userId, getToken: getClerkToken } = useAuth();
 
   useEffect(() => {
     // Native-only: in a plain browser there is no APNs token to fetch.
@@ -50,9 +50,10 @@ export function useApnsPushRegistration(): void {
           );
           return;
         }
-        const registerSecret = import.meta.env.VITE_PUSH_REGISTER_SECRET as
-          | string
-          | undefined;
+        // Auth: the worker derives user_id from this verified Clerk JWT
+        // (audit H9) — we no longer ship a shared secret in the build.
+        const jwt = await getClerkToken();
+        if (cancelled || !jwt) return;
 
         // Dynamically import so non-Tauri bundles never load native bindings.
         const { requestPermission, getToken } = await import(
@@ -69,12 +70,11 @@ export function useApnsPushRegistration(): void {
           method: 'POST',
           headers: {
             'content-type': 'application/json',
-            authorization: `Bearer ${registerSecret}`,
+            'x-user-jwt': jwt,
           },
           body: JSON.stringify({
             token,
             platform: 'ios',
-            user_id: userId ?? undefined,
           }),
         });
       } catch (err) {
