@@ -26,6 +26,8 @@ import { useAppLang } from '../settings/appLang';
 import { useFeature } from '../settings/features';
 import { crisisBannerCopy } from './crisisCopy';
 import { NeedsConfirmCard } from './NeedsConfirmCard';
+import { DumpReceipt } from './DumpReceipt';
+import { buildReceiptText } from './receiptCopy';
 import { ReminderWhenCard } from './ReminderWhenCard';
 import { scheduleReminderAt } from '../notify/taskReminder';
 import { resolveTimeOfDayFireAt, fallbackFireAt } from '../notify/reminderCascade';
@@ -44,6 +46,10 @@ const SMCP_STYLE: React.CSSProperties = {
 // Bumped a hair so the cleanup unmount lands just after the fade-out finishes
 // and the user never sees a hard cut.
 const ACK_FADE_MS = 2500;
+
+// Matches the total duration of the `ollie-receipt` keyframe — the calm
+// "Saved to X" line fades itself out, then we unmount just after.
+const RECEIPT_FADE_MS = 4100;
 
 /** One pending confirmation card — keyed by fragment index in the last dispatch. */
 interface PendingConfirm {
@@ -104,6 +110,10 @@ export function DumpScreen(): JSX.Element {
   // instance and never reset, so it leaked across HMR reloads + would collide
   // if two screens ever mounted.
   const ackTickRef = useRef(0);
+  // The post-dump receipt: a calm "Saved to X" line. Keyed by a monotonic tick
+  // so a fresh dump remounts it and restarts the fade. Null = nothing to show.
+  const [receipt, setReceipt] = useState<{ id: number; text: string } | null>(null);
+  const receiptTickRef = useRef(0);
   const [crisis, setCrisis] = useState<CrisisSignal | null>(null);
   const [pendingConfirms, setPendingConfirms] = useState<PendingConfirm[]>([]);
   // Time-less "remind me to X" dumps surface a small "when?" card. The to-do
@@ -124,6 +134,13 @@ export function DumpScreen(): JSX.Element {
     const t = setTimeout(() => setAckKey(null), ACK_FADE_MS);
     return () => clearTimeout(t);
   }, [ackKey]);
+
+  // Clear the receipt after it has faded so the home screen returns to quiet.
+  useEffect(() => {
+    if (receipt === null) return;
+    const t = setTimeout(() => setReceipt(null), RECEIPT_FADE_MS);
+    return () => clearTimeout(t);
+  }, [receipt]);
 
   // Fetch a Clerk session JWT for every dump request. The worker verifies
   // via JWKS at CLERK_ISSUER. Token has a short TTL (default ~60s) and
@@ -284,6 +301,21 @@ export function DumpScreen(): JSX.Element {
       setPendingReminders((prev) => [...prev, ...reminders]);
     }
 
+    // Post-dump receipt: tell her WHERE the dump landed (report §H). Only count
+    // fragments that were actually written — draft-first grey-zone fragments
+    // (e.result.draft) weren't saved yet, so the NeedsConfirmCard speaks for
+    // those instead. Module names only; buildReceiptText returns null when
+    // there's nothing nameable to acknowledge (e.g. goal-intent-only dumps,
+    // whose modal owns its own ack).
+    const writtenModules = dispatched.entries
+      .filter((e) => e.result.draft !== true)
+      .map((e) => e.fragment.module);
+    const receiptText = buildReceiptText(writtenModules);
+    if (receiptText !== null) {
+      receiptTickRef.current += 1;
+      setReceipt({ id: receiptTickRef.current, text: receiptText });
+    }
+
     // No ack fired here anymore — it already flashed instantly on submit (see
     // onSubmitted). Goal-intent dumps retract it above (modal owns the ack);
     // crisis dumps are hidden by the `!crisis` render guard once onCrisis sets
@@ -295,6 +327,8 @@ export function DumpScreen(): JSX.Element {
     // flashed on submit. The `!crisis` render guard hides it reactively, but
     // we also clear it so it can't reappear if crisis is later dismissed.
     setAckKey(null);
+    // A crisis dump writes nothing and must never look "saved".
+    setReceipt(null);
     setCrisis(signal);
   }, []);
 
@@ -365,6 +399,8 @@ export function DumpScreen(): JSX.Element {
       {crisis && <CrisisBanner onDismiss={() => setCrisis(null)} />}
 
       {!crisis && ackKey !== null && <Ack key={ackKey} />}
+
+      {!crisis && receipt !== null && <DumpReceipt key={receipt.id} text={receipt.text} />}
 
       {!crisis && pendingConfirms.length > 0 && (
         <Stack gap={10}>
