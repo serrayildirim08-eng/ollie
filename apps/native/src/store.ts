@@ -39,8 +39,10 @@ import {
   type CadenceSourceFn,
 } from '@ollie/orchestrator';
 import type { NotificationSpec } from '@ollie/notifications';
+import { installBackend, installStore as installNotificationStore } from '@ollie/notifications';
 import { isOverdue } from '@ollie/cadence';
 import { scheduleSystemNotification } from './notify/systemNotify';
+import { tauriBackend } from './notify/tauriBackend';
 import { runAllSyncs } from './bridge';
 import { recomputeBrain } from './modules/brain';
 import { installRenewalEscalation } from './modules/admin/renewalEscalation';
@@ -75,6 +77,26 @@ import { enumerateCadences as enumerateChores } from './modules/chores';
 const adapter = partitionedAdapter(browserAdapter);
 runMigrations(adapter);
 export const store = createStore(adapter);
+
+/**
+ * Notification wiring (audit S8 · gap 2). The @ollie/notifications dispatcher
+ * defaults to a NOOP backend with no store, so EVERY notify() call — most
+ * importantly the cadence-scanner's overdue cues — was silently dropped on
+ * device. Two installs fix that, and MUST run before orchestrator.init() arms
+ * the cadence scanner's (debounced) boot scan:
+ *
+ *   1. installBackend(tauriBackend) — routes deliver/schedule onto the real
+ *      Tauri OS notification path (Notification Center / iOS lock screen).
+ *   2. installNotificationStore(store) — activates the dispatcher's
+ *      suppression (quiet hours + focus), daily budget, per-category mute,
+ *      24h dedupe, and delivery log against the same store. WITHOUT this the
+ *      cadence-scanner's documented "notify() handles suppression/budget/
+ *      dedupe" contract was a no-op.
+ *
+ * Both are idempotent (HMR / StrictMode re-eval safe).
+ */
+installBackend(tauriBackend);
+installNotificationStore(store);
 
 // Let the date-less ladder clear persisted state without an explicit store arg
 // (e.g. from the notification-action completion path). See notify/datelessLadder.

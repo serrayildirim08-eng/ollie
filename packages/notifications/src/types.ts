@@ -60,7 +60,7 @@ export interface NotificationDispatchResult {
 
 /** Each platform implements this; default is a console-log fallback. */
 export interface NotificationBackend {
-  name: 'web' | 'electron' | 'capacitor' | 'noop';
+  name: 'web' | 'electron' | 'capacitor' | 'tauri' | 'noop';
   /** Deliver immediately. Returns the platform id (if any). */
   deliver(spec: NotificationSpec): Promise<string | undefined> | string | undefined;
   /** Schedule for a future ts. Implementations may emulate via setTimeout. */

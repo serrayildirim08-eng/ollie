@@ -22,7 +22,9 @@ import { store } from '../store';
 import { runAllSyncs } from '../bridge';
 import { recomputeBrain } from './brain';
 import { recordMoodFromDump } from '../bridge/mood';
+import { recordCoregulationFromDump } from '../bridge/coregulation';
 import { sweepDatelessLadders } from '../notify/datelessLadder';
+import { emitEvent } from '@ollie/orchestrator';
 
 export interface DispatchOptions {
   /**
@@ -44,6 +46,17 @@ export async function dispatchRouterOutput(
 
   const handlers = { ...stubHandlers, ...(opts.handlers ?? {}) };
   const entries: DispatchEntry[] = [];
+  // Items actually applied this dump — feeds the void:braindump:submitted event
+  // (audit S8 · gap 1) so the per-module orchestrator dump handlers (sleep /
+  // finance text re-parse, work / goals / habits / body / admin / dump
+  // recompute) fire. Drafts (needsConfirm) + no-handler fragments are excluded:
+  // nothing was written for them, so they aren't "submitted" work yet.
+  const submittedItems: Array<{
+    module: Module;
+    text: string;
+    intent: string;
+    confidence: number;
+  }> = [];
 
   // Sequential is fine here — module handlers are local + cheap. We avoid
   // Promise.all so the journal feed sees results in original fragment order
@@ -80,12 +93,46 @@ export async function dispatchRouterOutput(
     try {
       const result = await handler.apply(fragment);
       entries.push({ fragment, result });
+      if (result.ok) {
+        const intent = (fragment.payload as { action?: unknown } | undefined)?.action;
+        submittedItems.push({
+          module: fragment.module,
+          text: fragment.text,
+          intent: typeof intent === 'string' ? intent : fragment.module,
+          confidence: fragment.confidence,
+        });
+      }
     } catch (err) {
       entries.push({
         fragment,
         result: { ok: false, note: handlerErrorNote(fragment.module, err) },
       });
     }
+  }
+
+  // ── audit S8 · gap 1 — emit void:braindump:submitted ─────────────────────
+  // The per-module orchestrators (sleep / finance / work / goals / habits /
+  // body / admin / dump / cycle) subscribe to this event to re-parse or
+  // recompute on a fresh dump. apps/native never emitted it, so ~9 dump
+  // handlers stayed dark — a dump's sleep/finance free text was never
+  // re-parsed by the watchers, and the others only re-ran on the store-key
+  // mirror below. We emit the registry's v:2 shape AFTER the handlers wrote
+  // (so a watcher that reads store sees fresh data once the mirror lands).
+  // Idempotent for subscribers: every handler debounces / dedupes. Emitted
+  // even with empty items (still a valid "a dump happened, re-look" signal);
+  // the crisis short-circuit above returns before this point, so a crisis
+  // dump never emits.
+  try {
+    emitEvent('void:braindump:submitted', {
+      v: 2,
+      items: submittedItems,
+      raw: output.originalDump ?? '',
+      ts: typeof output.timestamp === 'number' ? output.timestamp : Date.now(),
+      idempotency_key: output.dumpId ?? `dump:${Date.now()}`,
+      route_path: 'native:dispatch',
+    });
+  } catch {
+    // Bus emit is best-effort — never break dispatch on a subscriber fault.
   }
 
   // The great rewiring: handlers just wrote freshly-captured data into the
@@ -113,6 +160,13 @@ export async function dispatchRouterOutput(
   // may tick before the mirror lands; acceptable because each module's own
   // subscribed keys still fire on its next change, and the boot sync already
   // populated all foreign keys once.
+  // Audit S8 · gap 3 — append this dump's co-regulation signal (sentiment +
+  // whether a pet was present) to pets.coregulation_log. The pets bridge
+  // read-merges that key but never writes it; this is the "dump pet-mention
+  // flow" it expects. Synchronous + self-try/caught — runs before the async
+  // mirror so the pets watcher (which the mirror wakes) sees the new entry.
+  recordCoregulationFromDump(store, output);
+
   void Promise.all([
     runAllSyncs(store),
     recordMoodFromDump(store, output.originalDump).catch((err) => {
@@ -155,6 +209,30 @@ export async function applyFragment(
     result = await handler.apply(fragment);
   } catch (err) {
     return { ok: false, note: handlerErrorNote(fragment.module, err) };
+  }
+
+  // A confirmed draft is a real write — notify the per-module dump handlers
+  // the same way a normal dump does (audit S8 · gap 1) so e.g. a confirmed
+  // sleep/finance fragment gets re-parsed by its watcher, not just mirrored.
+  if (result.ok) {
+    try {
+      const intent = (fragment.payload as { action?: unknown } | undefined)?.action;
+      emitEvent('void:braindump:submitted', {
+        v: 2,
+        items: [{
+          module: fragment.module,
+          text: fragment.text,
+          intent: typeof intent === 'string' ? intent : fragment.module,
+          confidence: fragment.confidence,
+        }],
+        raw: fragment.text,
+        ts: Date.now(),
+        idempotency_key: `confirm:${fragment.module}:${Date.now()}`,
+        route_path: 'native:confirm',
+      });
+    } catch {
+      /* best-effort */
+    }
   }
 
   void runAllSyncs(store)
