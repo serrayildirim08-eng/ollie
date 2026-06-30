@@ -28,6 +28,7 @@ import { crisisBannerCopy } from './crisisCopy';
 import { NeedsConfirmCard } from './NeedsConfirmCard';
 import { DumpReceipt } from './DumpReceipt';
 import { buildReceiptText } from './receiptCopy';
+import { FirstRunGuide } from './FirstRunGuide';
 import { ReminderWhenCard } from './ReminderWhenCard';
 import { scheduleReminderAt } from '../notify/taskReminder';
 import { resolveTimeOfDayFireAt, fallbackFireAt } from '../notify/reminderCascade';
@@ -127,6 +128,26 @@ export function DumpScreen(): JSX.Element {
   // the user just completes obstacle/premortem/ulysses. Null = closed.
   const [goalDraft, setGoalDraft] = useState<{ what: string; why: string } | null>(null);
 
+  // First-run guide: a brand-new user (no dumps ever) gets a guided empty state
+  // under the box with example chips. Hidden the moment they dump. Default
+  // false so a returning user never flashes it before the archive check runs.
+  const [showGuide, setShowGuide] = useState(false);
+  // Bumped each time an example chip is tapped → re-seeds the dump textarea.
+  const [seed, setSeed] = useState<{ text: string; nonce: number }>({ text: '', nonce: 0 });
+
+  // Decide first-run once on mount: show the guide only when nothing has ever
+  // been dumped. hasAny() returns true on a read error, so a transient DB
+  // hiccup can't make a returning user look brand-new.
+  useEffect(() => {
+    let cancelled = false;
+    void dumpArchive.hasAny().then((has) => {
+      if (!cancelled && !has) setShowGuide(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // Auto-clear the ack so the DOM cleans up after the fade-out and the
   // screen returns to its quiet default state.
   useEffect(() => {
@@ -171,7 +192,16 @@ export function DumpScreen(): JSX.Element {
   // (goal-intent waits for the modal save; crisis must never ack).
   const onSubmitted = useCallback(() => {
     fireAck();
+    // First dump submitted → the guide's job is done; the silent default takes
+    // over from here.
+    setShowGuide(false);
   }, [fireAck]);
+
+  // Tapping an example chip fills the dump box (and focuses it) so the user's
+  // first move is a single tap. The guide stays until they actually dump.
+  const onPickExample = useCallback((text: string) => {
+    setSeed((prev) => ({ text, nonce: prev.nonce + 1 }));
+  }, []);
 
   const onResult = useCallback(async (output: RouterOutput) => {
     // Goal intent → rich capture. When the AI classifies a fragment as a new
@@ -369,7 +399,10 @@ export function DumpScreen(): JSX.Element {
         onSubmitted={onSubmitted}
         onResult={onResult}
         onCrisis={onCrisis}
+        seed={seed}
       />
+
+      {!crisis && showGuide && <FirstRunGuide onPick={onPickExample} />}
 
       {/* The cross-life "today" surface — the PRIMARY brain surface (Sprint 2).
           Replaces the old per-module dump card here: the selection discipline

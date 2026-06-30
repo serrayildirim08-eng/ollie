@@ -61,7 +61,11 @@ const recordMock = vi.fn((_input?: unknown) => {
   });
 });
 vi.mock('./archive', () => ({
-  dumpArchive: { record: (input?: unknown) => recordMock(input) },
+  dumpArchive: {
+    record: (input?: unknown) => recordMock(input),
+    // Returning-user fixture: first-run guide stays hidden in these tests.
+    hasAny: () => Promise.resolve(true),
+  },
 }));
 
 const dispatchMock = vi.fn(async (_output?: unknown) => {

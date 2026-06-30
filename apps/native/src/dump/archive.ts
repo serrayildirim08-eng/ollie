@@ -112,6 +112,24 @@ export const dumpArchive = {
     }
   },
 
+  /**
+   * Whether the user has ever dumped. Cheap (LIMIT 1) — used by the home
+   * screen to decide if the first-run guide should show. A read failure
+   * returns true (assume not-first-run) so a transient DB error never makes a
+   * returning user look brand-new.
+   */
+  async hasAny(): Promise<boolean> {
+    try {
+      await migrateDumpArchive();
+      const rows = await sql.select<{ one: number }>(
+        `SELECT 1 AS one FROM dump_archive LIMIT 1`,
+      );
+      return rows.length > 0;
+    } catch {
+      return true;
+    }
+  },
+
   /** All archived dumps, most recent first. */
   async list(): Promise<DumpArchiveEntry[]> {
     try {

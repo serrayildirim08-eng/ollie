@@ -81,6 +81,14 @@ export interface BrainDumpInputProps {
   initialValue?: string;
 
   /**
+   * Imperative re-seed of the textarea (e.g. tapping a first-run example chip).
+   * Each tap bumps `nonce`, which replaces the box contents with `text` and
+   * focuses the input. `nonce` 0 / undefined is ignored so an initial render
+   * never clobbers a restored draft.
+   */
+  seed?: { text: string; nonce: number };
+
+  /**
    * Whether to clear the textarea after a successful submission.
    * Default: true.
    */
@@ -110,6 +118,7 @@ export function BrainDumpInput({
   placeholder = DEFAULT_PLACEHOLDER,
   initialValue = '',
   clearOnSuccess = true,
+  seed,
 }: BrainDumpInputProps): JSX.Element {
   const [text, setText] = useState(initialValue);
   const [state, setState] = useState<SubmitState>({ kind: 'idle' });
@@ -149,6 +158,25 @@ export function BrainDumpInput({
       cancelled = true;
     };
   }, []);
+
+  // Re-seed from an example chip: replace the box with the chip text and focus
+  // so the user can edit or just hit send. Keyed on nonce so only a real tap
+  // (nonce > 0) fires; the initial 0 is ignored to protect a restored draft.
+  const seedNonce = seed?.nonce ?? 0;
+  useEffect(() => {
+    if (seedNonce <= 0 || !seed) return;
+    setText(seed.text);
+    if (typeof document !== 'undefined') {
+      const el = document.getElementById(DUMP_INPUT_ID) as HTMLTextAreaElement | null;
+      el?.focus();
+      // Drop the cursor at the end so editing continues naturally.
+      const len = seed.text.length;
+      el?.setSelectionRange?.(len, len);
+    }
+    // Intentionally keyed on nonce only — re-tapping the SAME chip (same text,
+    // new nonce) must still re-seed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seedNonce]);
 
   // Debounced autosave: persist the draft as the user types, clear the
   // saved copy when they empty the box. Runs only after restore.
