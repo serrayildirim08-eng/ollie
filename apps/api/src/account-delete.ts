@@ -307,6 +307,9 @@ export async function runAccountDelete(
   // 3. FAIL LOUD if the hash salt is missing — otherwise the telemetry tables
   //    (raw_dumps, enriched_signals, …) would be queried with the wrong hash
   //    and silently delete 0 rows while we report success.
+  //    ⚠️ USER_HASH_SALT IS IMMUTABLE (audit H7): it is the deletion key, not a
+  //    rotatable credential. Rotating it makes deriveUserHash miss every prior
+  //    row and fake-erase silently. Never add it to the launch rotation queue.
   if (!env.USER_HASH_SALT) {
     return {
       ok: false,
