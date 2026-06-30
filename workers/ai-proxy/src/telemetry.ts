@@ -27,7 +27,7 @@
  *   - No request body content is ever logged.
  */
 
-import { scrubPII } from './pii';
+import { scrubPII, asLocale } from '@ollie/pii-scrub';
 import { json, upstreamError, exceedsContentLength, payloadTooLarge } from '@ollie/worker-http';
 
 /**
@@ -195,8 +195,10 @@ export async function handleEnrichDump(
     return json({ id: null, queued: false, reason: 'us_cycle_restricted' });
   }
 
-  // PII scrub (layer 1).
-  const { scrubbed } = scrubPII(body.raw_text);
+  // PII scrub (layer 1). FULL categories — this raw_text is queued INTO the
+  // opt-in research corpus, so health/mental-health/sexual terms + locale-aware
+  // (TR/ES/EN) names must be redacted before it is persisted (S9).
+  const { scrubbed } = scrubPII(body.raw_text, asLocale(body.locale));
 
   // IDOR fix: ownership comes from the verified JWT, never the client field.
   const serverUserHash = await deriveUserHash(userId, env.USER_HASH_SALT);

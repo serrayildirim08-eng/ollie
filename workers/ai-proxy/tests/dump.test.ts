@@ -523,4 +523,86 @@ describe('/route/dump — smoke', () => {
     // A timeout is transient → retried within the bound, then handled cleanly.
     expect(voyageCalls).toBe(3);
   });
+
+  // ── S9 PII redaction gap ──────────────────────────────────────────────────
+  // The worker-local scrubber had no MEDICAL/MEDICATION/MENTAL_HEALTH/SEXUAL
+  // category and only matched Western names, so a Turkish dump about a health
+  // condition reached Voyage/Groq (and could be queued into the research
+  // corpus) UNREDACTED. /route/dump now uses @ollie/pii-scrub with FULL
+  // categories + locale-aware names. This proves the leak is closed.
+  it('S9: redacts medical + medication + mental-health + Turkish name before anything leaves to Voyage/Groq', async () => {
+    const env = makeEnv();
+    const upstream: string[] = [];
+    let voyageBody = '';
+    fetchSpy.mockReset();
+    fetchSpy.mockImplementation(async (input: Request | string | URL, init?: RequestInit) => {
+      const url =
+        typeof input === 'string' ? input : input instanceof Request ? input.url : input.toString();
+      const reqBody =
+        input instanceof Request
+          ? await input.clone().text()
+          : init?.body
+            ? String(init.body)
+            : '';
+      upstream.push(reqBody);
+      if (url.includes('voyageai.com')) {
+        voyageBody = reqBody;
+        const parsed = JSON.parse(reqBody) as { input: string[] };
+        return new Response(
+          JSON.stringify({
+            data: parsed.input.map((_, i) => ({ embedding: Array(1024).fill(0.1), index: i })),
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url.includes('api.groq.com')) {
+        return new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    results: [
+                      { module: 'body', action: 'log_symptom', confidence: 0.9, payload: {} },
+                    ],
+                  }),
+                },
+                finish_reason: 'stop',
+              },
+            ],
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      return new Response('not found', { status: 404 });
+    });
+
+    // One Turkish sentence (terminal '.', no conjunction → single fragment):
+    // "Mehmet Öztürk told me I had a panic attack about the diabetes med Lustral."
+    const dumpText =
+      'Mehmet Öztürk bana diyabet ilacı Lustral konusunda panik atak yaşadığımı söyledi.';
+    const res = await handleDumpRoute(makeReq({ text: dumpText, locale: 'tr' }), env);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { crisis?: unknown; originalDump: string };
+    // Not a crisis term → normal route (no short-circuit), so it DID flow to upstream.
+    expect(body.crisis).toBeUndefined();
+
+    // The Voyage input is exactly the scrubbed fragment text (no system prompt
+    // noise), so it is the cleanest proof of what left the worker.
+    expect(voyageBody).not.toBe('');
+    expect(voyageBody).toContain('[NAME]'); // Mehmet + Öztürk
+    expect(voyageBody).toContain('[MEDICAL]'); // diyabet
+    expect(voyageBody).toContain('[MEDICATION]'); // Lustral
+    expect(voyageBody).toContain('[MENTAL_HEALTH]'); // panik atak
+
+    // NOTHING raw may appear in ANY upstream request body.
+    const allSent = upstream.join('\n');
+    for (const leak of ['Mehmet', 'Öztürk', 'diyabet', 'Lustral', 'panik atak']) {
+      expect(allSent).not.toContain(leak);
+    }
+
+    // originalDump is echoed back to the CLIENT (the user's own device), not a
+    // third party, so it intentionally stays raw.
+    expect(body.originalDump).toContain('Mehmet');
+  });
 });

@@ -351,6 +351,70 @@ describe('/route/medication — PII allowlist defensive', () => {
   });
 });
 
+// ─── S9: route-layer identity scrub (multilingual) ───────────────────────────
+//
+// /route/:module now uses @ollie/pii-scrub with sensitiveCategories:false:
+// identity PII (incl. Turkish/Spanish names the worker-local scrubber missed)
+// is redacted before the text reaches Voyage/Groq, while the drug name — the
+// thing the classifier exists to extract — survives. This proves both halves
+// on the live route, not just the pure scrubber.
+
+describe('/route/medication — S9 identity scrub on the route', () => {
+  let fetchSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    fetchSpy = vi.spyOn(globalThis, 'fetch');
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('scrubs a Turkish name before Voyage/Groq but preserves the drug name', async () => {
+    let voyageBody = '';
+    const upstream: string[] = [];
+    fetchSpy.mockImplementation(async (url: unknown, init?: RequestInit) => {
+      const u = String(url);
+      const reqBody = init?.body ? String(init.body) : '';
+      upstream.push(reqBody);
+      if (u.includes('voyageai.com')) {
+        voyageBody = reqBody;
+        return new Response(JSON.stringify({ data: [{ embedding: Array(1024).fill(0.1) }] }), {
+          status: 200,
+        });
+      }
+      if (u.includes('routing_cache_lookup')) {
+        return new Response(JSON.stringify([]), { status: 200 });
+      }
+      if (u.includes('api.groq.com')) {
+        return makeGroqResp({
+          action: 'log_dose',
+          payload: { medName: 'Zoloft' },
+          confidence: 0.95,
+          language: 'en',
+        });
+      }
+      return new Response('', { status: 201 });
+    });
+
+    const res = await handleRoute(
+      makeReq('Mehmet Öztürk reminded me to take Zoloft'),
+      makeEnv(),
+      'medication',
+    );
+    expect(res.status).toBe(200);
+
+    // Identity PII redacted...
+    expect(voyageBody).toContain('[NAME]');
+    expect(voyageBody).not.toContain('Mehmet');
+    expect(voyageBody).not.toContain('Öztürk');
+    // ...but the drug name (the classifier's target) survives.
+    expect(voyageBody).toContain('Zoloft');
+    // Belt + suspenders: name never reached any upstream body.
+    const allSent = upstream.join('\n');
+    expect(allSent).not.toContain('Öztürk');
+  });
+});
+
 // ─── transport / schema failure modes ────────────────────────────────────────
 
 describe('/route/medication — failure modes', () => {

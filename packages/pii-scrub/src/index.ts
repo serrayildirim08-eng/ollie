@@ -52,6 +52,45 @@ export interface ScrubResult {
   redactions: Redaction[];
 }
 
+export interface ScrubOptions {
+  /**
+   * When false, the four sensitive-content passes
+   * (MENTAL_HEALTH / MEDICAL / MEDICATION / SEXUAL) are skipped and ONLY
+   * identity PII (name, email, phone, address, GPS, URL, numeric) is
+   * redacted. Default: true (scrub everything).
+   *
+   * Why this exists: the functional Layer-2 module router (`/route/:module`,
+   * e.g. /route/body, /route/medication, /route/grocery) sends the text to
+   * the classifier whose JOB is to extract the symptom / drug / item — it
+   * MUST see "asthma", "Zoloft", "melatonin" to resolve the action+payload.
+   * Redacting those there would destroy the feature (and break the
+   * body/medication route tests that pin this contract). Those routes pass
+   * `{ sensitiveCategories: false }` so identity PII (names/email/phone) is
+   * still scrubbed before anything leaves to Groq/Gemini, while the
+   * domain term survives for classification.
+   *
+   * The corpus / dump pipelines (/route/dump, /label, /telemetry — anything
+   * that can persist text into the opt-in research corpus or fan out a whole
+   * dump) keep the default `true` so health terms never reach a third party.
+   */
+  sensitiveCategories?: boolean;
+}
+
+const LOCALES: readonly Locale[] = ['en', 'es', 'tr'];
+
+/**
+ * Coerce a free-form BCP-47-ish locale string ("tr-TR", "en_US", "es")
+ * to one of the supported `Locale` values. Unknown / missing → 'tr'
+ * (the app's default dump locale). The regex layer is locale-agnostic;
+ * locale only steers the name wordlist, so a wrong guess degrades name
+ * recall slightly but never silently disables identity scrubbing.
+ */
+export function asLocale(input: string | null | undefined): Locale {
+  if (!input) return 'tr';
+  const base = input.toLowerCase().slice(0, 2);
+  return (LOCALES as readonly string[]).includes(base) ? (base as Locale) : 'tr';
+}
+
 // ─── regex layer ──────────────────────────────────────────────────────────────
 
 // URL — strip path/query/fragment, keep scheme://host.
@@ -241,42 +280,48 @@ const MENTAL_HEALTH_REGEX = new RegExp(
 
 // ─── orchestrator ─────────────────────────────────────────────────────────────
 
-export function scrubPII(text: string, locale: Locale): ScrubResult {
+export function scrubPII(text: string, locale: Locale, opts?: ScrubOptions): ScrubResult {
   const redactions: Redaction[] = [];
   let out = text;
 
-  // 0a. MENTAL_HEALTH — run first: high-sensitivity crisis terms must not be
-  //     accidentally absorbed by a later, weaker pass (e.g. "suicide" eaten
-  //     by MEDICAL before we can tag it MENTAL_HEALTH). Brand check is a
-  //     no-op here but kept for symmetry.
-  out = out.replace(MENTAL_HEALTH_REGEX, (match) => {
-    if (isBrand(match)) return match;
-    redactions.push({ type: 'MENTAL_HEALTH', original: match });
-    return '[MENTAL_HEALTH]';
-  });
+  // Sensitive-content passes (0a–0d) are opt-out: the functional module
+  // router disables them so the classifier can still see the symptom/drug/item
+  // it exists to extract (see ScrubOptions.sensitiveCategories). Identity PII
+  // below (1–7b) ALWAYS runs.
+  if (opts?.sensitiveCategories !== false) {
+    // 0a. MENTAL_HEALTH — run first: high-sensitivity crisis terms must not be
+    //     accidentally absorbed by a later, weaker pass (e.g. "suicide" eaten
+    //     by MEDICAL before we can tag it MENTAL_HEALTH). Brand check is a
+    //     no-op here but kept for symmetry.
+    out = out.replace(MENTAL_HEALTH_REGEX, (match) => {
+      if (isBrand(match)) return match;
+      redactions.push({ type: 'MENTAL_HEALTH', original: match });
+      return '[MENTAL_HEALTH]';
+    });
 
-  // 0b. MEDICAL — diagnoses, conditions, clinical terms.
-  out = out.replace(MEDICAL_REGEX, (match) => {
-    if (isBrand(match)) return match;
-    redactions.push({ type: 'MEDICAL', original: match });
-    return '[MEDICAL]';
-  });
+    // 0b. MEDICAL — diagnoses, conditions, clinical terms.
+    out = out.replace(MEDICAL_REGEX, (match) => {
+      if (isBrand(match)) return match;
+      redactions.push({ type: 'MEDICAL', original: match });
+      return '[MEDICAL]';
+    });
 
-  // 0c. MEDICATION — drug names. Pharma brand names are kept in the brand
-  //     allowlist at the company level (Pfizer, Bayer) but NOT at the product
-  //     level (Ritalin, Xanax) because a product name reveals a prescription.
-  out = out.replace(MEDICATION_REGEX, (match) => {
-    if (isBrand(match)) return match;
-    redactions.push({ type: 'MEDICATION', original: match });
-    return '[MEDICATION]';
-  });
+    // 0c. MEDICATION — drug names. Pharma brand names are kept in the brand
+    //     allowlist at the company level (Pfizer, Bayer) but NOT at the product
+    //     level (Ritalin, Xanax) because a product name reveals a prescription.
+    out = out.replace(MEDICATION_REGEX, (match) => {
+      if (isBrand(match)) return match;
+      redactions.push({ type: 'MEDICATION', original: match });
+      return '[MEDICATION]';
+    });
 
-  // 0d. SEXUAL — explicit content terms.
-  out = out.replace(SEXUAL_REGEX, (match) => {
-    if (isBrand(match)) return match;
-    redactions.push({ type: 'SEXUAL', original: match });
-    return '[SEXUAL]';
-  });
+    // 0d. SEXUAL — explicit content terms.
+    out = out.replace(SEXUAL_REGEX, (match) => {
+      if (isBrand(match)) return match;
+      redactions.push({ type: 'SEXUAL', original: match });
+      return '[SEXUAL]';
+    });
+  }
 
   // 1. URL first
   out = out.replace(URL_REGEX, (match, scheme: string, host: string) => {

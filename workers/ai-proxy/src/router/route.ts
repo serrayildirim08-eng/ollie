@@ -25,7 +25,7 @@
  */
 
 import { json, upstreamError, exceedsContentLength, payloadTooLarge } from '@ollie/worker-http';
-import { scrubPII } from '../pii';
+import { scrubPII } from '@ollie/pii-scrub';
 import { groceryConfig, type ModuleConfig } from '../modules/grocery.config';
 import {
   adminConfig,
@@ -317,8 +317,20 @@ export async function handleRoute(
     return payloadTooLarge('text_too_large');
   }
 
-  // 1. PII scrub
-  const { scrubbed } = scrubPII(body.text);
+  // 1. PII scrub — IDENTITY ONLY (sensitiveCategories: false).
+  //
+  // This is the functional Layer-2 module router. The classifier's whole job
+  // is to extract the domain term — the symptom for /route/body ("asthma"),
+  // the drug for /route/medication ("Zoloft"), the item for /route/grocery
+  // ("melatonin"). Scrubbing those to [MEDICAL]/[MEDICATION] would destroy
+  // the feature (and break body/medication route tests that pin this). So we
+  // strip identity PII (names/email/phone/address/GPS/URL/numeric) — now
+  // multilingual + locale-aware via @ollie/pii-scrub, closing the TR/ES-name
+  // leak the worker-local scrubber had — while letting the domain term reach
+  // the classifier. No `locale` field on this route; 'tr' is the app default
+  // and the regex layer is locale-agnostic, so identity scrubbing is full
+  // strength regardless (locale only tunes the name wordlist).
+  const { scrubbed } = scrubPII(body.text, 'tr', { sensitiveCategories: false });
   const cleanText = scrubbed.trim();
 
   // 2. Voyage embed

@@ -35,7 +35,7 @@
 import { json, upstreamError, exceedsContentLength, payloadTooLarge } from '@ollie/worker-http';
 import { detectCrisis } from '@ollie/crisis-lexicon';
 import { verifyClerkJwt } from '../clerk-verify';
-import { scrubPII } from '../pii';
+import { scrubPII, asLocale } from '@ollie/pii-scrub';
 import { pass1Segment } from './segmentation';
 import { pass2SplitFragments } from './segmentation-llm';
 import { detectFragmentLanguage } from './lang-detect';
@@ -254,7 +254,19 @@ export async function handleDumpRoute(
     : userText;
 
   // PII scrub once on the whole dump; preserves segmentation faithfulness.
-  const { scrubbed: cleanDump } = scrubPII(combinedDump);
+  //
+  // S9 fix: uses the shared @ollie/pii-scrub (locale-aware, multilingual
+  // names + the MEDICAL/MEDICATION/MENTAL_HEALTH/SEXUAL categories the
+  // worker-local scrubber lacked). FULL categories here — a brain dump can
+  // fan out to the research corpus and is embedded/classified by third-party
+  // models (Voyage/Groq/Gemini), so health terms + TR/ES names must be
+  // redacted BEFORE they leave. Layer-1 routing is module-coarse, so a
+  // "[MEDICAL]"/"[MENTAL_HEALTH]" placeholder still routes the fragment to
+  // the body module; the fine-grained symptom/drug extraction happens in
+  // Layer-2 /route/:module, which receives the raw fragment from the client
+  // and scrubs identity-only (see router/route.ts). `originalDump` returned
+  // to the client stays RAW; only the third-party-bound copy is scrubbed.
+  const { scrubbed: cleanDump } = scrubPII(combinedDump, asLocale(locale));
 
   // 2 + 3. Segmentation (pass-1 + pass-2 for flagged fragments).
   // The flagged pass-2 splits are independent, so they run CONCURRENTLY

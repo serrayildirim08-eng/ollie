@@ -24,7 +24,7 @@
  *   - Hard cap: 280 chars max scrubbed_text — long-tail dumps are truncated.
  */
 
-import { scrubPII } from './pii';
+import { scrubPII, asLocale } from '@ollie/pii-scrub';
 import { json, upstreamError } from '@ollie/worker-http';
 
 export interface LabelEnv {
@@ -134,8 +134,13 @@ export async function handleLabel(req: Request, env: LabelEnv): Promise<Response
 
   // Belt-and-suspenders: re-scrub server-side. Caller should already have
   // scrubbed, but if a dev wires the endpoint wrong we don't want raw text
-  // hitting Anthropic.
-  const safe = scrubPII(body.scrubbed_text).scrubbed.slice(0, MAX_SCRUBBED_CHARS);
+  // hitting Anthropic. FULL categories — this text is labeled INTO the
+  // research corpus, so medical/mental-health/sexual terms + locale-aware
+  // names must be stripped before Anthropic ever sees them (S9).
+  const safe = scrubPII(body.scrubbed_text, asLocale(body.locale)).scrubbed.slice(
+    0,
+    MAX_SCRUBBED_CHARS,
+  );
 
   // Cost cap — fail open with a neutral label rather than block writes when
   // the daily budget is hit. The orchestrator decides what to do (likely
