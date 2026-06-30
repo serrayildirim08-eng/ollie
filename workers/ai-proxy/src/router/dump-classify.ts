@@ -13,28 +13,13 @@
 
 import { groqChat } from '../groq';
 import { jsonCascade, type JsonProviders } from './json-cascade';
-import type { FragmentLanguage, Module } from './dump-schema';
+import { MODULES, type FragmentLanguage, type Module } from './dump-schema';
 
-// Allowed Module values (enumerated in the system prompt so the model
-// stays on the rails even though Groq's JSON mode doesn't enforce a schema).
-const MODULES: Module[] = [
-  'crisis',
-  'work',
-  'admin',
-  'pets',
-  'cycle',
-  'finance',
-  'sleep',
-  'body',
-  'mood',
-  'habits',
-  'goals',
-  'grocery',
-  'medication',
-  'chores',
-  'dump_only',
-];
-
+// Allowed Module values are the single-source-of-truth `MODULES` array from
+// dump-schema.ts — imported here (not re-declared) so the router prompt's enum
+// and the runtime coercion guard can never drift from the `Module` type. The
+// system prompt enumerates them below so the model stays on the rails even
+// though Groq's JSON mode doesn't enforce a schema.
 const VALID_MODULES = new Set<string>(MODULES);
 /**
  * Coerce a model-supplied module to a known value (audit M2). Groq's JSON mode

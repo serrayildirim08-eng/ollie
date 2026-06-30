@@ -37,7 +37,7 @@ import { detectCrisis } from '@ollie/crisis-lexicon';
 import { verifyClerkJwt } from '../clerk-verify';
 import { scrubPII } from '../pii';
 import { pass1Segment } from './segmentation';
-import { pass2Split } from './segmentation-llm';
+import { pass2SplitFragments } from './segmentation-llm';
 import { detectFragmentLanguage } from './lang-detect';
 import { classifyBatch, type ClassifyResult } from './dump-classify';
 import { injectScheduledAt } from './remindIn';
@@ -257,31 +257,17 @@ export async function handleDumpRoute(
   const { scrubbed: cleanDump } = scrubPII(combinedDump);
 
   // 2 + 3. Segmentation (pass-1 + pass-2 for flagged fragments).
+  // The flagged pass-2 splits are independent, so they run CONCURRENTLY
+  // (bounded fan-out) rather than serially — a multi-topic dump no longer
+  // pays N × the Groq round-trip (S2 · fix 1). Ordering + per-fragment unsplit
+  // fallback are preserved inside pass2SplitFragments.
   const pass1 = pass1Segment(cleanDump, locale);
-  const fragmentsText: string[] = [];
-  let pass2Triggered = 0;
-
-  for (const frag of pass1.fragments) {
-    if (frag.needsPass2) {
-      pass2Triggered++;
-      try {
-        const split = await pass2Split(frag.text, {
-          groq: env.GROQ_API_KEY,
-          gemini: env.GEMINI_API_KEY,
-          cfAI: env.AI,
-          openrouter: env.OPENROUTER_API_KEY,
-        });
-        if (split.length > 0) {
-          fragmentsText.push(...split);
-          continue;
-        }
-      } catch (err) {
-        // Pass-2 failure: fall back to the pass-1 fragment unsplit.
-        console.error('[route/dump] pass2 failed, using pass1 fragment', err);
-      }
-    }
-    fragmentsText.push(frag.text);
-  }
+  const { fragmentsText, pass2Triggered } = await pass2SplitFragments(pass1.fragments, {
+    groq: env.GROQ_API_KEY,
+    gemini: env.GEMINI_API_KEY,
+    cfAI: env.AI,
+    openrouter: env.OPENROUTER_API_KEY,
+  });
 
   // 5. Crisis check — all 3 lexicons against the WHOLE dump in parallel.
   // (Per fragment also acceptable; the lexicon library does the right

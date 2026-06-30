@@ -40,11 +40,23 @@ import {
   BODY_ESCALATE_THRESHOLD,
 } from '../modules/body.config';
 import {
+  choresConfig,
+  CHORES_MODEL_FAST,
+  CHORES_MODEL_ACCURATE,
+  CHORES_ESCALATE_THRESHOLD,
+} from '../modules/chores.config';
+import {
   cycleConfig,
   CYCLE_MODEL_FAST,
   CYCLE_MODEL_ACCURATE,
   CYCLE_ESCALATE_THRESHOLD,
 } from '../modules/cycle.config';
+import {
+  moodConfig,
+  MOOD_MODEL_FAST,
+  MOOD_MODEL_ACCURATE,
+  MOOD_ESCALATE_THRESHOLD,
+} from '../modules/mood.config';
 import {
   financeConfig,
   FINANCE_MODEL_FAST,
@@ -119,11 +131,13 @@ const MODULE_CONFIGS: Record<string, ModuleConfig<any, any>> = {
   admin: adminConfig,
   grocery: groceryConfig,
   body: bodyConfig,
+  chores: choresConfig,
   cycle: cycleConfig,
   finance: financeConfig,
   goals: goalsConfig,
   habits: habitsConfig,
   medication: medicationConfig,
+  mood: moodConfig,
   pets: petsConfig,
   sleep: sleepConfig,
   work: workConfig,
@@ -154,9 +168,17 @@ const MODULE_TIERS: Record<string, TierConfig> = {
     models: [BODY_MODEL_FAST, BODY_MODEL_ACCURATE],
     threshold: BODY_ESCALATE_THRESHOLD,
   },
+  chores: {
+    models: [CHORES_MODEL_FAST, CHORES_MODEL_ACCURATE],
+    threshold: CHORES_ESCALATE_THRESHOLD,
+  },
   cycle: {
     models: [CYCLE_MODEL_FAST, CYCLE_MODEL_ACCURATE],
     threshold: CYCLE_ESCALATE_THRESHOLD,
+  },
+  mood: {
+    models: [MOOD_MODEL_FAST, MOOD_MODEL_ACCURATE],
+    threshold: MOOD_ESCALATE_THRESHOLD,
   },
   finance: {
     models: [FINANCE_MODEL_FAST, FINANCE_MODEL_ACCURATE],
