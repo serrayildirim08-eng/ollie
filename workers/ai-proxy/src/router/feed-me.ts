@@ -805,20 +805,26 @@ async function cacheLookup(
 }
 
 async function cacheHitUpdate(id: string, env: FeedMeEnv): Promise<void> {
-  const url = `${env.SUPABASE_URL.replace(/\/$/, '')}/rest/v1/routing_cache?id=eq.${encodeURIComponent(id)}`;
-  await fetch(url, {
-    method: 'PATCH',
+  // PostgREST does NOT support `{ increment: 1 }` in a PATCH body — it coerced
+  // hit_count to a JSON object and the request silently failed, so the
+  // popularity counter never moved (audit S2 · fix 2). Use an atomic SQL RPC
+  // instead (single round-trip, race-free). 404 = RPC not yet applied in this
+  // env → treat as a no-op (same tolerance as routing_cache_lookup).
+  const url = `${env.SUPABASE_URL.replace(/\/$/, '')}/rest/v1/rpc/routing_cache_increment`;
+  const res = await fetch(url, {
+    method: 'POST',
     headers: {
       'content-type': 'application/json',
       apikey: env.SUPABASE_SERVICE_ROLE,
       authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE}`,
       prefer: 'return=minimal',
     },
-    body: JSON.stringify({
-      hit_count: { increment: 1 },
-      last_hit_at: new Date().toISOString(),
-    }),
+    body: JSON.stringify({ p_id: id }),
   });
+  if (!res.ok && res.status !== 404) {
+    const detail = await res.text().catch(() => '');
+    throw new Error(`routing_cache_increment ${res.status}: ${detail.slice(0, 200)}`);
+  }
 }
 
 async function cacheWrite(

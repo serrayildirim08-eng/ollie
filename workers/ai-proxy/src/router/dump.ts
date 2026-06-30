@@ -56,6 +56,7 @@ import {
   type VectorizeIndex,
 } from './vectorize';
 import { base64ByteSize, isVisionImage, visionExtract, type VisionImage } from './vision';
+import { fetchWithTimeout, UpstreamTimeoutError, UPSTREAM_TIMEOUT_MS } from '../fetch-timeout';
 import type { CfAiBinding } from '../cloudflare-ai';
 
 /** Hard upper bound on the raw image/pdf bytes the worker accepts.
@@ -541,19 +542,7 @@ export async function handleDumpRoute(
  *  re-order by that index so the result aligns positionally with `texts`
  *  regardless of response ordering. */
 async function voyageEmbedBatch(texts: string[], apiKey: string): Promise<number[][]> {
-  const res = await fetch('https://api.voyageai.com/v1/embeddings', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      input: texts,
-      model: VOYAGE_MODEL,
-      input_type: 'query',
-      output_dimension: VOYAGE_EMBED_DIM,
-    }),
-  });
+  const res = await voyageFetchWithRetry(texts, apiKey);
   if (!res.ok) {
     const detail = await res.text().catch(() => '');
     throw new Error(`voyage ${res.status}: ${detail.slice(0, 200)}`);
@@ -574,4 +563,62 @@ async function voyageEmbedBatch(texts: string[], apiKey: string): Promise<number
     out[slot] = row.embedding;
   });
   return out;
+}
+
+/** Voyage embed is the FIRST step of the whole dump pipeline — a single
+ *  transient blip (429 rate-limit or a 5xx) killed the ENTIRE dump (audit S2 ·
+ *  fix 4). Bounded retry: up to VOYAGE_MAX_RETRIES re-tries on 429/5xx or a
+ *  timeout, with short exponential backoff + jitter. A 4xx (other than 429) is
+ *  a real client error and is returned immediately (no point retrying). After
+ *  the cap we return the last response (or rethrow the last timeout) so the
+ *  caller's existing 502 voyage_embed_failed path still fires cleanly — no
+ *  infinite loop. Each attempt is individually timeout-bounded (fix 3). */
+const VOYAGE_MAX_RETRIES = 2;
+const VOYAGE_RETRY_BASE_MS = 250;
+
+async function voyageFetchWithRetry(texts: string[], apiKey: string): Promise<Response> {
+  const init: RequestInit = {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      input: texts,
+      model: VOYAGE_MODEL,
+      input_type: 'query',
+      output_dimension: VOYAGE_EMBED_DIM,
+    }),
+  };
+
+  let lastTimeout: unknown;
+  for (let attempt = 0; attempt <= VOYAGE_MAX_RETRIES; attempt++) {
+    try {
+      const res = await fetchWithTimeout(
+        'https://api.voyageai.com/v1/embeddings',
+        init,
+        UPSTREAM_TIMEOUT_MS.voyage,
+        'voyage',
+      );
+      // Success or a non-retryable status (2xx, or a 4xx that isn't 429) —
+      // hand it back to the caller as-is.
+      const retryable = res.status === 429 || res.status >= 500;
+      if (!retryable || attempt === VOYAGE_MAX_RETRIES) return res;
+      // Drain the body so the connection can be reused before we back off.
+      await res.text().catch(() => '');
+    } catch (err) {
+      // A timeout is transient — retry it like a 5xx. Any other thrown error
+      // (network/DNS) is also retried within the cap; on the last attempt it
+      // rethrows so the caller's catch maps it to 502.
+      if (!(err instanceof UpstreamTimeoutError) && !(err instanceof Error)) throw err;
+      lastTimeout = err;
+      if (attempt === VOYAGE_MAX_RETRIES) throw err;
+    }
+    // Exponential backoff with jitter before the next attempt.
+    const backoff = VOYAGE_RETRY_BASE_MS * 2 ** attempt + Math.floor(Math.random() * 100);
+    await new Promise((r) => setTimeout(r, backoff));
+  }
+  // Unreachable (the loop always returns/throws on the final attempt), but
+  // satisfies the type checker.
+  throw (lastTimeout instanceof Error ? lastTimeout : new Error('voyage exhausted retries'));
 }

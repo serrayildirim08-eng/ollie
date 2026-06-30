@@ -430,4 +430,97 @@ describe('/route/dump — smoke', () => {
     expect(res2.headers.get('x-ollie-idempotent-replay')).toBeNull();
     expect(fetchSpy.mock.calls.length).toBeGreaterThan(callsAfterFirst);
   });
+
+  // ── Voyage embed timeout (fix 3) + transient retry (fix 4) ──────────────────
+
+  const groqGroceryResponse = () =>
+    new Response(
+      JSON.stringify({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                results: [
+                  { module: 'grocery', action: 'pantry_add', confidence: 0.93, payload: { item: 'süt' } },
+                ],
+              }),
+            },
+            finish_reason: 'stop',
+          },
+        ],
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+
+  const voyageOkResponse = () =>
+    new Response(JSON.stringify({ data: [{ embedding: Array(1024).fill(0.1) }] }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+
+  it('fix 4: a transient Voyage 429 is retried and the dump still succeeds', async () => {
+    const env = makeEnv();
+    let voyageCalls = 0;
+    fetchSpy.mockReset();
+    fetchSpy.mockImplementation(async (input: Request | string | URL) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : input.toString();
+      if (url.includes('voyageai.com')) {
+        voyageCalls++;
+        // First attempt: transient rate-limit. Second attempt: success.
+        return voyageCalls === 1
+          ? new Response('rate limited', { status: 429 })
+          : voyageOkResponse();
+      }
+      if (url.includes('api.groq.com')) return groqGroceryResponse();
+      return new Response('not found', { status: 404 });
+    });
+
+    const res = await handleDumpRoute(makeReq({ text: 'süt aldım' }), env);
+    expect(res.status).toBe(200);
+    expect(voyageCalls).toBe(2); // retried once, then succeeded
+    const body = (await res.json()) as { fragments: Array<{ module: string }> };
+    expect(body.fragments[0].module).toBe('grocery');
+  });
+
+  it('fix 4: a PERSISTENT Voyage 429 fails cleanly (502) without looping forever', async () => {
+    const env = makeEnv();
+    let voyageCalls = 0;
+    fetchSpy.mockReset();
+    fetchSpy.mockImplementation(async (input: Request | string | URL) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : input.toString();
+      if (url.includes('voyageai.com')) {
+        voyageCalls++;
+        return new Response('rate limited', { status: 429 });
+      }
+      return new Response('not found', { status: 404 });
+    });
+
+    const res = await handleDumpRoute(makeReq({ text: 'süt aldım' }), env);
+    expect(res.status).toBe(502);
+    expect((await res.json()) as { error: string }).toMatchObject({ error: 'voyage_embed_failed' });
+    // Bounded: 1 initial + 2 retries = 3 attempts, then give up (no infinite loop).
+    expect(voyageCalls).toBe(3);
+  });
+
+  it('fix 3: a Voyage timeout is the handled 502 path, not a hang', async () => {
+    const env = makeEnv();
+    let voyageCalls = 0;
+    fetchSpy.mockReset();
+    fetchSpy.mockImplementation(async (input: Request | string | URL) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : input.toString();
+      if (url.includes('voyageai.com')) {
+        voyageCalls++;
+        // Mimic AbortSignal.timeout() firing: fetch rejects with a TimeoutError
+        // DOMException, which fetchWithTimeout normalizes to UpstreamTimeoutError.
+        throw new DOMException('The operation timed out.', 'TimeoutError');
+      }
+      return new Response('not found', { status: 404 });
+    });
+
+    const res = await handleDumpRoute(makeReq({ text: 'süt aldım' }), env);
+    expect(res.status).toBe(502);
+    expect((await res.json()) as { error: string }).toMatchObject({ error: 'voyage_embed_failed' });
+    // A timeout is transient → retried within the bound, then handled cleanly.
+    expect(voyageCalls).toBe(3);
+  });
 });

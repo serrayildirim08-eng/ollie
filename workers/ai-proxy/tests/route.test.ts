@@ -243,6 +243,27 @@ describe('/route/:module — routing', () => {
     expect(patchCalls.length).toBeGreaterThanOrEqual(1);
   });
 
+  it('cache hit: increments via the routing_cache_increment RPC (S2 · fix 2), not a broken PATCH', async () => {
+    const fetchMock = vi.fn(makeCacheHitFetch() as unknown as typeof fetch);
+    fetchSpy.mockImplementation(fetchMock);
+
+    await handleRoute(makeReq({ text: 'need eggs' }), makeEnv(), 'grocery');
+    await new Promise((r) => setTimeout(r, 10)); // let the fire-and-forget RPC run
+
+    const incCall = fetchMock.mock.calls.find(
+      ([url]) => typeof url === 'string' && url.includes('rpc/routing_cache_increment'),
+    );
+    expect(incCall).toBeDefined();
+
+    const [, init] = incCall as [string, RequestInit];
+    expect(init.method).toBe('POST');
+    const body = JSON.parse(init.body as string);
+    // Atomic SQL increment by id — NEVER the PostgREST `{ increment: 1 }` object
+    // that silently failed and left hit_count pinned at 0.
+    expect(body).toEqual({ p_id: 'cache-row-1' });
+    expect(JSON.stringify(body)).not.toContain('increment');
+  });
+
   // ── cache miss → Groq ─────────────────────────────────────────────────────
 
   it('cache miss: calls Groq, returns source=groq_miss', async () => {
