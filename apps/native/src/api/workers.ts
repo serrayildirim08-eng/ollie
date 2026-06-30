@@ -88,7 +88,7 @@ export function routeModule(
 ): Promise<ApiResult<RouteModuleResponse>> {
   const req: RouteModuleRequest = { module, text };
   return post<RouteModuleResponse>(
-    `${urls.aiProxy}/route/${module}`,
+    `${urls.aiProxy}/route/${encodeURIComponent(module)}`,
     req,
     { authJwt: opts.bearer, timeoutMs: opts.timeoutMs ?? 15_000 },
   );

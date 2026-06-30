@@ -243,7 +243,7 @@ async function supabaseSelect<T>(env: Env, table: string, params: Record<string,
 }
 
 async function updateJob(env: Env, id: string, patch: Record<string, unknown>): Promise<void> {
-  const url = `${env.SUPABASE_URL}/rest/v1/scheduled_jobs?id=eq.${id}`;
+  const url = `${env.SUPABASE_URL}/rest/v1/scheduled_jobs?id=eq.${encodeURIComponent(id)}`;
   try {
     await fetch(url, {
       method: 'PATCH',
