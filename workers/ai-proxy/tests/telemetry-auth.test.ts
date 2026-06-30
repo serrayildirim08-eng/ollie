@@ -175,11 +175,11 @@ interface ClerkKeyMaterial {
 }
 
 async function makeClerkKey(): Promise<ClerkKeyMaterial> {
-  const { publicKey, privateKey } = await generateKeyPair('ES256', { extractable: true });
+  const { publicKey, privateKey } = await generateKeyPair('RS256', { extractable: true });
   const publicJwk = await exportJWK(publicKey);
   const kid = 'clerk-test-kid';
   publicJwk.kid = kid;
-  publicJwk.alg = 'ES256';
+  publicJwk.alg = 'RS256';
   publicJwk.use = 'sig';
   return { privateKey, publicJwk, kid };
 }
@@ -190,7 +190,7 @@ async function mintClerkJwt(
 ): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
   return new SignJWT({})
-    .setProtectedHeader({ alg: 'ES256', kid: k.kid })
+    .setProtectedHeader({ alg: 'RS256', kid: k.kid })
     .setSubject(sub)
     .setIssuer(CLERK_ISSUER)
     .setIssuedAt(now)
@@ -258,7 +258,7 @@ describe('telemetry auth gate · Clerk JWT (dual-mode)', () => {
     spy = mockClerkPath(real.publicJwk);
     // Token uses the real kid but is signed by the foreign key.
     const tampered = await new SignJWT({})
-      .setProtectedHeader({ alg: 'ES256', kid: real.kid })
+      .setProtectedHeader({ alg: 'RS256', kid: real.kid })
       .setSubject('user_evil')
       .setIssuer(CLERK_ISSUER)
       .setIssuedAt(Math.floor(Date.now() / 1000))

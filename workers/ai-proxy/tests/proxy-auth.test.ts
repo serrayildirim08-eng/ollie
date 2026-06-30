@@ -81,13 +81,13 @@ interface KeyMaterial {
 }
 
 async function makeKey(): Promise<KeyMaterial> {
-  const { publicKey, privateKey } = await generateKeyPair('ES256', {
+  const { publicKey, privateKey } = await generateKeyPair('RS256', {
     extractable: true,
   });
   const publicJwk = await exportJWK(publicKey);
   const kid = 'proxy-test-kid';
   publicJwk.kid = kid;
-  publicJwk.alg = 'ES256';
+  publicJwk.alg = 'RS256';
   publicJwk.use = 'sig';
   return { privateKey, publicJwk, kid };
 }
@@ -95,7 +95,7 @@ async function makeKey(): Promise<KeyMaterial> {
 async function mintJwt(k: KeyMaterial, sub: string): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
   return new SignJWT({})
-    .setProtectedHeader({ alg: 'ES256', kid: k.kid })
+    .setProtectedHeader({ alg: 'RS256', kid: k.kid })
     .setSubject(sub)
     .setIssuer(CLERK_ISSUER)
     .setIssuedAt(now)
