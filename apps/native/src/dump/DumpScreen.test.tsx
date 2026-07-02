@@ -37,6 +37,7 @@ vi.mock('../settings/features', () => ({ useFeature: () => false }));
 vi.mock('./crisisCopy', () => ({ crisisBannerCopy: () => ({ kicker: '', body: '', dismiss: '' }) }));
 vi.mock('./NeedsConfirmCard', () => ({ NeedsConfirmCard: () => null }));
 vi.mock('../modules/brain/TodayNoticings', () => ({ TodayNoticings: () => null }));
+vi.mock('../todo/TodayPulse', () => ({ TodayPulse: () => null }));
 vi.mock('../modules/goals/GoalCreateModal', () => ({ GoalCreateModal: () => null }));
 vi.mock('../modules/partner', () => ({ PartnerCard: () => null }));
 vi.mock('./mood-lexicon', () => ({ tagDumpMood: () => 'neutral' }));

@@ -34,6 +34,7 @@ import { scheduleReminderAt } from '../notify/taskReminder';
 import { resolveTimeOfDayFireAt, fallbackFireAt } from '../notify/reminderCascade';
 import type { HandlerResult } from '../router/schema';
 import { TodayNoticings } from '../modules/brain/TodayNoticings';
+import { TodayPulse } from '../todo/TodayPulse';
 import { GoalCreateModal } from '../modules/goals/GoalCreateModal';
 import { PartnerCard } from '../modules/partner';
 import styles from './DumpScreen.module.css';
@@ -403,6 +404,10 @@ export function DumpScreen(): JSX.Element {
       />
 
       {!crisis && showGuide && <FirstRunGuide onPick={onPickExample} />}
+
+      {/* One calm orientation line — "today's clear." / "a few things for
+          today." Hidden during first-run (the guide speaks then) and on crisis. */}
+      {!crisis && !showGuide && <TodayPulse />}
 
       {/* The cross-life "today" surface — the PRIMARY brain surface (Sprint 2).
           Replaces the old per-module dump card here: the selection discipline
