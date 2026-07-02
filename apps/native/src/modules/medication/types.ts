@@ -11,7 +11,7 @@
  * action; the act of logging implies it exists.
  */
 
-export type EventKind = 'dose' | 'missed' | 'side_effect';
+export type EventKind = 'dose' | 'missed' | 'side_effect' | 'later' | 'skipped';
 
 /**
  * What kind of thing this is. Mirrors @ollie/logic MedicationKind so the

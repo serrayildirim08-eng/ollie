@@ -322,6 +322,20 @@ export const events = {
     return writeEvent(med.id, 'missed', {});
   },
 
+  /** "later" — the user pushed a scheduled dose off for now (no cabinet
+   *  count-down; it's not taken, just set aside). */
+  async logLater(input: { medName: string }): Promise<MedicationEvent> {
+    const med = await medications.ensure(input.medName);
+    return writeEvent(med.id, 'later', {});
+  },
+
+  /** "skip today" — the user is intentionally skipping this dose. Calm, no
+   *  shame; does not decrement the cabinet. */
+  async logSkipped(input: { medName: string }): Promise<MedicationEvent> {
+    const med = await medications.ensure(input.medName);
+    return writeEvent(med.id, 'skipped', {});
+  },
+
   async logSideEffect(input: { medName: string; note: string }): Promise<MedicationEvent> {
     const med = await medications.ensure(input.medName);
     return writeEvent(med.id, 'side_effect', { note: input.note });

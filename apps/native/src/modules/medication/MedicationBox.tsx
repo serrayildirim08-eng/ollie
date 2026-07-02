@@ -34,6 +34,7 @@ import {
   medications as medsRepo,
 } from './repo';
 import { isLow, daysOfSupply } from './lowStock';
+import { doseStateForIndex, type DoseState } from './doseState';
 import { PURPOSE_ORDER, type MedPurpose } from './purposeMap';
 import {
   normaliseName,
@@ -57,6 +58,8 @@ interface BoxState {
   lastDose: Record<string, number>;
   todayDoses: MedicationEventWithName[];
   todayMissed: MedicationEventWithName[];
+  todayLater: MedicationEventWithName[];
+  todaySkipped: MedicationEventWithName[];
   recentMissed: MedicationEventWithName[];
   recentSideEffects: MedicationEventWithName[];
   /** Cadence per med id — populated by fan-out alongside the main read. */
@@ -69,6 +72,8 @@ const EMPTY_STATE: BoxState = {
   lastDose: {},
   todayDoses: [],
   todayMissed: [],
+  todayLater: [],
+  todaySkipped: [],
   recentMissed: [],
   recentSideEffects: [],
   doseCadence: new Map(),
@@ -80,16 +85,27 @@ export function MedicationBox(): JSX.Element {
 
   const refresh = useCallback(async () => {
     const startOfToday = startOfLocalDay(Date.now());
-    const [meds, cabinet, lastDose, todayDoses, todayMissed, recentMissed, recentSideEffects] =
-      await Promise.all([
-        medsRepo.list(),
-        cabinetRepo.list(),
-        medsRepo.lastDoseMap(),
-        eventsRepo.listByKindSince('dose', startOfToday),
-        eventsRepo.listByKindSince('missed', startOfToday),
-        eventsRepo.recentByKind('missed', RECENT_LIMIT),
-        eventsRepo.recentByKind('side_effect', RECENT_LIMIT),
-      ]);
+    const [
+      meds,
+      cabinet,
+      lastDose,
+      todayDoses,
+      todayMissed,
+      todayLater,
+      todaySkipped,
+      recentMissed,
+      recentSideEffects,
+    ] = await Promise.all([
+      medsRepo.list(),
+      cabinetRepo.list(),
+      medsRepo.lastDoseMap(),
+      eventsRepo.listByKindSince('dose', startOfToday),
+      eventsRepo.listByKindSince('missed', startOfToday),
+      eventsRepo.listByKindSince('later', startOfToday),
+      eventsRepo.listByKindSince('skipped', startOfToday),
+      eventsRepo.recentByKind('missed', RECENT_LIMIT),
+      eventsRepo.recentByKind('side_effect', RECENT_LIMIT),
+    ]);
     const cadencePairs = await Promise.all(
       meds.map(
         async (med) =>
@@ -103,6 +119,8 @@ export function MedicationBox(): JSX.Element {
       lastDose,
       todayDoses,
       todayMissed,
+      todayLater,
+      todaySkipped,
       recentMissed,
       recentSideEffects,
       doseCadence,
@@ -124,6 +142,25 @@ export function MedicationBox(): JSX.Element {
       if (alreadyTaken) return;
       await eventsRepo.logDose({ medName });
       await cabinetRepo.decrementOnTaken(medName);
+      await refresh();
+    },
+    [refresh],
+  );
+
+  // "later" / "skip today" — set a due dose aside. Neither decrements the
+  // cabinet (nothing was taken); both are today-scoped events the today tab
+  // reads back to mark the slot. Calm, no shame.
+  const handleLater = useCallback(
+    async (medName: string) => {
+      await eventsRepo.logLater({ medName });
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const handleSkip = useCallback(
+    async (medName: string) => {
+      await eventsRepo.logSkipped({ medName });
       await refresh();
     },
     [refresh],
@@ -177,9 +214,13 @@ export function MedicationBox(): JSX.Element {
           meds={state.meds}
           todayDoses={state.todayDoses}
           todayMissed={state.todayMissed}
+          todayLater={state.todayLater}
+          todaySkipped={state.todaySkipped}
           recentMissed={state.recentMissed}
           recentSideEffects={state.recentSideEffects}
           onTake={(name, alreadyTaken) => void handleTake(name, alreadyTaken)}
+          onLater={(name) => void handleLater(name)}
+          onSkip={(name) => void handleSkip(name)}
         />
       ) : (
         <CabinetTab
@@ -247,48 +288,67 @@ interface ScheduledDose {
   medId: string;
   medName: string;
   slot: string; // "HH:MM"
-  taken: boolean;
+  state: DoseState;
 }
 
 function TodayTab({
   meds,
   todayDoses,
   todayMissed,
+  todayLater,
+  todaySkipped,
   recentMissed,
   recentSideEffects,
   onTake,
+  onLater,
+  onSkip,
 }: {
   meds: Medication[];
   todayDoses: MedicationEventWithName[];
   todayMissed: MedicationEventWithName[];
+  todayLater: MedicationEventWithName[];
+  todaySkipped: MedicationEventWithName[];
   recentMissed: MedicationEventWithName[];
   recentSideEffects: MedicationEventWithName[];
   onTake: (medName: string, alreadyTaken: boolean) => void;
+  onLater: (medName: string) => void;
+  onSkip: (medName: string) => void;
 }): JSX.Element {
-  // How many doses landed for each med today. We mark the earliest N scheduled
-  // slots taken (per-slot, not per-name) so a twice-daily med doesn't show both
-  // slots done after a single tap.
-  const takenCountByName = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const ev of todayDoses) {
-      const k = normaliseName(ev.medName);
-      m.set(k, (m.get(k) ?? 0) + 1);
-    }
-    return m;
-  }, [todayDoses]);
+  // Per-med counts of what happened today. Slots are assigned states in a
+  // stable order (taken → skipped → later → due), so counts map onto concrete
+  // rows without tracking a specific slot per event.
+  const countByName = useCallback(
+    (events: MedicationEventWithName[]) => {
+      const m = new Map<string, number>();
+      for (const ev of events) {
+        const k = normaliseName(ev.medName);
+        m.set(k, (m.get(k) ?? 0) + 1);
+      }
+      return m;
+    },
+    [],
+  );
+  const takenCountByName = useMemo(() => countByName(todayDoses), [countByName, todayDoses]);
+  const laterCountByName = useMemo(() => countByName(todayLater), [countByName, todayLater]);
+  const skippedCountByName = useMemo(() => countByName(todaySkipped), [countByName, todaySkipped]);
 
   const { morning, evening } = useMemo(() => {
     const m: ScheduledDose[] = [];
     const e: ScheduledDose[] = [];
     for (const med of meds) {
       const slots = [...med.schedule].sort((a, b) => a.localeCompare(b));
-      const taken = takenCountByName.get(normaliseName(med.name)) ?? 0;
+      const key = normaliseName(med.name);
+      const counts = {
+        taken: takenCountByName.get(key) ?? 0,
+        skipped: skippedCountByName.get(key) ?? 0,
+        later: laterCountByName.get(key) ?? 0,
+      };
       slots.forEach((slot, i) => {
         const dose: ScheduledDose = {
           medId: med.id,
           medName: med.name,
           slot,
-          taken: i < taken, // the earliest `taken` slots count as done
+          state: doseStateForIndex(i, counts),
         };
         if (hourOf(slot) < 12) m.push(dose);
         else e.push(dose);
@@ -296,10 +356,10 @@ function TodayTab({
     }
     const bySlot = (a: ScheduledDose, b: ScheduledDose) => a.slot.localeCompare(b.slot);
     return { morning: m.sort(bySlot), evening: e.sort(bySlot) };
-  }, [meds, takenCountByName]);
+  }, [meds, takenCountByName, skippedCountByName, laterCountByName]);
 
   const total = morning.length + evening.length;
-  const takenCount = [...morning, ...evening].filter((d) => d.taken).length;
+  const takenCount = [...morning, ...evening].filter((d) => d.state === 'taken').length;
   const asNeededCount = meds.filter((m) => m.schedule.length === 0).length;
 
   return (
@@ -325,10 +385,10 @@ function TodayTab({
       ) : (
         <Stack gap={20}>
           {morning.length > 0 && (
-            <DoseGroup label="morning" doses={morning} onTake={onTake} />
+            <DoseGroup label="morning" doses={morning} onTake={onTake} onLater={onLater} onSkip={onSkip} />
           )}
           {evening.length > 0 && (
-            <DoseGroup label="evening" doses={evening} onTake={onTake} />
+            <DoseGroup label="evening" doses={evening} onTake={onTake} onLater={onLater} onSkip={onSkip} />
           )}
         </Stack>
       )}
@@ -345,6 +405,11 @@ function TodayTab({
       {/* Layer-2 noticings — fed by the SQLite→store bridge + medication watcher. */}
       <PatternCards module="medication" />
 
+      {recentMissed.length > 0 && (
+        <Text scale="caption" color={colors.inkFaint} style={{ lineHeight: 1.5, marginBottom: -8 }}>
+          missed — no shame, just noted.
+        </Text>
+      )}
       <ListSection
         label="missed doses"
         empty="none recent"
@@ -377,12 +442,16 @@ function DoseGroup({
   label,
   doses,
   onTake,
+  onLater,
+  onSkip,
 }: {
   label: string;
   doses: ScheduledDose[];
   onTake: (medName: string, alreadyTaken: boolean) => void;
+  onLater: (medName: string) => void;
+  onSkip: (medName: string) => void;
 }): JSX.Element {
-  const dueCount = doses.filter((d) => !d.taken).length;
+  const dueCount = doses.filter((d) => d.state === 'due').length;
   return (
     <Stack gap={10}>
       <Row gap={8} align="center">
@@ -405,14 +474,68 @@ function DoseGroup({
       </Row>
       <Stack gap={10}>
         {doses.map((d) => (
-          <DoseRow key={`${d.medId}-${d.slot}`} dose={d} onTake={() => onTake(d.medName, d.taken)} />
+          <DoseRow
+            key={`${d.medId}-${d.slot}`}
+            dose={d}
+            onTake={() => onTake(d.medName, d.state === 'taken')}
+            onLater={() => onLater(d.medName)}
+            onSkip={() => onSkip(d.medName)}
+          />
         ))}
       </Stack>
     </Stack>
   );
 }
 
-function DoseRow({ dose, onTake }: { dose: ScheduledDose; onTake: () => void }): JSX.Element {
+/** Small SMCP text action shared by the "later" / "skip" affordances. */
+function DoseAction({
+  label,
+  onClick,
+  color,
+}: {
+  label: string;
+  onClick: () => void;
+  color: string;
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        ...SMCP_STYLE,
+        border: 'none',
+        background: 'transparent',
+        color,
+        fontSize: 11,
+        fontWeight: 600,
+        cursor: 'pointer',
+        padding: '2px 2px',
+        flexShrink: 0,
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+function DoseRow({
+  dose,
+  onTake,
+  onLater,
+  onSkip,
+}: {
+  dose: ScheduledDose;
+  onTake: () => void;
+  onLater: () => void;
+  onSkip: () => void;
+}): JSX.Element {
+  const { state } = dose;
+  const taken = state === 'taken';
+  // A skipped dose has no tick — it wasn't and won't be taken today. Taken,
+  // later and due all keep the tick (a "later" dose can still be taken now).
+  const showTick = state !== 'skipped';
+  const dim = state === 'skipped' || state === 'later';
+
   return (
     <Box
       bg="cream"
@@ -420,23 +543,54 @@ function DoseRow({ dose, onTake }: { dose: ScheduledDose; onTake: () => void }):
       shadow="raised"
       style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}
     >
-      <TickCircle done={dose.taken} onClick={onTake} label={`mark ${dose.medName} taken`} />
+      {showTick ? (
+        <TickCircle done={taken} onClick={onTake} label={`mark ${dose.medName} taken`} />
+      ) : (
+        <span
+          aria-hidden
+          style={{
+            width: 26,
+            height: 26,
+            borderRadius: '50%',
+            flexShrink: 0,
+            background: colors.cream,
+            boxShadow:
+              'inset 3px 3px 6px rgba(120,140,122,0.55), inset -3px -3px 6px rgba(255,255,255,0.85)',
+          }}
+        />
+      )}
       <div style={{ flex: 1, minWidth: 0 }}>
         <span
           style={{
             fontSize: fontSizes.small,
-            color: dose.taken ? colors.inkFaint : colors.ink,
+            color: taken || dim ? colors.inkFaint : colors.ink,
             fontWeight: fontWeights.medium,
             letterSpacing: '-0.01em',
-            textDecoration: dose.taken ? 'line-through' : 'none',
+            textDecoration: taken ? 'line-through' : 'none',
           }}
         >
           {dose.medName}
         </span>
       </div>
-      <Text scale="caption" color={colors.inkFaint}>
-        {formatSlot(dose.slot)}
-      </Text>
+
+      {state === 'due' ? (
+        <Row gap={12} align="center" style={{ flexShrink: 0 }}>
+          <DoseAction label="later" onClick={onLater} color={colors.inkFaint} />
+          <DoseAction label="skip" onClick={onSkip} color={colors.inkFaint} />
+        </Row>
+      ) : state === 'skipped' ? (
+        <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
+          skipped
+        </Text>
+      ) : state === 'later' ? (
+        <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
+          later
+        </Text>
+      ) : (
+        <Text scale="caption" color={colors.inkFaint}>
+          {formatSlot(dose.slot)}
+        </Text>
+      )}
     </Box>
   );
 }
