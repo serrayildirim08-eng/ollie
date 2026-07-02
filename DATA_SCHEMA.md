@@ -299,7 +299,7 @@ Every migration ships a sibling `.down.sql`.
 After migrations:
 1. Extend `workers/ai-proxy/src/index.ts` to handle the `/enrich-dump` POST path
 2. New worker route OR extend ai-proxy: `/ingest-event` for retention/session/module/crisis events
-3. Bridge `apps/web/src/lib/retention.ts` events through `@ollie/research-stream` to the new ingest endpoint
+3. Bridge retention events (native app, e.g. `apps/native/src/api/`) through `@ollie/research-stream` to the new ingest endpoint _(original plan referenced the now-deleted `apps/web/src/lib/retention.ts`)_
 4. Hook `lib/account-boot.ts` to write `consent_audit` row on sign-up
 
 ---
