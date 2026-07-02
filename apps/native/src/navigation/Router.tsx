@@ -12,7 +12,7 @@
 
 import { useEffect } from "react";
 import { BrowserRouter, Link, Route, Routes } from "react-router";
-import { useUser, useClerk, useAuth } from "@clerk/clerk-react";
+import { useAuth } from "@clerk/clerk-react";
 import { Layout } from "./Layout";
 import { useDeepLinks } from "./useDeepLinks";
 import {
@@ -36,7 +36,7 @@ const TITLE_STYLE: React.CSSProperties = {
   lineHeight: 1.15,
   letterSpacing: "-0.01em",
 };
-import { colors, radii, shadows } from "../theme/tokens";
+import { colors } from "../theme/tokens";
 import { DumpScreen } from "../dump";
 import { MODULE_MANIFEST, MODULE_GROUP_META } from "./moduleRegistry";
 import { HouseholdRoom } from "../rooms/HouseholdRoom";
@@ -44,6 +44,7 @@ import { HealthRoom } from "../rooms/HealthRoom";
 import { ResponsibilitiesRoom } from "../rooms/ResponsibilitiesRoom";
 import { MoneyRoom } from "../rooms/MoneyRoom";
 import { TodoScreen } from "../todo/TodoScreen";
+import { SettingsScreen } from "../settings/SettingsScreen";
 import { useServerReminderBridge } from "../notify/serverReminderBridge";
 import { useApnsPushRegistration } from "../notify/apnsPushRegistration";
 
@@ -295,53 +296,6 @@ function ModulesIndex() {
           </Stack>
         </Stack>
       ))}
-    </Stack>
-  );
-}
-
-function SettingsScreen() {
-  const { user } = useUser();
-  const { signOut } = useClerk();
-  return (
-    <Stack gap={32}>
-      <Stack gap={8}>
-        <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
-          settings
-        </Text>
-        <Text scale="title" color={colors.ink} style={TITLE_STYLE}>settings</Text>
-      </Stack>
-
-      <Stack gap={12}>
-        <Box bg="cream" radius="card" shadow="raised" style={{ padding: "16px 18px" }}>
-          <Row gap={12} align="center" justify="space-between">
-            <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
-              account
-            </Text>
-            <Text scale="body">{user?.primaryEmailAddress?.emailAddress ?? "—"}</Text>
-          </Row>
-        </Box>
-
-        <button
-          onClick={() => void signOut()}
-          style={{
-            padding: "16px 18px",
-            width: "100%",
-            textAlign: "left",
-            border: "none",
-            borderRadius: radii.card,
-            background: colors.cream,
-            boxShadow: shadows.raised,
-            cursor: "pointer",
-            color: colors.sageDeep,
-            fontVariantCaps: "all-small-caps",
-            letterSpacing: "0.08em",
-            fontSize: 14,
-            fontFamily: "var(--ollie-font-sans)",
-          }}
-        >
-          sign out
-        </button>
-      </Stack>
     </Stack>
   );
 }
