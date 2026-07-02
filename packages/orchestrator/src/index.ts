@@ -111,26 +111,6 @@ export type {
 export { runBodySignalsPass } from './body-signals';
 export type { RunBodySignalsOpts } from './body-signals';
 export {
-  routeBrainDump,
-  dispatchAction,
-  applyGroceryMutations,
-  matchItem,
-} from './braindump-dispatch';
-export type {
-  RouteBrainDumpResult,
-  DispatchLocale,
-  DispatchOptions,
-  FinanceSlice,
-  GroceryPurchaseEvent,
-  GroceryRoutedItem,
-  GroceryRoutedAction,
-  GroceryRoutingResult,
-  GroceryRoutingSource,
-  GroceryListContext,
-  GroceryMutationEntry,
-  GroceryMutationReverse,
-} from './braindump-dispatch';
-export {
   createMatterRoutingOrchestrator,
   runMatterRoutingPass,
   collectRoutableDumps,

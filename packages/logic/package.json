@@ -19,7 +19,6 @@
     "./goals": "./src/goals/index.ts",
     "./admin": "./src/admin/index.ts",
     "./journal": "./src/journal/index.ts",
-    "./astrology": "./src/astrology/index.ts",
     "./patterns": "./src/patterns/index.ts",
     "./crisis": "./src/crisis/index.ts",
     "./dissection": "./src/dissection/index.ts",
