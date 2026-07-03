@@ -275,12 +275,13 @@ ACTIONS (pick exactly one):
 - savings_note: transferring money to savings or noting a savings milestone. payload: { amount? (number), note? (string — preserve user's note if any) }
     Triggers: "moved X to savings", "saved X", "ahorré X", "tasarrufa X attım", "biriktirdim".
 - subscription_log: a recurring subscription service (streaming, software, apps). payload: { name (REQUIRED — the service name, title-case), amount? (number), currency? (ISO 4217), cadence? ("monthly"|"yearly"|"weekly") }
-    Triggers: "renewed X", "subscribed to X", "X aboneliği yenilendi", "suscribí a X", "$X/month Netflix".
+    Triggers: "renewed X", "subscribed to X", "i pay X monthly", "paying for X", "X aboneliği yenilendi", "suscribí a X", "$X/month Netflix", "apple music 130 lira monthly".
 
 DISAMBIGUATION:
 - "spent $40 at sephora" → log_transaction with amount=40, currency="USD", merchant="Sephora".
 - "rent is $1800/month" → add_bill (recurring fixed expense), not log_transaction.
 - "Netflix $10/month" → subscription_log, not add_bill (streaming service vs. utility/fixed bill).
+- "i pay apple music 130 lira monthly" → subscription_log { name:"Apple Music", amount:130, currency:"TRY", cadence:"monthly" } — a RECURRING cue ("monthly", "aylık") makes it a subscription, NOT a one-off log_transaction, even with a spending verb ("i pay").
 - "moved 500 to savings" → savings_note (no merchant, no subscription).
 - "pagé 50 dólares de luz" → add_bill with merchant="Luz" (utility bill triggers add_bill, not log_transaction).
 - "200 pesos en farmacia" → log_transaction with amount=200, merchant="Farmacia" (one-off pharmacy spend).
