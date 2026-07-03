@@ -41,7 +41,6 @@ import { migrateFinance } from './migrate';
 import {
   bills as billsRepo,
   cadence as cadenceRepo,
-  getMonthlyBurn,
   income as incomeRepo,
   subscriptions as subsRepo,
   transactions as txRepo,
@@ -57,7 +56,6 @@ import {
   type FinanceIncome,
   type FinanceSubscription,
   type FinanceTransaction,
-  type MonthlyBurn,
 } from './types';
 
 // ── visual constants ──────────────────────────────────────────────────────
@@ -71,22 +69,6 @@ const UMBER = '#8A4B2C';
 const SMCP_STYLE: CSSProperties = {
   fontVariantCaps: 'all-small-caps',
   letterSpacing: '0.08em',
-};
-
-const HERO_LEAD_STYLE: CSSProperties = {
-  fontFamily: fonts.sans,
-  fontSize: 13,
-  fontWeight: 500,
-  letterSpacing: '0.02em',
-  color: colors.inkFaint,
-};
-
-const HERO_CAPTION_STYLE: CSSProperties = {
-  fontFamily: fonts.sans,
-  fontSize: 13,
-  fontWeight: 500,
-  color: colors.inkFaint,
-  textAlign: 'center',
 };
 
 const AREA_KEY_STYLE: CSSProperties = {
@@ -131,32 +113,29 @@ const DETAIL_V_STYLE: CSSProperties = {
 
 // ── component ─────────────────────────────────────────────────────────────
 
-type AreaKey = 'money in' | 'bills' | 'subscriptions' | 'recent transactions';
+type AreaKey = 'money in' | 'money out' | 'bills & recurring' | 'gift cards';
 
 export function FinanceBox(): JSX.Element {
   const [txs, setTxs] = useState<FinanceTransaction[]>([]);
   const [billRows, setBillRows] = useState<FinanceBill[]>([]);
   const [subRows, setSubRows] = useState<FinanceSubscription[]>([]);
   const [incomeRows, setIncomeRows] = useState<FinanceIncome[]>([]);
-  const [burn, setBurn] = useState<MonthlyBurn[]>([]);
   const [merchantCadence, setMerchantCadence] = useState<Map<string, CadenceEstimate>>(
     () => new Map(),
   );
   const [openCard, setOpenCard] = useState<AreaKey | null>(null);
 
   const refresh = useCallback(async () => {
-    const [t, b, s, inc, burnRows] = await Promise.all([
+    const [t, b, s, inc] = await Promise.all([
       txRepo.list(),
       billsRepo.list(),
       subsRepo.list(),
       incomeRepo.list(),
-      getMonthlyBurn(),
     ]);
     setTxs(t);
     setBillRows(b);
     setSubRows(s);
     setIncomeRows(inc);
-    setBurn(burnRows);
 
     // Fan-out cadence reads — one per distinct merchant in the transaction
     // list. Keeps row render synchronous (no per-row async).
@@ -219,20 +198,21 @@ export function FinanceBox(): JSX.Element {
     [refresh],
   );
 
-  const hasData = txs.length > 0 || billRows.length > 0 || subRows.length > 0;
+  // Split income into spendable cash vs store credit (gift cards) so each
+  // gets its own box (Serra's 5-box money layout, 2026-07-03).
+  const cashIncome = useMemo(
+    () => incomeRows.filter((r) => !isGiftCard(r.source)),
+    [incomeRows],
+  );
+  const giftCards = useMemo(
+    () => incomeRows.filter((r) => isGiftCard(r.source)),
+    [incomeRows],
+  );
 
   // Recurring detection — read-only surface. We re-derive on every tx
   // change rather than schedule a separate fetch since the detection is
   // a pure in-memory pass over the rows we already have.
   const suggestions = useMemo(() => detectFromTransactions(txs), [txs]);
-
-  // Lead currency comes from the burn hero; we use it to format the
-  // "$X recurring detected" caption so the unit matches what the eye
-  // just landed on. Falls back to USD-style "$" when no burn is available.
-  const recurringByLeadCurrency = useMemo(
-    () => sumRecurringInLeadCurrency(suggestions, burn[0]?.currency ?? null),
-    [suggestions, burn],
-  );
 
   const toggle = useCallback((k: AreaKey) => {
     setOpenCard((cur) => (cur === k ? null : k));
@@ -262,27 +242,6 @@ export function FinanceBox(): JSX.Element {
 
   // ── glance lines for area-cards ────────────────────────────────────────
 
-  const nextBill = billRows[0] ?? null;
-  const billsLine: ReactNode = nextBill
-    ? (
-      <>
-        {nextBill.merchant} <b style={{ fontFamily: fonts.mono, fontWeight: 500 }}>
-          {formatAmount(nextBill.amount, nextBill.currency)}
-        </b>
-        {nextBill.cadence ? ` · ${nextBill.cadence}` : ''}
-      </>
-    )
-    : 'add the ones you know';
-
-  const subsLine: ReactNode = subRows.length > 0
-    ? (
-      <>
-        <b style={{ fontFamily: fonts.mono, fontWeight: 500 }}>{subRows.length}</b>
-        {subRows.length === 1 ? ' tracked' : ' tracked'}
-      </>
-    )
-    : 'none picked up yet';
-
   const txLine: ReactNode = txs.length > 0
     ? (
       <>
@@ -294,16 +253,38 @@ export function FinanceBox(): JSX.Element {
     )
     : "nothing logged yet — try 'spent $40 at sephora'";
 
-  const incomeLine: ReactNode = incomeRows.length > 0
+  const incomeLine: ReactNode = cashIncome.length > 0
     ? (
       <>
         <b style={{ fontFamily: fonts.mono, fontWeight: 500 }}>
-          {formatAmount(incomeRows[0]!.amount, incomeRows[0]!.currency)}
+          {formatAmount(cashIncome[0]!.amount, cashIncome[0]!.currency)}
         </b>
-        {incomeRows[0]!.source ? ` · ${incomeRows[0]!.source}` : ''}
+        {cashIncome[0]!.source ? ` · ${cashIncome[0]!.source}` : ''}
       </>
     )
-    : "nothing in yet — try 'dad sent me 500' or 'got a zara gift card'";
+    : "nothing in yet — try 'dad sent me 500'";
+
+  const giftLine: ReactNode = giftCards.length > 0
+    ? (
+      <>
+        <b style={{ fontFamily: fonts.mono, fontWeight: 500 }}>
+          {formatAmount(giftCards[0]!.amount, giftCards[0]!.currency)}
+        </b>
+        {giftCards[0]!.source ? ` · ${giftCards[0]!.source}` : ''}
+      </>
+    )
+    : "none yet — try 'got a 10k zara gift card'";
+
+  // Bills + subscriptions share one "bills & recurring" box — both are money
+  // that repeats every month.
+  const billsRecurringLine: ReactNode = billRows.length > 0 || subRows.length > 0
+    ? (
+      <>
+        <b style={{ fontFamily: fonts.mono, fontWeight: 500 }}>{billRows.length + subRows.length}</b>
+        {` recurring`}
+      </>
+    )
+    : 'nothing recurring yet — try "netflix monthly" or "rent 18000 monthly"';
 
   return (
     <Stack gap={48}>
@@ -332,36 +313,24 @@ export function FinanceBox(): JSX.Element {
         </Text>
       ) : (
         <Stack gap={40}>
-          {/* HERO — this month's true burn, on the darker sage content card */}
-          <Box
-            bg="paper"
-            radius="card"
-            shadow="card"
-            style={{ padding: '28px 22px' }}
-          >
-            <MonthHero
-              burn={burn}
-              hasData={hasData}
-              recurringDetected={recurringByLeadCurrency}
-            />
-          </Box>
-
           {/* TAP-TO-LOG — a quiet spend form so capture isn't dump-only. */}
           <LogSpendForm onLog={(i) => void handleLogTx(i)} />
 
-          {/* AREA CARDS — expandable in-place */}
+          {/* MONEY in separate boxes (Serra 2026-07-03): in · out · bills &
+              recurring · gift cards. Each a tap-to-open card. (Assets = step 2.) */}
           <Stack gap={12}>
+            {/* MONEY IN — spendable cash only (gift cards get their own box) */}
             <AreaCard
               areaKey="money in"
               value={incomeLine}
               open={openCard === 'money in'}
               onToggle={() => toggle('money in')}
             >
-              {incomeRows.length === 0 ? (
-                <EmptyLine text="nothing in yet — try dumping 'dad sent me 500' or 'got a 10k zara gift card'" />
+              {cashIncome.length === 0 ? (
+                <EmptyLine text="nothing in yet — try dumping 'dad sent me 500'" />
               ) : (
                 <DetailList>
-                  {incomeRows.map((item) => (
+                  {cashIncome.map((item) => (
                     <IncomeDetailRow
                       key={item.id}
                       item={item}
@@ -372,56 +341,15 @@ export function FinanceBox(): JSX.Element {
               )}
             </AreaCard>
 
+            {/* MONEY OUT — one-off spends (bills + subscriptions live below) */}
             <AreaCard
-              areaKey="bills"
-              value={billsLine}
-              open={openCard === 'bills'}
-              onToggle={() => toggle('bills')}
-            >
-              {billRows.length === 0 ? (
-                <EmptyLine text="no bills yet — try dumping 'netflix bill monthly'" />
-              ) : (
-                <DetailList>
-                  {billRows.map((item) => (
-                    <BillDetailRow
-                      key={item.id}
-                      item={item}
-                      onRemove={() => void handleRemoveBill(item.id)}
-                    />
-                  ))}
-                </DetailList>
-              )}
-            </AreaCard>
-
-            <AreaCard
-              areaKey="subscriptions"
-              value={subsLine}
-              open={openCard === 'subscriptions'}
-              onToggle={() => toggle('subscriptions')}
-            >
-              {subRows.length === 0 ? (
-                <EmptyLine text="no subscriptions yet — try dumping 'subscribed to spotify'" />
-              ) : (
-                <DetailList>
-                  {subRows.map((item) => (
-                    <SubDetailRow
-                      key={item.id}
-                      item={item}
-                      onRemove={() => void handleRemoveSub(item.id)}
-                    />
-                  ))}
-                </DetailList>
-              )}
-            </AreaCard>
-
-            <AreaCard
-              areaKey="recent transactions"
+              areaKey="money out"
               value={txLine}
-              open={openCard === 'recent transactions'}
-              onToggle={() => toggle('recent transactions')}
+              open={openCard === 'money out'}
+              onToggle={() => toggle('money out')}
             >
               {txs.length === 0 ? (
-                <EmptyLine text="no transactions yet — try dumping 'paid rent' or 'spent $40 at sephora'" />
+                <EmptyLine text="nothing out yet — try dumping 'spent $40 at sephora'" />
               ) : (
                 <DetailList>
                   {txs.map((item) => (
@@ -434,6 +362,57 @@ export function FinanceBox(): JSX.Element {
                         )
                       }
                       onRemove={() => void handleRemoveTx(item.id)}
+                    />
+                  ))}
+                </DetailList>
+              )}
+            </AreaCard>
+
+            {/* BILLS & RECURRING — bills + subscriptions, the monthly repeats */}
+            <AreaCard
+              areaKey="bills & recurring"
+              value={billsRecurringLine}
+              open={openCard === 'bills & recurring'}
+              onToggle={() => toggle('bills & recurring')}
+            >
+              {billRows.length === 0 && subRows.length === 0 ? (
+                <EmptyLine text="nothing recurring yet — try dumping 'rent 18000 monthly' or 'subscribed to spotify'" />
+              ) : (
+                <DetailList>
+                  {billRows.map((item) => (
+                    <BillDetailRow
+                      key={item.id}
+                      item={item}
+                      onRemove={() => void handleRemoveBill(item.id)}
+                    />
+                  ))}
+                  {subRows.map((item) => (
+                    <SubDetailRow
+                      key={item.id}
+                      item={item}
+                      onRemove={() => void handleRemoveSub(item.id)}
+                    />
+                  ))}
+                </DetailList>
+              )}
+            </AreaCard>
+
+            {/* GIFT CARDS — store credit, kept apart from cash */}
+            <AreaCard
+              areaKey="gift cards"
+              value={giftLine}
+              open={openCard === 'gift cards'}
+              onToggle={() => toggle('gift cards')}
+            >
+              {giftCards.length === 0 ? (
+                <EmptyLine text="none yet — try dumping 'got a 10k zara gift card'" />
+              ) : (
+                <DetailList>
+                  {giftCards.map((item) => (
+                    <IncomeDetailRow
+                      key={item.id}
+                      item={item}
+                      onRemove={() => void handleRemoveIncome(item.id)}
                     />
                   ))}
                 </DetailList>
@@ -676,202 +655,6 @@ const FIELD_INPUT_STYLE: CSSProperties = {
   color: colors.ink,
   outline: 'none',
 };
-
-// ── hero ──────────────────────────────────────────────────────────────────
-
-/**
- * MonthHero — the calm safe-to-spend stand-in.
- *
- * Sorts MonthlyBurn biggest-first, anchors the dominant currency's total
- * (transactions + subscriptions + bills) in a large serif figure, lists
- * the breakdown beneath as "$X spent · $Y subscriptions · $Z bills", then
- * any secondary currencies. Unknown-currency totals carry the umber ink
- * (money-v2's "no currency tag" rail) so currency-parse leakage stays
- * visible without lying about its meaning.
- */
-function MonthHero({
-  burn,
-  hasData,
-  recurringDetected,
-}: {
-  burn: MonthlyBurn[];
-  hasData: boolean;
-  /**
-   * Sum of detected recurring monthly cost, expressed in the lead
-   * currency. `null` when detection found nothing — caller computes; we
-   * just render. Show as "$X recurring detected" under the breakdown.
-   */
-  recurringDetected: { amount: number; currency: string | null } | null;
-}): JSX.Element {
-  if (burn.length === 0) {
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        <div style={HERO_LEAD_STYLE}>this month</div>
-        <div
-          style={{
-            marginTop: 18,
-            fontFamily: fonts.serif,
-            fontSize: 28,
-            fontWeight: 400,
-            color: colors.ink,
-            letterSpacing: '-0.018em',
-            textAlign: 'center',
-            lineHeight: 1.35,
-            maxWidth: 260,
-          }}
-        >
-          {hasData
-            ? 'nothing landed this month yet'
-            : 'a few spends and ollie can work this out'}
-        </div>
-        <div style={{ marginTop: 14, ...HERO_CAPTION_STYLE }}>
-          {hasData ? 'still a quiet ledger' : 'nothing logged yet'}
-        </div>
-      </div>
-    );
-  }
-
-  const lead = burn[0]!;
-  const rest = burn.slice(1);
-  const isUnaccounted = lead.currency == null;
-  const { symbol, body } = splitAmount(lead.total, lead.currency);
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-      <div style={HERO_LEAD_STYLE}>this month</div>
-
-      <div
-        style={{
-          marginTop: 10,
-          display: 'flex',
-          alignItems: 'baseline',
-          fontFamily: fonts.serif,
-          fontSize: 72,
-          fontWeight: 400,
-          color: isUnaccounted ? UMBER : colors.ink,
-          letterSpacing: '-0.04em',
-          lineHeight: 1,
-        }}
-      >
-        <span
-          style={{
-            fontFamily: fonts.mono,
-            fontWeight: 400,
-            fontSize: 44,
-            color: isUnaccounted ? UMBER : colors.inkFaint,
-            marginRight: 2,
-          }}
-        >
-          {symbol}
-        </span>
-        <span style={{ fontVariantNumeric: 'tabular-nums' }}>{body}</span>
-      </div>
-
-      {/* breakdown — txns · subs · bills · (in the lead currency) */}
-      <BurnBreakdown row={lead} />
-
-      {/* recurring caption — only when detection found at least one pattern */}
-      {recurringDetected && (
-        <div
-          style={{
-            marginTop: 4,
-            fontFamily: fonts.sans,
-            fontSize: 11,
-            fontWeight: 500,
-            color: colors.inkFaint,
-            letterSpacing: '0.06em',
-            fontVariantCaps: 'all-small-caps',
-            textAlign: 'center',
-          }}
-        >
-          {`${formatAmount(recurringDetected.amount, recurringDetected.currency)} recurring detected`}
-        </div>
-      )}
-
-      {/* horizon bar — a soft hairline that holds the eye even when empty */}
-      <div
-        style={{
-          marginTop: 18,
-          width: 188,
-          height: 4,
-          borderRadius: 3,
-          background: colors.hairlineSoft,
-        }}
-        aria-hidden
-      />
-
-      {rest.length > 0 && (
-        <div
-          style={{
-            marginTop: 13,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: 4,
-          }}
-        >
-          {rest.map((m) => {
-            const muted = m.currency == null;
-            return (
-              <div
-                key={m.currency ?? '_'}
-                style={{
-                  fontFamily: fonts.mono,
-                  fontSize: 13,
-                  fontWeight: 500,
-                  color: muted ? UMBER : colors.inkFaint,
-                  fontVariantNumeric: 'tabular-nums',
-                }}
-              >
-                {formatAmount(m.total, m.currency)}
-                {muted ? ' · no currency tag' : ''}
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      <div style={{ marginTop: rest.length > 0 ? 10 : 13, ...HERO_CAPTION_STYLE }}>
-        {lead.currency ?? 'no currency tag'}
-        {' · '}
-        {monthLabel(new Date())}
-      </div>
-    </div>
-  );
-}
-
-/**
- * BurnBreakdown — the one-line "$1200 spent · $15 subscriptions · $0 bills"
- * caption that unpacks the headline. Stays under the hero number so the
- * eye lands on the total first; renders silent when ALL three components
- * are zero (the empty-state already speaks for that case).
- */
-function BurnBreakdown({ row }: { row: MonthlyBurn }): JSX.Element | null {
-  if (row.transactions === 0 && row.subscriptions === 0 && row.billsDue === 0) {
-    return null;
-  }
-  const muted = row.currency == null;
-  return (
-    <div
-      style={{
-        marginTop: 10,
-        fontFamily: fonts.mono,
-        fontSize: 12,
-        fontWeight: 500,
-        color: muted ? UMBER : colors.inkFaint,
-        fontVariantNumeric: 'tabular-nums',
-        letterSpacing: '0.01em',
-        textAlign: 'center',
-      }}
-    >
-      {`${formatAmount(row.transactions, row.currency)} spent`}
-      {' · '}
-      {`${formatAmount(row.subscriptions, row.currency)} subscriptions`}
-      {' · '}
-      {`${formatAmount(row.billsDue, row.currency)} bills`}
-    </div>
-  );
-}
 
 // ── area card ─────────────────────────────────────────────────────────────
 
@@ -1247,48 +1030,6 @@ function RecurringRow({
   );
 }
 
-/**
- * Roll detection results into a single "recurring detected" caption value,
- * expressed in the lead currency from the burn. Currency-mismatched
- * suggestions are dropped from the sum (we don't fake an FX) — the user
- * still sees them as individual rows in the RecurringList below. When the
- * lead currency is unresolved (null), we sum any null-currency rows
- * together so the caption still reads sensibly under the "no currency
- * tag" hero.
- *
- * Returns `null` when nothing remains — caller renders nothing.
- */
-function sumRecurringInLeadCurrency(
-  suggestions: RecurringSuggestion[],
-  leadCurrency: string | null,
-): { amount: number; currency: string | null } | null {
-  let total = 0;
-  let counted = 0;
-  for (const s of suggestions) {
-    if (s.medianAmount == null) continue;
-    if (s.currency !== leadCurrency) continue;
-    // Express every cycle as a monthly-equivalent so the caption reads
-    // consistently with the hero (which is already a per-month figure).
-    const monthly = toMonthlyEquivalent(s.medianAmount, s.cadence);
-    total += monthly;
-    counted += 1;
-  }
-  if (counted === 0) return null;
-  return { amount: total, currency: leadCurrency };
-}
-
-/** Convert a per-cycle amount into its monthly-equivalent. */
-function toMonthlyEquivalent(
-  amount: number,
-  cadence: 'monthly' | 'weekly' | 'yearly',
-): number {
-  switch (cadence) {
-    case 'monthly': return amount;
-    case 'weekly':  return amount * (52 / 12);
-    case 'yearly':  return amount / 12;
-  }
-}
-
 // ── formatting helpers ────────────────────────────────────────────────────
 
 /** Format an amount with currency prefix. Falls back to "—" if amount null. */
@@ -1303,28 +1044,4 @@ function formatAmount(amount: number | null, currency: string | null): string {
   if (currency === 'EUR') return `€${fixed}`;
   if (currency === 'GBP') return `£${fixed}`;
   return `${currency} ${fixed}`;
-}
-
-/**
- * Split an amount into a mute-coloured currency symbol + body number so
- * the hero can render them at different sizes (money-v2 HeroNumber).
- */
-function splitAmount(
-  amount: number,
-  currency: string | null,
-): { symbol: string; body: string } {
-  const fixed = amount.toFixed(2);
-  if (!currency) return { symbol: '$', body: fixed };
-  if (currency.length === 1) return { symbol: currency, body: fixed };
-  if (currency === 'USD') return { symbol: '$', body: fixed };
-  if (currency === 'EUR') return { symbol: '€', body: fixed };
-  if (currency === 'GBP') return { symbol: '£', body: fixed };
-  // For unknown ISO codes the symbol slot carries the code; the body
-  // remains the numeric value so DM Serif still anchors the hero.
-  return { symbol: currency, body: fixed };
-}
-
-/** "may 2026" — used in the hero caption. */
-function monthLabel(d: Date): string {
-  return d.toLocaleString(undefined, { month: 'long', year: 'numeric' }).toLowerCase();
 }
