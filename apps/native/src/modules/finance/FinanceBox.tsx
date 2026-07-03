@@ -42,6 +42,7 @@ import {
   bills as billsRepo,
   cadence as cadenceRepo,
   getMonthlyBurn,
+  income as incomeRepo,
   subscriptions as subsRepo,
   transactions as txRepo,
 } from './repo';
@@ -53,6 +54,7 @@ import {
   FINANCE_CATEGORIES,
   normaliseMerchant,
   type FinanceBill,
+  type FinanceIncome,
   type FinanceSubscription,
   type FinanceTransaction,
   type MonthlyBurn,
@@ -129,12 +131,13 @@ const DETAIL_V_STYLE: CSSProperties = {
 
 // ── component ─────────────────────────────────────────────────────────────
 
-type AreaKey = 'bills' | 'subscriptions' | 'recent transactions';
+type AreaKey = 'money in' | 'bills' | 'subscriptions' | 'recent transactions';
 
 export function FinanceBox(): JSX.Element {
   const [txs, setTxs] = useState<FinanceTransaction[]>([]);
   const [billRows, setBillRows] = useState<FinanceBill[]>([]);
   const [subRows, setSubRows] = useState<FinanceSubscription[]>([]);
+  const [incomeRows, setIncomeRows] = useState<FinanceIncome[]>([]);
   const [burn, setBurn] = useState<MonthlyBurn[]>([]);
   const [merchantCadence, setMerchantCadence] = useState<Map<string, CadenceEstimate>>(
     () => new Map(),
@@ -142,15 +145,17 @@ export function FinanceBox(): JSX.Element {
   const [openCard, setOpenCard] = useState<AreaKey | null>(null);
 
   const refresh = useCallback(async () => {
-    const [t, b, s, burnRows] = await Promise.all([
+    const [t, b, s, inc, burnRows] = await Promise.all([
       txRepo.list(),
       billsRepo.list(),
       subsRepo.list(),
+      incomeRepo.list(),
       getMonthlyBurn(),
     ]);
     setTxs(t);
     setBillRows(b);
     setSubRows(s);
+    setIncomeRows(inc);
     setBurn(burnRows);
 
     // Fan-out cadence reads — one per distinct merchant in the transaction
@@ -202,6 +207,13 @@ export function FinanceBox(): JSX.Element {
   const handleRemoveSub = useCallback(
     async (id: string) => {
       await subsRepo.remove(id);
+      await refresh();
+    },
+    [refresh],
+  );
+  const handleRemoveIncome = useCallback(
+    async (id: string) => {
+      await incomeRepo.remove(id);
       await refresh();
     },
     [refresh],
@@ -282,6 +294,17 @@ export function FinanceBox(): JSX.Element {
     )
     : "nothing logged yet — try 'spent $40 at sephora'";
 
+  const incomeLine: ReactNode = incomeRows.length > 0
+    ? (
+      <>
+        <b style={{ fontFamily: fonts.mono, fontWeight: 500 }}>
+          {formatAmount(incomeRows[0]!.amount, incomeRows[0]!.currency)}
+        </b>
+        {incomeRows[0]!.source ? ` · ${incomeRows[0]!.source}` : ''}
+      </>
+    )
+    : "nothing in yet — try 'dad sent me 500' or 'got a zara gift card'";
+
   return (
     <Stack gap={48}>
       <Stack gap={8}>
@@ -328,6 +351,27 @@ export function FinanceBox(): JSX.Element {
 
           {/* AREA CARDS — expandable in-place */}
           <Stack gap={12}>
+            <AreaCard
+              areaKey="money in"
+              value={incomeLine}
+              open={openCard === 'money in'}
+              onToggle={() => toggle('money in')}
+            >
+              {incomeRows.length === 0 ? (
+                <EmptyLine text="nothing in yet — try dumping 'dad sent me 500' or 'got a 10k zara gift card'" />
+              ) : (
+                <DetailList>
+                  {incomeRows.map((item) => (
+                    <IncomeDetailRow
+                      key={item.id}
+                      item={item}
+                      onRemove={() => void handleRemoveIncome(item.id)}
+                    />
+                  ))}
+                </DetailList>
+              )}
+            </AreaCard>
+
             <AreaCard
               areaKey="bills"
               value={billsLine}
@@ -949,6 +993,42 @@ function BillDetailRow({
         </Row>
       </Row>
       <WhenCaption ts={item.addedAt} />
+    </Stack>
+  );
+}
+
+/** True when a logged income looks like store credit (a gift card) rather
+ *  than spendable cash — keys off the source text the router captured. */
+function isGiftCard(source: string | null): boolean {
+  return source != null && /gift\s*card|gift$|\bgift\b/i.test(source);
+}
+
+function IncomeDetailRow({
+  item,
+  onRemove,
+}: {
+  item: FinanceIncome;
+  onRemove: () => void;
+}): JSX.Element {
+  const muted = item.currency == null && item.amount != null;
+  const gift = isGiftCard(item.source);
+  return (
+    <Stack gap={2}>
+      <Row gap={12} align="baseline" justify="space-between">
+        <span style={DETAIL_K_STYLE}>
+          {item.source ?? 'money in'}
+          {gift ? (
+            <span style={{ color: colors.inkGhost, marginLeft: 6 }}>· gift card</span>
+          ) : null}
+        </span>
+        <Row gap={8} align="baseline">
+          <span style={{ ...DETAIL_V_STYLE, color: muted ? UMBER : colors.ink }}>
+            {formatAmount(item.amount, item.currency)}
+          </span>
+          <RemoveButton onClick={onRemove} />
+        </Row>
+      </Row>
+      <WhenCaption ts={item.receivedAt} />
     </Stack>
   );
 }
