@@ -73,7 +73,7 @@ Purchase / past-tense (bought / got / picked up / aldım / compré / paid for): 
 
 Finance sub-routing (one fragment → one action):
 - log_transaction: one-off non-grocery spend.
-- log_income: money IN ("got paid", "deposited", "geldi", "ödediler", "depositaron", "me pagaron", "maaş", "paycheck"). NOT a refund.
+- log_income: money IN ("got paid", "deposited", "geldi", "ödediler", "depositaron", "me pagaron", "maaş", "paycheck"). Also gifts + gift cards ("dad gave me…", "birthday money", "zara gift card") — put a descriptive \`source\` (the payer, or "<store> gift card" for store credit). NOT a refund.
 - log_refund: money came back ("refunded", "returned the X", "iade aldım", "me devolvieron").
 - spending_reflection: PATTERN, not one event. Markers: "too much"/"demasiado"/"çok", "always", "again", Nth-time, "keep buying", "forgot to cancel … again".
 - pending_decision: money NOT yet spent. Markers: "should I…", "thinking about…", "quote", "deposit" (no payment verb), "comprar o no", "almalı mıyım", "got a quote".
@@ -151,6 +151,7 @@ MINI EXAMPLES:
 - "hamileyim" → cycle.set_pregnant {}
 - "spent $40 at sephora" → finance.log_transaction { amount:40, currency:"USD", merchant:"sephora" }
 - "maaş geldi" → finance.log_income { source:"salary" }
+- "my dad gave me a 10k zara gift card" → finance.log_income { amount:10000, currency:"TRY", source:"zara gift card" }
 - "couldn't sleep so took melatonin" → sleep.log_insomnia { med_taken:"melatonin" }
 - "slept 6 hours last night" → sleep.log_sleep { hours:6 }   (a plain duration, no insomnia signal, is STILL a sleep log — never dump_only)
 - "i slept 6 hours last night i feel tired" → TWO fragments: sleep.log_sleep { hours:6 } + mood.log_energy { level:"low", label:"tired" }
