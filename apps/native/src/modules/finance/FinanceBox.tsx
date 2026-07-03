@@ -50,6 +50,7 @@ import {
   detectFromTransactions,
   type RecurringSuggestion,
 } from './recurring';
+import { recurringMonthlyTotal } from './recurringTotal';
 import {
   FINANCE_CATEGORIES,
   normaliseMerchant,
@@ -314,8 +315,22 @@ export function FinanceBox(): JSX.Element {
     : 'nothing yet — add savings, gold, a car…';
 
   // Bills + subscriptions share one "bills & recurring" box — both are money
-  // that repeats every month.
-  const billsRecurringLine: ReactNode = billRows.length > 0 || subRows.length > 0
+  // that repeats every month. Header shows the monthly total when amounts are
+  // known, else just the count.
+  const recurringTotal = useMemo(
+    () => recurringMonthlyTotal([...billRows, ...subRows]),
+    [billRows, subRows],
+  );
+  const billsRecurringLine: ReactNode = recurringTotal != null
+    ? (
+      <>
+        <b style={{ fontFamily: fonts.mono, fontWeight: 500 }}>
+          {formatAmount(recurringTotal.amount, recurringTotal.currency)}
+        </b>
+        {' / month'}
+      </>
+    )
+    : billRows.length > 0 || subRows.length > 0
     ? (
       <>
         <b style={{ fontFamily: fonts.mono, fontWeight: 500 }}>{billRows.length + subRows.length}</b>
