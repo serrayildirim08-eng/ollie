@@ -112,9 +112,24 @@ const CREATE_STATEMENTS = [
     noted_at   INTEGER NOT NULL
   )`,
 
+  // finance_assets — things you own with a value you type in (savings, gold,
+  // car…). NOT money flow: no bank link, no auto net-worth. 2026-07-03.
+  // `note` holds a qualifier the user typed ("5 g", "2019 clio"); `value` +
+  // `currency` are optional (an asset can be listed with no value set).
+  `CREATE TABLE IF NOT EXISTS finance_assets (
+    id           TEXT PRIMARY KEY,
+    name         TEXT NOT NULL,
+    note         TEXT,
+    value        REAL,
+    currency     TEXT,
+    created_at   INTEGER NOT NULL
+  )`,
+
   // Indexes for the common UI query (most recent first).
   `CREATE INDEX IF NOT EXISTS idx_finance_transactions_occurred_at
     ON finance_transactions(occurred_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_finance_assets_created_at
+    ON finance_assets(created_at DESC)`,
   `CREATE INDEX IF NOT EXISTS idx_finance_bills_added_at
     ON finance_bills(added_at DESC)`,
   `CREATE INDEX IF NOT EXISTS idx_finance_subscriptions_added_at

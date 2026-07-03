@@ -39,6 +39,7 @@ import { useModuleData } from '../../lib/useModuleData';
 import { PatternCards } from '../../patterns/PatternCards';
 import { migrateFinance } from './migrate';
 import {
+  assets as assetsRepo,
   bills as billsRepo,
   cadence as cadenceRepo,
   income as incomeRepo,
@@ -52,6 +53,7 @@ import {
 import {
   FINANCE_CATEGORIES,
   normaliseMerchant,
+  type FinanceAsset,
   type FinanceBill,
   type FinanceIncome,
   type FinanceSubscription,
@@ -113,29 +115,32 @@ const DETAIL_V_STYLE: CSSProperties = {
 
 // ── component ─────────────────────────────────────────────────────────────
 
-type AreaKey = 'money in' | 'money out' | 'bills & recurring' | 'gift cards';
+type AreaKey = 'money in' | 'money out' | 'bills & recurring' | 'gift cards' | 'assets';
 
 export function FinanceBox(): JSX.Element {
   const [txs, setTxs] = useState<FinanceTransaction[]>([]);
   const [billRows, setBillRows] = useState<FinanceBill[]>([]);
   const [subRows, setSubRows] = useState<FinanceSubscription[]>([]);
   const [incomeRows, setIncomeRows] = useState<FinanceIncome[]>([]);
+  const [assetRows, setAssetRows] = useState<FinanceAsset[]>([]);
   const [merchantCadence, setMerchantCadence] = useState<Map<string, CadenceEstimate>>(
     () => new Map(),
   );
   const [openCard, setOpenCard] = useState<AreaKey | null>(null);
 
   const refresh = useCallback(async () => {
-    const [t, b, s, inc] = await Promise.all([
+    const [t, b, s, inc, ast] = await Promise.all([
       txRepo.list(),
       billsRepo.list(),
       subsRepo.list(),
       incomeRepo.list(),
+      assetsRepo.list(),
     ]);
     setTxs(t);
     setBillRows(b);
     setSubRows(s);
     setIncomeRows(inc);
+    setAssetRows(ast);
 
     // Fan-out cadence reads — one per distinct merchant in the transaction
     // list. Keeps row render synchronous (no per-row async).
@@ -193,6 +198,20 @@ export function FinanceBox(): JSX.Element {
   const handleRemoveIncome = useCallback(
     async (id: string) => {
       await incomeRepo.remove(id);
+      await refresh();
+    },
+    [refresh],
+  );
+  const handleAddAsset = useCallback(
+    async (input: { name: string; note: string | null; value: number | null }) => {
+      await assetsRepo.add(input);
+      await refresh();
+    },
+    [refresh],
+  );
+  const handleRemoveAsset = useCallback(
+    async (id: string) => {
+      await assetsRepo.remove(id);
       await refresh();
     },
     [refresh],
@@ -274,6 +293,15 @@ export function FinanceBox(): JSX.Element {
       </>
     )
     : "none yet — try 'got a 10k zara gift card'";
+
+  const assetsLine: ReactNode = assetRows.length > 0
+    ? (
+      <>
+        <b style={{ fontFamily: fonts.mono, fontWeight: 500 }}>{assetRows.length}</b>
+        {assetRows.length === 1 ? ' thing you hold' : ' things you hold'}
+      </>
+    )
+    : 'nothing yet — add savings, gold, a car…';
 
   // Bills + subscriptions share one "bills & recurring" box — both are money
   // that repeats every month.
@@ -417,6 +445,29 @@ export function FinanceBox(): JSX.Element {
                   ))}
                 </DetailList>
               )}
+            </AreaCard>
+
+            {/* ASSETS — things you own, value typed by you (no bank link) */}
+            <AreaCard
+              areaKey="assets"
+              value={assetsLine}
+              open={openCard === 'assets'}
+              onToggle={() => toggle('assets')}
+            >
+              <Stack gap={14}>
+                {assetRows.length > 0 && (
+                  <DetailList>
+                    {assetRows.map((item) => (
+                      <AssetDetailRow
+                        key={item.id}
+                        item={item}
+                        onRemove={() => void handleRemoveAsset(item.id)}
+                      />
+                    ))}
+                  </DetailList>
+                )}
+                <AddAssetForm onAdd={(i) => void handleAddAsset(i)} />
+              </Stack>
             </AreaCard>
           </Stack>
 
@@ -812,6 +863,184 @@ function IncomeDetailRow({
         </Row>
       </Row>
       <WhenCaption ts={item.receivedAt} />
+    </Stack>
+  );
+}
+
+function AssetDetailRow({
+  item,
+  onRemove,
+}: {
+  item: FinanceAsset;
+  onRemove: () => void;
+}): JSX.Element {
+  const muted = item.currency == null && item.value != null;
+  return (
+    <Stack gap={2}>
+      <Row gap={12} align="baseline" justify="space-between">
+        <span style={DETAIL_K_STYLE}>
+          {item.name}
+          {item.note ? (
+            <span style={{ color: colors.inkGhost, marginLeft: 6 }}>· {item.note}</span>
+          ) : null}
+        </span>
+        <Row gap={8} align="baseline">
+          {item.value == null ? (
+            <span
+              style={{
+                fontFamily: fonts.sans,
+                fontSize: 12,
+                fontWeight: 500,
+                color: colors.inkFaint,
+                fontVariantCaps: 'all-small-caps',
+                letterSpacing: '0.06em',
+              }}
+            >
+              no value set
+            </span>
+          ) : (
+            <span style={{ ...DETAIL_V_STYLE, color: muted ? UMBER : colors.ink }}>
+              {formatAmount(item.value, item.currency)}
+            </span>
+          )}
+          <RemoveButton onClick={onRemove} />
+        </Row>
+      </Row>
+      <WhenCaption ts={item.createdAt} />
+    </Stack>
+  );
+}
+
+/**
+ * AddAssetForm — a quiet "add something you own" inline form. Assets have no
+ * dump routing yet, so this is how you list one: what it is, an optional
+ * detail ("5g", "2019 clio"), and an optional value you type. Collapsed to a
+ * single affordance so it doesn't shout.
+ */
+function AddAssetForm({
+  onAdd,
+}: {
+  onAdd: (input: { name: string; note: string | null; value: number | null }) => void;
+}): JSX.Element {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState('');
+  const [note, setNote] = useState('');
+  const [value, setValue] = useState('');
+
+  const canAdd = name.trim().length > 0;
+  const reset = () => {
+    setName('');
+    setNote('');
+    setValue('');
+  };
+  const submit = () => {
+    if (!canAdd) return;
+    const cleaned = value.replace(/[^0-9.]/g, '');
+    const v = cleaned === '' ? null : Number(cleaned);
+    onAdd({
+      name: name.trim(),
+      note: note.trim() || null,
+      value: v != null && Number.isFinite(v) ? v : null,
+    });
+    reset();
+    setOpen(false);
+  };
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        style={{
+          alignSelf: 'flex-start',
+          background: 'none',
+          border: 'none',
+          padding: '4px 2px',
+          cursor: 'pointer',
+          color: colors.sage,
+          fontFamily: fonts.sans,
+          fontSize: 13,
+          fontWeight: 600,
+          letterSpacing: '0.06em',
+          fontVariantCaps: 'all-small-caps',
+        }}
+      >
+        + add something you own
+      </button>
+    );
+  }
+
+  return (
+    <Stack gap={10}>
+      <input
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="what — savings, gold, car…"
+        aria-label="asset name"
+        style={FIELD_INPUT_STYLE}
+      />
+      <Row gap={8} align="center">
+        <input
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder="detail — 5g, 2019 clio (optional)"
+          aria-label="asset detail"
+          style={{ ...FIELD_INPUT_STYLE, flex: 1 }}
+        />
+        <input
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          inputMode="decimal"
+          placeholder="value"
+          aria-label="asset value"
+          style={{ ...FIELD_INPUT_STYLE, maxWidth: 120, fontFamily: fonts.mono }}
+        />
+      </Row>
+      <Row gap={8} align="center">
+        <button
+          type="button"
+          onClick={submit}
+          disabled={!canAdd}
+          style={{
+            background: canAdd ? colors.ink : 'transparent',
+            color: canAdd ? colors.cream : colors.inkGhost,
+            border: `1px solid ${canAdd ? colors.ink : colors.hairline}`,
+            borderRadius: 8,
+            padding: '8px 18px',
+            cursor: canAdd ? 'pointer' : 'default',
+            fontFamily: fonts.sans,
+            fontSize: 12,
+            fontWeight: 600,
+            letterSpacing: '0.08em',
+            fontVariantCaps: 'all-small-caps',
+            WebkitTapHighlightColor: 'transparent',
+          }}
+        >
+          add
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            reset();
+            setOpen(false);
+          }}
+          style={{
+            background: 'none',
+            border: 'none',
+            padding: '8px 8px',
+            cursor: 'pointer',
+            color: colors.inkFaint,
+            fontFamily: fonts.sans,
+            fontSize: 12,
+            fontWeight: 500,
+            letterSpacing: '0.08em',
+            fontVariantCaps: 'all-small-caps',
+            WebkitTapHighlightColor: 'transparent',
+          }}
+        >
+          cancel
+        </button>
+      </Row>
     </Stack>
   );
 }
