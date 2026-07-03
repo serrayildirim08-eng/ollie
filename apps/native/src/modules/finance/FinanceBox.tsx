@@ -209,6 +209,16 @@ export function FinanceBox(): JSX.Element {
     },
     [refresh],
   );
+  // Manual add for bills & recurring — a safety net for when the dump router
+  // misses a subscription ("i pay apple music 130 lira monthly"). Writes a
+  // subscription row (deduped by name); shows in the same box.
+  const handleAddSubscription = useCallback(
+    async (input: { name: string; amount: number | null; cadence: 'monthly' | 'yearly' | 'weekly' }) => {
+      await subsRepo.add(input);
+      await refresh();
+    },
+    [refresh],
+  );
   const handleRemoveAsset = useCallback(
     async (id: string) => {
       await assetsRepo.remove(id);
@@ -403,26 +413,27 @@ export function FinanceBox(): JSX.Element {
               open={openCard === 'bills & recurring'}
               onToggle={() => toggle('bills & recurring')}
             >
-              {billRows.length === 0 && subRows.length === 0 ? (
-                <EmptyLine text="nothing recurring yet — try dumping 'rent 18000 monthly' or 'subscribed to spotify'" />
-              ) : (
-                <DetailList>
-                  {billRows.map((item) => (
-                    <BillDetailRow
-                      key={item.id}
-                      item={item}
-                      onRemove={() => void handleRemoveBill(item.id)}
-                    />
-                  ))}
-                  {subRows.map((item) => (
-                    <SubDetailRow
-                      key={item.id}
-                      item={item}
-                      onRemove={() => void handleRemoveSub(item.id)}
-                    />
-                  ))}
-                </DetailList>
-              )}
+              <Stack gap={14}>
+                {(billRows.length > 0 || subRows.length > 0) && (
+                  <DetailList>
+                    {billRows.map((item) => (
+                      <BillDetailRow
+                        key={item.id}
+                        item={item}
+                        onRemove={() => void handleRemoveBill(item.id)}
+                      />
+                    ))}
+                    {subRows.map((item) => (
+                      <SubDetailRow
+                        key={item.id}
+                        item={item}
+                        onRemove={() => void handleRemoveSub(item.id)}
+                      />
+                    ))}
+                  </DetailList>
+                )}
+                <AddRecurringForm onAdd={(i) => void handleAddSubscription(i)} />
+              </Stack>
             </AreaCard>
 
             {/* GIFT CARDS — store credit, kept apart from cash */}
@@ -996,6 +1007,157 @@ function AddAssetForm({
           style={{ ...FIELD_INPUT_STYLE, maxWidth: 120, fontFamily: fonts.mono }}
         />
       </Row>
+      <Row gap={8} align="center">
+        <button
+          type="button"
+          onClick={submit}
+          disabled={!canAdd}
+          style={{
+            background: canAdd ? colors.ink : 'transparent',
+            color: canAdd ? colors.cream : colors.inkGhost,
+            border: `1px solid ${canAdd ? colors.ink : colors.hairline}`,
+            borderRadius: 8,
+            padding: '8px 18px',
+            cursor: canAdd ? 'pointer' : 'default',
+            fontFamily: fonts.sans,
+            fontSize: 12,
+            fontWeight: 600,
+            letterSpacing: '0.08em',
+            fontVariantCaps: 'all-small-caps',
+            WebkitTapHighlightColor: 'transparent',
+          }}
+        >
+          add
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            reset();
+            setOpen(false);
+          }}
+          style={{
+            background: 'none',
+            border: 'none',
+            padding: '8px 8px',
+            cursor: 'pointer',
+            color: colors.inkFaint,
+            fontFamily: fonts.sans,
+            fontSize: 12,
+            fontWeight: 500,
+            letterSpacing: '0.08em',
+            fontVariantCaps: 'all-small-caps',
+            WebkitTapHighlightColor: 'transparent',
+          }}
+        >
+          cancel
+        </button>
+      </Row>
+    </Stack>
+  );
+}
+
+/**
+ * AddRecurringForm — manual add for the bills & recurring box, the safety net
+ * for when the dump router misses a subscription. Name + optional amount +
+ * cadence (monthly default). Writes a subscription row.
+ */
+function AddRecurringForm({
+  onAdd,
+}: {
+  onAdd: (input: { name: string; amount: number | null; cadence: 'monthly' | 'yearly' | 'weekly' }) => void;
+}): JSX.Element {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState('');
+  const [amount, setAmount] = useState('');
+  const [cadence, setCadence] = useState<'monthly' | 'yearly' | 'weekly'>('monthly');
+
+  const canAdd = name.trim().length > 0;
+  const reset = () => {
+    setName('');
+    setAmount('');
+    setCadence('monthly');
+  };
+  const submit = () => {
+    if (!canAdd) return;
+    const cleaned = amount.replace(/[^0-9.]/g, '');
+    const a = cleaned === '' ? null : Number(cleaned);
+    onAdd({ name: name.trim(), amount: a != null && Number.isFinite(a) ? a : null, cadence });
+    reset();
+    setOpen(false);
+  };
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        style={{
+          alignSelf: 'flex-start',
+          background: 'none',
+          border: 'none',
+          padding: '4px 2px',
+          cursor: 'pointer',
+          color: colors.sage,
+          fontFamily: fonts.sans,
+          fontSize: 13,
+          fontWeight: 600,
+          letterSpacing: '0.06em',
+          fontVariantCaps: 'all-small-caps',
+        }}
+      >
+        + add a bill or subscription
+      </button>
+    );
+  }
+
+  return (
+    <Stack gap={10}>
+      <input
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="what — apple music, rent, netflix…"
+        aria-label="name"
+        style={FIELD_INPUT_STYLE}
+      />
+      <Row gap={8} align="center">
+        <input
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          inputMode="decimal"
+          placeholder="amount (optional)"
+          aria-label="amount"
+          style={{ ...FIELD_INPUT_STYLE, flex: 1, fontFamily: fonts.mono }}
+        />
+      </Row>
+      <div style={{ display: 'flex', gap: 8 }}>
+        {(['monthly', 'yearly', 'weekly'] as const).map((c) => {
+          const active = cadence === c;
+          return (
+            <button
+              key={c}
+              type="button"
+              aria-pressed={active}
+              onClick={() => setCadence(c)}
+              style={{
+                background: active ? colors.ink : 'transparent',
+                color: active ? colors.cream : colors.inkFaint,
+                border: `1px solid ${active ? colors.ink : colors.hairline}`,
+                borderRadius: 999,
+                padding: '6px 12px',
+                cursor: 'pointer',
+                fontFamily: fonts.sans,
+                fontSize: 12,
+                fontWeight: 500,
+                letterSpacing: '0.04em',
+                fontVariantCaps: 'all-small-caps',
+                WebkitTapHighlightColor: 'transparent',
+              }}
+            >
+              {c}
+            </button>
+          );
+        })}
+      </div>
       <Row gap={8} align="center">
         <button
           type="button"
