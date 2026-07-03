@@ -204,7 +204,7 @@ export function FinanceBox(): JSX.Element {
     [refresh],
   );
   const handleAddAsset = useCallback(
-    async (input: { name: string; note: string | null; value: number | null }) => {
+    async (input: { name: string; note: string | null; value: number | null; currency: string | null }) => {
       await assetsRepo.add(input);
       await refresh();
     },
@@ -214,7 +214,12 @@ export function FinanceBox(): JSX.Element {
   // misses a subscription ("i pay apple music 130 lira monthly"). Writes a
   // subscription row (deduped by name); shows in the same box.
   const handleAddSubscription = useCallback(
-    async (input: { name: string; amount: number | null; cadence: 'monthly' | 'yearly' | 'weekly' }) => {
+    async (input: {
+      name: string;
+      amount: number | null;
+      currency: string;
+      cadence: 'monthly' | 'yearly' | 'weekly';
+    }) => {
       await subsRepo.add(input);
       await refresh();
     },
@@ -937,6 +942,56 @@ function AssetDetailRow({
   );
 }
 
+/** Currency chips for the manual add forms. TRY first (primary user), then the
+ *  ones Serra asked for. Value is the ISO code; the label is the glyph. */
+const CURRENCY_OPTIONS: { code: string; label: string }[] = [
+  { code: 'TRY', label: '₺' },
+  { code: 'USD', label: '$' },
+  { code: 'EUR', label: '€' },
+  { code: 'CAD', label: 'CA$' },
+  { code: 'MXN', label: 'MX$' },
+];
+
+function CurrencyChips({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (code: string) => void;
+}): JSX.Element {
+  return (
+    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+      {CURRENCY_OPTIONS.map(({ code, label }) => {
+        const active = value === code;
+        return (
+          <button
+            key={code}
+            type="button"
+            aria-pressed={active}
+            aria-label={code}
+            onClick={() => onChange(code)}
+            style={{
+              background: active ? colors.ink : 'transparent',
+              color: active ? colors.cream : colors.inkFaint,
+              border: `1px solid ${active ? colors.ink : colors.hairline}`,
+              borderRadius: 999,
+              padding: '6px 12px',
+              cursor: 'pointer',
+              fontFamily: fonts.sans,
+              fontSize: 12,
+              fontWeight: 500,
+              letterSpacing: '0.02em',
+              WebkitTapHighlightColor: 'transparent',
+            }}
+          >
+            {label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 /**
  * AddAssetForm — a quiet "add something you own" inline form. Assets have no
  * dump routing yet, so this is how you list one: what it is, an optional
@@ -946,27 +1001,37 @@ function AssetDetailRow({
 function AddAssetForm({
   onAdd,
 }: {
-  onAdd: (input: { name: string; note: string | null; value: number | null }) => void;
+  onAdd: (input: {
+    name: string;
+    note: string | null;
+    value: number | null;
+    currency: string | null;
+  }) => void;
 }): JSX.Element {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
   const [note, setNote] = useState('');
   const [value, setValue] = useState('');
+  const [currency, setCurrency] = useState('TRY');
 
   const canAdd = name.trim().length > 0;
   const reset = () => {
     setName('');
     setNote('');
     setValue('');
+    setCurrency('TRY');
   };
   const submit = () => {
     if (!canAdd) return;
     const cleaned = value.replace(/[^0-9.]/g, '');
     const v = cleaned === '' ? null : Number(cleaned);
+    const parsedValue = v != null && Number.isFinite(v) ? v : null;
     onAdd({
       name: name.trim(),
       note: note.trim() || null,
-      value: v != null && Number.isFinite(v) ? v : null,
+      value: parsedValue,
+      // currency only meaningful when a value is set
+      currency: parsedValue != null ? currency : null,
     });
     reset();
     setOpen(false);
@@ -1022,6 +1087,7 @@ function AddAssetForm({
           style={{ ...FIELD_INPUT_STYLE, maxWidth: 120, fontFamily: fonts.mono }}
         />
       </Row>
+      <CurrencyChips value={currency} onChange={setCurrency} />
       <Row gap={8} align="center">
         <button
           type="button"
@@ -1079,24 +1145,36 @@ function AddAssetForm({
 function AddRecurringForm({
   onAdd,
 }: {
-  onAdd: (input: { name: string; amount: number | null; cadence: 'monthly' | 'yearly' | 'weekly' }) => void;
+  onAdd: (input: {
+    name: string;
+    amount: number | null;
+    currency: string;
+    cadence: 'monthly' | 'yearly' | 'weekly';
+  }) => void;
 }): JSX.Element {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
   const [amount, setAmount] = useState('');
+  const [currency, setCurrency] = useState('TRY');
   const [cadence, setCadence] = useState<'monthly' | 'yearly' | 'weekly'>('monthly');
 
   const canAdd = name.trim().length > 0;
   const reset = () => {
     setName('');
     setAmount('');
+    setCurrency('TRY');
     setCadence('monthly');
   };
   const submit = () => {
     if (!canAdd) return;
     const cleaned = amount.replace(/[^0-9.]/g, '');
     const a = cleaned === '' ? null : Number(cleaned);
-    onAdd({ name: name.trim(), amount: a != null && Number.isFinite(a) ? a : null, cadence });
+    onAdd({
+      name: name.trim(),
+      amount: a != null && Number.isFinite(a) ? a : null,
+      currency,
+      cadence,
+    });
     reset();
     setOpen(false);
   };
@@ -1144,6 +1222,7 @@ function AddRecurringForm({
           style={{ ...FIELD_INPUT_STYLE, flex: 1, fontFamily: fonts.mono }}
         />
       </Row>
+      <CurrencyChips value={currency} onChange={setCurrency} />
       <div style={{ display: 'flex', gap: 8 }}>
         {(['monthly', 'yearly', 'weekly'] as const).map((c) => {
           const active = cadence === c;
@@ -1438,16 +1517,21 @@ function RecurringRow({
 
 // ── formatting helpers ────────────────────────────────────────────────────
 
-/** Format an amount with currency prefix. Falls back to "—" if amount null. */
+/** Format an amount with currency prefix. Falls back to "—" if amount null.
+ *  No currency → the bare number (never fake a "$" — a null currency means
+ *  "unknown", not USD). */
 function formatAmount(amount: number | null, currency: string | null): string {
   if (amount == null) return '—';
   const fixed = amount.toFixed(2);
-  if (!currency) return `$${fixed}`;
-  // Single-character symbols ($, €, £, ¥) prefix directly; ISO codes get
-  // a space ("USD 15.00") so they read as letters not noise.
+  if (!currency) return fixed;
+  // Single-character symbols ($, €, £, ¥) prefix directly; known ISO codes
+  // get their symbol; everything else reads as "CODE 15.00".
   if (currency.length === 1) return `${currency}${fixed}`;
   if (currency === 'USD') return `$${fixed}`;
   if (currency === 'EUR') return `€${fixed}`;
   if (currency === 'GBP') return `£${fixed}`;
+  if (currency === 'TRY') return `₺${fixed}`;
+  if (currency === 'CAD') return `CA$${fixed}`;
+  if (currency === 'MXN') return `MX$${fixed}`;
   return `${currency} ${fixed}`;
 }
