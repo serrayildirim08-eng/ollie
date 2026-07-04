@@ -72,7 +72,12 @@
  *
  * Tables with NO per-user linkage are correctly EXCLUDED (disclosed in the
  * privacy policy): research_corpus + crisis_events (anonymized / count-only,
- * no user column) and routing_cache (shared embedding cache).
+ * no user column). NOTE: routing_cache USED to be excluded as a "shared cache",
+ * but the S2 fix made it user_hash-keyed (per-user embeddings of the user's own
+ * dump text) — it is now erased below like the other hash tables.
+ *
+ * We also erase the DEVICE_TOKENS edge-KV copy of the APNs token (key
+ * `user:<id>`) so a deleted user's device token does not linger in the cache.
  */
 
 export interface AccountDeleteEnv {
@@ -87,6 +92,10 @@ export interface AccountDeleteEnv {
   /** Server salt for deriving user_hash on the anonymized telemetry tables.
    *  MUST equal the value ai-proxy used at write time. */
   USER_HASH_SALT?: string;
+  /** Edge KV holding the APNs device token at `user:<id>`. Erased on deletion so
+   *  the token doesn't linger in cache (best-effort; the push_tokens table is the
+   *  authoritative copy and is deleted above). Optional: absent in unit tests. */
+  DEVICE_TOKENS?: KVNamespace;
 }
 
 export interface AccountDeleteBody {
@@ -186,6 +195,10 @@ export const USER_SCOPED_TABLES: ReadonlyArray<UserScopedTable> = [
   { table: 'retention_events', key: 'hash', columns: ['user_hash'] },
   { table: 'session_events', key: 'hash', columns: ['user_hash'] },
   { table: 'user_consent', key: 'hash', columns: ['user_hash'] },
+  // routing_cache: per-user embeddings of the user's OWN dump text, keyed by
+  // user_hash since the S2 cross-user-leakage fix. Previously (wrongly) excluded
+  // as a "shared cache" — a deleted user's dump embeddings survived erasure.
+  { table: 'routing_cache', key: 'hash', columns: ['user_hash'] },
 
   // ── user_hash, two-sided (OR across both columns) ── (1 table)
   // invites: the user may be the inviter or the (claimed) invitee. This is the
@@ -377,6 +390,19 @@ export async function runAccountDelete(
     }
     deleted_tables.push(entry.table);
     deleted_rows[entry.table] = r.count;
+  }
+
+  // 6b. Erase the DEVICE_TOKENS edge-KV copy of the APNs token (key `user:<id>`).
+  //     Best-effort: push_tokens (the authoritative row) is already deleted above,
+  //     so a KV hiccup must not abort erasure or block the identity delete.
+  if (env.DEVICE_TOKENS) {
+    try {
+      await env.DEVICE_TOKENS.delete(`user:${userId}`);
+      deleted_tables.push('device_tokens_kv');
+    } catch {
+      // Non-fatal: the durable push_tokens row is gone and the edge entry will
+      // also expire on its own. Left out of deleted_tables to stay honest.
+    }
   }
 
   // 7. Delete the identity record LAST.
