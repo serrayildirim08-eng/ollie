@@ -23,7 +23,14 @@ export function json(
 ): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { 'content-type': 'application/json', ...headers },
+    headers: {
+      'content-type': 'application/json',
+      // SECURITY (S5): defense-in-depth HSTS. Tell browsers/webviews to pin
+      // HTTPS for two years incl. subdomains, so a downgrade/interception can't
+      // reach these paid+authenticated endpoints. Callers may still override.
+      'strict-transport-security': 'max-age=63072000; includeSubDomains',
+      ...headers,
+    },
   });
 }
 
