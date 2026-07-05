@@ -85,6 +85,28 @@ async function appVersion(): Promise<string> {
   return appVersionCache;
 }
 
+/**
+ * One-time consent seed (product decision, pre-beta): `necessary` consent is
+ * mandatory for the app to function, so a fresh install with NO persisted
+ * consent state is initialized to { necessary: true, marketing: false,
+ * research_optin: null } via the consent package's own setter. Marketing and
+ * research stay opt-in default-off; the single consent screen ships later.
+ * No-op when any state already exists (canonical row or legacy keys).
+ */
+async function ensureConsentSeeded(): Promise<void> {
+  try {
+    const [consent, { store }] = await Promise.all([
+      import('@ollie/consent'),
+      import('../store'),
+    ]);
+    // Covers both the canonical row and the legacy-key bridge.
+    if (consent.hasNecessaryConsent(store)) return;
+    consent.setNecessaryConsentSync(store);
+  } catch {
+    /* best-effort — consentGranted() just stays false */
+  }
+}
+
 async function consentGranted(): Promise<boolean> {
   try {
     // Lazy imports — see module docblock (boot-cycle avoidance).
@@ -190,6 +212,7 @@ const RETURN_MILESTONES: Array<{ event: 'd1_returned' | 'd7_returned' | 'd30_ret
  */
 export function initAnalytics(): void {
   void (async () => {
+    await ensureConsentSeeded();
     let ts = await installTs();
     const firstRun = ts == null;
     if (ts == null) {
