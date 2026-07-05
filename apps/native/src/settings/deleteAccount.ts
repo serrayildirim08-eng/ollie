@@ -11,6 +11,8 @@
  * delete — mirrors the VITE_PUSH_REGISTER_URL no-op pattern.
  */
 
+import { track } from '../api/analytics';
+
 export type DeleteResult =
   | { ok: true }
   | { ok: false; reason: 'unconfigured' | 'unauthorized' | 'error'; message: string };
@@ -31,6 +33,10 @@ export async function deleteAccount(
   if (!jwt) {
     return { ok: false, reason: 'unauthorized', message: 'please sign in again.' };
   }
+
+  // Funnel telemetry BEFORE the delete request — after a 2xx the user (and
+  // their JWT) are gone, so this is the last moment the row can be written.
+  track('account_deleted');
 
   try {
     const res = await fetch(url, {

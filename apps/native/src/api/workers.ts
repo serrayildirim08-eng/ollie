@@ -469,12 +469,12 @@ export function enrichDump(
  */
 export function ingestEvent(
   req: IngestEventRequest,
-  opts: { timeoutMs?: number } = {},
+  opts: { timeoutMs?: number; authJwt?: string } = {},
 ): Promise<ApiResult<IngestEventResponse>> {
   return post<IngestEventResponse>(
     `${urls.aiProxy}/ingest-event`,
     req,
-    { timeoutMs: opts.timeoutMs ?? 8_000 },
+    { timeoutMs: opts.timeoutMs ?? 8_000, authJwt: opts.authJwt },
   );
 }
 

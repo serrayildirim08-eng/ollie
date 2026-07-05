@@ -30,6 +30,7 @@ import { routeDump } from '../api';
 import { detectCrisis } from '@ollie/logic/crisis';
 import type { RouteDumpRequest } from '../api';
 import { kv } from '../storage';
+import { track, trackOnce } from '../api/analytics';
 import { colors } from '../theme/tokens';
 import type { RouterOutput, CrisisSignal } from '../router/schema';
 import { usePhotoIntake, PhotoIntakeBar } from './PhotoIntake';
@@ -269,6 +270,10 @@ export function BrainDumpInput({
           had_image: hasImage,
         }),
       );
+      // Funnel telemetry (fire-and-forget, consent-gated): every successful
+      // dump, plus the once-ever first_dump activation marker.
+      track('dump_submitted');
+      trackOnce('first_dump');
     }
     if (!res.ok) {
       // Translate ApiError to a one-line human message. The draft stays in

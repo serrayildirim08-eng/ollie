@@ -35,6 +35,7 @@
  */
 
 import type { NotificationSpec } from '@ollie/notifications';
+import { track } from '../api/analytics';
 
 /** Shape of a CustomEvent we listen for on `window`. */
 export interface NotifyEventDetail {
@@ -133,6 +134,9 @@ export async function requestNotificationPermission(): Promise<boolean> {
     const granted = await plugin.isPermissionGranted();
     if (granted) return true;
     const result = await plugin.requestPermission();
+    // Funnel telemetry: only when the OS prompt actually ran (not the
+    // already-granted short-circuit above). Fire-and-forget, consent-gated.
+    track('notif_permission', { value: result === 'granted' ? 'granted' : 'denied' });
     return result === 'granted';
   } catch (err) {
     console.warn('[systemNotify] permission flow failed', err);

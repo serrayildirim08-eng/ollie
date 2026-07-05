@@ -14,6 +14,7 @@ import { useRef, useState, type CSSProperties } from 'react';
 import { Stack, Row } from '../layout';
 import { Text } from '../ui';
 import { colors } from '../theme/tokens';
+import { track } from '../api/analytics';
 
 const SMCP_STYLE: CSSProperties = {
   fontVariantCaps: 'all-small-caps',
@@ -49,10 +50,13 @@ export function NeedsConfirmCard({
   // synchronous second tap; the state flag visually disables the buttons.
   const actedRef = useRef(false);
   const [acted, setActed] = useState(false);
-  const guard = (fn: () => void) => () => {
+  const guard = (fn: () => void, corrected = false) => () => {
     if (actedRef.current) return;
     actedRef.current = true;
     setActed(true);
+    // Funnel telemetry: an undo on the confirm card = the user corrected the
+    // AI's routing. Fire-and-forget, consent-gated; keep stays silent.
+    if (corrected) track('route_corrected', { value: routeLabel });
     fn();
   };
   return (
@@ -124,7 +128,7 @@ export function NeedsConfirmCard({
           <button
             type="button"
             aria-label="Undo this routing"
-            onClick={guard(onUndo)}
+            onClick={guard(onUndo, true)}
             disabled={acted}
             style={{
               background: 'none',

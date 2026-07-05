@@ -76,6 +76,7 @@ const ALLOWED_TABLES = new Set([
   'module_events',
   'crisis_events',
   'consent_audit',
+  'funnel_events',
 ]);
 
 // audit #155 — per-table column whitelist. /ingest-event forwards the client
@@ -104,6 +105,10 @@ const ALLOWED_COLUMNS: Record<string, Set<string>> = {
   consent_audit: new Set([
     'user_hash', 'consent_necessary', 'consent_marketing', 'consented_at',
     'event_source', 'ip_country', 'user_agent', 'app_version',
+  ]),
+  funnel_events: new Set([
+    'user_hash', 'event_type', 'value', 'minutes_since_install',
+    'app_version', 'app', 'event_at',
   ]),
 };
 

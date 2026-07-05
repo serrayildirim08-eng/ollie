@@ -18,6 +18,7 @@ import type { CSSProperties } from 'react';
 import { Stack, Row } from '../layout';
 import { Text } from '../ui';
 import { colors, shadows } from '../theme/tokens';
+import { trackOnce } from '../api/analytics';
 
 /** Example dumps — one per common life area (groceries, meds, money). */
 const EXAMPLES = ['out of milk', 'took vitamin d', 'cancel netflix friday'];
@@ -43,7 +44,12 @@ export function FirstRunGuide({ onPick }: { onPick: (text: string) => void }): J
             <button
               key={ex}
               type="button"
-              onClick={() => onPick(ex)}
+              onClick={() => {
+                // Guide "completed" = the user made their first move (tapped a
+                // chip). Once-ever, fire-and-forget, consent-gated.
+                trackOnce('onboarding_completed');
+                onPick(ex);
+              }}
               style={{
                 border: 'none',
                 background: colors.cream,

@@ -75,6 +75,9 @@ importers:
       '@ollie/cadence':
         specifier: workspace:*
         version: link:../../packages/cadence
+      '@ollie/consent':
+        specifier: workspace:*
+        version: link:../../packages/consent
       '@ollie/crypto':
         specifier: workspace:*
         version: link:../../packages/crypto

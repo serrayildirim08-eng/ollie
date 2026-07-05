@@ -18,6 +18,7 @@
     "@fontsource/dm-serif-display": "^5.2.8",
     "@ollie/api": "workspace:*",
     "@ollie/cadence": "workspace:*",
+    "@ollie/consent": "workspace:*",
     "@ollie/crypto": "workspace:*",
     "@ollie/logic": "workspace:*",
     "@ollie/notifications": "workspace:*",

@@ -150,7 +150,8 @@ export type IngestTable =
   | 'session_events'
   | 'module_events'
   | 'crisis_events'
-  | 'consent_audit';
+  | 'consent_audit'
+  | 'funnel_events';
 
 export interface IngestEventRequest {
   table: IngestTable;

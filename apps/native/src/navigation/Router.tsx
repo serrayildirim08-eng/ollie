@@ -24,6 +24,7 @@ import { tasks as adminTasksRepo } from "../modules/admin";
 import { tasks as workTasksRepo } from "../modules/work";
 import { onTaskCompleted } from "../notify/datelessLadderHook";
 import { pullGroceryPantry } from "../sync/groceryPull";
+import { setAnalyticsBearer } from "../api/analytics";
 import { isFeatureEnabled } from "../settings/features";
 import { Stack, Row, Box } from "../layout";
 import { Text } from "../ui";
@@ -56,6 +57,16 @@ const SMCP_STYLE: React.CSSProperties = {
 /** Wires ollie:// deep links to navigation; must live inside <BrowserRouter>. */
 function DeepLinkBridge(): null {
   useDeepLinks();
+  return null;
+}
+
+/** Wires the Clerk token getter into the analytics module so consent-gated
+ *  funnel/retention events queued at boot can flush once signed in. */
+function AnalyticsBridge(): null {
+  const { getToken } = useAuth();
+  useEffect(() => {
+    setAnalyticsBearer(() => getToken());
+  }, [getToken]);
   return null;
 }
 
@@ -111,6 +122,7 @@ export function Router() {
       <DeepLinkBridge />
       <NotificationActionBridge />
       <GrocerySyncBridge />
+      <AnalyticsBridge />
       <Routes>
         <Route element={<Layout />}>
           <Route index element={<DumpScreen />} />
