@@ -25,6 +25,7 @@ import {
   normaliseSentiment,
   normaliseSubscriptionName,
   type Cadence,
+  type FinanceAsset,
   type FinanceBill,
   type FinanceIncome,
   type FinanceRefund,
@@ -469,6 +470,69 @@ export const income = {
 
   async remove(id: string): Promise<void> {
     await sql.execute(`DELETE FROM finance_income WHERE id = ?`, [id]);
+  },
+};
+
+// ─── assets ─────────────────────────────────────────────────────────────────
+//
+// Things you own with a value you type in (savings, gold, car). NOT money
+// flow — no bank link, no auto net-worth. Added + removed manually from the
+// box (no dump routing yet).
+
+interface AssetRow {
+  id: string;
+  name: string;
+  note: string | null;
+  value: number | null;
+  currency: string | null;
+  created_at: number;
+  [col: string]: unknown;
+}
+
+function rowToAsset(r: AssetRow): FinanceAsset {
+  return {
+    id: r.id,
+    name: r.name,
+    note: r.note ?? null,
+    value: r.value == null ? null : Number(r.value),
+    currency: normaliseCurrency(r.currency),
+    createdAt: r.created_at,
+  };
+}
+
+export const assets = {
+  async add(input: {
+    name: string;
+    note?: string | null;
+    value?: number | null;
+    currency?: string | null;
+  }): Promise<FinanceAsset> {
+    const id = newId('f_');
+    const now = Date.now();
+    const name = input.name.trim();
+    const note = input.note?.trim() || null;
+    const value =
+      typeof input.value === 'number' && Number.isFinite(input.value) ? input.value : null;
+    const currency = normaliseCurrency(input.currency ?? null);
+    await sql.execute(
+      `INSERT INTO finance_assets (id, name, note, value, currency, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [id, name, note, value, currency, now],
+    );
+    return { id, name, note, value, currency, createdAt: now };
+  },
+
+  async list(): Promise<FinanceAsset[]> {
+    const rows = await sql.select<AssetRow>(
+      `SELECT id, name, note, value, currency, created_at
+       FROM finance_assets
+       ORDER BY created_at DESC`,
+    );
+    return rows.map(rowToAsset);
+  },
+
+  async remove(id: string): Promise<void> {
+    await sql.execute(`DELETE FROM finance_assets WHERE id = ?`, [id]);
   },
 };
 

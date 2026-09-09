@@ -39,9 +39,10 @@ import { useModuleData } from '../../lib/useModuleData';
 import { PatternCards } from '../../patterns/PatternCards';
 import { migrateFinance } from './migrate';
 import {
+  assets as assetsRepo,
   bills as billsRepo,
   cadence as cadenceRepo,
-  getMonthlyBurn,
+  income as incomeRepo,
   subscriptions as subsRepo,
   transactions as txRepo,
 } from './repo';
@@ -49,13 +50,15 @@ import {
   detectFromTransactions,
   type RecurringSuggestion,
 } from './recurring';
+import { recurringMonthlyTotal } from './recurringTotal';
 import {
   FINANCE_CATEGORIES,
   normaliseMerchant,
+  type FinanceAsset,
   type FinanceBill,
+  type FinanceIncome,
   type FinanceSubscription,
   type FinanceTransaction,
-  type MonthlyBurn,
 } from './types';
 
 // ── visual constants ──────────────────────────────────────────────────────
@@ -69,22 +72,6 @@ const UMBER = '#8A4B2C';
 const SMCP_STYLE: CSSProperties = {
   fontVariantCaps: 'all-small-caps',
   letterSpacing: '0.08em',
-};
-
-const HERO_LEAD_STYLE: CSSProperties = {
-  fontFamily: fonts.sans,
-  fontSize: 13,
-  fontWeight: 500,
-  letterSpacing: '0.02em',
-  color: colors.inkFaint,
-};
-
-const HERO_CAPTION_STYLE: CSSProperties = {
-  fontFamily: fonts.sans,
-  fontSize: 13,
-  fontWeight: 500,
-  color: colors.inkFaint,
-  textAlign: 'center',
 };
 
 const AREA_KEY_STYLE: CSSProperties = {
@@ -129,29 +116,32 @@ const DETAIL_V_STYLE: CSSProperties = {
 
 // ── component ─────────────────────────────────────────────────────────────
 
-type AreaKey = 'bills' | 'subscriptions' | 'recent transactions';
+type AreaKey = 'money in' | 'money out' | 'bills & recurring' | 'gift cards' | 'assets';
 
 export function FinanceBox(): JSX.Element {
   const [txs, setTxs] = useState<FinanceTransaction[]>([]);
   const [billRows, setBillRows] = useState<FinanceBill[]>([]);
   const [subRows, setSubRows] = useState<FinanceSubscription[]>([]);
-  const [burn, setBurn] = useState<MonthlyBurn[]>([]);
+  const [incomeRows, setIncomeRows] = useState<FinanceIncome[]>([]);
+  const [assetRows, setAssetRows] = useState<FinanceAsset[]>([]);
   const [merchantCadence, setMerchantCadence] = useState<Map<string, CadenceEstimate>>(
     () => new Map(),
   );
   const [openCard, setOpenCard] = useState<AreaKey | null>(null);
 
   const refresh = useCallback(async () => {
-    const [t, b, s, burnRows] = await Promise.all([
+    const [t, b, s, inc, ast] = await Promise.all([
       txRepo.list(),
       billsRepo.list(),
       subsRepo.list(),
-      getMonthlyBurn(),
+      incomeRepo.list(),
+      assetsRepo.list(),
     ]);
     setTxs(t);
     setBillRows(b);
     setSubRows(s);
-    setBurn(burnRows);
+    setIncomeRows(inc);
+    setAssetRows(ast);
 
     // Fan-out cadence reads — one per distinct merchant in the transaction
     // list. Keeps row render synchronous (no per-row async).
@@ -206,21 +196,58 @@ export function FinanceBox(): JSX.Element {
     },
     [refresh],
   );
+  const handleRemoveIncome = useCallback(
+    async (id: string) => {
+      await incomeRepo.remove(id);
+      await refresh();
+    },
+    [refresh],
+  );
+  const handleAddAsset = useCallback(
+    async (input: { name: string; note: string | null; value: number | null; currency: string | null }) => {
+      await assetsRepo.add(input);
+      await refresh();
+    },
+    [refresh],
+  );
+  // Manual add for bills & recurring — a safety net for when the dump router
+  // misses a subscription ("i pay apple music 130 lira monthly"). Writes a
+  // subscription row (deduped by name); shows in the same box.
+  const handleAddSubscription = useCallback(
+    async (input: {
+      name: string;
+      amount: number | null;
+      currency: string;
+      cadence: 'monthly' | 'yearly' | 'weekly';
+    }) => {
+      await subsRepo.add(input);
+      await refresh();
+    },
+    [refresh],
+  );
+  const handleRemoveAsset = useCallback(
+    async (id: string) => {
+      await assetsRepo.remove(id);
+      await refresh();
+    },
+    [refresh],
+  );
 
-  const hasData = txs.length > 0 || billRows.length > 0 || subRows.length > 0;
+  // Split income into spendable cash vs store credit (gift cards) so each
+  // gets its own box (Serra's 5-box money layout, 2026-07-03).
+  const cashIncome = useMemo(
+    () => incomeRows.filter((r) => !isGiftCard(r.source)),
+    [incomeRows],
+  );
+  const giftCards = useMemo(
+    () => incomeRows.filter((r) => isGiftCard(r.source)),
+    [incomeRows],
+  );
 
   // Recurring detection — read-only surface. We re-derive on every tx
   // change rather than schedule a separate fetch since the detection is
   // a pure in-memory pass over the rows we already have.
   const suggestions = useMemo(() => detectFromTransactions(txs), [txs]);
-
-  // Lead currency comes from the burn hero; we use it to format the
-  // "$X recurring detected" caption so the unit matches what the eye
-  // just landed on. Falls back to USD-style "$" when no burn is available.
-  const recurringByLeadCurrency = useMemo(
-    () => sumRecurringInLeadCurrency(suggestions, burn[0]?.currency ?? null),
-    [suggestions, burn],
-  );
 
   const toggle = useCallback((k: AreaKey) => {
     setOpenCard((cur) => (cur === k ? null : k));
@@ -250,27 +277,6 @@ export function FinanceBox(): JSX.Element {
 
   // ── glance lines for area-cards ────────────────────────────────────────
 
-  const nextBill = billRows[0] ?? null;
-  const billsLine: ReactNode = nextBill
-    ? (
-      <>
-        {nextBill.merchant} <b style={{ fontFamily: fonts.mono, fontWeight: 500 }}>
-          {formatAmount(nextBill.amount, nextBill.currency)}
-        </b>
-        {nextBill.cadence ? ` · ${nextBill.cadence}` : ''}
-      </>
-    )
-    : 'add the ones you know';
-
-  const subsLine: ReactNode = subRows.length > 0
-    ? (
-      <>
-        <b style={{ fontFamily: fonts.mono, fontWeight: 500 }}>{subRows.length}</b>
-        {subRows.length === 1 ? ' tracked' : ' tracked'}
-      </>
-    )
-    : 'none picked up yet';
-
   const txLine: ReactNode = txs.length > 0
     ? (
       <>
@@ -281,6 +287,62 @@ export function FinanceBox(): JSX.Element {
       </>
     )
     : "nothing logged yet — try 'spent $40 at sephora'";
+
+  const incomeLine: ReactNode = cashIncome.length > 0
+    ? (
+      <>
+        <b style={{ fontFamily: fonts.mono, fontWeight: 500 }}>
+          {formatAmount(cashIncome[0]!.amount, cashIncome[0]!.currency)}
+        </b>
+        {cashIncome[0]!.source ? ` · ${cashIncome[0]!.source}` : ''}
+      </>
+    )
+    : "nothing in yet — try 'dad sent me 500'";
+
+  const giftLine: ReactNode = giftCards.length > 0
+    ? (
+      <>
+        <b style={{ fontFamily: fonts.mono, fontWeight: 500 }}>
+          {formatAmount(giftCards[0]!.amount, giftCards[0]!.currency)}
+        </b>
+        {giftCards[0]!.source ? ` · ${giftCards[0]!.source}` : ''}
+      </>
+    )
+    : "none yet — try 'got a 10k zara gift card'";
+
+  const assetsLine: ReactNode = assetRows.length > 0
+    ? (
+      <>
+        <b style={{ fontFamily: fonts.mono, fontWeight: 500 }}>{assetRows.length}</b>
+        {assetRows.length === 1 ? ' thing you hold' : ' things you hold'}
+      </>
+    )
+    : 'nothing yet — add savings, gold, a car…';
+
+  // Bills + subscriptions share one "bills & recurring" box — both are money
+  // that repeats every month. Header shows the monthly total when amounts are
+  // known, else just the count.
+  const recurringTotal = useMemo(
+    () => recurringMonthlyTotal([...billRows, ...subRows]),
+    [billRows, subRows],
+  );
+  const billsRecurringLine: ReactNode = recurringTotal != null
+    ? (
+      <>
+        <b style={{ fontFamily: fonts.mono, fontWeight: 500 }}>
+          {formatAmount(recurringTotal.amount, recurringTotal.currency)}
+        </b>
+        {' / month'}
+      </>
+    )
+    : billRows.length > 0 || subRows.length > 0
+    ? (
+      <>
+        <b style={{ fontFamily: fonts.mono, fontWeight: 500 }}>{billRows.length + subRows.length}</b>
+        {` recurring`}
+      </>
+    )
+    : 'nothing recurring yet — try "netflix monthly" or "rent 18000 monthly"';
 
   return (
     <Stack gap={48}>
@@ -309,75 +371,43 @@ export function FinanceBox(): JSX.Element {
         </Text>
       ) : (
         <Stack gap={40}>
-          {/* HERO — this month's true burn, on the darker sage content card */}
-          <Box
-            bg="paper"
-            radius="card"
-            shadow="card"
-            style={{ padding: '28px 22px' }}
-          >
-            <MonthHero
-              burn={burn}
-              hasData={hasData}
-              recurringDetected={recurringByLeadCurrency}
-            />
-          </Box>
-
           {/* TAP-TO-LOG — a quiet spend form so capture isn't dump-only. */}
           <LogSpendForm onLog={(i) => void handleLogTx(i)} />
 
-          {/* AREA CARDS — expandable in-place */}
+          {/* MONEY in separate boxes (Serra 2026-07-03): in · out · bills &
+              recurring · gift cards. Each a tap-to-open card. (Assets = step 2.) */}
           <Stack gap={12}>
+            {/* MONEY IN — spendable cash only (gift cards get their own box) */}
             <AreaCard
-              areaKey="bills"
-              value={billsLine}
-              open={openCard === 'bills'}
-              onToggle={() => toggle('bills')}
+              areaKey="money in"
+              value={incomeLine}
+              open={openCard === 'money in'}
+              onToggle={() => toggle('money in')}
             >
-              {billRows.length === 0 ? (
-                <EmptyLine text="no bills yet — try dumping 'netflix bill monthly'" />
+              {cashIncome.length === 0 ? (
+                <EmptyLine text="nothing in yet — try dumping 'dad sent me 500'" />
               ) : (
                 <DetailList>
-                  {billRows.map((item) => (
-                    <BillDetailRow
+                  {cashIncome.map((item) => (
+                    <IncomeDetailRow
                       key={item.id}
                       item={item}
-                      onRemove={() => void handleRemoveBill(item.id)}
+                      onRemove={() => void handleRemoveIncome(item.id)}
                     />
                   ))}
                 </DetailList>
               )}
             </AreaCard>
 
+            {/* MONEY OUT — one-off spends (bills + subscriptions live below) */}
             <AreaCard
-              areaKey="subscriptions"
-              value={subsLine}
-              open={openCard === 'subscriptions'}
-              onToggle={() => toggle('subscriptions')}
-            >
-              {subRows.length === 0 ? (
-                <EmptyLine text="no subscriptions yet — try dumping 'subscribed to spotify'" />
-              ) : (
-                <DetailList>
-                  {subRows.map((item) => (
-                    <SubDetailRow
-                      key={item.id}
-                      item={item}
-                      onRemove={() => void handleRemoveSub(item.id)}
-                    />
-                  ))}
-                </DetailList>
-              )}
-            </AreaCard>
-
-            <AreaCard
-              areaKey="recent transactions"
+              areaKey="money out"
               value={txLine}
-              open={openCard === 'recent transactions'}
-              onToggle={() => toggle('recent transactions')}
+              open={openCard === 'money out'}
+              onToggle={() => toggle('money out')}
             >
               {txs.length === 0 ? (
-                <EmptyLine text="no transactions yet — try dumping 'paid rent' or 'spent $40 at sephora'" />
+                <EmptyLine text="nothing out yet — try dumping 'spent $40 at sephora'" />
               ) : (
                 <DetailList>
                   {txs.map((item) => (
@@ -394,6 +424,81 @@ export function FinanceBox(): JSX.Element {
                   ))}
                 </DetailList>
               )}
+            </AreaCard>
+
+            {/* BILLS & RECURRING — bills + subscriptions, the monthly repeats */}
+            <AreaCard
+              areaKey="bills & recurring"
+              value={billsRecurringLine}
+              open={openCard === 'bills & recurring'}
+              onToggle={() => toggle('bills & recurring')}
+            >
+              <Stack gap={14}>
+                {(billRows.length > 0 || subRows.length > 0) && (
+                  <DetailList>
+                    {billRows.map((item) => (
+                      <BillDetailRow
+                        key={item.id}
+                        item={item}
+                        onRemove={() => void handleRemoveBill(item.id)}
+                      />
+                    ))}
+                    {subRows.map((item) => (
+                      <SubDetailRow
+                        key={item.id}
+                        item={item}
+                        onRemove={() => void handleRemoveSub(item.id)}
+                      />
+                    ))}
+                  </DetailList>
+                )}
+                <AddRecurringForm onAdd={(i) => void handleAddSubscription(i)} />
+              </Stack>
+            </AreaCard>
+
+            {/* GIFT CARDS — store credit, kept apart from cash */}
+            <AreaCard
+              areaKey="gift cards"
+              value={giftLine}
+              open={openCard === 'gift cards'}
+              onToggle={() => toggle('gift cards')}
+            >
+              {giftCards.length === 0 ? (
+                <EmptyLine text="none yet — try dumping 'got a 10k zara gift card'" />
+              ) : (
+                <DetailList>
+                  {giftCards.map((item) => (
+                    <IncomeDetailRow
+                      key={item.id}
+                      item={item}
+                      onRemove={() => void handleRemoveIncome(item.id)}
+                    />
+                  ))}
+                </DetailList>
+              )}
+            </AreaCard>
+
+            {/* ASSETS — things you own, value typed by you (no bank link) */}
+            <AreaCard
+              areaKey="assets"
+              value={assetsLine}
+              open={openCard === 'assets'}
+              onToggle={() => toggle('assets')}
+            >
+              <Stack gap={14}>
+                {assetRows.length > 0 && (
+                  <DetailList>
+                    {assetRows.map((item) => (
+                      <AssetDetailRow
+                        key={item.id}
+                        item={item}
+                        onRemove={() => void handleRemoveAsset(item.id)}
+                      />
+                    ))}
+                  </DetailList>
+                )}
+                <AddAssetForm onAdd={(i) => void handleAddAsset(i)} />
+              </Stack>
             </AreaCard>
           </Stack>
 
@@ -633,202 +738,6 @@ const FIELD_INPUT_STYLE: CSSProperties = {
   outline: 'none',
 };
 
-// ── hero ──────────────────────────────────────────────────────────────────
-
-/**
- * MonthHero — the calm safe-to-spend stand-in.
- *
- * Sorts MonthlyBurn biggest-first, anchors the dominant currency's total
- * (transactions + subscriptions + bills) in a large serif figure, lists
- * the breakdown beneath as "$X spent · $Y subscriptions · $Z bills", then
- * any secondary currencies. Unknown-currency totals carry the umber ink
- * (money-v2's "no currency tag" rail) so currency-parse leakage stays
- * visible without lying about its meaning.
- */
-function MonthHero({
-  burn,
-  hasData,
-  recurringDetected,
-}: {
-  burn: MonthlyBurn[];
-  hasData: boolean;
-  /**
-   * Sum of detected recurring monthly cost, expressed in the lead
-   * currency. `null` when detection found nothing — caller computes; we
-   * just render. Show as "$X recurring detected" under the breakdown.
-   */
-  recurringDetected: { amount: number; currency: string | null } | null;
-}): JSX.Element {
-  if (burn.length === 0) {
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        <div style={HERO_LEAD_STYLE}>this month</div>
-        <div
-          style={{
-            marginTop: 18,
-            fontFamily: fonts.serif,
-            fontSize: 28,
-            fontWeight: 400,
-            color: colors.ink,
-            letterSpacing: '-0.018em',
-            textAlign: 'center',
-            lineHeight: 1.35,
-            maxWidth: 260,
-          }}
-        >
-          {hasData
-            ? 'nothing landed this month yet'
-            : 'a few spends and ollie can work this out'}
-        </div>
-        <div style={{ marginTop: 14, ...HERO_CAPTION_STYLE }}>
-          {hasData ? 'still a quiet ledger' : 'nothing logged yet'}
-        </div>
-      </div>
-    );
-  }
-
-  const lead = burn[0]!;
-  const rest = burn.slice(1);
-  const isUnaccounted = lead.currency == null;
-  const { symbol, body } = splitAmount(lead.total, lead.currency);
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-      <div style={HERO_LEAD_STYLE}>this month</div>
-
-      <div
-        style={{
-          marginTop: 10,
-          display: 'flex',
-          alignItems: 'baseline',
-          fontFamily: fonts.serif,
-          fontSize: 72,
-          fontWeight: 400,
-          color: isUnaccounted ? UMBER : colors.ink,
-          letterSpacing: '-0.04em',
-          lineHeight: 1,
-        }}
-      >
-        <span
-          style={{
-            fontFamily: fonts.mono,
-            fontWeight: 400,
-            fontSize: 44,
-            color: isUnaccounted ? UMBER : colors.inkFaint,
-            marginRight: 2,
-          }}
-        >
-          {symbol}
-        </span>
-        <span style={{ fontVariantNumeric: 'tabular-nums' }}>{body}</span>
-      </div>
-
-      {/* breakdown — txns · subs · bills · (in the lead currency) */}
-      <BurnBreakdown row={lead} />
-
-      {/* recurring caption — only when detection found at least one pattern */}
-      {recurringDetected && (
-        <div
-          style={{
-            marginTop: 4,
-            fontFamily: fonts.sans,
-            fontSize: 11,
-            fontWeight: 500,
-            color: colors.inkFaint,
-            letterSpacing: '0.06em',
-            fontVariantCaps: 'all-small-caps',
-            textAlign: 'center',
-          }}
-        >
-          {`${formatAmount(recurringDetected.amount, recurringDetected.currency)} recurring detected`}
-        </div>
-      )}
-
-      {/* horizon bar — a soft hairline that holds the eye even when empty */}
-      <div
-        style={{
-          marginTop: 18,
-          width: 188,
-          height: 4,
-          borderRadius: 3,
-          background: colors.hairlineSoft,
-        }}
-        aria-hidden
-      />
-
-      {rest.length > 0 && (
-        <div
-          style={{
-            marginTop: 13,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: 4,
-          }}
-        >
-          {rest.map((m) => {
-            const muted = m.currency == null;
-            return (
-              <div
-                key={m.currency ?? '_'}
-                style={{
-                  fontFamily: fonts.mono,
-                  fontSize: 13,
-                  fontWeight: 500,
-                  color: muted ? UMBER : colors.inkFaint,
-                  fontVariantNumeric: 'tabular-nums',
-                }}
-              >
-                {formatAmount(m.total, m.currency)}
-                {muted ? ' · no currency tag' : ''}
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      <div style={{ marginTop: rest.length > 0 ? 10 : 13, ...HERO_CAPTION_STYLE }}>
-        {lead.currency ?? 'no currency tag'}
-        {' · '}
-        {monthLabel(new Date())}
-      </div>
-    </div>
-  );
-}
-
-/**
- * BurnBreakdown — the one-line "$1200 spent · $15 subscriptions · $0 bills"
- * caption that unpacks the headline. Stays under the hero number so the
- * eye lands on the total first; renders silent when ALL three components
- * are zero (the empty-state already speaks for that case).
- */
-function BurnBreakdown({ row }: { row: MonthlyBurn }): JSX.Element | null {
-  if (row.transactions === 0 && row.subscriptions === 0 && row.billsDue === 0) {
-    return null;
-  }
-  const muted = row.currency == null;
-  return (
-    <div
-      style={{
-        marginTop: 10,
-        fontFamily: fonts.mono,
-        fontSize: 12,
-        fontWeight: 500,
-        color: muted ? UMBER : colors.inkFaint,
-        fontVariantNumeric: 'tabular-nums',
-        letterSpacing: '0.01em',
-        textAlign: 'center',
-      }}
-    >
-      {`${formatAmount(row.transactions, row.currency)} spent`}
-      {' · '}
-      {`${formatAmount(row.subscriptions, row.currency)} subscriptions`}
-      {' · '}
-      {`${formatAmount(row.billsDue, row.currency)} bills`}
-    </div>
-  );
-}
-
 // ── area card ─────────────────────────────────────────────────────────────
 
 /**
@@ -949,6 +858,445 @@ function BillDetailRow({
         </Row>
       </Row>
       <WhenCaption ts={item.addedAt} />
+    </Stack>
+  );
+}
+
+/** True when a logged income looks like store credit (a gift card) rather
+ *  than spendable cash — keys off the source text the router captured. */
+function isGiftCard(source: string | null): boolean {
+  return source != null && /gift\s*card|gift$|\bgift\b/i.test(source);
+}
+
+function IncomeDetailRow({
+  item,
+  onRemove,
+}: {
+  item: FinanceIncome;
+  onRemove: () => void;
+}): JSX.Element {
+  const muted = item.currency == null && item.amount != null;
+  const gift = isGiftCard(item.source);
+  return (
+    <Stack gap={2}>
+      <Row gap={12} align="baseline" justify="space-between">
+        <span style={DETAIL_K_STYLE}>
+          {item.source ?? 'money in'}
+          {gift ? (
+            <span style={{ color: colors.inkGhost, marginLeft: 6 }}>· gift card</span>
+          ) : null}
+        </span>
+        <Row gap={8} align="baseline">
+          <span style={{ ...DETAIL_V_STYLE, color: muted ? UMBER : colors.ink }}>
+            {formatAmount(item.amount, item.currency)}
+          </span>
+          <RemoveButton onClick={onRemove} />
+        </Row>
+      </Row>
+      <WhenCaption ts={item.receivedAt} />
+    </Stack>
+  );
+}
+
+function AssetDetailRow({
+  item,
+  onRemove,
+}: {
+  item: FinanceAsset;
+  onRemove: () => void;
+}): JSX.Element {
+  const muted = item.currency == null && item.value != null;
+  return (
+    <Stack gap={2}>
+      <Row gap={12} align="baseline" justify="space-between">
+        <span style={DETAIL_K_STYLE}>
+          {item.name}
+          {item.note ? (
+            <span style={{ color: colors.inkGhost, marginLeft: 6 }}>· {item.note}</span>
+          ) : null}
+        </span>
+        <Row gap={8} align="baseline">
+          {item.value == null ? (
+            <span
+              style={{
+                fontFamily: fonts.sans,
+                fontSize: 12,
+                fontWeight: 500,
+                color: colors.inkFaint,
+                fontVariantCaps: 'all-small-caps',
+                letterSpacing: '0.06em',
+              }}
+            >
+              no value set
+            </span>
+          ) : (
+            <span style={{ ...DETAIL_V_STYLE, color: muted ? UMBER : colors.ink }}>
+              {formatAmount(item.value, item.currency)}
+            </span>
+          )}
+          <RemoveButton onClick={onRemove} />
+        </Row>
+      </Row>
+      <WhenCaption ts={item.createdAt} />
+    </Stack>
+  );
+}
+
+/** Currency chips for the manual add forms. TRY first (primary user), then the
+ *  ones Serra asked for. Value is the ISO code; the label is the glyph. */
+const CURRENCY_OPTIONS: { code: string; label: string }[] = [
+  { code: 'TRY', label: '₺' },
+  { code: 'USD', label: '$' },
+  { code: 'EUR', label: '€' },
+  { code: 'CAD', label: 'CA$' },
+  { code: 'MXN', label: 'MX$' },
+];
+
+function CurrencyChips({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (code: string) => void;
+}): JSX.Element {
+  return (
+    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+      {CURRENCY_OPTIONS.map(({ code, label }) => {
+        const active = value === code;
+        return (
+          <button
+            key={code}
+            type="button"
+            aria-pressed={active}
+            aria-label={code}
+            onClick={() => onChange(code)}
+            style={{
+              background: active ? colors.ink : 'transparent',
+              color: active ? colors.cream : colors.inkFaint,
+              border: `1px solid ${active ? colors.ink : colors.hairline}`,
+              borderRadius: 999,
+              padding: '6px 12px',
+              cursor: 'pointer',
+              fontFamily: fonts.sans,
+              fontSize: 12,
+              fontWeight: 500,
+              letterSpacing: '0.02em',
+              WebkitTapHighlightColor: 'transparent',
+            }}
+          >
+            {label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * AddAssetForm — a quiet "add something you own" inline form. Assets have no
+ * dump routing yet, so this is how you list one: what it is, an optional
+ * detail ("5g", "2019 clio"), and an optional value you type. Collapsed to a
+ * single affordance so it doesn't shout.
+ */
+function AddAssetForm({
+  onAdd,
+}: {
+  onAdd: (input: {
+    name: string;
+    note: string | null;
+    value: number | null;
+    currency: string | null;
+  }) => void;
+}): JSX.Element {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState('');
+  const [note, setNote] = useState('');
+  const [value, setValue] = useState('');
+  const [currency, setCurrency] = useState('TRY');
+
+  const canAdd = name.trim().length > 0;
+  const reset = () => {
+    setName('');
+    setNote('');
+    setValue('');
+    setCurrency('TRY');
+  };
+  const submit = () => {
+    if (!canAdd) return;
+    const cleaned = value.replace(/[^0-9.]/g, '');
+    const v = cleaned === '' ? null : Number(cleaned);
+    const parsedValue = v != null && Number.isFinite(v) ? v : null;
+    onAdd({
+      name: name.trim(),
+      note: note.trim() || null,
+      value: parsedValue,
+      // currency only meaningful when a value is set
+      currency: parsedValue != null ? currency : null,
+    });
+    reset();
+    setOpen(false);
+  };
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        style={{
+          alignSelf: 'flex-start',
+          background: 'none',
+          border: 'none',
+          padding: '4px 2px',
+          cursor: 'pointer',
+          color: colors.sage,
+          fontFamily: fonts.sans,
+          fontSize: 13,
+          fontWeight: 600,
+          letterSpacing: '0.06em',
+          fontVariantCaps: 'all-small-caps',
+        }}
+      >
+        + add something you own
+      </button>
+    );
+  }
+
+  return (
+    <Stack gap={10}>
+      <input
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="what — savings, gold, car…"
+        aria-label="asset name"
+        style={FIELD_INPUT_STYLE}
+      />
+      <Row gap={8} align="center">
+        <input
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder="detail — 5g, 2019 clio (optional)"
+          aria-label="asset detail"
+          style={{ ...FIELD_INPUT_STYLE, flex: 1 }}
+        />
+        <input
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          inputMode="decimal"
+          placeholder="value"
+          aria-label="asset value"
+          style={{ ...FIELD_INPUT_STYLE, maxWidth: 120, fontFamily: fonts.mono }}
+        />
+      </Row>
+      <CurrencyChips value={currency} onChange={setCurrency} />
+      <Row gap={8} align="center">
+        <button
+          type="button"
+          onClick={submit}
+          disabled={!canAdd}
+          style={{
+            background: canAdd ? colors.ink : 'transparent',
+            color: canAdd ? colors.cream : colors.inkGhost,
+            border: `1px solid ${canAdd ? colors.ink : colors.hairline}`,
+            borderRadius: 8,
+            padding: '8px 18px',
+            cursor: canAdd ? 'pointer' : 'default',
+            fontFamily: fonts.sans,
+            fontSize: 12,
+            fontWeight: 600,
+            letterSpacing: '0.08em',
+            fontVariantCaps: 'all-small-caps',
+            WebkitTapHighlightColor: 'transparent',
+          }}
+        >
+          add
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            reset();
+            setOpen(false);
+          }}
+          style={{
+            background: 'none',
+            border: 'none',
+            padding: '8px 8px',
+            cursor: 'pointer',
+            color: colors.inkFaint,
+            fontFamily: fonts.sans,
+            fontSize: 12,
+            fontWeight: 500,
+            letterSpacing: '0.08em',
+            fontVariantCaps: 'all-small-caps',
+            WebkitTapHighlightColor: 'transparent',
+          }}
+        >
+          cancel
+        </button>
+      </Row>
+    </Stack>
+  );
+}
+
+/**
+ * AddRecurringForm — manual add for the bills & recurring box, the safety net
+ * for when the dump router misses a subscription. Name + optional amount +
+ * cadence (monthly default). Writes a subscription row.
+ */
+function AddRecurringForm({
+  onAdd,
+}: {
+  onAdd: (input: {
+    name: string;
+    amount: number | null;
+    currency: string;
+    cadence: 'monthly' | 'yearly' | 'weekly';
+  }) => void;
+}): JSX.Element {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState('');
+  const [amount, setAmount] = useState('');
+  const [currency, setCurrency] = useState('TRY');
+  const [cadence, setCadence] = useState<'monthly' | 'yearly' | 'weekly'>('monthly');
+
+  const canAdd = name.trim().length > 0;
+  const reset = () => {
+    setName('');
+    setAmount('');
+    setCurrency('TRY');
+    setCadence('monthly');
+  };
+  const submit = () => {
+    if (!canAdd) return;
+    const cleaned = amount.replace(/[^0-9.]/g, '');
+    const a = cleaned === '' ? null : Number(cleaned);
+    onAdd({
+      name: name.trim(),
+      amount: a != null && Number.isFinite(a) ? a : null,
+      currency,
+      cadence,
+    });
+    reset();
+    setOpen(false);
+  };
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        style={{
+          alignSelf: 'flex-start',
+          background: 'none',
+          border: 'none',
+          padding: '4px 2px',
+          cursor: 'pointer',
+          color: colors.sage,
+          fontFamily: fonts.sans,
+          fontSize: 13,
+          fontWeight: 600,
+          letterSpacing: '0.06em',
+          fontVariantCaps: 'all-small-caps',
+        }}
+      >
+        + add a bill or subscription
+      </button>
+    );
+  }
+
+  return (
+    <Stack gap={10}>
+      <input
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="what — apple music, rent, netflix…"
+        aria-label="name"
+        style={FIELD_INPUT_STYLE}
+      />
+      <Row gap={8} align="center">
+        <input
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          inputMode="decimal"
+          placeholder="amount (optional)"
+          aria-label="amount"
+          style={{ ...FIELD_INPUT_STYLE, flex: 1, fontFamily: fonts.mono }}
+        />
+      </Row>
+      <CurrencyChips value={currency} onChange={setCurrency} />
+      <div style={{ display: 'flex', gap: 8 }}>
+        {(['monthly', 'yearly', 'weekly'] as const).map((c) => {
+          const active = cadence === c;
+          return (
+            <button
+              key={c}
+              type="button"
+              aria-pressed={active}
+              onClick={() => setCadence(c)}
+              style={{
+                background: active ? colors.ink : 'transparent',
+                color: active ? colors.cream : colors.inkFaint,
+                border: `1px solid ${active ? colors.ink : colors.hairline}`,
+                borderRadius: 999,
+                padding: '6px 12px',
+                cursor: 'pointer',
+                fontFamily: fonts.sans,
+                fontSize: 12,
+                fontWeight: 500,
+                letterSpacing: '0.04em',
+                fontVariantCaps: 'all-small-caps',
+                WebkitTapHighlightColor: 'transparent',
+              }}
+            >
+              {c}
+            </button>
+          );
+        })}
+      </div>
+      <Row gap={8} align="center">
+        <button
+          type="button"
+          onClick={submit}
+          disabled={!canAdd}
+          style={{
+            background: canAdd ? colors.ink : 'transparent',
+            color: canAdd ? colors.cream : colors.inkGhost,
+            border: `1px solid ${canAdd ? colors.ink : colors.hairline}`,
+            borderRadius: 8,
+            padding: '8px 18px',
+            cursor: canAdd ? 'pointer' : 'default',
+            fontFamily: fonts.sans,
+            fontSize: 12,
+            fontWeight: 600,
+            letterSpacing: '0.08em',
+            fontVariantCaps: 'all-small-caps',
+            WebkitTapHighlightColor: 'transparent',
+          }}
+        >
+          add
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            reset();
+            setOpen(false);
+          }}
+          style={{
+            background: 'none',
+            border: 'none',
+            padding: '8px 8px',
+            cursor: 'pointer',
+            color: colors.inkFaint,
+            fontFamily: fonts.sans,
+            fontSize: 12,
+            fontWeight: 500,
+            letterSpacing: '0.08em',
+            fontVariantCaps: 'all-small-caps',
+            WebkitTapHighlightColor: 'transparent',
+          }}
+        >
+          cancel
+        </button>
+      </Row>
     </Stack>
   );
 }
@@ -1167,84 +1515,23 @@ function RecurringRow({
   );
 }
 
-/**
- * Roll detection results into a single "recurring detected" caption value,
- * expressed in the lead currency from the burn. Currency-mismatched
- * suggestions are dropped from the sum (we don't fake an FX) — the user
- * still sees them as individual rows in the RecurringList below. When the
- * lead currency is unresolved (null), we sum any null-currency rows
- * together so the caption still reads sensibly under the "no currency
- * tag" hero.
- *
- * Returns `null` when nothing remains — caller renders nothing.
- */
-function sumRecurringInLeadCurrency(
-  suggestions: RecurringSuggestion[],
-  leadCurrency: string | null,
-): { amount: number; currency: string | null } | null {
-  let total = 0;
-  let counted = 0;
-  for (const s of suggestions) {
-    if (s.medianAmount == null) continue;
-    if (s.currency !== leadCurrency) continue;
-    // Express every cycle as a monthly-equivalent so the caption reads
-    // consistently with the hero (which is already a per-month figure).
-    const monthly = toMonthlyEquivalent(s.medianAmount, s.cadence);
-    total += monthly;
-    counted += 1;
-  }
-  if (counted === 0) return null;
-  return { amount: total, currency: leadCurrency };
-}
-
-/** Convert a per-cycle amount into its monthly-equivalent. */
-function toMonthlyEquivalent(
-  amount: number,
-  cadence: 'monthly' | 'weekly' | 'yearly',
-): number {
-  switch (cadence) {
-    case 'monthly': return amount;
-    case 'weekly':  return amount * (52 / 12);
-    case 'yearly':  return amount / 12;
-  }
-}
-
 // ── formatting helpers ────────────────────────────────────────────────────
 
-/** Format an amount with currency prefix. Falls back to "—" if amount null. */
+/** Format an amount with currency prefix. Falls back to "—" if amount null.
+ *  No currency → the bare number (never fake a "$" — a null currency means
+ *  "unknown", not USD). */
 function formatAmount(amount: number | null, currency: string | null): string {
   if (amount == null) return '—';
   const fixed = amount.toFixed(2);
-  if (!currency) return `$${fixed}`;
-  // Single-character symbols ($, €, £, ¥) prefix directly; ISO codes get
-  // a space ("USD 15.00") so they read as letters not noise.
+  if (!currency) return fixed;
+  // Single-character symbols ($, €, £, ¥) prefix directly; known ISO codes
+  // get their symbol; everything else reads as "CODE 15.00".
   if (currency.length === 1) return `${currency}${fixed}`;
   if (currency === 'USD') return `$${fixed}`;
   if (currency === 'EUR') return `€${fixed}`;
   if (currency === 'GBP') return `£${fixed}`;
+  if (currency === 'TRY') return `₺${fixed}`;
+  if (currency === 'CAD') return `CA$${fixed}`;
+  if (currency === 'MXN') return `MX$${fixed}`;
   return `${currency} ${fixed}`;
-}
-
-/**
- * Split an amount into a mute-coloured currency symbol + body number so
- * the hero can render them at different sizes (money-v2 HeroNumber).
- */
-function splitAmount(
-  amount: number,
-  currency: string | null,
-): { symbol: string; body: string } {
-  const fixed = amount.toFixed(2);
-  if (!currency) return { symbol: '$', body: fixed };
-  if (currency.length === 1) return { symbol: currency, body: fixed };
-  if (currency === 'USD') return { symbol: '$', body: fixed };
-  if (currency === 'EUR') return { symbol: '€', body: fixed };
-  if (currency === 'GBP') return { symbol: '£', body: fixed };
-  // For unknown ISO codes the symbol slot carries the code; the body
-  // remains the numeric value so DM Serif still anchors the hero.
-  return { symbol: currency, body: fixed };
-}
-
-/** "may 2026" — used in the hero caption. */
-function monthLabel(d: Date): string {
-  return d.toLocaleString(undefined, { month: 'long', year: 'numeric' }).toLowerCase();
 }

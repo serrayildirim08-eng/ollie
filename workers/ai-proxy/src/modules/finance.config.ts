@@ -256,9 +256,9 @@ ACTIONS (pick exactly one):
 - log_transaction: a one-off payment, purchase, or expense (money OUT). payload: { amount? (number), currency? (ISO 4217: "USD"/"EUR"/"TRY"/"GBP"), merchant? (string, title-case the business name) }
     Currency symbols: $ → "USD", £ → "GBP", € → "EUR", TL/TRY → "TRY". Leave omitted when not stated.
     Triggers: "spent X at Y", "paid X", "gasté X en Y", "X TL harcadım", "pagué X de Y", "gastos X en Y".
-- log_income: money IN — salary, freelance payment, client payment, gift, asset sale. NOT a refund (use log_refund). payload: { amount? (number), currency? (ISO 4217), source? (string — the payer name when stated, or "salary" / "freelance" as a generic) }
-    Triggers: "got paid", "deposited", "received", "hit my account", "geldi", "ödediler", "depositaron", "me pagaron", "paycheck", "maaş", "salary".
-    Examples: "maaş geldi" → { source: "salary" } ; "akalan paycheck deposited" → { source: "akalan" } ; "elin energy paid me 500" → { amount: 500, source: "elin energy" } ; "depositaron el sueldo" → { source: "salary" } ; "freelance 5000 TL geldi" → { amount: 5000, currency: "TRY", source: "freelance" }.
+- log_income: money IN — salary, freelance payment, client payment, gift, gift card / store credit, asset sale. NOT a refund (use log_refund). payload: { amount? (number), currency? (ISO 4217), source? (string — the payer name when stated, or "salary" / "freelance" as a generic, or "<store> gift card" for store credit) }
+    Triggers: "got paid", "deposited", "received", "hit my account", "geldi", "ödediler", "depositaron", "me pagaron", "paycheck", "maaş", "salary", "gave me", "gift card", "hediye kartı".
+    Examples: "maaş geldi" → { source: "salary" } ; "akalan paycheck deposited" → { source: "akalan" } ; "elin energy paid me 500" → { amount: 500, source: "elin energy" } ; "depositaron el sueldo" → { source: "salary" } ; "freelance 5000 TL geldi" → { amount: 5000, currency: "TRY", source: "freelance" } ; "my dad gave me a 10k zara gift card" → { amount: 10000, currency: "TRY", source: "zara gift card" }.
 - log_refund: money came back from a previous purchase. payload: { amount? (number), currency? (ISO 4217), merchant? (string), originalItem? (string — what was returned) }
     Triggers: "refunded me", "returned the X", "got a refund for X", "iade aldım", "me devolvieron", "X devuelto".
     Examples: "returned the scarf" → { originalItem: "scarf" } ; "amazon refunded me $40" → { amount: 40, currency: "USD", merchant: "Amazon" } ; "me devolvieron los zapatos" → { originalItem: "shoes" } ; "iade aldım" → { } ; "amazon 200 TL iade etti" → { amount: 200, currency: "TRY", merchant: "Amazon" }.
@@ -275,12 +275,13 @@ ACTIONS (pick exactly one):
 - savings_note: transferring money to savings or noting a savings milestone. payload: { amount? (number), note? (string — preserve user's note if any) }
     Triggers: "moved X to savings", "saved X", "ahorré X", "tasarrufa X attım", "biriktirdim".
 - subscription_log: a recurring subscription service (streaming, software, apps). payload: { name (REQUIRED — the service name, title-case), amount? (number), currency? (ISO 4217), cadence? ("monthly"|"yearly"|"weekly") }
-    Triggers: "renewed X", "subscribed to X", "X aboneliği yenilendi", "suscribí a X", "$X/month Netflix".
+    Triggers: "renewed X", "subscribed to X", "i pay X monthly", "paying for X", "X aboneliği yenilendi", "suscribí a X", "$X/month Netflix", "apple music 130 lira monthly".
 
 DISAMBIGUATION:
 - "spent $40 at sephora" → log_transaction with amount=40, currency="USD", merchant="Sephora".
 - "rent is $1800/month" → add_bill (recurring fixed expense), not log_transaction.
 - "Netflix $10/month" → subscription_log, not add_bill (streaming service vs. utility/fixed bill).
+- "i pay apple music 130 lira monthly" → subscription_log { name:"Apple Music", amount:130, currency:"TRY", cadence:"monthly" } — a RECURRING cue ("monthly", "aylık") makes it a subscription, NOT a one-off log_transaction, even with a spending verb ("i pay").
 - "moved 500 to savings" → savings_note (no merchant, no subscription).
 - "pagé 50 dólares de luz" → add_bill with merchant="Luz" (utility bill triggers add_bill, not log_transaction).
 - "200 pesos en farmacia" → log_transaction with amount=200, merchant="Farmacia" (one-off pharmacy spend).

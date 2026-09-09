@@ -72,6 +72,21 @@ export interface FinanceIncome {
 }
 
 /**
+ * Something you own with a value you type in (savings, gold, a car). NOT money
+ * flow — no bank link, no auto net-worth. `note` is a qualifier the user typed
+ * ("5 g", "2019 clio"); `value` + `currency` are optional (list it with no
+ * value set).
+ */
+export interface FinanceAsset {
+  id: string;
+  name: string;
+  note: string | null;
+  value: number | null;
+  currency: string | null;
+  createdAt: number;
+}
+
+/**
  * Money came back from a prior purchase. `originalItem` is the returned
  * item when the user named it ("returned the scarf"); merchant is the
  * payer ("amazon refunded me"). Both individually nullable since the

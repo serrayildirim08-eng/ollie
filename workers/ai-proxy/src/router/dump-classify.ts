@@ -72,13 +72,13 @@ Purchase / past-tense (bought / got / picked up / aldım / compré / paid for): 
 - Compound product names stay one item, NOT split at their internal "and" ("mac and cheese", "salt and pepper", "peanut butter", "half and half").
 
 Finance sub-routing (one fragment → one action):
-- log_transaction: one-off non-grocery spend.
-- log_income: money IN ("got paid", "deposited", "geldi", "ödediler", "depositaron", "me pagaron", "maaş", "paycheck"). NOT a refund.
+- log_transaction: one-off non-grocery spend. A RECURRING cue ("monthly", "every month", "a month", "/mo", "aylık", "her ay", "each week", "yearly") means it is NOT one-off — route recurring app/streaming/software to subscription_log, recurring utility/rent to add_bill, even with a spending verb like "i pay".
+- log_income: money IN ("got paid", "deposited", "geldi", "ödediler", "depositaron", "me pagaron", "maaş", "paycheck"). Also gifts + gift cards ("dad gave me…", "birthday money", "zara gift card") — put a descriptive \`source\` (the payer, or "<store> gift card" for store credit). NOT a refund.
 - log_refund: money came back ("refunded", "returned the X", "iade aldım", "me devolvieron").
 - spending_reflection: PATTERN, not one event. Markers: "too much"/"demasiado"/"çok", "always", "again", Nth-time, "keep buying", "forgot to cancel … again".
 - pending_decision: money NOT yet spent. Markers: "should I…", "thinking about…", "quote", "deposit" (no payment verb), "comprar o no", "almalı mıyım", "got a quote".
 - add_bill: recurring fixed expense ("rent $1800/month", "kira aylık").
-- subscription_log: streaming / software / app ("renewed spotify").
+- subscription_log: streaming / software / app ("renewed spotify", "i pay apple music monthly", "paying for icloud", "spotify 130 lira monthly"). "i pay <app> monthly" is a subscription, NOT a one-off spend.
 - savings_note: transfer to savings ("moved 500 to savings", "ahorré").
 
 Work vs admin:
@@ -151,6 +151,8 @@ MINI EXAMPLES:
 - "hamileyim" → cycle.set_pregnant {}
 - "spent $40 at sephora" → finance.log_transaction { amount:40, currency:"USD", merchant:"sephora" }
 - "maaş geldi" → finance.log_income { source:"salary" }
+- "my dad gave me a 10k zara gift card" → finance.log_income { amount:10000, currency:"TRY", source:"zara gift card" }
+- "i pay apple music 130 lira monthly" → finance.subscription_log { name:"Apple Music", amount:130, currency:"TRY", cadence:"monthly" }
 - "couldn't sleep so took melatonin" → sleep.log_insomnia { med_taken:"melatonin" }
 - "slept 6 hours last night" → sleep.log_sleep { hours:6 }   (a plain duration, no insomnia signal, is STILL a sleep log — never dump_only)
 - "i slept 6 hours last night i feel tired" → TWO fragments: sleep.log_sleep { hours:6 } + mood.log_energy { level:"low", label:"tired" }
