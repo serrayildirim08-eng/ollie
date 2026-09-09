@@ -31,6 +31,12 @@ import { detectCrisis } from '@ollie/logic/crisis';
 import type { RouteDumpRequest } from '../api';
 import { kv } from '../storage';
 import { track, trackOnce } from '../api/analytics';
+import {
+  FirstDumpWhisper,
+  shouldShowFirstDumpWhisper,
+  markFirstDumpWhisperShown,
+  WHISPER_GENERIC_MODULES,
+} from './FirstDumpWhisper';
 import { colors } from '../theme/tokens';
 import type { RouterOutput, CrisisSignal } from '../router/schema';
 import { usePhotoIntake, PhotoIntakeBar } from './PhotoIntake';
@@ -144,6 +150,10 @@ export function BrainDumpInput({
   const inFlightRef = useRef(false);
 
   const photo = usePhotoIntake();
+
+  // One-time-ever first-dump whisper (see FirstDumpWhisper.tsx). Set on the
+  // first successful route with a nameable destination; null forever after.
+  const [whisper, setWhisper] = useState<{ module: string; extra: number } | null>(null);
 
   // Restore a persisted draft on mount (unless the textarea already has
   // content, e.g. an initialValue from a voice transcript).
@@ -274,6 +284,24 @@ export function BrainDumpInput({
       // dump, plus the once-ever first_dump activation marker.
       track('dump_submitted');
       trackOnce('first_dump');
+
+      // First-dump whisper: once ever, and only when the route produced a
+      // nameable destination (crisis/journal/dump_only have nothing to show).
+      // The flag is set at SHOW time so a quit mid-display still counts.
+      const routed = [
+        ...new Set(
+          res.data.fragments
+            .map((f) => f.module as string)
+            .filter((m) => !WHISPER_GENERIC_MODULES.has(m)),
+        ),
+      ];
+      if (routed.length > 0 && !res.data.crisis) {
+        void (async () => {
+          if (!(await shouldShowFirstDumpWhisper())) return;
+          await markFirstDumpWhisperShown();
+          setWhisper({ module: routed[0], extra: routed.length - 1 });
+        })().catch(() => {});
+      }
     }
     if (!res.ok) {
       // Translate ApiError to a one-line human message. The draft stays in
@@ -421,6 +449,13 @@ export function BrainDumpInput({
             send
           </Button>
         </Row>
+        {whisper && (
+          <FirstDumpWhisper
+            module={whisper.module}
+            extraCount={whisper.extra}
+            onDone={() => setWhisper(null)}
+          />
+        )}
         <NotifyPrimeLine />
       </Stack>
     </div>

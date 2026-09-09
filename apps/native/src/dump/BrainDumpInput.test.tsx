@@ -60,6 +60,14 @@ vi.mock('../ui', () => ({
 
 vi.mock('./BrainDumpInput.module.css', () => ({ default: {} }));
 
+// ── stub the first-dump whisper (has its own tests; needs Router context) ──
+vi.mock('./FirstDumpWhisper', () => ({
+  FirstDumpWhisper: () => null,
+  shouldShowFirstDumpWhisper: async () => false,
+  markFirstDumpWhisperShown: async () => {},
+  WHISPER_GENERIC_MODULES: new Set(['dump_only', 'journal', 'crisis', '']),
+}));
+
 // ── mock kv with an in-memory store + spies ────────────────────────────────
 const memStore = new Map<string, unknown>();
 const kvSet = vi.fn(async (k: string, v: unknown) => void memStore.set(k, v));
