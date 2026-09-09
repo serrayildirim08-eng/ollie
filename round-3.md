@@ -1050,7 +1050,7 @@ SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsI
 - **Problem:** Real Voyage AI and Gemini API keys are present in .env for local development (used by router build scripts). Real Groq API key is in workers/ai-proxy/.dev.vars for Wrangler local development. Both files are properly gitignored, but represent developer machine compromise risk.
 - **Fix:** These keys should be rotated if developer machines are known to be compromised. Consider documenting in worker README files how to regenerate these keys (e.g., 'Generate via https://console.groq.com → API Keys'). The .gitignore protection is correct; no code change needed.
 - **Evidence:** `VOYAGE_API_KEY=[REDACTED_VOYAGE_KEY]
-GEMINI_API_KEY=[REDACTED_GEMINI_KEY]
+GEMINI_API_KEY=<REDACTED — key rotated>
 GROQ_API_KEY=[REDACTED_GROQ_KEY]`
 
 ### Unvalidated excludeDishes array size in /feed-me endpoint

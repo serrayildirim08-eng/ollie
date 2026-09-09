@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Cycle — history</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;
+    padding:0 26px 36px}
+
+  /* the mean — one line, the headline number. no grade, no judgement. */
+  .mean{margin-top:116px;display:flex;flex-direction:column;align-items:center}
+  .mlead{font-size:13px;color:var(--mute);font-weight:500;letter-spacing:.02em}
+  .mnum{margin-top:6px;font-size:54px;font-weight:300;color:var(--ink);
+    letter-spacing:-.03em;line-height:1}
+  .mnum .u{font-size:20px;color:var(--mute);font-weight:400;margin-left:6px;
+    letter-spacing:0}
+
+  /* THE ONE THING — last 5 closed cycles as calm day-length marks.
+     each cycle is a tile: a horizontal bar whose width reads its
+     length against the others, the day count beside it, the month
+     it started below. ink bars, no colour, no grade. the longest
+     cycles ride a faint sage edge — that's all the "irregular" gets. */
+  .tiles{margin-top:46px;display:flex;flex-direction:column;gap:20px}
+  .tile{display:flex;align-items:center;gap:14px}
+  .tmonth{width:40px;font-size:11px;color:var(--mute);font-weight:600;
+    letter-spacing:.05em;text-transform:uppercase;flex-shrink:0}
+  .tbarwrap{flex:1;height:14px;border-radius:7px;background:var(--line);
+    position:relative;overflow:hidden}
+  .tbar{position:absolute;left:0;top:0;bottom:0;border-radius:7px;
+    background:var(--ink)}
+  /* a long cycle — the bar carries a quiet sage cap, never red */
+  .tbar.long{background:var(--sage)}
+  .tdays{width:54px;font-size:14px;color:var(--ink);font-weight:600;
+    letter-spacing:-.01em;flex-shrink:0;text-align:right}
+  .tdays .d{color:var(--mute);font-weight:500;font-size:12px}
+
+  /* the irregular flag — one calm sage line, only if set. a watch
+     framing, never an alarm. */
+  .flag{margin-top:38px;display:flex;align-items:center;gap:9px;
+    border-top:1px solid var(--line);padding-top:22px}
+  .flag .fdot{width:7px;height:7px;border-radius:50%;background:var(--sage);
+    flex-shrink:0}
+  .flag span{font-size:13px;color:var(--ink);font-weight:500;letter-spacing:-.01em}
+  .flag b{font-weight:600;color:var(--sage)}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+
+  <div class="who">
+    <span>history</span>
+  </div>
+
+  <div class="scroll">
+    <div class="mean">
+      <div class="mlead">mean cycle length</div>
+      <div class="mnum">31<span class="u">days</span></div>
+    </div>
+
+    <!-- last 5 closed cycles — calm day-length tiles, newest first.
+         bar widths read length against each other (24..38d span). -->
+    <div class="tiles">
+      <div class="tile">
+        <span class="tmonth">apr</span>
+        <div class="tbarwrap"><div class="tbar long" style="width:96%"></div></div>
+        <span class="tdays">38<span class="d"> d</span></span>
+      </div>
+      <div class="tile">
+        <span class="tmonth">mar</span>
+        <div class="tbarwrap"><div class="tbar long" style="width:88%"></div></div>
+        <span class="tdays">36<span class="d"> d</span></span>
+      </div>
+      <div class="tile">
+        <span class="tmonth">feb</span>
+        <div class="tbarwrap"><div class="tbar long" style="width:84%"></div></div>
+        <span class="tdays">35<span class="d"> d</span></span>
+      </div>
+      <div class="tile">
+        <span class="tmonth">jan</span>
+        <div class="tbarwrap"><div class="tbar" style="width:50%"></div></div>
+        <span class="tdays">27<span class="d"> d</span></span>
+      </div>
+      <div class="tile">
+        <span class="tmonth">dec</span>
+        <div class="tbarwrap"><div class="tbar" style="width:32%"></div></div>
+        <span class="tdays">24<span class="d"> d</span></span>
+      </div>
+    </div>
+
+    <!-- the irregular flag — calm, sage, a watch line not an alarm -->
+    <div class="flag">
+      <span class="fdot"></span>
+      <span><b>cycles vary by 14 days</b> — that's wider than usual for you.</span>
+    </div>
+  </div>
+</div>
+</body>
+</html>

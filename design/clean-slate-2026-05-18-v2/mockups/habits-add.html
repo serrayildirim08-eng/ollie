@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Habits — add a habit</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  /* swipe-down handle dismisses — same return gesture everywhere */
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;
+    padding:0 26px 36px}
+
+  /* the lead — one calm line */
+  .lead{margin-top:116px;font-size:22px;font-weight:300;color:var(--ink);
+    letter-spacing:-.02em}
+  .lead b{font-weight:500}
+
+  /* each field — a quiet label + one underlined input line. never a box.
+     calm vertical rhythm, generous air between the three fields. */
+  .field{margin-top:34px}
+  .flbl{font-size:11px;color:var(--mute);font-weight:600;letter-spacing:.07em;
+    text-transform:uppercase}
+  .fline{margin-top:11px;border-bottom:1px solid var(--line);padding-bottom:11px}
+  .fline span{font-size:19px;color:var(--ink);font-weight:400;letter-spacing:-.012em}
+  /* the name field, filled — the user's own words */
+  .fline.set span{font-weight:500}
+  /* a placeholder line — quiet grey, an example of the kind of thing */
+  .fline .ph{color:var(--mute);font-weight:400}
+
+  /* the cue field is REQUIRED — its underline carries a quiet sage tick
+     once filled, and a one-line conviction note sits below it. this is
+     the heart of the screen: a habit without a cue is wishful thinking. */
+  .field.cue .fline{display:flex;align-items:baseline;gap:10px}
+  .field.cue .fline span{flex:1}
+  .ctick{flex-shrink:0}
+  .ctick svg{stroke:var(--sage)}
+  /* the conviction line — sage dot + one calm sentence, never scolding */
+  .why{margin-top:13px;display:flex;align-items:flex-start;gap:9px}
+  .why .wdot{width:7px;height:7px;border-radius:50%;background:var(--sage);
+    flex-shrink:0;margin-top:5px}
+  .why span{font-size:13px;color:var(--mute);font-weight:400;line-height:1.5}
+  .why b{color:var(--ink);font-weight:600}
+
+  /* the cue-time tag — three calm pills, single-select. morning / anytime
+     / evening — when the cue tends to land, so the day orders itself. */
+  .tags{margin-top:13px;display:flex;gap:9px}
+  .tag{flex:1;height:44px;border-radius:14px;border:1px solid var(--line);
+    background:#fff;display:flex;align-items:center;justify-content:center;
+    gap:7px;box-shadow:0 5px 14px rgba(42,38,34,.04)}
+  .tag svg{stroke:var(--mute)}
+  .tag span{font-size:14px;color:var(--ink);font-weight:500;letter-spacing:-.01em}
+  /* the chosen tag — amber edge, the one accent */
+  .tag.on{border-color:var(--accent);background:#FCF6EA}
+  .tag.on svg{stroke:var(--accent)}
+  .tag.on span{font-weight:600}
+
+  /* save — full-width amber, the one commit */
+  .save{margin-top:40px;height:52px;border-radius:26px;background:var(--accent);
+    display:flex;align-items:center;justify-content:center;gap:8px;
+    box-shadow:0 12px 28px rgba(201,146,62,.32)}
+  .save svg{stroke:#fff}
+  .save span{font-size:16px;font-weight:600;color:#fff;letter-spacing:-.01em}
+
+  /* a closing reassurance — no streak waits for this habit */
+  .foot{margin-top:18px;text-align:center;font-size:12px;color:var(--mute);
+    font-weight:400;line-height:1.5}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+
+  <div class="who">
+    <span>add a habit</span>
+  </div>
+
+  <div class="scroll">
+    <div class="lead"><b>one small thing</b><br>you'd like to do most days</div>
+
+    <!-- NAME — the user's own words -->
+    <div class="field">
+      <div class="flbl">the habit</div>
+      <div class="fline set"><span>drink water</span></div>
+    </div>
+
+    <!-- CUE — required. the underline ticks sage, the conviction line
+         states why it can't be skipped. -->
+    <div class="field cue">
+      <div class="flbl">its cue — required</div>
+      <div class="fline set">
+        <span>after coffee</span>
+        <span class="ctick">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke-width="2.4"><path d="M5 13l4 4 10-11"/></svg>
+        </span>
+      </div>
+      <div class="why">
+        <span class="wdot"></span>
+        <span>a habit without a cue is wishful thinking. <b>the cue is
+          what actually fires it</b> — something that already happens.</span>
+      </div>
+    </div>
+
+    <!-- CUE-TIME — when the cue tends to land. orders the day. -->
+    <div class="field">
+      <div class="flbl">when does that cue land</div>
+      <div class="tags">
+        <div class="tag on">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke-width="1.9"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M5 5l2 2M17 17l2 2M2 12h3M19 12h3M5 19l2-2M17 7l2-2"/></svg>
+          <span>morning</span>
+        </div>
+        <div class="tag">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke-width="1.9"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+          <span>anytime</span>
+        </div>
+        <div class="tag">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke-width="1.9"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z"/></svg>
+          <span>evening</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="save">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>
+      <span>add it</span>
+    </div>
+    <div class="foot">no streak starts. just a small thing,<br>here when its cue comes round.</div>
+  </div>
+</div>
+</body>
+</html>

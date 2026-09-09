@@ -26,7 +26,6 @@ import { useEffect, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { Stack, Row } from '../layout';
 import { Text } from '../ui';
-import { colors } from '../theme/tokens';
 import {
   checkNotificationPermission,
   requestNotificationPermission,
@@ -108,11 +107,11 @@ export function NotifyPrimeLine({
       style={{
         paddingTop: 16,
         paddingBottom: 16,
-        borderTop: `1px solid ${colors.hairline}`,
+        borderTop: '1px solid var(--ollie-color-hairline)',
       }}
       data-testid="notify-prime-line"
     >
-      <Text scale="body" color={colors.ink}>
+      <Text scale="body" color="var(--ollie-color-ink)">
         {label}
       </Text>
       <Row gap={20}>
@@ -121,7 +120,7 @@ export function NotifyPrimeLine({
           onClick={() => {
             void onAllow();
           }}
-          style={{ ...buttonStyle, color: colors.sageDeep }}
+          style={{ ...buttonStyle, color: 'var(--ollie-color-sage-deep)' }}
           data-testid="notify-prime-allow"
         >
           allow
@@ -129,7 +128,7 @@ export function NotifyPrimeLine({
         <button
           type="button"
           onClick={onDismiss}
-          style={{ ...buttonStyle, color: colors.inkSoft }}
+          style={{ ...buttonStyle, color: 'var(--ollie-color-ink-soft)' }}
           data-testid="notify-prime-dismiss"
         >
           not now

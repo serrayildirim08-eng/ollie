@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Sleep — wind-down</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  /* swipe-down handle dismisses */
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+
+  .scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;
+    padding:0 26px 36px}
+
+  /* the lead — one calm line. no streak, no count of "days done". */
+  .lead{margin-top:116px;font-size:22px;font-weight:300;color:var(--ink);
+    letter-spacing:-.02em}
+  .lead b{font-weight:500}
+  .sub{margin-top:6px;font-size:13px;color:var(--mute);font-weight:500}
+
+  /* THE ONE THING — a 6-step sequential tap-through. one step in FOCUS,
+     the rest quiet. done steps = sage tick, soft. the current step is
+     the only one with weight: amber ring, larger, the rest near-mute.
+     no streak, no progress bar — just where you are in the ritual. */
+  .steps{margin-top:34px;display:flex;flex-direction:column}
+  .step{display:flex;align-items:center;gap:15px;padding:15px 2px}
+  /* the mark — a small circle. done = sage filled tick, pending = open. */
+  .mark{width:28px;height:28px;border-radius:50%;border:1.6px solid var(--line);
+    display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .mark svg{stroke:#fff}
+  .stext{flex:1;display:flex;flex-direction:column;gap:2px;min-width:0}
+  .sk{font-size:15px;color:var(--mute);font-weight:500;letter-spacing:-.01em}
+  .ss{font-size:12px;color:var(--mute);font-weight:400}
+
+  /* a DONE step — sage tick, calm, the line settles back */
+  .step.done .mark{background:var(--sage);border-color:var(--sage)}
+  .step.done .sk{color:var(--ink);font-weight:500}
+
+  /* the step IN FOCUS — the one with weight. amber ring, larger mark,
+     the label full-ink, a quiet "tap when done" cue. one at a time. */
+  .step.now{background:#FCF6EA;border-radius:18px;padding:18px 16px;
+    margin:6px -4px}
+  .step.now .mark{width:34px;height:34px;border:2px solid var(--accent)}
+  .step.now .sk{font-size:17px;color:var(--ink);font-weight:600}
+  .step.now .ss{color:#9A7A45;font-weight:500}
+  /* the focused step carries its glyph in amber, the others are unmarked */
+  .step.now .gl{stroke:var(--accent)}
+  .gl{display:none}
+
+  /* the closing line — calm, after the last step. no score. */
+  .close{margin-top:30px;display:flex;align-items:flex-start;gap:10px}
+  .close svg{stroke:var(--mute);flex-shrink:0;margin-top:1px}
+  .close span{font-size:12px;color:var(--mute);font-weight:400;line-height:1.5}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+
+  <div class="who">
+    <span>wind-down</span>
+  </div>
+
+  <div class="scroll">
+    <div class="lead"><b>six small steps</b> into the night</div>
+    <div class="sub">tap each as you go · no streak, no rush</div>
+
+    <!-- the 6-step sequential ritual. steps 1–3 done, step 4 in focus,
+         5–6 quiet ahead. one step has weight at a time. -->
+    <div class="steps">
+      <!-- done -->
+      <div class="step done">
+        <div class="mark"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke-width="3"><path d="M5 13l4 4 10-11"/></svg></div>
+        <div class="stext"><span class="sk">phone away</span></div>
+      </div>
+      <div class="step done">
+        <div class="mark"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke-width="3"><path d="M5 13l4 4 10-11"/></svg></div>
+        <div class="stext"><span class="sk">a glass of water</span></div>
+      </div>
+      <div class="step done">
+        <div class="mark"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke-width="3"><path d="M5 13l4 4 10-11"/></svg></div>
+        <div class="stext"><span class="sk">supplement</span></div>
+      </div>
+
+      <!-- the step IN FOCUS — the one with weight -->
+      <div class="step now">
+        <div class="mark">
+          <svg class="gl" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M12 3v2M12 19v2M5 12H3M21 12h-2M6 6L4.5 4.5M18 6l1.5-1.5M6 18l-1.5 1.5M18 18l1.5 1.5"/><circle cx="12" cy="12" r="4"/></svg>
+        </div>
+        <div class="stext">
+          <span class="sk">lights low</span>
+          <span class="ss">dim the room — tap when it's done</span>
+        </div>
+      </div>
+
+      <!-- quiet ahead -->
+      <div class="step">
+        <div class="mark"></div>
+        <div class="stext"><span class="sk">breath or a few lines journalled</span></div>
+      </div>
+      <div class="step">
+        <div class="mark"></div>
+        <div class="stext"><span class="sk">into bed</span></div>
+      </div>
+    </div>
+
+    <div class="close">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="1.8">
+        <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z"/>
+      </svg>
+      <span>missing a step is fine — it's a ritual, not a test. ollie
+        keeps no streak here.</span>
+    </div>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Money</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E; --sage:#5B8C7E;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  .safe{position:absolute;top:62px;right:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .safe svg{stroke:var(--mute)}
+  .find{position:absolute;top:62px;left:24px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .find svg{stroke:var(--mute)}
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  /* money is the only submodule — so the money page IS finance.
+     no module-card list. the face: one focus = ONE number. */
+  .who{position:absolute;top:104px;left:0;right:0;display:flex;
+    align-items:center;justify-content:center;gap:9px}
+  .who span{font-size:14px;font-weight:600;color:var(--mute);letter-spacing:.04em}
+  /* the privacy eye — tap masks all figures; face-id to unmask */
+  .eye{margin-left:3px;width:26px;height:26px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center}
+  .eye svg{stroke:var(--mute)}
+
+  .scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;
+    padding:0 26px 36px}
+
+  /* THE HERO — safe to spend. one number, the rest is air.
+     margin-top clears the absolutely-positioned .who label (top:104 + ~30). */
+  .hero{margin-top:116px;display:flex;flex-direction:column;align-items:center}
+  .lead{font-size:13px;color:var(--mute);font-weight:500;letter-spacing:.02em}
+  .amount{font-size:78px;font-weight:300;color:var(--ink);letter-spacing:-.04em;
+    line-height:1;margin-top:8px}
+  .amount .c{color:var(--mute);font-weight:300}
+  .horizon{margin-top:26px;width:174px;height:4px;border-radius:3px;
+    background:var(--line);position:relative;overflow:hidden}
+  .horizon div{position:absolute;left:0;top:0;bottom:0;width:62%;
+    border-radius:3px;background:var(--accent)}
+  .til{margin-top:12px;font-size:13px;color:var(--mute);font-weight:500}
+
+  /* one amber button — log a spend */
+  .spend{margin:30px auto 0;height:50px;border-radius:25px;background:var(--accent);
+    display:flex;align-items:center;justify-content:center;gap:8px;padding:0 26px;
+    box-shadow:0 12px 28px rgba(201,146,62,.32)}
+  .spend svg{stroke:#fff}
+  .spend span{font-size:16px;font-weight:600;color:#fff;letter-spacing:-.01em}
+
+  /* below the hero, lots of air — 5 calm expandable area-rows.
+     each = ONE real data line. tap = expand inline → tap → detail. */
+  .rows{margin-top:54px;display:flex;flex-direction:column}
+  .row{border-top:1px solid var(--line);padding:19px 2px}
+  .row:last-child{border-bottom:1px solid var(--line)}
+  .rhead{display:flex;align-items:baseline;gap:0}
+  .rk{font-size:13px;color:var(--mute);font-weight:600;letter-spacing:.01em;
+    flex-shrink:0}
+  .rsep{color:var(--line);margin:0 8px;font-size:13px}
+  .rv{font-size:14px;color:var(--ink);font-weight:500;letter-spacing:-.01em;flex:1}
+  .rv b{font-weight:600}
+  .chev{stroke:var(--mute);flex-shrink:0;margin-left:8px;align-self:center}
+  /* one row shown expanded — 3 quiet lines + an open cue */
+  .row.open{padding-bottom:22px}
+  .row.open .chev{transform:rotate(180deg)}
+  .det{margin-top:14px;display:flex;flex-direction:column;gap:9px}
+  .dl{display:flex;align-items:baseline;justify-content:space-between;font-size:13px}
+  .dl .k{color:var(--mute);font-weight:500}
+  .dl .v{color:var(--ink);font-weight:600}
+  .open{margin-top:14px;font-size:12px;color:var(--accent);font-weight:600;
+    letter-spacing:.02em}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+  <div class="find">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/>
+    </svg>
+  </div>
+  <div class="safe">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2">
+      <path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.5-7 10-7 10z"/>
+    </svg>
+  </div>
+
+  <div class="who">
+    <span>money</span>
+    <!-- privacy eye — tap masks every figure -->
+    <div class="eye">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke-width="1.7">
+        <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/>
+        <circle cx="12" cy="12" r="3"/>
+      </svg>
+    </div>
+  </div>
+
+  <div class="scroll">
+    <div class="hero">
+      <div class="lead">safe to spend</div>
+      <div class="amount"><span class="c">$</span>312</div>
+      <div class="horizon"><div></div></div>
+      <div class="til">11 days left</div>
+      <div class="spend">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="2.4">
+          <path d="M12 5v14M5 12h14"/>
+        </svg>
+        <span>spend</span>
+      </div>
+    </div>
+
+    <div class="rows">
+      <!-- bills -->
+      <div class="row">
+        <div class="rhead">
+          <span class="rk">bills</span><span class="rsep">·</span>
+          <span class="rv">rent <b>$1,200</b> · fri</span>
+          <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+        </div>
+      </div>
+
+      <!-- income — shown expanded -->
+      <div class="row open">
+        <div class="rhead">
+          <span class="rk">income</span><span class="rsep">·</span>
+          <span class="rv">~<b>$3.2k</b>/mo · irregular</span>
+          <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+        </div>
+        <div class="det">
+          <div class="dl"><span class="k">last 3 months</span><span class="v">$2.8k · $3.7k · $3.1k</span></div>
+          <div class="dl"><span class="k">pays</span><span class="v">no fixed day</span></div>
+          <div class="dl"><span class="k">last landed</span><span class="v">$1,150 · 6 days ago</span></div>
+        </div>
+        <div class="open">open income &rarr;</div>
+      </div>
+
+      <!-- subscriptions -->
+      <div class="row">
+        <div class="rhead">
+          <span class="rk">subscriptions</span><span class="rsep">·</span>
+          <span class="rv"><b>2</b> look dormant</span>
+          <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+        </div>
+      </div>
+
+      <!-- savings -->
+      <div class="row">
+        <div class="rhead">
+          <span class="rk">savings</span><span class="rsep">·</span>
+          <span class="rv">trip <b>$340</b> / $1,000</span>
+          <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+        </div>
+      </div>
+
+      <!-- adhd tax -->
+      <div class="row">
+        <div class="rhead">
+          <span class="rk">adhd tax</span><span class="rsep">·</span>
+          <span class="rv"><b>$47</b> this month</span>
+          <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

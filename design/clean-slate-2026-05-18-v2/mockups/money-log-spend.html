@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ollie · Log a spend</title>
+<style>
+  :root{
+    --paper:#FAF6EF; --ink:#2A2622; --mute:#B6ADA0; --line:#EAE2D4;
+    --accent:#C9923E;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:#d8d0c2;
+    display:flex;align-items:center;justify-content:center}
+  .phone{width:390px;height:844px;background:var(--paper);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.32);display:flex;flex-direction:column}
+  .status{height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 6px;font-size:13px;font-weight:600;color:var(--ink)}
+  /* swipe-down handle dismisses — same return gesture everywhere */
+  .handle{position:absolute;top:64px;left:0;right:0;display:flex;justify-content:center}
+  .handle div{width:38px;height:5px;border-radius:3px;background:var(--line)}
+
+  /* THE ONE THING — the amount, fast. number pad below, one calm
+     category line above the keys. no date picker, no notes field. */
+  .top{flex:1;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;padding:0 44px}
+  .lead{font-size:13px;color:var(--mute);font-weight:500;letter-spacing:.02em}
+  .amount{margin-top:10px;font-size:80px;font-weight:300;color:var(--ink);
+    letter-spacing:-.04em;line-height:1;display:flex;align-items:baseline}
+  .amount .c{color:var(--mute);font-weight:300;font-size:48px;margin-right:2px}
+  .amount .caret{width:3px;height:64px;background:var(--accent);margin-left:4px;
+    animation:blink 1.1s step-end infinite}
+  @keyframes blink{50%{opacity:0}}
+  /* one calm category line — a single chip, tap to change */
+  .cat{margin-top:30px;display:flex;align-items:center;gap:8px;
+    border:1px solid var(--line);background:#fff;border-radius:18px;
+    padding:9px 16px;box-shadow:0 8px 20px rgba(42,38,34,.05)}
+  .cat svg{stroke:var(--accent)}
+  .cat span{font-size:14px;font-weight:600;color:var(--ink)}
+  .cat .ch{stroke:var(--mute)}
+
+  /* the pad */
+  .pad{padding:0 18px 18px;display:grid;grid-template-columns:repeat(3,1fr);
+    gap:6px}
+  .key{height:62px;display:flex;align-items:center;justify-content:center;
+    font-size:28px;font-weight:400;color:var(--ink);border-radius:16px;
+    letter-spacing:-.02em}
+  .key svg{stroke:var(--mute)}
+  /* the save key — amber, the only colored thing on the pad */
+  .key.save{background:var(--accent);box-shadow:0 10px 24px rgba(201,146,62,.3)}
+  .key.save svg{stroke:#fff}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+  <div class="handle"><div></div></div>
+
+  <div class="top">
+    <div class="lead">spent</div>
+    <div class="amount"><span class="c">$</span>24<span class="caret"></span></div>
+    <div class="cat">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="1.8">
+        <path d="M3 10h18M7 3v4M17 3v4M5 6h14v14H5z"/>
+      </svg>
+      <span>food</span>
+      <svg class="ch" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+    </div>
+  </div>
+
+  <div class="pad">
+    <div class="key">1</div><div class="key">2</div><div class="key">3</div>
+    <div class="key">4</div><div class="key">5</div><div class="key">6</div>
+    <div class="key">7</div><div class="key">8</div><div class="key">9</div>
+    <div class="key">.</div>
+    <div class="key">0</div>
+    <div class="key">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="1.9">
+        <path d="M21 5H8L3 12l5 7h13z"/><path d="M16 9l-5 6M11 9l5 6"/>
+      </svg>
+    </div>
+    <div class="key save" style="grid-column:1 / -1;border-radius:18px;height:56px">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke-width="2.4"><path d="M5 13l4 4 10-11"/></svg>
+    </div>
+  </div>
+</div>
+</body>
+</html>
