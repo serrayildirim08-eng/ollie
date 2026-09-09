@@ -473,3 +473,52 @@ describe('isUuid', () => {
     expect(isUuid('not-a-uuid')).toBe(false);
   });
 });
+
+describe('runAccountDelete · erases the DEVICE_TOKENS edge KV copy', () => {
+  it('deletes user:<id> from DEVICE_TOKENS and records device_tokens_kv', async () => {
+    const db = new FakeDb();
+    await seedAllTables(db, CLERK_ID, /* includeLegacyUuid */ false);
+
+    const kvDeletes: string[] = [];
+    const DEVICE_TOKENS = {
+      delete: async (key: string) => {
+        kvDeletes.push(key);
+      },
+    } as unknown as KVNamespace;
+
+    const verifyIdentity = async (): Promise<VerifiedIdentity | null> => ({
+      userId: CLERK_ID,
+      identity: 'clerk',
+    });
+
+    const r = await runAccountDelete(
+      postReq({ confirm: 'DELETE' }, { authorization: 'Bearer good' }),
+      { ...ENV, DEVICE_TOKENS },
+      { fetchImpl: db.fetchImpl, verifyIdentity },
+    );
+
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(kvDeletes).toEqual([`user:${CLERK_ID}`]);
+    expect(r.deleted_tables).toContain('device_tokens_kv');
+  });
+
+  it('still succeeds and skips the KV step when DEVICE_TOKENS is unbound', async () => {
+    const db = new FakeDb();
+    await seedAllTables(db, CLERK_ID, /* includeLegacyUuid */ false);
+    const verifyIdentity = async (): Promise<VerifiedIdentity | null> => ({
+      userId: CLERK_ID,
+      identity: 'clerk',
+    });
+
+    const r = await runAccountDelete(
+      postReq({ confirm: 'DELETE' }, { authorization: 'Bearer good' }),
+      ENV,
+      { fetchImpl: db.fetchImpl, verifyIdentity },
+    );
+
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.deleted_tables).not.toContain('device_tokens_kv');
+  });
+});
