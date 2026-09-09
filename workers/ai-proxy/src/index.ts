@@ -268,6 +268,11 @@ export default {
           return withCors(origin, json({ error: 'rate_limited' }, 429));
         }
       }
+      // Global daily ceiling (S4c): paid Groq Whisper. Bound TOTAL spend so
+      // coordinated signup-abuse can't drain the key even within per-user limits.
+      if (!(await checkGlobalBudget(env.RATE_KV, env))) {
+        return withCors(origin, json({ error: 'budget_exhausted' }, 429));
+      }
       return withCors(origin, await handleTranscribe(req, env));
     }
 
@@ -305,6 +310,11 @@ export default {
         if (!allowed) {
           return withCors(origin, json({ error: 'rate_limited' }, 429));
         }
+      }
+      // Global daily ceiling (S4c): paid Voyage + Groq. Bound TOTAL spend so
+      // coordinated signup-abuse can't drain the key even within per-user limits.
+      if (!(await checkGlobalBudget(env.RATE_KV, env))) {
+        return withCors(origin, json({ error: 'budget_exhausted' }, 429));
       }
       return withCors(origin, await handleFeedMe(req, env, feedMeMatch[1]));
     }
@@ -413,6 +423,12 @@ export default {
       }
       if (url.pathname === '/ingest-event') {
         return withCors(origin, await handleIngestEvent(req, env, userId));
+      }
+      // /label calls Anthropic synchronously (paid). Global daily ceiling (S4c)
+      // so signup-abuse can't drain the key. (enrich-dump only ENQUEUES — the
+      // paid Anthropic call happens in the cron worker and is gated there.)
+      if (!(await checkGlobalBudget(env.RATE_KV, env))) {
+        return withCors(origin, json({ error: 'budget_exhausted' }, 429));
       }
       return withCors(origin, await handleLabel(req, env));
     }
