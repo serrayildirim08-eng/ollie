@@ -16,6 +16,8 @@ import { verifyClerkJwt } from '../clerk-verify';
 export interface TranscribeEnv {
   GROQ_API_KEY: string;
   T0_JWT_ENFORCED?: string;
+  /** Cloudflare env name; "production" forces auth even if T0_JWT_ENFORCED='0' (S4e). */
+  ENVIRONMENT?: string;
   CLERK_ISSUER?: string;
 }
 
@@ -35,8 +37,8 @@ function extFor(contentType: string): string {
 }
 
 export async function handleTranscribe(req: Request, env: TranscribeEnv): Promise<Response> {
-  // ── Auth — fail CLOSED unless T0_JWT_ENFORCED === '0' (dev). ──────────────
-  if (env.T0_JWT_ENFORCED !== '0') {
+  // ── Auth — fail CLOSED unless T0_JWT_ENFORCED === '0' (dev) AND not prod. ──
+  if (env.T0_JWT_ENFORCED !== '0' || env.ENVIRONMENT === 'production') {
     const auth = req.headers.get('authorization');
     if (!auth || !auth.startsWith('Bearer ')) {
       return json({ error: 'unauthorized' }, 401);

@@ -53,8 +53,19 @@ import type { RouterOutput } from '../router/schema';
 
 // ─── env helpers ──────────────────────────────────────────────────────────────
 
-function workerUrl(key: string, fallback?: string): string {
-  const val = import.meta.env[key] as string | undefined;
+// Static allowlist of the ONLY env vars this module may read. Dynamic
+// `import.meta.env[key]` access forces Vite to serialize the ENTIRE env object
+// into the shipped bundle (every VITE_ var, secrets included) — each entry
+// below is a literal property access, so only these values get inlined.
+const WORKER_ENV = {
+  VITE_AI_PROXY_URL: import.meta.env.VITE_AI_PROXY_URL as string | undefined,
+  VITE_ROUTE_DUMP_URL: import.meta.env.VITE_ROUTE_DUMP_URL as string | undefined,
+  VITE_APNS_PUSH_URL: import.meta.env.VITE_APNS_PUSH_URL as string | undefined,
+  VITE_SENTRY_TUNNEL_URL: import.meta.env.VITE_SENTRY_TUNNEL_URL as string | undefined,
+} as const;
+
+function workerUrl(key: keyof typeof WORKER_ENV, fallback?: string): string {
+  const val = WORKER_ENV[key];
   if (val) return val.replace(/\/$/, '');
   if (fallback) return fallback;
   throw new Error(`[ollie/native] Missing worker URL env var: ${key}`);
@@ -64,7 +75,7 @@ function workerUrl(key: string, fallback?: string): string {
 export const urls = {
   get aiProxy() { return workerUrl('VITE_AI_PROXY_URL', 'https://ollie-api.ollieapp.workers.dev'); },
   get routeDump() {
-    const override = import.meta.env.VITE_ROUTE_DUMP_URL as string | undefined;
+    const override = WORKER_ENV.VITE_ROUTE_DUMP_URL;
     if (override) return override.replace(/\/$/, '');
     return this.aiProxy;
   },
