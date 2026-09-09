@@ -14,7 +14,7 @@
 import { useCallback, useState } from 'react';
 import { Stack, Row, Box } from '../../layout';
 import { Text } from '../../ui';
-import { fontWeights } from '../../theme/tokens';
+import { colors, fontWeights } from '../../theme/tokens';
 import { WhenCaption } from '../../lib/WhenCaption';
 import { useModuleData } from '../../lib/useModuleData';
 import { migrateMood } from './migrate';
@@ -64,7 +64,7 @@ export function MoodBox(): JSX.Element {
   return (
     <Stack gap={48}>
       <Stack gap={8}>
-        <Text scale="caption" color="var(--ollie-color-ink-faint)" style={SMCP_STYLE}>
+        <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
           box
         </Text>
         <Text
@@ -83,7 +83,7 @@ export function MoodBox(): JSX.Element {
       </Stack>
 
       {!ready ? (
-        <Text scale="caption" color="var(--ollie-color-ink-faint)">
+        <Text scale="caption" color={colors.inkFaint}>
           loading…
         </Text>
       ) : isEmpty ? (
@@ -124,12 +124,12 @@ function ColdStart(): JSX.Element {
           width: 7,
           height: 7,
           borderRadius: '50%',
-          background: 'var(--ollie-color-sage-deep)',
+          background: colors.sageDeep,
           flexShrink: 0,
           marginTop: 7,
         }}
       />
-      <Text scale="body" color="var(--ollie-color-ink)">
+      <Text scale="body" color={colors.ink}>
         <b style={{ fontWeight: fontWeights.medium }}>
           this is mood — how you feel, your energy, the way you talk to yourself.
         </b>{' '}
@@ -153,7 +153,7 @@ function ListSection({
   if (items.length === 0) return null;
   return (
     <Stack gap={16}>
-      <Text scale="lede" color="var(--ollie-color-ink)">
+      <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
         {label}
       </Text>
       <Stack gap={12}>
@@ -252,7 +252,7 @@ function RemoveButton({ onClick }: { onClick: () => void }): JSX.Element {
         background: 'none',
         border: 'none',
         padding: '4px 8px',
-        color: 'var(--ollie-color-ink-faint)',
+        color: colors.inkFaint,
         cursor: 'pointer',
         fontVariantCaps: 'all-small-caps',
         letterSpacing: '0.08em',
