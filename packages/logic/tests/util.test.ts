@@ -24,6 +24,9 @@ import {
   dayKeyUTC,
   nextDayKey,
   daysBetweenKeys,
+  startOfLocalDay,
+  addLocalDays,
+  eachLocalDayKey,
   levenshtein,
   withinEditDistance,
   resolveNow,
@@ -163,29 +166,25 @@ describe('util · dayKey vs dayKeyUTC — cross-midnight divergence', () => {
       return;
     }
 
-    // Pick the instant of local midnight on 2026-01-06. In UTC this instant
-    // is offsetMin minutes away from midnight, so it lands on a different
-    // wall-clock hour — and, because it is *exactly* a local day boundary,
-    // the UTC calendar day differs from the local one.
-    const localMidnight = new Date(2026, 0, 6, 0, 0, 0, 0).getTime();
-    const localKey = dayKey(localMidnight);
-    const utcKey = dayKeyUTC(localMidnight);
-
-    // Local sees the new day...
-    expect(localKey).toBe('2026-01-06');
-    // ...UTC does not (it is still 2026-01-05 for tz east of UTC, or already
-    // 2026-01-06 with a stale hour for tz west — either way the keys differ
-    // because the instant is a *local* boundary, not a UTC one).
-    expect(utcKey).not.toBe(localKey);
-
-    // Spell out the direction so a regression is obvious:
-    if (offsetMin > 0) {
-      // West of UTC (e.g. Americas): local midnight is already tomorrow UTC.
-      expect(utcKey).toBe('2026-01-06');
+    // Pick a local wall-clock instant that straddles the UTC date line for the
+    // host's offset direction. The divergence is asymmetric:
+    //   - EAST of UTC (offsetMin < 0): local *midnight* is still the PREVIOUS
+    //     UTC calendar day (e.g. Istanbul +3 → 21:00 UTC the day before).
+    //   - WEST of UTC (offsetMin > 0): local midnight is the SAME UTC day, so
+    //     we instead take 23:30 LOCAL, which is already the NEXT UTC day
+    //     (e.g. America/LA −8 → 07:30 UTC tomorrow).
+    if (offsetMin < 0) {
+      // East of UTC: local midnight on 2026-01-06.
+      const localMidnight = new Date(2026, 0, 6, 0, 0, 0, 0).getTime();
+      expect(dayKey(localMidnight)).toBe('2026-01-06');
+      expect(dayKeyUTC(localMidnight)).toBe('2026-01-05');
+      expect(dayKeyUTC(localMidnight)).not.toBe(dayKey(localMidnight));
     } else {
-      // East of UTC (e.g. Istanbul, the CI host): local midnight is still
-      // the previous calendar day in UTC.
-      expect(utcKey).toBe('2026-01-05');
+      // West of UTC: 23:30 LOCAL on 2026-01-05.
+      const lateLocal = new Date(2026, 0, 5, 23, 30, 0, 0).getTime();
+      expect(dayKey(lateLocal)).toBe('2026-01-05');
+      expect(dayKeyUTC(lateLocal)).toBe('2026-01-06');
+      expect(dayKeyUTC(lateLocal)).not.toBe(dayKey(lateLocal));
     }
   });
 
@@ -274,6 +273,90 @@ describe('util · daysBetweenKeys', () => {
     const a = '2026-06-15';
     const b = nextDayKey(a)!;
     expect(daysBetweenKeys(a, b)).toBe(1);
+  });
+});
+
+// ─── DST-safe calendar-day stepping (finding #140) ───────────────────────────
+
+describe('util · startOfLocalDay / addLocalDays / eachLocalDayKey', () => {
+  it('startOfLocalDay returns local midnight of the day containing ts', () => {
+    const noon = new Date(2026, 2, 8, 12, 34, 56, 789).getTime();
+    const sod = startOfLocalDay(noon);
+    const d = new Date(sod);
+    expect(d.getHours()).toBe(0);
+    expect(d.getMinutes()).toBe(0);
+    expect(d.getSeconds()).toBe(0);
+    expect(d.getMilliseconds()).toBe(0);
+    expect(dayKey(sod)).toBe(dayKey(noon));
+  });
+
+  it('addLocalDays preserves local wall-clock time-of-day', () => {
+    const t = new Date(2026, 0, 10, 9, 30, 0, 0).getTime();
+    const plus3 = addLocalDays(t, 3);
+    const d = new Date(plus3);
+    expect(d.getHours()).toBe(9);
+    expect(d.getMinutes()).toBe(30);
+    expect(dayKey(plus3)).toBe('2026-01-13');
+  });
+
+  it('addLocalDays(-1) is the previous LOCAL calendar day', () => {
+    const t = new Date(2026, 0, 1, 0, 30, 0, 0).getTime();
+    expect(dayKey(addLocalDays(t, -1))).toBe('2025-12-31');
+  });
+
+  it('eachLocalDayKey yields one key per local day, inclusive, no skip/dup', () => {
+    const from = new Date(2026, 0, 1, 5, 0, 0, 0).getTime();
+    const to = new Date(2026, 0, 5, 22, 0, 0, 0).getTime();
+    const keys = [...eachLocalDayKey(from, to)];
+    expect(keys).toEqual([
+      '2026-01-01',
+      '2026-01-02',
+      '2026-01-03',
+      '2026-01-04',
+      '2026-01-05',
+    ]);
+    // distinct + consecutive
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  it('eachLocalDayKey yields nothing when to < from', () => {
+    const from = new Date(2026, 0, 5, 0, 0, 0, 0).getTime();
+    const to = new Date(2026, 0, 1, 0, 0, 0, 0).getTime();
+    expect([...eachLocalDayKey(from, to)]).toEqual([]);
+  });
+
+  it('DST: fixed 24h stepping skips/dups a day but the helpers do not', () => {
+    // Spring-forward in US zones is 2026-03-08 (a 23h local day). Walk a window
+    // straddling it. The helper must emit EXACTLY one key per local calendar
+    // day with NONE missing and NONE repeated, regardless of host TZ.
+    const from = new Date(2026, 2, 6, 1, 0, 0, 0).getTime(); // Mar 6
+    const to = new Date(2026, 2, 11, 1, 0, 0, 0).getTime(); // Mar 11
+    const keys = [...eachLocalDayKey(from, to)];
+    expect(keys).toEqual([
+      '2026-03-06',
+      '2026-03-07',
+      '2026-03-08', // DST transition day — present exactly once
+      '2026-03-09',
+      '2026-03-10',
+      '2026-03-11',
+    ]);
+
+    // Contrast with the OLD buggy pattern (`t += DAY_MS` + dayKey) so the
+    // regression is documented when the host actually observes a DST shift in
+    // this window (e.g. America/Los_Angeles). On UTC there is no shift and the
+    // naive walk happens to be correct — so only assert the bug where it bites.
+    const naive: string[] = [];
+    for (let t = startOfLocalDay(from) + 12 * HOUR_MS; t <= startOfLocalDay(to) + 12 * HOUR_MS; t += DAY_MS) {
+      naive.push(dayKey(t));
+    }
+    const springForwardOffsetShift =
+      new Date(2026, 2, 6).getTimezoneOffset() !==
+      new Date(2026, 2, 11).getTimezoneOffset();
+    if (springForwardOffsetShift) {
+      // The naive 24h walk drifts an hour and double-counts a day on the
+      // 23h-long DST day — proving the helper fixes a real bug here.
+      expect(naive).not.toEqual(keys);
+    }
   });
 });
 

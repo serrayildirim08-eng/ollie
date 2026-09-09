@@ -43,23 +43,18 @@
   100% { transform: scale(1.02); }
 }
 
-/* inline ack — quiet "okay" under the input, every dump after the day's first */
-.inlineAck {
-  font-family: var(--ollie-font-sans);
-  font-size: var(--ollie-text-small);
-  color: var(--ollie-color-sage);
-  text-align: center;
-  font-variant-caps: all-small-caps;
-  letter-spacing: 0.08em;
+/* Post-dump receipt — a quiet line that fades in as the ack flood clears,
+   holds, then fades back so the home screen returns to its silent default. */
+.receipt {
   opacity: 0;
-  animation: ollie-inline-ack 1600ms ease-out forwards;
+  animation: ollie-receipt 4000ms cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
   will-change: opacity;
 }
 
-@keyframes ollie-inline-ack {
+@keyframes ollie-receipt {
   0%   { opacity: 0; }
-  15%  { opacity: 1; }
-  68%  { opacity: 1; }
+  18%  { opacity: 1; }
+  80%  { opacity: 1; }
   100% { opacity: 0; }
 }
 
@@ -73,7 +68,7 @@
     animation: none;
     transform: none;
   }
-  .inlineAck {
+  .receipt {
     animation: none;
     opacity: 1;
   }

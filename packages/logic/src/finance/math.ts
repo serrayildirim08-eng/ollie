@@ -36,8 +36,18 @@ export function fMedian(a: number[]): number | null {
   return medianCore(a);
 }
 
-/** Scaled MAD (Rousseeuw & Croux 1993: σ ≈ 1.4826·MAD). 0 for empty input. */
+/**
+ * RAW median absolute deviation (no consistency scaling). 0 for empty input.
+ *
+ * Finding #104: the stored `amount_mad` / `interval_days_mad` convention is
+ * RAW MAD. Readers that need a σ estimate apply the Rousseeuw & Croux 1993
+ * factor themselves (σ ≈ 1.4826·MAD); readers computing a modified z-score
+ * use 0.6745·(x−med)/MAD. Previously fMad returned the SCALED value, and the
+ * σ/modZ readers re-scaled it — double-counting 1.4826 in the cash-flow band
+ * (~48% too wide) and shrinking the anomaly modZ (~0.45×, missing outliers).
+ * Storing RAW here makes the writers and every reader agree.
+ */
 export function fMad(a: number[], center?: number): number {
   if (!a || !a.length) return 0;
-  return madCore(a, 1.4826, center);
+  return madCore(a, 1, center);
 }

@@ -55,12 +55,12 @@ service = "ollie-ai-proxy"
 #      workers/ai-proxy/wrangler.toml
 #   4. deploy ai-proxy, then cron
 #
-[[queues.consumers]]
-queue = "ollie-enrich-queue"
-max_batch_size = 25
-max_batch_timeout = 30
-max_retries = 12
-dead_letter_queue = "ollie-enrich-dlq"
+# [[queues.consumers]]
+# queue = "ollie-enrich-queue"
+# max_batch_size = 25
+# max_batch_timeout = 30
+# max_retries = 12
+# dead_letter_queue = "ollie-enrich-dlq"
 
 # ─── secrets (set with `wrangler secret put`) ──────────────────────────────────
 # SUPABASE_URL                — https://<ref>.supabase.co
@@ -69,7 +69,6 @@ dead_letter_queue = "ollie-enrich-dlq"
 #                               notification delivery drain (flushNotificationQueue):
 #                               it scans scheduled_jobs + push_tokens across
 #                               all users, bypassing RLS.
-# SUPABASE_SERVICE_ROLE_KEY   — alias kept for the daily-stub handlers
 # APNS_INTERNAL_SECRET        — shared secret presented to the apns-push
 #                               worker's /push endpoint. MUST equal the
 #                               value set on ollie-apns-push as

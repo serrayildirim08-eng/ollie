@@ -11,7 +11,7 @@
 import { Profiler, type ProfilerOnRenderCallback } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router";
 import { Box } from "../layout";
-import { space } from "../theme/tokens";
+import { colors } from "../theme/tokens";
 import { TabBar } from "./TabBar";
 
 // Measurement sayacı: per-screen render cost. Only logs renders slower than
@@ -56,7 +56,7 @@ function BackBar(): JSX.Element | null {
         background: "none",
         border: "none",
         padding: "4px 0",
-        color: 'var(--ollie-color-ink-faint)',
+        color: colors.inkFaint,
         cursor: "pointer",
         fontSize: 13,
         fontFamily: "inherit",
@@ -86,23 +86,18 @@ const responsiveCss = `
     overflow: hidden;
   }
   .ollie-main {
+    padding: 24px;
     overflow-y: auto;
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
   }
-  /* The editorial column is centered by default (mobile + normal laptops). */
-  .ollie-column { margin-left: auto; margin-right: auto; }
-  /* On wide screens it no longer floats dead-center in an ocean of gutter:
-     it anchors LEFT behind an editorial indent, and the right margin becomes
-     deliberate whitespace — a composed magazine page, not an island. */
-  @media (min-width: 1280px) {
-    .ollie-main { padding-left: clamp(40px, 7vw, 140px); }
-    .ollie-column { margin-left: 0; margin-right: auto; }
-  }
   @media (max-width: ${BREAKPOINT_PX - 1}px) {
     .ollie-nav-sidebar { display: none; }
     .ollie-nav-bottom { display: block; }
-    .ollie-main { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
+    .ollie-main {
+      padding-top: calc(24px + env(safe-area-inset-top));
+      padding-bottom: calc(72px + env(safe-area-inset-bottom));
+    }
     .ollie-shell-root { flex-direction: column; }
   }
 `;
@@ -117,8 +112,8 @@ export function Layout(): JSX.Element {
         style={{
           display: "flex",
           flexDirection: "row",
-          background: 'var(--ollie-color-cream)',
-          color: 'var(--ollie-color-ink)',
+          background: colors.cream,
+          color: colors.ink,
         }}
       >
         <TabBar />
@@ -127,7 +122,6 @@ export function Layout(): JSX.Element {
           className="ollie-main"
           style={{
             flex: 1,
-            padding: space[6],
             minWidth: 0,
             minHeight: 0,
           }}
@@ -135,9 +129,10 @@ export function Layout(): JSX.Element {
           {/* Editorial column — content lives in the middle, not edge-to-edge.
               Generous side margins on wide screens, fluid on narrow. */}
           <Box
-            className="ollie-column"
             style={{
-              maxWidth: 760,
+              maxWidth: 720,
+              marginLeft: "auto",
+              marginRight: "auto",
               width: "100%",
             }}
           >

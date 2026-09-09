@@ -1,0 +1,21 @@
+# PR branch SHA snapshot 2026-06-11 15:36 — force-push oncesi
+ee6300adeaf56bb4c441ae765f8cf2e50c92bf28 pr/15-sprint-closeout
+49e8f5dcc94b83ae2921a63091780e44b7bd22b8 pr/14-adaptive-replenishment
+743b8e8df142ac91a070da48faa97dd0043645db pr/13-feed-me-v2
+20df63fec5f5c3e4de4f8cd97fde210a6cf162b0 pr/12-grocery-routing
+ba0fb6cab79637f9751aea05489a454081a61572 pr/11-t2-route-endpoint
+6f83105fabba5dcff5c96c736d30a8ff4efae9a5 pr/10-t0-clerk-jwt
+160a7adb0ddd3e8e4a25a9e5e4e7038d7b683ce6 pr/09-loose-fixes
+4a218a8dbe2171e57a4535529b04d38f9b4d4946 pr/08-audit-cleanup
+d62e5e090bfcfe943855af99321be27cb122d7b4 pr/07-apple-intelligence
+5d82348718af680d37be8dd83473b9422abdc289 pr/05-money-v2-guards
+8433aa7518731df13d012fecb15052e3216650d2 pr/06-v2-shell
+91916e88d937fa43332d93f280c2391fb6e0cd93 pr/04-work-matters
+2104e817dd0654ad36b55373b9e3a9e4408e3bdd pr/03-faz2-modules
+ec0130398df6daf610711eb405c8050c45bfb758 pr/02-notifications-push
+086f2325896a99081c69deebf70d368cec3d9161 pr/01-pii-scrub-routing-cache
+edd0ff75042b761d01ee6a479f336b99bdecd1fe chore/audit-infra
+ce258d4e9f9dc5aaaf6a095a115c49059dd6da40 feat/faz2-modules
+0cda3a59457d503ddfccb64820565dbeec384889 feat/work-matters
+a0454c61a161f00867031b95e064ef1c5f62aff8 fix/sentry-orphan-modules
+616cf0c14c5e83b03f7bf2ab33dc262e9708c2f5 alpha-notifications-mobile

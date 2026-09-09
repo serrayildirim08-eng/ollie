@@ -28,6 +28,7 @@ import { syncToStore as syncAdmin } from '../modules/admin/bridge';
 import { syncToStore as syncPets } from '../modules/pets/bridge';
 import { syncToStore as syncGrocery } from '../modules/grocery/bridge';
 import { syncToStore as syncMedication } from '../modules/medication/bridge';
+import { syncToStore as syncChores } from '../modules/chores/bridge';
 import { syncToStore as syncDump } from '../modules/dump/bridge';
 import { syncToStore as syncMood } from '../modules/mood/bridge';
 
@@ -45,6 +46,7 @@ const SYNCS: readonly NamedSync[] = [
   ['pets', syncPets],
   ['grocery', syncGrocery],
   ['medication', syncMedication],
+  ['chores', syncChores],
   ['mood', syncMood],
   ['dump', syncDump],
 ];

@@ -13,26 +13,26 @@
 
 import { groqChat } from '../groq';
 import { jsonCascade, type JsonProviders } from './json-cascade';
-import type { FragmentLanguage, Module } from './dump-schema';
+import { MODULES, type FragmentLanguage, type Module } from './dump-schema';
 
-// Allowed Module values (enumerated in the system prompt so the model
-// stays on the rails even though Groq's JSON mode doesn't enforce a schema).
-const MODULES: Module[] = [
-  'crisis',
-  'work',
-  'admin',
-  'pets',
-  'cycle',
-  'finance',
-  'sleep',
-  'body',
-  'mood',
-  'habits',
-  'goals',
-  'grocery',
-  'medication',
-  'dump_only',
-];
+// Allowed Module values are the single-source-of-truth `MODULES` array from
+// dump-schema.ts — imported here (not re-declared) so the router prompt's enum
+// and the runtime coercion guard can never drift from the `Module` type. The
+// system prompt enumerates them below so the model stays on the rails even
+// though Groq's JSON mode doesn't enforce a schema.
+const VALID_MODULES = new Set<string>(MODULES);
+/**
+ * Coerce a model-supplied module to a known value (audit M2). Groq's JSON mode
+ * doesn't enforce the enum, so a hallucinated module would otherwise be written
+ * to the Vectorize cache + dump_inbox and then fail silently at dispatch ("no
+ * handler"). Routing an unknown module to `dump_only` preserves the fragment as
+ * a raw dump instead of losing it.
+ */
+export function coerceModule(module: unknown): Module {
+  return typeof module === 'string' && VALID_MODULES.has(module)
+    ? (module as Module)
+    : 'dump_only';
+}
 
 // LEAN LAYER 1 ROUTER PROMPT (refactor 2026-06-01).
 // Job: fragment → { module, action, confidence, payload }. Pick the right
@@ -58,7 +58,8 @@ MODULES → ACTIONS
 - habits: complete | identity_statement   (streak_break_note FORBIDDEN; Ollie has no streaks)
 - goals: progress_note | create_goal | milestone_hit | obstacle_note
 - grocery: pantry_add | pantry_use | pantry_depleted | shopping_list_add | pantry_low_flag | meal_request | recipe_cooked
-- medication: log_dose | missed_dose | side_effect_note
+- medication: log_dose | missed_dose | side_effect_note | add_to_cabinet | set_low | set_have | mark_taken
+- chores: chore_done | add_chore | add_recurring_chore
 - dump_only: archive_only
 
 ROUTING RULES (drive MODULE choice; Layer 2 owns full field extraction)
@@ -67,16 +68,17 @@ Purchase / past-tense (bought / got / picked up / aldım / compré / paid for): 
 - Consumable (food/drink/toiletry/cleaning/household) → grocery.pantry_add even with a price (grocery mirrors finance — no separate finance fragment).
 - Else (book/electronics/clothes/makeup/furniture/software/service/experience) → finance.log_transaction. Unidentifiable purchase → finance.log_transaction with empty payload.
 - Orphan single noun: pantry/bathroom noun ("milk", "oil", "tampons", "toilet paper") → grocery.pantry_add. Non-grocery orphan ("book", "headphones") or filler ("etc", "and", "stuff") → dump_only.
-- Compound product names stay one item ("mac and cheese", "salt and pepper", "peanut butter", "half and half").
+- GROCERY/SHOPPING LIST (multiple items to buy/bought in one fragment, joined by commas and/or "and"/"ve"/"y"): emit ONE grocery action — shopping_list_add for FUTURE intent ("need", "to buy", "almam lazım", "comprar"), pantry_add for PAST ("bought", "got", "aldım"). \`item\` is a CLEAN COMMA-separated string of EVERY named item, converting list-joiner "and"/"ve"/"y" to commas ("milk, eggs and bread" → item:"milk, eggs, bread"). INCLUDE non-food household items (batteries, detergent, light bulbs, trash bags). NEVER drop a list member, NEVER route any member to dump_only.
+- Compound product names stay one item, NOT split at their internal "and" ("mac and cheese", "salt and pepper", "peanut butter", "half and half").
 
 Finance sub-routing (one fragment → one action):
-- log_transaction: one-off non-grocery spend.
-- log_income: money IN ("got paid", "deposited", "geldi", "ödediler", "depositaron", "me pagaron", "maaş", "paycheck"). NOT a refund.
+- log_transaction: one-off non-grocery spend. A RECURRING cue ("monthly", "every month", "a month", "/mo", "aylık", "her ay", "each week", "yearly") means it is NOT one-off — route recurring app/streaming/software to subscription_log, recurring utility/rent to add_bill, even with a spending verb like "i pay".
+- log_income: money IN ("got paid", "deposited", "geldi", "ödediler", "depositaron", "me pagaron", "maaş", "paycheck"). Also gifts + gift cards ("dad gave me…", "birthday money", "zara gift card") — put a descriptive \`source\` (the payer, or "<store> gift card" for store credit). NOT a refund.
 - log_refund: money came back ("refunded", "returned the X", "iade aldım", "me devolvieron").
 - spending_reflection: PATTERN, not one event. Markers: "too much"/"demasiado"/"çok", "always", "again", Nth-time, "keep buying", "forgot to cancel … again".
 - pending_decision: money NOT yet spent. Markers: "should I…", "thinking about…", "quote", "deposit" (no payment verb), "comprar o no", "almalı mıyım", "got a quote".
 - add_bill: recurring fixed expense ("rent $1800/month", "kira aylık").
-- subscription_log: streaming / software / app ("renewed spotify").
+- subscription_log: streaming / software / app ("renewed spotify", "i pay apple music monthly", "paying for icloud", "spotify 130 lira monthly"). "i pay <app> monthly" is a subscription, NOT a one-off spend.
 - savings_note: transfer to savings ("moved 500 to savings", "ahorré").
 
 Work vs admin:
@@ -87,8 +89,14 @@ Work vs admin:
 Other module-choice hints:
 - sleep.log_insomnia (didn't sleep) vs sleep.log_sleep quality=1 (slept badly).
 - admin.log_renewal (paperwork w/ expiry) vs admin.recurring_decision (cancel-or-keep).
-- grocery.pantry_low_flag ("running low") vs shopping_list_add ("need to buy") vs pantry_depleted ("out of"/"ran out"/"bitti"/"se acabó").
-- pets.log_supplement (named vitamin/calcium) vs pets.log_care (generic).
+- grocery FUTURE intent to acquire ("need to buy", "have to get", "need", "pick up", "buy", "get me", "gotta grab", "almam lazım", "lazım", "comprar", "tengo que comprar") → shopping_list_add — EVEN for household/cleaning/toiletry items (trash bags, detergent, paper towels, toilet paper). Future intent OVERRIDES the consumable→pantry_add rule (that rule is for PAST purchases only).
+- grocery.pantry_low_flag ("running low") vs shopping_list_add ("need to buy") vs pantry_depleted ("out of"/"ran out"/"bitti"/"se acabó") vs pantry_add (PAST "bought/got/picked up").
+- CHORES = household cleaning/upkeep tasks (vacuuming, dishes, laundry, mopping, taking out trash, cleaning a room, changing sheets, watering plants). DISTINCT from grocery (buying/consuming items) and admin (paperwork/appointments/calls).
+  · PAST-TENSE done ("vacuumed", "cleaned the kitchen", "did the dishes", "took out the trash", "süpürdüm", "limpié la cocina") → chores.chore_done { chore } (resets a recurring chore's clock).
+  · FUTURE one-off ("need to vacuum", "clean the bathroom", "have to do the dishes", "banyoyu temizlemem lazım") → chores.add_chore { chore }.
+  · RECURRING by WEEKDAY ("do laundry on wednesdays", "vacuum on mondays", "çarşambaları çamaşır", "los lunes paso la aspiradora", "trash out on tuesdays") → chores.add_recurring_chore { chore, weekdays:number[] } where weekdays use local 0=Sun..6=Sat (wednesday→[3], "mon & thu"→[1,4], weekdays→[1,2,3,4,5]). Prefer weekdays whenever specific days are named.
+  · RECURRING by INTERVAL ("do laundry every week", "vacuum every 7 days", "her hafta çamaşır", "mop weekly") → chores.add_recurring_chore { chore, cadenceDays:number }. Map weekly→7, daily→1, every N days→N, monthly→30, biweekly→14. Use cadenceDays ONLY when no specific weekday is named.
+  · A chore mentioned with a PRICE or a purchased item is NOT a chore (buying a vacuum → finance/grocery, not chores).
 - body.log_movement covers ALL physical activity (walk/run/yoga/lift/stretch/swim).
 - MOOD vs body vs habits (mood owns feelings/energy/self-talk):
   · Transient EMOTION (anxious, sad, happy, numb, overwhelmed, scared, "X is scaring me", "did nothing today" as a feeling) → mood.log_mood { label, valence:"pos"|"neu"|"neg" }.
@@ -96,8 +104,19 @@ Other module-choice hints:
   · SELF-TALK / self-evaluation ("don't like myself", "I'm failing", "I'm lazy", "habits all empty this week", "hate myself") → mood.self_talk { statement, valence:"pos"|"neg" }.
   · habits.identity_statement is now ONLY a DELIBERATE positive identity goal ("I'm becoming someone who reads daily"). Negative self-judgment → mood.self_talk, NOT habits.
 - cycle.pill_logged is BIRTH CONTROL pill. Generic Rx → medication.log_dose.
+- MEDICATION (meds, vitamins, supplements — the medicine cabinet):
+  · PAST-TENSE took ("took my magnesium", "took 50mg sertraline", "had my vitamin d", "tomé melatonina", "ilacımı aldım") → medication.mark_taken { medName, dose? }. (mark_taken both logs the dose AND counts the cabinet down; plain log_dose is equivalent.)
+  · DID NOT take / skipped ("skipped my meds", "forgot my sertraline", "almadım", "no tomé") → medication.missed_dose { medName }.
+  · STARTED / now taking / began ("started magnesium 400mg at night for sleep", "began taking vitamin d", "now on sertraline 50mg in the morning", "magnezyuma başladım") → medication.add_to_cabinet { medName, doseLabel? (e.g. "400mg"), purpose? one of sleep|mood|pain|digestion|vitamins|other, qty? (units on hand), schedule? array of "HH:MM" when a time of day is given ("at night"→["21:00"], "in the morning"→["09:00"], "9am"→["09:00"]) }. Infer purpose from the name when obvious (melatonin/magnesium/l-theanine→sleep, sertraline/omega-3→mood, ibuprofen/acetaminophen→pain, omeprazole/probiotic→digestion, vitamin d/b12/iron→vitamins) else omit.
+  · RUNNING LOW ("running low on vitamin d", "almost out of my magnesium", "low on melatonin", "vitaminim bitmek üzere") → medication.set_low { medName }. (Distinct from grocery.pantry_low_flag — meds/vitamins/supplements route to MEDICATION, not grocery.)
+  · RESTOCKED / have it again ("got more vitamin d", "restocked my magnesium", "have melatonin again") → medication.set_have { medName }.
+  · SIDE EFFECT ("sertraline making me nauseous", "dizzy from my meds") → medication.side_effect_note { medName, note }.
 - habits.streak_break_note FORBIDDEN. "Broke X habit" / "missed 5 days" said as self-judgment → mood.self_talk; as neutral observation → dump_only. NEVER identity_statement for negative habit talk.
-- TIME-DEFERRED REMINDER ("remind me to X in N", "Y dakika sonra hatırlat", "recuérdame X en N"): classify by what to do (e.g. "remind me to call mama in 1 min" → admin.create_phone_task person="mama"), add top-level \`remindIn: { amount: number, unit: "sec"|"min"|"hr"|"day" }\`. Never a separate reminder fragment, never dump_only when remindIn present. "Remind me to take <med> in N" → admin.create_task text="take <med>" + remindIn (NOT medication.log_dose — that is past-tense).
+- REMINDER ("remind me to X", "X hatırlat", "recuérdame X"): an explicit reminder request. Classify by what to do (e.g. "call mom" → admin.create_phone_task person="mom"; "take out the trash" → admin.create_task), and ALWAYS add \`reminder: true\`. Then add the TIME the user gave, if any:
+  · RELATIVE ("in N min/hr/days", "N dakika sonra", "en N") → \`remindIn: { amount: number, unit: "sec"|"min"|"hr"|"day" }\`.
+  · ABSOLUTE CLOCK TIME ("at 6pm", "at 9am", "saat 18:00", "a las 6") → \`remindAt: "HH:MM"\` (24h local; 6pm→"18:00", 9am→"09:00", noon→"12:00", midnight→"00:00").
+  · NO TIME ("remind me to call mom") → \`reminder: true\` ONLY (omit remindIn AND remindAt); the app will ask the user when.
+  Never a separate reminder fragment, never dump_only when reminder:true. "Remind me to take <med> at 9pm" → admin.create_task text="take <med>" + reminder:true + remindAt:"21:00" (NOT medication.log_dose — that is past-tense).
 
 CROSS-MODULE HINT FIELDS (Layer 1 emits hint on payload; primary handler mirrors to secondary — never emit a separate fragment):
 - body.log_movement → \`pet\` (proper noun like "buddy"/"tontin"; omit for species-only "the dog") → mirrors pets.log_care.
@@ -105,7 +124,7 @@ CROSS-MODULE HINT FIELDS (Layer 1 emits hint on payload; primary handler mirrors
 - work.log_focus_session → \`skipped_meals: true\` ONLY when hyperfocus is explicitly paired with not eating ("didn't eat"/"forgot lunch"/"hiç yemedim"/"no comí") → mirrors body.log_hunger.
 - finance.log_transaction → \`renewal_for\` ("passport"|"license"|"visa"|"lease"|"insurance"|"id"|"work_permit"|"residency_permit") ONLY when the fragment names the document ("passport fee", "vize ücreti", "lease deposit paid") → mirrors admin.log_renewal. Generic "expedite fee 89" → plain log_transaction.
 - grocery.pantry_add → \`price\` + \`currency\` when stated → mirrors finance.log_transaction.
-- admin.create_task / admin.create_phone_task / work.create_task → \`remindIn\` (per TIME-DEFERRED REMINDER).
+- admin.create_task / admin.create_phone_task / work.create_task → \`reminder: true\` plus \`remindIn\` (relative) OR \`remindAt: "HH:MM"\` (absolute), per the REMINDER rule above.
 
 NEGATION: "did NOT take" / "skipped" / "almadım" / "no tomé" → medication.missed_dose. "no comí nada" → body.log_hunger.
 
@@ -119,18 +138,24 @@ RESPONSE FORMAT — return ONLY a valid JSON object, no prose, no markdown, no c
   "module": one of [${MODULES.join(', ')}],
   "action": one of that module's actions for the chosen module,
   "confidence": a number between 0 and 1,
-  "payload": an object with the obvious fields extracted from the fragment, plus any cross-module hint field listed above, plus optional daysAgo, plus optional remindIn. Use {} when no fields apply.
+  "payload": an object with the obvious fields extracted from the fragment, plus any cross-module hint field listed above, plus optional daysAgo, plus optional reminder / remindIn / remindAt. Use {} when no fields apply.
 }
 
 MINI EXAMPLES:
 - "90 min deep work on atelier" → work.log_focus_session { durationMin:90, project:"atelier" }
 - "fill yeo's ds forms, due tuesday" → work.log_deadline { text:"fill yeo's ds forms", dueDate:"tuesday" }
-- "remind me to call mama in 1 minute" → admin.create_phone_task { person:"mama", remindIn:{ amount:1, unit:"min" } }
+- "remind me to call mama in 1 minute" → admin.create_phone_task { person:"mama", reminder:true, remindIn:{ amount:1, unit:"min" } }
+- "remind me to call mom at 6pm" → admin.create_phone_task { person:"mom", reminder:true, remindAt:"18:00" }
+- "remind me to call mom" → admin.create_phone_task { person:"mom", reminder:true }
 - "fed tontin" → pets.log_feed { petName:"tontin" }
 - "hamileyim" → cycle.set_pregnant {}
 - "spent $40 at sephora" → finance.log_transaction { amount:40, currency:"USD", merchant:"sephora" }
 - "maaş geldi" → finance.log_income { source:"salary" }
+- "my dad gave me a 10k zara gift card" → finance.log_income { amount:10000, currency:"TRY", source:"zara gift card" }
+- "i pay apple music 130 lira monthly" → finance.subscription_log { name:"Apple Music", amount:130, currency:"TRY", cadence:"monthly" }
 - "couldn't sleep so took melatonin" → sleep.log_insomnia { med_taken:"melatonin" }
+- "slept 6 hours last night" → sleep.log_sleep { hours:6 }   (a plain duration, no insomnia signal, is STILL a sleep log — never dump_only)
+- "i slept 6 hours last night i feel tired" → TWO fragments: sleep.log_sleep { hours:6 } + mood.log_energy { level:"low", label:"tired" }
 - "walked buddy 30 min" → body.log_movement { type:"walk", duration_min:30, pet:"buddy" }
 - "meditation done" → habits.complete { habitName:"meditation" }
 - "so tired today" → mood.log_energy { level:"low", label:"tired" }
@@ -138,8 +163,30 @@ MINI EXAMPLES:
 - "i don't like myself" → mood.self_talk { statement:"don't like myself", valence:"neg" }
 - "want to run a half marathon" → goals.create_goal { what:"run a half marathon" }
 - "bought milk" → grocery.pantry_add { item:"milk" }
+- "süt, yumurta ve ekmek almam lazım" → grocery.shopping_list_add { item:"süt, yumurta, ekmek" }
+- "I need milk, eggs and bread" → grocery.shopping_list_add { item:"milk, eggs, bread" }
+- "milk, eggs, batteries, detergent to buy" → grocery.shopping_list_add { item:"milk, eggs, batteries, detergent" }
+- "got mac and cheese and milk" → grocery.pantry_add { item:"mac and cheese, milk" }
+- "i need to buy large trash bags" → grocery.shopping_list_add { item:"large trash bags" }
+- "have to get more detergent" → grocery.shopping_list_add { item:"detergent" }
 - "out of lemons" → grocery.pantry_depleted { item:"lemons" }
 - "took 50mg sertraline" → medication.log_dose { medName:"sertraline", dose:"50mg" }
+- "took my magnesium" → medication.mark_taken { medName:"magnesium" }
+- "started magnesium 400mg at night for sleep" → medication.add_to_cabinet { medName:"magnesium", doseLabel:"400mg", purpose:"sleep", schedule:["21:00"] }
+- "began taking vitamin d in the morning" → medication.add_to_cabinet { medName:"vitamin d", purpose:"vitamins", schedule:["09:00"] }
+- "running low on vitamin d" → medication.set_low { medName:"vitamin d" }
+- "got more melatonin" → medication.set_have { medName:"melatonin" }
+- "forgot to take my sertraline" → medication.missed_dose { medName:"sertraline" }
+- "cleaned the kitchen" → chores.chore_done { chore:"clean the kitchen" }
+- "vacuumed" → chores.chore_done { chore:"vacuum" }
+- "did the dishes" → chores.chore_done { chore:"do the dishes" }
+- "need to vacuum" → chores.add_chore { chore:"vacuum" }
+- "clean the bathroom" → chores.add_chore { chore:"clean the bathroom" }
+- "do laundry every week" → chores.add_recurring_chore { chore:"do laundry", cadenceDays:7 }
+- "vacuum every 7 days" → chores.add_recurring_chore { chore:"vacuum", cadenceDays:7 }
+- "do laundry on wednesdays" → chores.add_recurring_chore { chore:"do laundry", weekdays:[3] }
+- "çarşambaları çamaşır yıkarım" → chores.add_recurring_chore { chore:"do laundry", weekdays:[3] }
+- "take the trash out on mondays and thursdays" → chores.add_recurring_chore { chore:"take the trash out", weekdays:[1,4] }
 - "ugh today is weird" → dump_only.archive_only { reason:"no_module_match" }
 
 Confidence < 0.6 → dump_only.`;
@@ -212,9 +259,10 @@ export async function classifyFragment(
     throw new Error(`classify groq bad json: ${rawText.slice(0, 300)}`);
   }
 
+  const module = coerceModule(parsed.module);
   return {
-    module: parsed.module,
-    payload: { ...parsed.payload, module: parsed.module, action: parsed.action },
+    module,
+    payload: { ...parsed.payload, module, action: parsed.action },
     confidence: normalizeConfidence(parsed.confidence),
   };
 }
@@ -243,11 +291,14 @@ function parseBatchResults(rawText: string, expected: number, provider: string):
     throw new Error(`classify-batch ${provider} count mismatch: got ${got} want ${expected}`);
   }
 
-  return results.map((r) => ({
-    module: r.module,
-    payload: { ...r.payload, module: r.module, action: r.action },
-    confidence: normalizeConfidence(r.confidence),
-  }));
+  return results.map((r) => {
+    const module = coerceModule(r.module);
+    return {
+      module,
+      payload: { ...r.payload, module, action: r.action },
+      confidence: normalizeConfidence(r.confidence),
+    };
+  });
 }
 
 /**

@@ -75,6 +75,9 @@ importers:
       '@ollie/cadence':
         specifier: workspace:*
         version: link:../../packages/cadence
+      '@ollie/consent':
+        specifier: workspace:*
+        version: link:../../packages/consent
       '@ollie/crypto':
         specifier: workspace:*
         version: link:../../packages/crypto
@@ -96,6 +99,9 @@ importers:
       '@tauri-apps/api':
         specifier: ^2
         version: 2.11.0
+      '@tauri-apps/plugin-deep-link':
+        specifier: ^2.4.9
+        version: 2.4.9
       '@tauri-apps/plugin-notification':
         specifier: ^2
         version: 2.3.3
@@ -117,6 +123,9 @@ importers:
       react-router:
         specifier: ^7.15.1
         version: 7.15.1(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+      tauri-plugin-mobile-push-api:
+        specifier: ^0.1.4
+        version: 0.1.4(@tauri-apps/api@2.11.0)
     devDependencies:
       '@tauri-apps/cli':
         specifier: ^2
@@ -414,6 +423,10 @@ importers:
         version: 4.90.1(@cloudflare/workers-types@4.20260510.1)
 
   workers/apns-push:
+    dependencies:
+      '@ollie/apns-jwt':
+        specifier: workspace:*
+        version: link:../../packages/apns-jwt
     devDependencies:
       '@cloudflare/workers-types':
         specifier: ^4.20250906.0
@@ -421,6 +434,9 @@ importers:
       typescript:
         specifier: ^5.6.0
         version: 5.9.3
+      vitest:
+        specifier: ^2.1.9
+        version: 2.1.9(@types/node@22.19.19)(jsdom@29.1.1)
       wrangler:
         specifier: ^4.0.0
         version: 4.90.1(@cloudflare/workers-types@4.20260510.1)
@@ -445,10 +461,6 @@ importers:
         version: 4.90.1(@cloudflare/workers-types@4.20260510.1)
 
   workers/sentry-tunnel:
-    dependencies:
-      '@ollie/worker-http':
-        specifier: workspace:*
-        version: link:../../packages/worker-http
     devDependencies:
       '@cloudflare/workers-types':
         specifier: ^4.20250906.0
@@ -1482,6 +1494,9 @@ packages:
     engines: {node: '>= 10'}
     hasBin: true
 
+  '@tauri-apps/plugin-deep-link@2.4.9':
+    resolution: {integrity: sha512-u0SKOUHnJ1wqeqXsDFq2+kASCBj9xxbG0g9XZWPy9SOmU4wXtp6b/wiYpm6oH6/5fBTQsLqnLhIvqLBRpgHJlA==}
+
   '@tauri-apps/plugin-notification@2.3.3':
     resolution: {integrity: sha512-Zw+ZH18RJb41G4NrfHgIuofJiymusqN+q8fGUIIV7vyCH+5sSn5coqRv/MWB9qETsUs97vmU045q7OyseCV3Qg==}
 
@@ -2161,6 +2176,11 @@ packages:
 
   symbol-tree@3.2.4:
     resolution: {integrity: sha512-9QNk5KwDF+Bvz+PyObkmSYjI5ksVUYtjW7AU22r2NKcfLJcXp96hkDWU3+XndOsUb+AQ9QhfzfCT2O+CNWT5Tw==}
+
+  tauri-plugin-mobile-push-api@0.1.4:
+    resolution: {integrity: sha512-AJayYS3iAQ8zoXdTebs1Ml91H+mDBA3wexWjfoEx8oa4EsE6AiODvVZHzQZ7l0QeXTvYcxyCF3txI7XJjI8IBw==}
+    peerDependencies:
+      '@tauri-apps/api': '>=2.0.0'
 
   tinybench@2.9.0:
     resolution: {integrity: sha512-0+DUvqWMValLmha6lr4kD8iAMK1HzV0/aKnCtWb9v9641TnP/MFb7Pc2bxoxQjTXAErryXVgUOfv2YqNllqGeg==}
@@ -3161,6 +3181,10 @@ snapshots:
       '@tauri-apps/cli-win32-ia32-msvc': 2.11.2
       '@tauri-apps/cli-win32-x64-msvc': 2.11.2
 
+  '@tauri-apps/plugin-deep-link@2.4.9':
+    dependencies:
+      '@tauri-apps/api': 2.11.0
+
   '@tauri-apps/plugin-notification@2.3.3':
     dependencies:
       '@tauri-apps/api': 2.11.0
@@ -3944,6 +3968,10 @@ snapshots:
       use-sync-external-store: 1.6.0(react@19.2.6)
 
   symbol-tree@3.2.4: {}
+
+  tauri-plugin-mobile-push-api@0.1.4(@tauri-apps/api@2.11.0):
+    dependencies:
+      '@tauri-apps/api': 2.11.0
 
   tinybench@2.9.0: {}
 

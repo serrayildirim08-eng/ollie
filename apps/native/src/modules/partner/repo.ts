@@ -41,7 +41,8 @@ const EMPTY: PartnerLocalState = {
  *  and demonstrable; consent filtering + go-dark are already honest. */
 const SAMPLE_SIGNALS: RawSignals = { mood: 'low', energy: 'high', cyclePhase: null, focus: 'deep' };
 
-type Bearer = () => Promise<string>;
+// Falsy (null or '') = not signed in; every call site guards with `if (!bearer)`.
+type Bearer = () => Promise<string | null>;
 
 function dayKey(nowMs: number): string {
   const d = new Date(nowMs);

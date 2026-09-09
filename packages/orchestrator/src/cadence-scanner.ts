@@ -22,14 +22,18 @@
  *   `notify()` with the same key just to have it dedupe — cheaper to skip
  *   in-memory before constructing the spec.
  *
- * Dedupe key shape:
+ * Dedupe key shape (the notification's dedupe_key, used for copy + notify()):
  *   `cadence:<module>:<key>:<YYYY-MM-DD>`
  *
- * The trailing local-calendar-day suffix means:
- *   - within one day, repeated scans collapse (in-process Set + store map +
+ * Firing is gated on a DAY-INDEPENDENT item key (`cadence:<module>:<key>`)
+ * plus a ≥20h min-interval (audit #43). The earlier per-day suffix on the
+ * gate let a 23:30 fire repeat ~1h later at 00:30 once the suffix rolled —
+ * and notify()'s own rolling-24h dedupe couldn't catch it because the key
+ * had changed. With the min-interval gate:
+ *   - repeated scans within the window collapse (in-process map + store map +
  *     notify()'s own 24h dedupe — three layers)
- *   - across the day boundary, the key naturally rotates so a still-overdue
- *     item can fire ONCE the next day (per-day, not per-overdue-event)
+ *   - a still-overdue item can fire again ~once per day, but never the
+ *     double-push across midnight.
  *
  * Trigger model
  * ─────────────
@@ -197,6 +201,15 @@ export const DEFAULT_CADENCE_COPY: Record<string, CadenceCopyTemplates> = {
       (l) => ({ title: `${l} window` }),
     ],
   },
+  chores: {
+    category: 'PATTERN_ALERT',
+    actionUrl: '/chores',
+    variants: [
+      (l) => ({ title: `${l} — usually done by now` }),
+      (l) => ({ title: `${l} is about due` }),
+      (l) => ({ title: `time for ${l} again` }),
+    ],
+  },
 };
 
 // ─── persistence ────────────────────────────────────────────────────────
@@ -242,6 +255,27 @@ export function localDayKey(ts: number): string {
 export function buildDedupeKey(module: string, key: string, now: number): string {
   return `cadence:${module}:${key}:${localDayKey(now)}`;
 }
+
+/**
+ * Day-independent gating key (audit #43). The dedupe key above carries a
+ * local-calendar-day suffix, so an item that fired at 23:30 would get a NEW
+ * key at 00:30 the next day and fire again ~1h later — and notify()'s own
+ * rolling-24h dedupe can't catch it because the key changed. We gate the
+ * actual firing decision on this stable key + a ≥20h min-interval instead,
+ * which is robust across the midnight boundary while still letting a
+ * genuinely-still-overdue item re-fire roughly once per day.
+ */
+export function buildItemKey(module: string, key: string): string {
+  return `cadence:${module}:${key}`;
+}
+
+/**
+ * Minimum gap between two fires for the SAME item, independent of the
+ * calendar day. Slightly under 24h so a daily-cadence reminder can still
+ * land at roughly the same time each day, but comfortably above the ~1h
+ * midnight-rollover window that caused the double push.
+ */
+export const MIN_ITEM_INTERVAL_MS = 20 * 60 * 60 * 1000;
 
 /** Tiny deterministic hash for copy-variant selection. */
 function hashStr(s: string): number {
@@ -338,9 +372,12 @@ export function createCadenceScanner(
   let bootTimer: ReturnType<typeof setTimeout> | null = null;
   let intervalTimer: ReturnType<typeof setInterval> | null = null;
   let visibilityHandler: (() => void) | null = null;
-  // In-process Set so within a single session repeated scans skip even
-  // before we read/write the store. Cleared on teardown only.
-  const sessionFired = new Set<string>();
+  // In-process map (stable item key → last-fired ts) so within a single
+  // session repeated scans skip even before we read/write the store. Keyed
+  // on the day-independent item key (audit #43) and pruned each scan to
+  // entries within the min-interval window so it can't grow unbounded over
+  // a long-lived session (audit #57).
+  let sessionFired = new Map<string, number>();
 
   async function scanOnce(): Promise<CadenceScanResult> {
     const now = getNow();
@@ -354,6 +391,16 @@ export function createCadenceScanner(
     // Read-then-prune the last-fired map once per scan.
     const lastFired = pruneLastFired(readLastFired(store), now);
     let lastFiredDirty = false;
+
+    // Prune the in-process session map to entries still inside the min-interval
+    // window (audit #57). Anything older can never gate a fire again, so it's
+    // dead weight in a long-lived session.
+    const sessionCutoff = now - MIN_ITEM_INTERVAL_MS;
+    const prunedSession = new Map<string, number>();
+    for (const [k, ts] of sessionFired) {
+      if (ts >= sessionCutoff) prunedSession.set(k, ts);
+    }
+    sessionFired = prunedSession;
 
     for (const [module, enumerate] of sources.entries()) {
       let entries: CadenceTrackedEntry[];
@@ -374,16 +421,21 @@ export function createCadenceScanner(
         if (overdue !== true) continue;
 
         const dedupeKey = buildDedupeKey(entry.module, entry.key, now);
+        // Day-independent gating key (audit #43). Both dedupe layers below
+        // key on this so a midnight rollover can't bypass the min-interval.
+        const itemKey = buildItemKey(entry.module, entry.key);
 
-        // Layer 1: in-process Set (same session, same day).
-        if (sessionFired.has(dedupeKey)) {
+        // Layer 1: in-process map (same session, within min-interval).
+        const lastSession = sessionFired.get(itemKey);
+        if (typeof lastSession === 'number' && now - lastSession < MIN_ITEM_INTERVAL_MS) {
           result.skippedDedupe.push(dedupeKey);
           continue;
         }
-        // Layer 2: persisted map (across sessions, same day).
-        if (typeof lastFired[dedupeKey] === 'number') {
+        // Layer 2: persisted map (across sessions, within min-interval).
+        const lastPersisted = lastFired[itemKey];
+        if (typeof lastPersisted === 'number' && now - lastPersisted < MIN_ITEM_INTERVAL_MS) {
           result.skippedDedupe.push(dedupeKey);
-          sessionFired.add(dedupeKey);
+          sessionFired.set(itemKey, lastPersisted);
           continue;
         }
 
@@ -396,8 +448,8 @@ export function createCadenceScanner(
         const label = entry.label ?? entry.key;
         const { title, body } = pickCopyVariant(templates, entry.module, entry.key, label);
 
-        sessionFired.add(dedupeKey);
-        lastFired[dedupeKey] = now;
+        sessionFired.set(itemKey, now);
+        lastFired[itemKey] = now;
         lastFiredDirty = true;
 
         result.fired.push({ module: entry.module, key: entry.key, dedupeKey, title });

@@ -14,6 +14,7 @@
  */
 
 import type { StorageAdapter } from './adapter';
+import { isSensitiveStoreKey, sensitiveBlobFieldsFor } from './adapter';
 import { STORE_VERSION, STORE_META_KEY } from './store';
 
 export type Migration = (adapter: StorageAdapter) => void;
@@ -26,6 +27,29 @@ export interface StoreMeta {
 }
 
 export const NO_MIGRATIONS: MigrationMap = {};
+
+/** Key prefix for pre-migration backup snapshots. */
+const SNAPSHOT_PREFIX = 'void.state._backup.pre_migration.';
+
+/**
+ * Monotonic per-process counter appended to snapshot keys so two snapshots
+ * taken in the same millisecond never collide (#125).
+ */
+let snapshotSeq = 0;
+function nextSnapshotSeq(): number {
+  return snapshotSeq++;
+}
+
+/**
+ * Parse the millisecond timestamp embedded in a snapshot key.
+ * Key shape: `<SNAPSHOT_PREFIX><ts>` (legacy) or `<SNAPSHOT_PREFIX><ts>.<seq>`.
+ * Returns NaN-safe 0 for unparseable keys so they sort oldest-first.
+ */
+function snapshotTs(key: string): number {
+  const rest = key.slice(SNAPSHOT_PREFIX.length);
+  const ts = Number.parseInt(rest.split('.')[0] ?? '', 10);
+  return Number.isFinite(ts) ? ts : 0;
+}
 
 export function readMeta(adapter: StorageAdapter): StoreMeta {
   const raw = adapter.getItem(STORE_META_KEY);
@@ -57,15 +81,48 @@ export function writeMeta(adapter: StorageAdapter, meta: StoreMeta): void {
  * adapter and the rollback restored nothing. It now uses the
  * `getAllKeys()` method that is part of the StorageAdapter contract and
  * implemented by both adapters.
+ *
+ * Privacy (alpha blocker #3, GAP 4): the snapshot blob is itself written to a
+ * NON-sensitive key (`void.state._backup.pre_migration.<ts>`), so any sensitive
+ * value folded into it would be re-leaked to plaintext localStorage. We
+ * therefore EXCLUDE the RAM-only sensitive module blobs and STRIP the sensitive
+ * sub-fields (e.g. `shared.actionLog`) before snapshotting. This loses nothing:
+ * those values are not migrated through localStorage anyway — they are held in
+ * RAM and rebuilt from the encrypted SQLite DB by the native bridges on boot.
  */
 function snapshotVoidNamespace(adapter: StorageAdapter): { key: string; value: string }[] {
   const snap: { key: string; value: string }[] = [];
   for (const k of adapter.getAllKeys()) {
     if (!k.startsWith('void.state.')) continue;
     // Don't snapshot prior snapshots — they are large and self-referential.
-    if (k.startsWith('void.state._backup.pre_migration.')) continue;
+    if (k.startsWith(SNAPSHOT_PREFIX)) continue;
+    // Never copy a fully-sensitive (RAM-only) module blob into the plaintext
+    // snapshot.
+    if (isSensitiveStoreKey(k)) continue;
     const v = adapter.getItem(k);
-    if (v != null) snap.push({ key: k, value: v });
+    if (v == null) continue;
+    // Strip sensitive sub-fields (e.g. shared.actionLog) from partially-
+    // sensitive blobs before they enter the plaintext snapshot.
+    const fields = sensitiveBlobFieldsFor(k);
+    if (fields) {
+      try {
+        const obj = JSON.parse(v) as Record<string, unknown>;
+        if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
+          let stripped = false;
+          for (const f of fields) {
+            if (Object.prototype.hasOwnProperty.call(obj, f)) {
+              delete obj[f];
+              stripped = true;
+            }
+          }
+          snap.push({ key: k, value: stripped ? JSON.stringify(obj) : v });
+          continue;
+        }
+      } catch {
+        /* not JSON object — fall through and store as-is (can't carry the field) */
+      }
+    }
+    snap.push({ key: k, value: v });
   }
   return snap;
 }
@@ -113,7 +170,10 @@ export function runMigrations(
   let snap: { key: string; value: string }[] = [];
   try {
     snap = snapshotVoidNamespace(adapter);
-    const snapKey = `void.state._backup.pre_migration.${Date.now()}`;
+    // Embed a per-call counter after the ts so two snapshots taken in the
+    // same millisecond get distinct keys (#125) — otherwise the second would
+    // overwrite the first under the bare `Date.now()` key.
+    const snapKey = `${SNAPSHOT_PREFIX}${Date.now()}.${nextSnapshotSeq()}`;
     adapter.setItem(snapKey, JSON.stringify(snap));
     // Trim older snapshots, keep last 3.
     pruneOldSnapshots(adapter, 3);
@@ -161,12 +221,13 @@ export function runMigrations(
 
 function pruneOldSnapshots(adapter: StorageAdapter, keep: number): void {
   // Uses getAllKeys() (audit item #14) so pruning works on every adapter,
-  // not just localStorage. Snapshot keys embed Date.now() so a lexical
-  // sort is also chronological.
+  // not just localStorage. Sort NUMERICALLY by the embedded ts (a lexical
+  // sort breaks once ms-counts differ in digit width, and the new `.<seq>`
+  // suffix would also misorder lexically) so we always evict the oldest (#125).
   const keys = adapter
     .getAllKeys()
-    .filter((k) => k.startsWith('void.state._backup.pre_migration.'))
-    .sort();
+    .filter((k) => k.startsWith(SNAPSHOT_PREFIX))
+    .sort((a, b) => snapshotTs(a) - snapshotTs(b) || (a < b ? -1 : a > b ? 1 : 0));
   while (keys.length > keep) {
     const old = keys.shift();
     if (old) {

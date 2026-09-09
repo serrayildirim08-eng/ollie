@@ -34,7 +34,6 @@ import {
   _median,
 } from './helpers';
 import { CHRONO_BANDS } from './constants';
-import { DAY_MS } from '../util';
 
 export function deriveSleepStats(records: SleepRecord[], W = 14): SleepStats | null {
   if (!Array.isArray(records)) return null;
@@ -66,7 +65,18 @@ export function computeSleepDebt(
   const targetMin = target * 60;
   if (!Array.isArray(records) || records.length === 0)
     return { totalDeficitHours: 0, nightsCounted: 0 };
-  const cutoff = typeof now === 'number' ? now - W * DAY_MS : 0;
+  // Normalize the cutoff to a local-day boundary. `now` is an arbitrary instant
+  // within its day, but each record is compared at its local noon
+  // (`night_of + 'T12:00:00'`). Subtracting a raw W*DAY_MS from `now` makes the
+  // oldest included night depend on the time-of-day of `now`, so the window can
+  // include W or W+1 nights for the same calendar day — an off-by-one. Anchor
+  // the cutoff to noon of the day W days before now's local day instead.
+  let cutoff = 0;
+  if (typeof now === 'number') {
+    const ref = new Date(now);
+    const cut = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate() - W, 12, 0, 0, 0);
+    cutoff = cut.getTime();
+  }
   const window = records
     .filter((r) => r && !r.is_skipped && r.tst_min != null)
     .filter((r) => {

@@ -52,6 +52,45 @@ export interface ScrubResult {
   redactions: Redaction[];
 }
 
+export interface ScrubOptions {
+  /**
+   * When false, the four sensitive-content passes
+   * (MENTAL_HEALTH / MEDICAL / MEDICATION / SEXUAL) are skipped and ONLY
+   * identity PII (name, email, phone, address, GPS, URL, numeric) is
+   * redacted. Default: true (scrub everything).
+   *
+   * Why this exists: the functional Layer-2 module router (`/route/:module`,
+   * e.g. /route/body, /route/medication, /route/grocery) sends the text to
+   * the classifier whose JOB is to extract the symptom / drug / item — it
+   * MUST see "asthma", "Zoloft", "melatonin" to resolve the action+payload.
+   * Redacting those there would destroy the feature (and break the
+   * body/medication route tests that pin this contract). Those routes pass
+   * `{ sensitiveCategories: false }` so identity PII (names/email/phone) is
+   * still scrubbed before anything leaves to Groq/Gemini, while the
+   * domain term survives for classification.
+   *
+   * The corpus / dump pipelines (/route/dump, /label, /telemetry — anything
+   * that can persist text into the opt-in research corpus or fan out a whole
+   * dump) keep the default `true` so health terms never reach a third party.
+   */
+  sensitiveCategories?: boolean;
+}
+
+const LOCALES: readonly Locale[] = ['en', 'es', 'tr'];
+
+/**
+ * Coerce a free-form BCP-47-ish locale string ("tr-TR", "en_US", "es")
+ * to one of the supported `Locale` values. Unknown / missing → 'tr'
+ * (the app's default dump locale). The regex layer is locale-agnostic;
+ * locale only steers the name wordlist, so a wrong guess degrades name
+ * recall slightly but never silently disables identity scrubbing.
+ */
+export function asLocale(input: string | null | undefined): Locale {
+  if (!input) return 'tr';
+  const base = input.toLowerCase().slice(0, 2);
+  return (LOCALES as readonly string[]).includes(base) ? (base as Locale) : 'tr';
+}
+
 // ─── regex layer ──────────────────────────────────────────────────────────────
 
 // URL — strip path/query/fragment, keep scheme://host.
@@ -79,6 +118,23 @@ const ADDRESS_REGEX =
 // money amounts (matched via lookbehind for currency or trailing 'k'/'M'/'%').
 // JS supports lookbehind in modern engines; keep pattern simple.
 const NUMERIC_REGEX = /(?<![$€₺£¥])(?<!\d[.,])\b\d{4,}\b(?![.,]\d|%|k\b|M\b)/g;
+
+// Year-context cues, checked around a 4-digit number before treating it as a
+// calendar year rather than a secret code. Covers EN/ES/TR keywords ("year",
+// "since", "año", "yıl"…), the © symbol, month names, and a leading "in".
+const YEAR_WORD_REGEX =
+  /(?:©|copyright|\b(?:year|years|since|circa|fy|in|by|during|established|est|founded|born|died|a[ñn]o|a[ñn]os|desde|yıl|yili|yılında|ocak|şubat|mart|nisan|mayıs|haziran|temmuz|ağustos|eylül|ekim|kasım|aralık|jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?|ene(?:ro)?|abr(?:il)?|ago(?:sto)?|dic(?:iembre)?)\b)/i;
+
+// True when text immediately around `match` (at `offset`, length `len`)
+// corroborates it being a calendar year: a year-cue word within a small window
+// on either side, or an adjacent date separator forming a Y-M-D / D-M-Y date.
+function isYearContext(full: string, offset: number, len: number): boolean {
+  const before = full.slice(Math.max(0, offset - 16), offset);
+  const after = full.slice(offset + len, offset + len + 16);
+  // Adjacent date separator with another numeric part → "2024-01-05", "01/02/2024".
+  if (/[-/.]\s*\d{1,4}\s*$/.test(before) || /^\s*[-/.]\s*\d{1,2}\b/.test(after)) return true;
+  return YEAR_WORD_REGEX.test(before) || YEAR_WORD_REGEX.test(after);
+}
 
 // ─── sensitive-category regexes ───────────────────────────────────────────────
 //
@@ -218,50 +274,54 @@ const MENTAL_HEALTH_REGEX = new RegExp(
   'gi',
 );
 
-// Stop list for names that look like names but aren't.
-const ADDRESS_NAME_STOPWORDS = new Set([
-  'New York', 'New Jersey', 'Los Angeles', 'San Francisco', 'San Diego',
-  'United States', 'United Kingdom',
-]);
+// (audit #172) The former ADDRESS_NAME_STOPWORDS set was dead code: every
+// ADDRESS_REGEX match begins with a street number (`\d{1,6}\s+…`), so it could
+// never equal a bare place name like "New York" / "United States". Removed.
 
 // ─── orchestrator ─────────────────────────────────────────────────────────────
 
-export function scrubPII(text: string, locale: Locale): ScrubResult {
+export function scrubPII(text: string, locale: Locale, opts?: ScrubOptions): ScrubResult {
   const redactions: Redaction[] = [];
   let out = text;
 
-  // 0a. MENTAL_HEALTH — run first: high-sensitivity crisis terms must not be
-  //     accidentally absorbed by a later, weaker pass (e.g. "suicide" eaten
-  //     by MEDICAL before we can tag it MENTAL_HEALTH). Brand check is a
-  //     no-op here but kept for symmetry.
-  out = out.replace(MENTAL_HEALTH_REGEX, (match) => {
-    if (isBrand(match)) return match;
-    redactions.push({ type: 'MENTAL_HEALTH', original: match });
-    return '[MENTAL_HEALTH]';
-  });
+  // Sensitive-content passes (0a–0d) are opt-out: the functional module
+  // router disables them so the classifier can still see the symptom/drug/item
+  // it exists to extract (see ScrubOptions.sensitiveCategories). Identity PII
+  // below (1–7b) ALWAYS runs.
+  if (opts?.sensitiveCategories !== false) {
+    // 0a. MENTAL_HEALTH — run first: high-sensitivity crisis terms must not be
+    //     accidentally absorbed by a later, weaker pass (e.g. "suicide" eaten
+    //     by MEDICAL before we can tag it MENTAL_HEALTH). Brand check is a
+    //     no-op here but kept for symmetry.
+    out = out.replace(MENTAL_HEALTH_REGEX, (match) => {
+      if (isBrand(match)) return match;
+      redactions.push({ type: 'MENTAL_HEALTH', original: match });
+      return '[MENTAL_HEALTH]';
+    });
 
-  // 0b. MEDICAL — diagnoses, conditions, clinical terms.
-  out = out.replace(MEDICAL_REGEX, (match) => {
-    if (isBrand(match)) return match;
-    redactions.push({ type: 'MEDICAL', original: match });
-    return '[MEDICAL]';
-  });
+    // 0b. MEDICAL — diagnoses, conditions, clinical terms.
+    out = out.replace(MEDICAL_REGEX, (match) => {
+      if (isBrand(match)) return match;
+      redactions.push({ type: 'MEDICAL', original: match });
+      return '[MEDICAL]';
+    });
 
-  // 0c. MEDICATION — drug names. Pharma brand names are kept in the brand
-  //     allowlist at the company level (Pfizer, Bayer) but NOT at the product
-  //     level (Ritalin, Xanax) because a product name reveals a prescription.
-  out = out.replace(MEDICATION_REGEX, (match) => {
-    if (isBrand(match)) return match;
-    redactions.push({ type: 'MEDICATION', original: match });
-    return '[MEDICATION]';
-  });
+    // 0c. MEDICATION — drug names. Pharma brand names are kept in the brand
+    //     allowlist at the company level (Pfizer, Bayer) but NOT at the product
+    //     level (Ritalin, Xanax) because a product name reveals a prescription.
+    out = out.replace(MEDICATION_REGEX, (match) => {
+      if (isBrand(match)) return match;
+      redactions.push({ type: 'MEDICATION', original: match });
+      return '[MEDICATION]';
+    });
 
-  // 0d. SEXUAL — explicit content terms.
-  out = out.replace(SEXUAL_REGEX, (match) => {
-    if (isBrand(match)) return match;
-    redactions.push({ type: 'SEXUAL', original: match });
-    return '[SEXUAL]';
-  });
+    // 0d. SEXUAL — explicit content terms.
+    out = out.replace(SEXUAL_REGEX, (match) => {
+      if (isBrand(match)) return match;
+      redactions.push({ type: 'SEXUAL', original: match });
+      return '[SEXUAL]';
+    });
+  }
 
   // 1. URL first
   out = out.replace(URL_REGEX, (match, scheme: string, host: string) => {
@@ -283,7 +343,6 @@ export function scrubPII(text: string, locale: Locale): ScrubResult {
 
   // 4. Address (before phone — long digit runs in addresses can look like phones)
   out = out.replace(ADDRESS_REGEX, (match) => {
-    if (ADDRESS_NAME_STOPWORDS.has(match)) return match;
     redactions.push({ type: 'ADDRESS', original: match });
     return '[ADDRESS]';
   });
@@ -297,10 +356,15 @@ export function scrubPII(text: string, locale: Locale): ScrubResult {
   });
 
   // 6. Numeric — 4+ digit sequences not adjacent to currency
-  out = out.replace(NUMERIC_REGEX, (match) => {
-    // Skip if this is clearly a year (1900-2099) — those are research signal
+  out = out.replace(NUMERIC_REGEX, (match: string, offset: number, full: string) => {
+    // A bare 4-digit number in the year range (1900-2099) is research signal
+    // ONLY when surrounding text corroborates it as a year. Without context a
+    // 4-digit number is just as likely to be a PIN, OTP, or 2FA code, so we
+    // redact it like any other number to avoid leaking secrets (audit #171).
     const n = parseInt(match, 10);
-    if (match.length === 4 && n >= 1900 && n <= 2099) return match;
+    if (match.length === 4 && n >= 1900 && n <= 2099 && isYearContext(full, offset, match.length)) {
+      return match;
+    }
     redactions.push({ type: 'NUMERIC', original: match });
     return '[NUMERIC]';
   });

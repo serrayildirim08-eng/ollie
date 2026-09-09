@@ -10,9 +10,11 @@
  * text-only action buttons. Same grammar as GroceryBox's inline rows.
  */
 
-import type { CSSProperties } from 'react';
+import { useRef, useState, type CSSProperties } from 'react';
 import { Stack, Row } from '../layout';
 import { Text } from '../ui';
+import { colors } from '../theme/tokens';
+import { track } from '../api/analytics';
 
 const SMCP_STYLE: CSSProperties = {
   fontVariantCaps: 'all-small-caps',
@@ -42,6 +44,21 @@ export function NeedsConfirmCard({
   onUndo,
   fromPhoto = false,
 }: NeedsConfirmCardProps): JSX.Element {
+  // In-flight guard (audit #53): the parent dismisses the card synchronously,
+  // but until that re-render commits a fast double-tap can fire keep/undo
+  // twice (applying / removing the fragment twice). The ref blocks the
+  // synchronous second tap; the state flag visually disables the buttons.
+  const actedRef = useRef(false);
+  const [acted, setActed] = useState(false);
+  const guard = (fn: () => void, corrected = false) => () => {
+    if (actedRef.current) return;
+    actedRef.current = true;
+    setActed(true);
+    // Funnel telemetry: an undo on the confirm card = the user corrected the
+    // AI's routing. Fire-and-forget, consent-gated; keep stays silent.
+    if (corrected) track('route_corrected', { value: routeLabel });
+    fn();
+  };
   return (
     <div
       role="status"
@@ -49,8 +66,8 @@ export function NeedsConfirmCard({
       style={{
         padding: '14px 18px',
         borderRadius: 10,
-        background: 'var(--ollie-color-paper)',
-        border: '1px solid var(--ollie-color-hairline)',
+        background: colors.paper,
+        border: `1px solid ${colors.hairline}`,
         position: 'relative',
       }}
     >
@@ -63,7 +80,7 @@ export function NeedsConfirmCard({
             right: 12,
             fontFamily: 'inherit',
             fontSize: 10,
-            color: 'var(--ollie-color-sage)',
+            color: colors.sage,
             letterSpacing: '0.10em',
             fontVariantCaps: 'all-small-caps',
           }}
@@ -73,17 +90,17 @@ export function NeedsConfirmCard({
       )}
       <Stack gap={10}>
         {/* kicker */}
-        <Text scale="caption" color="var(--ollie-color-ink-faint)" style={SMCP_STYLE}>
+        <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
           not sure · confirm?
         </Text>
 
         {/* fragment preview */}
-        <Text scale="body" color="var(--ollie-color-ink)" style={{ fontStyle: 'italic' }}>
+        <Text scale="body" color={colors.ink} style={{ fontStyle: 'italic' }}>
           &ldquo;{fragmentPreview}&rdquo;
         </Text>
 
         {/* route label */}
-        <Text scale="caption" color="var(--ollie-color-ink-soft)" style={SMCP_STYLE}>
+        <Text scale="caption" color={colors.inkSoft} style={SMCP_STYLE}>
           {routeLabel}
         </Text>
 
@@ -92,17 +109,18 @@ export function NeedsConfirmCard({
           <button
             type="button"
             aria-label="Keep this routing"
-            onClick={onKeep}
+            onClick={guard(onKeep)}
+            disabled={acted}
             style={{
               background: 'none',
               border: 'none',
               padding: 0,
-              cursor: 'pointer',
+              cursor: acted ? 'default' : 'pointer',
               fontFamily: 'inherit',
               fontSize: 13,
               fontWeight: 600,
               letterSpacing: '0.04em',
-              color: 'var(--ollie-color-sage)',
+              color: colors.sage,
             }}
           >
             keep
@@ -110,17 +128,18 @@ export function NeedsConfirmCard({
           <button
             type="button"
             aria-label="Undo this routing"
-            onClick={onUndo}
+            onClick={guard(onUndo, true)}
+            disabled={acted}
             style={{
               background: 'none',
               border: 'none',
               padding: 0,
-              cursor: 'pointer',
+              cursor: acted ? 'default' : 'pointer',
               fontFamily: 'inherit',
               fontSize: 13,
               fontWeight: 500,
               letterSpacing: '0.04em',
-              color: 'var(--ollie-color-ink-faint)',
+              color: colors.inkFaint,
             }}
           >
             undo

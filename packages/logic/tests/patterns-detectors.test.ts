@@ -22,6 +22,50 @@ describe('phaseForDay', () => {
     expect(phaseForDay(13, 28)).toBe('ovulation window');
     expect(phaseForDay(20, 28)).toBe('luteal');
   });
+
+  // ── #51 CANONICAL boundary table ──────────────────────────────────────
+  // ONE definition for every detector. Boundaries are pinned EXACTLY so the
+  // three former copies (which disagreed on `<` vs `<=` and `-17` vs `-18`)
+  // can never re-diverge. For cycleLen=28, bleed=5:
+  //   menstrual  : day <= 5
+  //   follicular : 6 .. 9        (day < cycleLen-18 == 10)
+  //   ovulation  : 10 .. 15      (cycleLen-18 .. cycleLen-13, inclusive)
+  //   luteal     : day >= 16
+  it('pins the inequality edges for a 28-day / 5-day-bleed cycle', () => {
+    const table: Array<[number, string]> = [
+      [5, 'menstrual'],          // last bleed day
+      [6, 'follicular'],         // first non-bleed
+      [9, 'follicular'],         // last follicular (cycleLen-18-1)
+      [10, 'ovulation window'],  // ov start  == cycleLen-18 (inclusive)
+      [15, 'ovulation window'],  // ov end    == cycleLen-13 (inclusive)
+      [16, 'luteal'],            // first luteal
+      [28, 'luteal'],
+    ];
+    for (const [d, expected] of table) {
+      expect(phaseForDay(d, 28, 5)).toBe(expected);
+    }
+  });
+
+  it('honors an explicit bleed length', () => {
+    // bleed=7 → days 6,7 are now menstrual (were follicular at default bleed=5)
+    expect(phaseForDay(6, 28, 7)).toBe('menstrual');
+    expect(phaseForDay(7, 28, 7)).toBe('menstrual');
+    expect(phaseForDay(8, 28, 7)).toBe('follicular');
+  });
+
+  it('clamps degenerate short cycles (window would collide with bleed)', () => {
+    // cycleLen=21 → ovStart=3, ovEnd=8; with bleed=5 ovStart(3) <= bleed(5)
+    // so the ovulation window is dropped: follicular up to ovEnd, then luteal.
+    expect(phaseForDay(5, 21, 5)).toBe('menstrual');
+    expect(phaseForDay(6, 21, 5)).toBe('follicular');
+    expect(phaseForDay(8, 21, 5)).toBe('follicular');
+    expect(phaseForDay(9, 21, 5)).toBe('luteal');
+  });
+
+  it('defaults bleed length to 5 when omitted', () => {
+    expect(phaseForDay(5, 28)).toBe('menstrual');
+    expect(phaseForDay(6, 28)).toBe('follicular');
+  });
 });
 
 describe('closedCycles + isIrregular', () => {

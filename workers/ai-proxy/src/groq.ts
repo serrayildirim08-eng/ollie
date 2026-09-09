@@ -10,6 +10,8 @@
  * Auth:     Bearer <GROQ_API_KEY>  (Worker secret; never client-shipped)
  */
 
+import { fetchWithTimeout, UPSTREAM_TIMEOUT_MS } from './fetch-timeout';
+
 export const GROQ_MODEL = 'openai/gpt-oss-120b';
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 
@@ -99,14 +101,23 @@ export async function groqChat(opts: GroqOpts, label: string): Promise<GroqChoic
   }
 
   const startedAt = Date.now();
-  const res = await fetch(GROQ_URL, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      authorization: `Bearer ${opts.apiKey}`,
+  // Per-call timeout (audit S2 · fix 3): a stalled Groq response otherwise held
+  // the Worker for the full 30s wall. On timeout this throws a typed
+  // UpstreamTimeoutError (.status=504) which the classify cascade treats as a
+  // provider failure and falls through to the next free-tier provider.
+  const res = await fetchWithTimeout(
+    GROQ_URL,
+    {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${opts.apiKey}`,
+      },
+      body: JSON.stringify(body),
     },
-    body: JSON.stringify(body),
-  });
+    UPSTREAM_TIMEOUT_MS.groq,
+    label,
+  );
   const latencyMs = Date.now() - startedAt;
 
   if (!res.ok) {

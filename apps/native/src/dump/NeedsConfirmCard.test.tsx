@@ -135,6 +135,35 @@ describe('NeedsConfirmCard', () => {
     expect(onUndo).not.toHaveBeenCalled();
   });
 
+  it('#53: a double-tap on keep fires onKeep exactly ONCE', () => {
+    const onKeep = vi.fn();
+    const onUndo = vi.fn();
+    render({
+      fragmentPreview: 'test fragment',
+      routeLabel: 'grocery · add_item',
+      onKeep,
+      onUndo,
+    });
+    clickButton('Keep this routing');
+    clickButton('Keep this routing');
+    expect(onKeep).toHaveBeenCalledTimes(1);
+  });
+
+  it('#53: after keep is tapped, undo is disabled and does NOT fire', () => {
+    const onKeep = vi.fn();
+    const onUndo = vi.fn();
+    render({
+      fragmentPreview: 'test fragment',
+      routeLabel: 'grocery · add_item',
+      onKeep,
+      onUndo,
+    });
+    clickButton('Keep this routing');
+    clickButton('Undo this routing');
+    expect(onKeep).toHaveBeenCalledTimes(1);
+    expect(onUndo).not.toHaveBeenCalled();
+  });
+
   it('renders only when mounted — caller gates on needsConfirm', () => {
     // The component itself is always "visible" when mounted.
     // The gate (needsConfirm === true) lives in DumpScreen.

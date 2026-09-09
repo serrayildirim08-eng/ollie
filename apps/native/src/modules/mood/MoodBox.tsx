@@ -11,15 +11,15 @@
  * from another tab / from a dump while the page is open.
  */
 
-import { useCallback, useEffect, useState } from 'react';
-import { Stack, Row } from '../../layout';
+import { useCallback, useState } from 'react';
+import { Stack, Row, Box } from '../../layout';
 import { Text } from '../../ui';
-import { fontWeights } from '../../theme/tokens';
+import { colors, fontWeights } from '../../theme/tokens';
 import { WhenCaption } from '../../lib/WhenCaption';
+import { useModuleData } from '../../lib/useModuleData';
 import { migrateMood } from './migrate';
 import { events as eventsRepo } from './repo';
 import {
-  getEnergyLevel,
   getLabel,
   getStatement,
   getValence,
@@ -34,44 +34,19 @@ const SMCP_STYLE: React.CSSProperties = {
   letterSpacing: '0.08em',
 };
 
-const POLL_MS = 6000;
-
 export function MoodBox(): JSX.Element {
   const [items, setItems] = useState<MoodEvent[]>([]);
-  const [ready, setReady] = useState(false);
 
   const refresh = useCallback(async () => {
     const list = await eventsRepo.list();
     setItems(list);
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      await migrateMood();
-      if (cancelled) return;
-      await refresh();
-      if (cancelled) return;
-      setReady(true);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [refresh]);
-
-  useEffect(() => {
-    const t = setInterval(() => {
-      void refresh();
-    }, POLL_MS);
-    const onFocus = () => {
-      void refresh();
-    };
-    window.addEventListener('focus', onFocus);
-    return () => {
-      clearInterval(t);
-      window.removeEventListener('focus', onFocus);
-    };
-  }, [refresh]);
+  const { ready } = useModuleData({
+    migrationKey: 'mood',
+    migrate: migrateMood,
+    refresh,
+  });
 
   const handleRemove = useCallback(
     async (id: string) => {
@@ -89,14 +64,26 @@ export function MoodBox(): JSX.Element {
   return (
     <Stack gap={48}>
       <Stack gap={8}>
-        <Text scale="caption" color="var(--ollie-color-ink-faint)" style={SMCP_STYLE}>
+        <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
           box
         </Text>
-        <Text scale="display">Mood</Text>
+        <Text
+          scale="title"
+          color={colors.ink}
+          style={{
+            fontFamily: 'var(--ollie-font-sans)',
+            fontSize: '26px',
+            fontWeight: 700,
+            lineHeight: 1.15,
+            letterSpacing: '-0.01em',
+          }}
+        >
+          mood
+        </Text>
       </Stack>
 
       {!ready ? (
-        <Text scale="caption" color="var(--ollie-color-ink-faint)">
+        <Text scale="caption" color={colors.inkFaint}>
           loading…
         </Text>
       ) : isEmpty ? (
@@ -137,12 +124,12 @@ function ColdStart(): JSX.Element {
           width: 7,
           height: 7,
           borderRadius: '50%',
-          background: 'var(--ollie-color-sage-deep)',
+          background: colors.sageDeep,
           flexShrink: 0,
           marginTop: 7,
         }}
       />
-      <Text scale="body" color="var(--ollie-color-ink)">
+      <Text scale="body" color={colors.ink}>
         <b style={{ fontWeight: fontWeights.medium }}>
           this is mood — how you feel, your energy, the way you talk to yourself.
         </b>{' '}
@@ -166,10 +153,16 @@ function ListSection({
   if (items.length === 0) return null;
   return (
     <Stack gap={16}>
-      <Text scale="lede" color="var(--ollie-color-ink)">
+      <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
         {label}
       </Text>
-      <Stack gap={4}>{items.map((e) => children(e))}</Stack>
+      <Stack gap={12}>
+        {items.map((e) => (
+          <Box key={e.id} bg="cream" radius="card" shadow="raised" style={{ padding: '16px 18px' }}>
+            {children(e)}
+          </Box>
+        ))}
+      </Stack>
     </Stack>
   );
 }
@@ -189,20 +182,49 @@ function MoodRow({ event, onRemove }: { event: MoodEvent; onRemove: () => void }
   );
 }
 
+/** Normalize the energy level (the AI sends a word like "low"; older rows may
+ *  hold a 1–5 number) into a label + how many of the 3 calm segments to fill. */
+const ENERGY_WORDS: Record<string, number> = { low: 1, mid: 2, medium: 2, high: 3 };
+function energyMeter(event: MoodEvent): { word: string; filled: number } | null {
+  const raw = (event.data as Record<string, unknown>)['level'];
+  if (typeof raw === 'string' && raw.trim()) {
+    const k = raw.toLowerCase();
+    return { word: k, filled: ENERGY_WORDS[k] ?? 2 };
+  }
+  if (typeof raw === 'number' && Number.isFinite(raw)) {
+    const filled = raw <= 2 ? 1 : raw === 3 ? 2 : 3;
+    return { word: filled === 1 ? 'low' : filled === 2 ? 'mid' : 'high', filled };
+  }
+  return null;
+}
+
 function EnergyRow({ event, onRemove }: { event: MoodEvent; onRemove: () => void }): JSX.Element {
-  const level = getEnergyLevel(event);
-  const label = getLabel(event);
-  const text = label
-    ? `${label}${level != null ? ` · ${level}` : ''}`
-    : level != null
-      ? `energy ${level}`
-      : 'energy';
+  const label = getLabel(event) || 'energy';
+  const meter = energyMeter(event);
   return (
-    <Stack gap={2}>
-      <Row gap={12} align="baseline" justify="space-between">
-        <Text scale="body">{text}</Text>
+    <Stack gap={8}>
+      <Row gap={12} align="center" justify="space-between">
+        <Text scale="body" style={{ fontWeight: 600 }}>{label}</Text>
         <RemoveButton onClick={onRemove} />
       </Row>
+      {meter ? (
+        <Row gap={8} align="center">
+          <div style={{ display: 'flex', gap: 4 }} aria-hidden>
+            {[0, 1, 2].map((i) => (
+              <span
+                key={i}
+                style={{
+                  width: 20,
+                  height: 5,
+                  borderRadius: 3,
+                  background: i < meter.filled ? colors.sageDeep : 'rgba(47, 61, 49, 0.12)',
+                }}
+              />
+            ))}
+          </div>
+          <Text scale="caption" color={colors.inkFaint}>{`${meter.word} energy`}</Text>
+        </Row>
+      ) : null}
       <WhenCaption ts={event.loggedAt} />
     </Stack>
   );
@@ -230,7 +252,7 @@ function RemoveButton({ onClick }: { onClick: () => void }): JSX.Element {
         background: 'none',
         border: 'none',
         padding: '4px 8px',
-        color: 'var(--ollie-color-ink-faint)',
+        color: colors.inkFaint,
         cursor: 'pointer',
         fontVariantCaps: 'all-small-caps',
         letterSpacing: '0.08em',

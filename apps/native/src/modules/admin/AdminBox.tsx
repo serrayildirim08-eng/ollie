@@ -53,22 +53,25 @@
 
 import {
   useCallback,
-  useEffect,
   useMemo,
   useState,
   type CSSProperties,
   type ReactNode,
 } from 'react';
 import {
+  formatDays,
   daysSinceLast,
   medianIntervalDays,
   type CadenceEstimate,
 } from '@ollie/cadence';
-import { Stack, Row } from '../../layout';
+import { Stack, Row, Box } from '../../layout';
 import { Text } from '../../ui';
+import { colors } from '../../theme/tokens';
 import { WhenCaption } from '../../lib/WhenCaption';
+import { useModuleData } from '../../lib/useModuleData';
 import { PatternCards } from '../../patterns/PatternCards';
 import { migrateAdmin } from './migrate';
+import { onTaskCompleted } from '../../notify/datelessLadderHook';
 import {
   cadence as cadenceRepo,
   renewals as renewalsRepo,
@@ -88,8 +91,6 @@ const SMCP_STYLE: CSSProperties = {
   fontVariantCaps: 'all-small-caps',
   letterSpacing: '0.08em',
 };
-
-const POLL_MS = 6000;
 
 /** Umber accent for renewal markers. Lifted verbatim from v2 Runway. */
 const UMBER = '#A8703C';
@@ -124,7 +125,6 @@ export function AdminBox(): JSX.Element {
   const [renewalCadence, setRenewalCadence] = useState<Map<string, CadenceEstimate>>(
     () => new Map(),
   );
-  const [ready, setReady] = useState(false);
 
   const refresh = useCallback(async () => {
     const [t, r] = await Promise.all([tasksRepo.list(), renewalsRepo.list()]);
@@ -147,33 +147,11 @@ export function AdminBox(): JSX.Element {
     setRenewalCadence(new Map(pairs));
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      await migrateAdmin();
-      if (cancelled) return;
-      await refresh();
-      if (cancelled) return;
-      setReady(true);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [refresh]);
-
-  useEffect(() => {
-    const t = setInterval(() => {
-      void refresh();
-    }, POLL_MS);
-    const onFocus = () => {
-      void refresh();
-    };
-    window.addEventListener('focus', onFocus);
-    return () => {
-      clearInterval(t);
-      window.removeEventListener('focus', onFocus);
-    };
-  }, [refresh]);
+  const { ready } = useModuleData({
+    migrationKey: 'admin',
+    migrate: migrateAdmin,
+    refresh,
+  });
 
   const handleRemoveTask = useCallback(
     async (id: string) => {
@@ -186,6 +164,8 @@ export function AdminBox(): JSX.Element {
   const handleToggleTask = useCallback(
     async (id: string, nextDone: boolean) => {
       await tasksRepo.setDone(id, nextDone);
+      // Completing in-app cancels any remaining date-less ladder tiers.
+      if (nextDone) await onTaskCompleted('admin', id);
       await refresh();
     },
     [refresh],
@@ -219,18 +199,30 @@ export function AdminBox(): JSX.Element {
     <Stack gap={56}>
       {/* kicker + serif title — the box hero strip, sibling-pattern parity */}
       <Stack gap={12}>
-        <Text scale="caption" color="var(--ollie-color-ink-faint)" style={SMCP_STYLE}>
+        <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
           box · admin
         </Text>
-        <Text scale="display">Admin</Text>
-        <Text scale="body" color="var(--ollie-color-ink-soft)" style={{ maxWidth: 460 }}>
+        <Text
+          scale="title"
+          color={colors.ink}
+          style={{
+            fontFamily: 'var(--ollie-font-sans)',
+            fontSize: '26px',
+            fontWeight: 700,
+            lineHeight: 1.15,
+            letterSpacing: '-0.01em',
+          }}
+        >
+          admin
+        </Text>
+        <Text scale="body" color={colors.inkSoft} style={{ maxWidth: 460 }}>
           the things you forget — passport, lease, taxes, the dentist. ollie
           carries the dates.
         </Text>
       </Stack>
 
       {!ready ? (
-        <Text scale="caption" color="var(--ollie-color-ink-faint)">
+        <Text scale="caption" color={colors.inkFaint}>
           loading…
         </Text>
       ) : (
@@ -327,7 +319,7 @@ function NextDueHero({ renewal }: { renewal: AdminRenewal }): JSX.Element {
   return (
     <Stack gap={0} align="center">
       <Runway pos={pos} />
-      <Text scale="caption" color="var(--ollie-color-ink-faint)" style={{ letterSpacing: '0.02em' }}>
+      <Text scale="caption" color={colors.inkFaint} style={{ letterSpacing: '0.02em' }}>
         next thing due
       </Text>
       <div
@@ -336,7 +328,7 @@ function NextDueHero({ renewal }: { renewal: AdminRenewal }): JSX.Element {
           fontFamily: 'var(--ollie-font-serif)',
           fontSize: 40,
           fontWeight: 300,
-          color: 'var(--ollie-color-ink)',
+          color: colors.ink,
           letterSpacing: '-0.03em',
           lineHeight: 1.05,
           textAlign: 'center',
@@ -348,7 +340,7 @@ function NextDueHero({ renewal }: { renewal: AdminRenewal }): JSX.Element {
         style={{
           marginTop: 13,
           fontSize: 14,
-          color: 'var(--ollie-color-ink)',
+          color: colors.ink,
           fontWeight: 500,
           letterSpacing: '-0.01em',
         }}
@@ -356,13 +348,13 @@ function NextDueHero({ renewal }: { renewal: AdminRenewal }): JSX.Element {
         <strong
           style={{
             fontWeight: 600,
-            color: overdue ? 'var(--ollie-color-rubric)' : UMBER,
+            color: overdue ? colors.rubric : UMBER,
           }}
         >
           {tag}
         </strong>
-        <span style={{ color: 'var(--ollie-color-hairline)', margin: '0 7px' }}>·</span>
-        <span style={{ color: 'var(--ollie-color-ink-soft)' }}>renewal</span>
+        <span style={{ color: colors.hairline, margin: '0 7px' }}>·</span>
+        <span style={{ color: colors.inkSoft }}>renewal</span>
       </div>
     </Stack>
   );
@@ -372,7 +364,7 @@ function ColdHero({ hasAnyData }: { hasAnyData: boolean }): JSX.Element {
   return (
     <Stack gap={0} align="center">
       <Runway pos={null} />
-      <Text scale="caption" color="var(--ollie-color-ink-faint)" style={{ letterSpacing: '0.02em' }}>
+      <Text scale="caption" color={colors.inkFaint} style={{ letterSpacing: '0.02em' }}>
         nothing due yet
       </Text>
       <div
@@ -381,7 +373,7 @@ function ColdHero({ hasAnyData }: { hasAnyData: boolean }): JSX.Element {
           fontFamily: 'var(--ollie-font-serif)',
           fontSize: 30,
           fontWeight: 300,
-          color: 'var(--ollie-color-ink)',
+          color: colors.ink,
           letterSpacing: '-0.025em',
           lineHeight: 1.25,
           textAlign: 'center',
@@ -408,7 +400,7 @@ function ColdHero({ hasAnyData }: { hasAnyData: boolean }): JSX.Element {
               width: 7,
               height: 7,
               borderRadius: '50%',
-              background: 'var(--ollie-color-sage)',
+              background: colors.sage,
               flexShrink: 0,
               marginTop: 6,
             }}
@@ -416,7 +408,7 @@ function ColdHero({ hasAnyData }: { hasAnyData: boolean }): JSX.Element {
           <span
             style={{
               fontSize: 14,
-              color: 'var(--ollie-color-ink)',
+              color: colors.ink,
               fontWeight: 500,
               letterSpacing: '-0.01em',
               lineHeight: 1.5,
@@ -446,7 +438,7 @@ function Runway({ pos }: { pos: number | null }): JSX.Element {
             y1={TRACK_Y}
             x2={TRACK_X1}
             y2={TRACK_Y}
-            style={{ stroke: 'var(--ollie-color-hairline)' }}
+            stroke={colors.hairline}
             strokeWidth={2}
             strokeLinecap="round"
             strokeDasharray="2 5"
@@ -458,7 +450,7 @@ function Runway({ pos }: { pos: number | null }): JSX.Element {
               y1={25}
               x2={x}
               y2={35}
-              style={{ stroke: 'var(--ollie-color-hairline)' }}
+              stroke={colors.hairline}
               strokeWidth={1.6}
             />
           ))}
@@ -476,7 +468,7 @@ function Runway({ pos }: { pos: number | null }): JSX.Element {
           y1={TRACK_Y}
           x2={TRACK_X1}
           y2={TRACK_Y}
-          style={{ stroke: 'var(--ollie-color-hairline)' }}
+          stroke={colors.hairline}
           strokeWidth={2}
           strokeLinecap="round"
         />
@@ -490,18 +482,18 @@ function Runway({ pos }: { pos: number | null }): JSX.Element {
           strokeLinecap="round"
           opacity={0.4}
         />
-        <line x1={8} y1={24} x2={8} y2={36} style={{ stroke: 'var(--ollie-color-hairline)' }} strokeWidth={2} />
-        <line x1={142} y1={24} x2={142} y2={36} style={{ stroke: 'var(--ollie-color-hairline)' }} strokeWidth={2} />
-        <line x1={178} y1={24} x2={178} y2={36} style={{ stroke: 'var(--ollie-color-hairline)' }} strokeWidth={2} />
-        <line x1={200} y1={24} x2={200} y2={36} style={{ stroke: 'var(--ollie-color-hairline)' }} strokeWidth={2} />
+        <line x1={8} y1={24} x2={8} y2={36} stroke={colors.hairline} strokeWidth={2} />
+        <line x1={142} y1={24} x2={142} y2={36} stroke={colors.hairline} strokeWidth={2} />
+        <line x1={178} y1={24} x2={178} y2={36} stroke={colors.hairline} strokeWidth={2} />
+        <line x1={200} y1={24} x2={200} y2={36} stroke={colors.hairline} strokeWidth={2} />
         <circle cx={mx} cy={TRACK_Y} r={7} fill={UMBER} />
-        <circle cx={mx} cy={TRACK_Y} r={7} fill="none" style={{ stroke: 'var(--ollie-color-paper)' }} strokeWidth={3} />
+        <circle cx={mx} cy={TRACK_Y} r={7} fill="none" stroke={colors.paper} strokeWidth={3} />
         <text
           x={8}
           y={14}
           fontSize={9}
           fontWeight={600}
-          style={{ fill: 'var(--ollie-color-ink-faint)' }}
+          fill={colors.inkFaint}
           textAnchor="middle"
         >
           90
@@ -511,7 +503,7 @@ function Runway({ pos }: { pos: number | null }): JSX.Element {
           y={14}
           fontSize={9}
           fontWeight={600}
-          style={{ fill: 'var(--ollie-color-ink-faint)' }}
+          fill={colors.inkFaint}
           textAnchor="middle"
         >
           30
@@ -521,7 +513,7 @@ function Runway({ pos }: { pos: number | null }): JSX.Element {
           y={14}
           fontSize={9}
           fontWeight={600}
-          style={{ fill: 'var(--ollie-color-ink-faint)' }}
+          fill={colors.inkFaint}
           textAnchor="middle"
         >
           7
@@ -531,7 +523,7 @@ function Runway({ pos }: { pos: number | null }): JSX.Element {
           y={14}
           fontSize={9}
           fontWeight={600}
-          style={{ fill: 'var(--ollie-color-ink-faint)' }}
+          fill={colors.inkFaint}
           textAnchor="middle"
         >
           0
@@ -552,7 +544,7 @@ function Section({
 }): JSX.Element {
   return (
     <Stack gap={16}>
-      <Text scale="lede" color="var(--ollie-color-ink)">
+      <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
         {label}
       </Text>
       {children}
@@ -580,7 +572,7 @@ function TaskSection({
   return (
     <Section label={label}>
       {items.length === 0 ? (
-        <Text scale="body" color="var(--ollie-color-ink-faint)">
+        <Text scale="body" color={colors.inkFaint}>
           {empty}
         </Text>
       ) : (
@@ -602,8 +594,8 @@ function TaskSection({
 }
 
 /**
- * Render a list of items as hairline-bordered rows (top + bottom rule on
- * the last row). Mirrors the v2 torn-note grammar from admin-cold.html.
+ * Render a list of items as raised neumorphic cards — one per row, with a
+ * calm gap between. Replaces the v2 torn-note hairline grammar.
  */
 function HairlineList<T extends { id: string }>({
   items,
@@ -613,19 +605,17 @@ function HairlineList<T extends { id: string }>({
   renderRow: (item: T, index: number) => ReactNode;
 }): JSX.Element {
   return (
-    <Stack gap={0}>
+    <Stack gap={12}>
       {items.map((item, i) => (
-        <div
+        <Box
           key={item.id}
-          style={{
-            borderTop: `1px solid var(--ollie-color-hairline)`,
-            borderBottom:
-              i === items.length - 1 ? `1px solid var(--ollie-color-hairline)` : 'none',
-            padding: '14px 2px',
-          }}
+          bg="cream"
+          radius="card"
+          shadow="raised"
+          style={{ padding: '16px 18px' }}
         >
           {renderRow(item, i)}
-        </div>
+        </Box>
       ))}
     </Stack>
   );
@@ -647,10 +637,10 @@ function RenewalRow({
   const dueSoon = days != null && days >= 0 && days <= 7;
   const tag = formatDaysUntil(renewal.dueDate);
   const tagColor = overdue
-    ? 'var(--ollie-color-rubric)'
+    ? colors.rubric
     : dueSoon
-      ? 'var(--ollie-color-amber)'
-      : 'var(--ollie-color-ink-faint)';
+      ? colors.amber
+      : colors.inkFaint;
   return (
     <Row gap={12} align="baseline" justify="space-between">
       <Row gap={11} align="baseline">
@@ -661,13 +651,13 @@ function RenewalRow({
             width: 6,
             height: 6,
             borderRadius: 2,
-            background: overdue ? 'var(--ollie-color-rubric)' : dueSoon ? 'var(--ollie-color-amber)' : UMBER,
+            background: overdue ? colors.rubric : dueSoon ? colors.amber : UMBER,
             flexShrink: 0,
             opacity: overdue || dueSoon ? 1 : 0.6,
           }}
         />
         <Stack gap={2}>
-          <Text scale="body" color="var(--ollie-color-ink)">
+          <Text scale="body" color={colors.ink}>
             {renewal.renewalType}
             <Text
               as="span"
@@ -715,7 +705,7 @@ function CadenceHint({
   return (
     <Text
       scale="caption"
-      color="var(--ollie-color-ink-faint)"
+      color={colors.inkFaint}
       style={{ fontVariantCaps: 'all-small-caps', letterSpacing: '0.06em' }}
     >
       {`last ${subject} ${sinceLabel} ago · usually every ${everyLabel}`}
@@ -723,11 +713,6 @@ function CadenceHint({
   );
 }
 
-function formatDays(d: number): string {
-  if (d < 1) return 'less than a day';
-  const rounded = Math.round(d);
-  return `${rounded} day${rounded === 1 ? '' : 's'}`;
-}
 
 /**
  * Renewals run on yearly+ cadence, so we humanise the median: anything
@@ -764,7 +749,7 @@ function TaskRow({
         <Stack gap={2}>
           <Text
             scale="body"
-            color={task.done ? 'var(--ollie-color-ink-faint)' : 'var(--ollie-color-ink)'}
+            color={task.done ? colors.inkFaint : colors.ink}
             style={task.done ? { textDecoration: 'line-through' } : undefined}
           >
             {label}
@@ -772,7 +757,7 @@ function TaskRow({
               <Text
                 as="span"
                 scale="caption"
-                color="var(--ollie-color-ink-faint)"
+                color={colors.inkFaint}
                 style={{ marginLeft: 8 }}
               >
                 {secondary}
@@ -790,8 +775,8 @@ function TaskRow({
 // ─── primitives ───────────────────────────────────────────────────────────
 
 /**
- * Soft round tick — the v2 ShopList grammar, ported. Empty = a thin sage
- * ring; checked = a filled sage disc with a paper-coloured check.
+ * Soft round tick — neumorphic. Empty = a pressed cream well; checked = a
+ * filled sageDeep disc with a cream check.
  */
 function TickCircle({
   done,
@@ -808,10 +793,13 @@ function TickCircle({
       aria-pressed={done}
       style={{
         appearance: 'none',
-        background: done ? 'var(--ollie-color-sage)' : 'transparent',
-        border: `1.5px solid ${done ? 'var(--ollie-color-sage)' : 'var(--ollie-color-hairline)'}`,
-        width: 18,
-        height: 18,
+        background: done ? colors.sageDeep : colors.cream,
+        border: 'none',
+        boxShadow: done
+          ? 'none'
+          : 'inset 3px 3px 6px rgba(120,140,122,0.55), inset -3px -3px 6px rgba(255,255,255,0.85)',
+        width: 24,
+        height: 24,
         padding: 0,
         borderRadius: '50%',
         cursor: 'pointer',
@@ -819,15 +807,15 @@ function TickCircle({
         alignItems: 'center',
         justifyContent: 'center',
         flexShrink: 0,
-        transition: 'background-color 200ms cubic-bezier(0.18, 0, 0.22, 1), border-color 200ms cubic-bezier(0.18, 0, 0.22, 1)',
+        transition: 'background-color 200ms cubic-bezier(0.18, 0, 0.22, 1)',
       }}
     >
       {done && (
-        <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden>
+        <svg width="11" height="11" viewBox="0 0 10 10" aria-hidden>
           <path
             d="M2 5.2 L4.2 7.2 L8 3"
             fill="none"
-            style={{ stroke: 'var(--ollie-color-paper)' }}
+            stroke={colors.cream}
             strokeWidth={1.6}
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -848,7 +836,7 @@ function RemoveButton({ onClick }: { onClick: () => void }): JSX.Element {
         background: 'none',
         border: 'none',
         padding: '4px 8px',
-        color: 'var(--ollie-color-ink-faint)',
+        color: colors.inkFaint,
         cursor: 'pointer',
         fontVariantCaps: 'all-small-caps',
         letterSpacing: '0.08em',

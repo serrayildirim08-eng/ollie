@@ -35,6 +35,7 @@ import {
   type HabitsHistory,
   type Habit,
 } from '../src/habits';
+import { addLocalDays } from '../src/util';
 
 // ─── helpers ──────────────────────────────────────────────────────────
 
@@ -208,6 +209,38 @@ describe('detectHabitRebirthLegacy', () => {
     expect(r).not.toBeNull();
     expect(r?.pattern).toBe('habit-rebirth');
   });
+
+  // #139: a genuinely weekly habit has ~7-day gaps by design. The old absolute
+  // ≥minGapDays rule counted EVERY weekly cadence as a "restart". Cadence-aware
+  // detection must NOT flag a steady weekly habit as restarting.
+  it('#139: steady weekly habit is NOT a string of restarts', () => {
+    const weekly = makeHabit('w1', null, []);
+    // 9 completions, every 7 days → 8 normal weekly gaps, zero restarts.
+    weekly.completions = Array.from({ length: 9 }, (_, i) => ({ ts: ts(7 + i * 7), habit_id: 'w1' }));
+    const history: HabitsHistory = { now: NOW, habits: [weekly] };
+    // Even with the old minGapDays:7, the weekly cadence must not register.
+    const r = detectHabitRebirthLegacy(history, { minRestarts: 3, minGapDays: 7 });
+    expect(r).toBeNull();
+  });
+
+  // #139: a weekly habit that ACTUALLY lapsed (a multi-week gap) still counts,
+  // relative to its own cadence.
+  it('#139: a real multi-week lapse in a weekly habit still counts', () => {
+    const weekly = makeHabit('w2', null, []);
+    // weekly for a while, then three big gaps (~3 weeks each).
+    const completions = [
+      ...Array.from({ length: 4 }, (_, i) => ts(2 + i * 7)),   // recent weekly run
+      ts(2 + 4 * 7 + 21),                                       // +3wk lapse
+      ts(2 + 4 * 7 + 21 + 7),
+      ts(2 + 4 * 7 + 21 + 7 + 21),                              // another +3wk lapse
+      ts(2 + 4 * 7 + 21 + 7 + 21 + 21),                         // another +3wk lapse
+    ].map((t) => ({ ts: t, habit_id: 'w2' }));
+    weekly.completions = completions;
+    const history: HabitsHistory = { now: NOW, habits: [weekly] };
+    const r = detectHabitRebirthLegacy(history, { minRestarts: 3, minGapDays: 7, windowDays: 365 });
+    expect(r).not.toBeNull();
+    expect(r?.pattern).toBe('habit-rebirth');
+  });
 });
 
 // ─── detectExternalizationRequirement (tier-1) ───────────────────────
@@ -259,6 +292,35 @@ describe('detectLutealCollapse', () => {
     const r = detectLutealCollapse(history, { minLutealWindows: 1, maxRatio: 0.95, windowDays: 65 });
     expect(r).not.toBeNull();
     expect(r?.signal).toBe('luteal_collapse');
+  });
+
+  // #142: a habit created mid-window must NOT have its pre-creation days
+  // counted as missed slots. Here a steady habit completes every non-luteal
+  // day and nothing in luteal — a clean collapse. A SECOND habit is created
+  // only AFTER the luteal window (in the recent follicular stretch) and
+  // completes every day it exists. With the old `days * totalHabits`
+  // denominator, the new habit's pre-creation days inflate the OTHER-phase
+  // denominator and wrongly soften the measured collapse. Counting only
+  // active habits keeps the luteal collapse fully visible.
+  it('#142: habit added mid-window does not bias the per-day rate', () => {
+    const lutealStart = ts(40);
+    const lutealEnd = ts(31);
+    const phases = [
+      { start: ts(60), end: ts(41), name: 'follicular' },
+      { start: lutealStart, end: lutealEnd, name: 'luteal' },
+      { start: ts(30), end: ts(1), name: 'follicular' },
+    ];
+    // Habit 1: present whole window, completes every non-luteal day, none luteal.
+    const h1 = makeHabit('h1', null, [2, 3, 4, 5, 6, 7, 8, 9, 10, 42, 43, 44, 45, 46, 47, 48, 49, 50, 55, 58]);
+    // Habit 2: created only ~15 days ago (well after luteal), completes daily since.
+    const h2 = makeHabit('h2', null, [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
+    h2.created_at = ts(15);
+    const history: HabitsHistory = { now: NOW, habits: [h1, h2], cyclePhases: phases };
+    const r = detectLutealCollapse(history, { minLutealWindows: 1, maxRatio: 0.95, windowDays: 65 });
+    expect(r).not.toBeNull();
+    expect(r?.signal).toBe('luteal_collapse');
+    // Luteal had zero completions for the only active habit (h1) → full collapse.
+    expect(r?.evidence).toContain('luteal_rate:0');
   });
 });
 
@@ -474,15 +536,20 @@ describe('detectSleepHabitCoupling', () => {
     ];
     // Sleep record instant: 00:30 LOCAL on the night's calendar day.
     const sleepTs = (key: string): number => Date.parse(key + 'T00:30:00');
-    // The detector adds DAY_MS then keys LOCAL → next local calendar day.
-    const localFollowKey = (key: string): string => dayKey(sleepTs(key) + DAY);
+    // The detector advances by one LOCAL calendar day then keys LOCAL → next
+    // local calendar day (DST-safe; matches `dayKey(addLocalDays(ts, 1))`).
+    const localFollowKey = (key: string): string => dayKey(addLocalDays(sleepTs(key), 1));
 
-    // Confirm the chosen instants genuinely straddle the date line vs UTC on a
-    // non-UTC host — i.e. this fixture really stresses the timezone bug.
-    if (new Date().getTimezoneOffset() !== 0) {
-      const s = sleepTs('2024-04-10');
-      expect(dayKey(s)).not.toBe(dayKeyUTC(s));
-    }
+    // Sanity: this fixture is meant to stress the LOCAL-vs-UTC keying split.
+    // At 00:30 LOCAL the local/UTC keys diverge only in zones EAST of UTC
+    // (where 00:30 local is the previous UTC day); west-of-UTC hosts (e.g.
+    // America/Los_Angeles) see no divergence at this instant. Either way the
+    // behavioural assertions below pin LOCAL keying — this guard only
+    // documents when the divergence is actually exercised.
+    const stressesUtcSplit = baseKeys.some(
+      (k) => localFollowKey(k) !== dayKeyUTC(sleepTs(k) + DAY),
+    );
+    void stressesUtcSplit;
 
     // Split nights: even-index = short sleep, odd-index = normal sleep.
     const shortKeys = baseKeys.filter((_, i) => i % 2 === 0);
@@ -739,6 +806,56 @@ describe('detectFrictionSignatureLegacy', () => {
       makeHabit('h1', null, Array.from({ length: 60 }, (_, d) => d + 1)),
     ];
     expect(detectFrictionSignatureLegacy({ now: NOW, habits })).toBeNull();
+  });
+
+  // #58 regression: multiple completions of one habit on the same day must not
+  // push a per-weekday rate above 1, and the valley must never be a weekday
+  // with zero observed days. We build a window dominated by one weekday, then
+  // double-log that weekday for both habits.
+  it('per-weekday rate stays <= 1 even with multiple same-day completions', () => {
+    // Find the weekday at "5 days ago" and double-log it; everything else once.
+    const heavyDow = new Date(ts(5)).getDay();
+    const h1: Habit = { id: 'h1', name: 'h1', completions: [] };
+    const h2: Habit = { id: 'h2', name: 'h2', completions: [] };
+    for (let d = 1; d <= 84; d++) {
+      const dow = new Date(ts(d)).getDay();
+      const reps = dow === heavyDow ? 3 : 1; // triple-log the heavy weekday
+      for (let k = 0; k < reps; k++) {
+        h1.completions!.push({ ts: ts(d), habit_id: 'h1' });
+        h2.completions!.push({ ts: ts(d), habit_id: 'h2' });
+      }
+    }
+    const result = detectFrictionSignatureLegacy({ now: NOW, habits: [h1, h2] });
+    // Even though the heavy weekday is triple-logged, dedupe to one-per-day
+    // keeps every rate a true fraction; an even spread → no pattern (rate==1
+    // everywhere, spread 0). The key assertion is it does NOT crash / over-count.
+    expect(result).toBeNull();
+  });
+
+  it('valley never resolves to a weekday with no observed days', () => {
+    // Tiny window (8 days) so several weekdays have dowDays===0. One real
+    // weekday lags. The valley must be a covered weekday, not a 0-day one.
+    const NAMES = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+    const coveredDows = new Set<string>();
+    for (let d = 0; d <= 8; d++) coveredDows.add(NAMES[new Date(ts(d)).getDay()]);
+    // Lag one specific covered weekday (the one at "3 days ago").
+    const lagDow = new Date(ts(3)).getDay();
+    const mk = (id: string): Habit => {
+      const h: Habit = { id, name: id, completions: [] };
+      for (let d = 1; d <= 8; d++) {
+        if (new Date(ts(d)).getDay() === lagDow) continue; // skip lagging weekday
+        h.completions!.push({ ts: ts(d), habit_id: id });
+      }
+      return h;
+    };
+    const result = detectFrictionSignatureLegacy(
+      { now: NOW, habits: [mk('h1'), mk('h2')] },
+      { windowDays: 8 },
+    );
+    if (result) {
+      expect(coveredDows.has(result.valley as string)).toBe(true);
+      expect(coveredDows.has(result.peak as string)).toBe(true);
+    }
   });
 });
 

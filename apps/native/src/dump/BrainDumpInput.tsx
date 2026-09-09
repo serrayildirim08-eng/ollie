@@ -23,17 +23,26 @@
  * will surface a Clerk session JWT instead.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Textarea, Button, Text } from '../ui';
 import { Stack, Row } from '../layout';
 import { routeDump } from '../api';
 import { detectCrisis } from '@ollie/logic/crisis';
 import type { RouteDumpRequest } from '../api';
 import { kv } from '../storage';
+import { track, trackOnce } from '../api/analytics';
+import {
+  FirstDumpWhisper,
+  shouldShowFirstDumpWhisper,
+  markFirstDumpWhisperShown,
+  WHISPER_GENERIC_MODULES,
+} from './FirstDumpWhisper';
+import { colors } from '../theme/tokens';
 import type { RouterOutput, CrisisSignal } from '../router/schema';
 import { usePhotoIntake, PhotoIntakeBar } from './PhotoIntake';
 import { MicButton } from './MicButton';
 import { NotifyPrimeLine } from '../notify/NotifyPrimeLine';
+import { DUMP_INPUT_ID } from '../navigation/useDeepLinks';
 import styles from './BrainDumpInput.module.css';
 
 /**
@@ -79,6 +88,14 @@ export interface BrainDumpInputProps {
   initialValue?: string;
 
   /**
+   * Imperative re-seed of the textarea (e.g. tapping a first-run example chip).
+   * Each tap bumps `nonce`, which replaces the box contents with `text` and
+   * focuses the input. `nonce` 0 / undefined is ignored so an initial render
+   * never clobbers a restored draft.
+   */
+  seed?: { text: string; nonce: number };
+
+  /**
    * Whether to clear the textarea after a successful submission.
    * Default: true.
    */
@@ -92,6 +109,14 @@ type SubmitState =
 
 const DEFAULT_PLACEHOLDER = "What's in your head?";
 
+/** Stable per-attempt id for /route/dump. Crash-resistant fallback for the
+ *  rare runtime without crypto.randomUUID. */
+function newDumpId(): string {
+  return typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `d_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
 export function BrainDumpInput({
   getBearer,
   onSubmitted,
@@ -100,6 +125,7 @@ export function BrainDumpInput({
   placeholder = DEFAULT_PLACEHOLDER,
   initialValue = '',
   clearOnSuccess = true,
+  seed,
 }: BrainDumpInputProps): JSX.Element {
   const [text, setText] = useState(initialValue);
   const [state, setState] = useState<SubmitState>({ kind: 'idle' });
@@ -107,7 +133,27 @@ export function BrainDumpInput({
   // never delete a saved draft before we've had a chance to load it.
   const [restored, setRestored] = useState(false);
 
+  // Stable dumpId for the CURRENT attempt. Minted lazily on the first submit
+  // and REUSED for every retry of the same words, so a request that timed out
+  // client-side but actually succeeded server-side does not double-route or
+  // double-write its fragments — the worker dedupes on this id (idempotency).
+  // Reset to null only after a confirmed success so the NEXT dump gets a fresh
+  // id; a failed/timed-out submit keeps it, which is exactly the retry case.
+  const dumpIdRef = useRef<string | null>(null);
+
+  // Concurrent-submit guard (audit #33). The disabled button only blocks the
+  // pointer path; Cmd/Ctrl+Enter and the voice auto-submit call submit()
+  // directly, and `setState({kind:'loading'})` is async so re-entry inside the
+  // same tick can't see it. This ref flips SYNCHRONOUSLY the instant a submit
+  // begins and clears in `finally`, so a second trigger (double Cmd+Enter,
+  // button + key, voice + button) bails before dispatching a duplicate route.
+  const inFlightRef = useRef(false);
+
   const photo = usePhotoIntake();
+
+  // One-time-ever first-dump whisper (see FirstDumpWhisper.tsx). Set on the
+  // first successful route with a nameable destination; null forever after.
+  const [whisper, setWhisper] = useState<{ module: string; extra: number } | null>(null);
 
   // Restore a persisted draft on mount (unless the textarea already has
   // content, e.g. an initialValue from a voice transcript).
@@ -123,6 +169,25 @@ export function BrainDumpInput({
       cancelled = true;
     };
   }, []);
+
+  // Re-seed from an example chip: replace the box with the chip text and focus
+  // so the user can edit or just hit send. Keyed on nonce so only a real tap
+  // (nonce > 0) fires; the initial 0 is ignored to protect a restored draft.
+  const seedNonce = seed?.nonce ?? 0;
+  useEffect(() => {
+    if (seedNonce <= 0 || !seed) return;
+    setText(seed.text);
+    if (typeof document !== 'undefined') {
+      const el = document.getElementById(DUMP_INPUT_ID) as HTMLTextAreaElement | null;
+      el?.focus();
+      // Drop the cursor at the end so editing continues naturally.
+      const len = seed.text.length;
+      el?.setSelectionRange?.(len, len);
+    }
+    // Intentionally keyed on nonce only — re-tapping the SAME chip (same text,
+    // new nonce) must still re-seed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seedNonce]);
 
   // Debounced autosave: persist the draft as the user types, clear the
   // saved copy when they empty the box. Runs only after restore.
@@ -146,7 +211,15 @@ export function BrainDumpInput({
     // No-op when both sides are empty. Spec: "If text is empty AND image is
     // empty, do nothing." We DON'T flip to error state — quietly bail.
     if (!hasText && !hasImage) return;
+    // Concurrent-submit guard (audit #33): bail if a submit is already in
+    // flight. The state check is the declarative belt; the ref is the
+    // synchronous braces — `setState` hasn't flushed yet when two triggers
+    // fire in the same tick, so the ref is what actually prevents the
+    // double-dispatch + double-ack from Cmd+Enter / voice / button races.
+    if (state.kind === 'loading' || inFlightRef.current) return;
+    inFlightRef.current = true;
     setState({ kind: 'loading' });
+    try {
 
     // Instant ack: fire the moment we know the dump is non-empty, BEFORE the
     // cloud round-trip + dispatch, so perceived latency is ~0. The parent shows
@@ -183,7 +256,14 @@ export function BrainDumpInput({
       await kv.set(PENDING_DUMP_KEY, { text: trimmed, ts: Date.now() });
     }
 
-    const body: RouteDumpRequest = {};
+    // Mint the attempt id once, then reuse it across retries. A retry of the
+    // same words sends the SAME dumpId, so the worker can recognise a request
+    // it already completed (e.g. one that timed out client-side after the
+    // worker had already routed it) and return the stored result instead of
+    // routing + writing every fragment a second time.
+    if (dumpIdRef.current === null) dumpIdRef.current = newDumpId();
+
+    const body: RouteDumpRequest = { dumpId: dumpIdRef.current };
     if (hasText) body.text = trimmed;
     if (photo.image) body.image = photo.image;
 
@@ -200,6 +280,28 @@ export function BrainDumpInput({
           had_image: hasImage,
         }),
       );
+      // Funnel telemetry (fire-and-forget, consent-gated): every successful
+      // dump, plus the once-ever first_dump activation marker.
+      track('dump_submitted');
+      trackOnce('first_dump');
+
+      // First-dump whisper: once ever, and only when the route produced a
+      // nameable destination (crisis/journal/dump_only have nothing to show).
+      // The flag is set at SHOW time so a quit mid-display still counts.
+      const routed = [
+        ...new Set(
+          res.data.fragments
+            .map((f) => f.module as string)
+            .filter((m) => !WHISPER_GENERIC_MODULES.has(m)),
+        ),
+      ];
+      if (routed.length > 0 && !res.data.crisis) {
+        void (async () => {
+          if (!(await shouldShowFirstDumpWhisper())) return;
+          await markFirstDumpWhisperShown();
+          setWhisper({ module: routed[0], extra: routed.length - 1 });
+        })().catch(() => {});
+      }
     }
     if (!res.ok) {
       // Translate ApiError to a one-line human message. The draft stays in
@@ -225,12 +327,24 @@ export function BrainDumpInput({
     }
 
     // Success — the dump routed, so the saved draft is no longer needed.
+    // Retire this attempt's dumpId so the NEXT dump mints a fresh one (a new
+    // thought must not collapse into the just-completed one's idempotency key).
+    dumpIdRef.current = null;
     void kv.delete(PENDING_DUMP_KEY);
     setState({ kind: 'idle' });
     if (clearOnSuccess) {
       setText('');
       photo.clear();
     }
+
+    // Recover the swallowed ack on a local crisis FALSE-POSITIVE (audit #88).
+    // We withheld the optimistic ack above because the offline matcher tripped,
+    // but the authoritative server verdict came back NOT a crisis — so the dump
+    // genuinely routed and deserves feedback. Without this the user sees zero
+    // response and reads the dump as dropped. Fire the ack now (the real-crisis
+    // branch below never reaches here for an acked dump because onCrisis hides
+    // the ack reactively).
+    if (localCrisis && !res.data.crisis && onSubmitted) onSubmitted();
 
     // Crisis short-circuit BEFORE module result — parent decides whether to
     // pause downstream side-effects, but in v1 both callbacks fire so a
@@ -239,7 +353,15 @@ export function BrainDumpInput({
       onCrisis(res.data.crisis, res.data);
     }
     if (onResult) onResult(res.data);
-  }, [text, photo, getBearer, onSubmitted, onResult, onCrisis, clearOnSuccess]);
+    } finally {
+      // Release the concurrent-submit guard (audit #33) on EVERY exit path —
+      // success, auth/bearer bail, route error, or a thrown exception. The
+      // dumpId is retired separately (only on success) so a failed attempt
+      // still reuses its id on retry; the in-flight flag is purely "is a
+      // submit running right now".
+      inFlightRef.current = false;
+    }
+  }, [text, state.kind, photo, getBearer, onSubmitted, onResult, onCrisis, clearOnSuccess]);
 
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -270,7 +392,7 @@ export function BrainDumpInput({
         // 1px dashed sage on drag-over; transparent border by default so the
         // layout doesn't jitter when the border appears.
         border: photo.isDragOver
-          ? '1px dashed var(--ollie-color-sage)'
+          ? `1px dashed ${colors.sage}`
           : '1px dashed transparent',
         borderRadius: 6,
         padding: 4,
@@ -284,6 +406,7 @@ export function BrainDumpInput({
     >
       <Stack gap="md">
         <Textarea
+          id={DUMP_INPUT_ID}
           value={text}
           onChange={setText}
           placeholder={placeholder}
@@ -326,6 +449,13 @@ export function BrainDumpInput({
             send
           </Button>
         </Row>
+        {whisper && (
+          <FirstDumpWhisper
+            module={whisper.module}
+            extraCount={whisper.extra}
+            onDone={() => setWhisper(null)}
+          />
+        )}
         <NotifyPrimeLine />
       </Stack>
     </div>

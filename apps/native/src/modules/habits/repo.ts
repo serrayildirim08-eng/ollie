@@ -12,6 +12,7 @@
 
 import { computeCadence, type CadenceEstimate } from '@ollie/cadence';
 import { sql } from '../../storage';
+import { newId } from '../../storage/id';
 import {
   normaliseHabitName,
   type Habit,
@@ -48,11 +49,6 @@ interface HabitEventRow {
   [col: string]: unknown;
 }
 
-function newId(): string {
-  return typeof crypto !== 'undefined' && crypto.randomUUID
-    ? crypto.randomUUID()
-    : `h_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-}
 
 // ─── registry ─────────────────────────────────────────────────────────────
 
@@ -86,7 +82,7 @@ export const registry = {
     const existing = await registry.findByName(name);
     if (existing) return existing;
     const habit: Habit = {
-      id: newId(),
+      id: newId('h_'),
       name: normaliseHabitName(name),
       createdAt: Date.now(),
       cue,
@@ -117,7 +113,7 @@ export const registry = {
 export const completions = {
   /** Log one completion. Caller has already ensured the habit exists. */
   async add(habitId: string, at: number = Date.now()): Promise<HabitCompletion> {
-    const c: HabitCompletion = { id: newId(), habitId, completedAt: at };
+    const c: HabitCompletion = { id: newId('h_'), habitId, completedAt: at };
     await sql.execute(
       `INSERT INTO habits_completions (id, habit_id, completed_at)
        VALUES (?, ?, ?)`,
@@ -188,7 +184,7 @@ async function insertEvent(
   payload: Record<string, unknown>,
 ): Promise<HabitEvent> {
   const e: HabitEvent = {
-    id: newId(),
+    id: newId('h_'),
     kind,
     data: JSON.stringify(payload),
     loggedAt: Date.now(),

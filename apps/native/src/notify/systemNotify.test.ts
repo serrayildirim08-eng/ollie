@@ -35,16 +35,18 @@ const pluginMock = {
 
 vi.mock('@tauri-apps/plugin-notification', () => pluginMock);
 
-// Mock the Tauri core IPC bridge so scheduleAt's durable native path
-// (schedule_local_notification / cancel_local_notification) is observable
-// without a running Tauri shell. Default resolves; individual tests override
-// with mockRejectedValue to exercise the setTimeout fallback.
-const invokeMock = vi.fn((_cmd: string, _args?: Record<string, unknown>) =>
+// Mock the Tauri event bridge so scheduleAt's durable native path
+// (emit 'ollie-schedule-notif' / 'ollie-cancel-notif') is observable without a
+// running Tauri shell. The localhost webview's ACL blocks direct invoke() of
+// app commands, so the durable path EMITs events the Rust setup listener
+// schedules from. Default resolves; individual tests override with
+// mockRejectedValue to exercise the setTimeout fallback.
+const emitMock = vi.fn((_event: string, _payload?: unknown) =>
   Promise.resolve(undefined),
 );
 
-vi.mock('@tauri-apps/api/core', () => ({
-  invoke: invokeMock,
+vi.mock('@tauri-apps/api/event', () => ({
+  emit: emitMock,
 }));
 
 // ─── imports after mocks ───────────────────────────────────────────────────
@@ -82,8 +84,8 @@ beforeEach(() => {
   pluginMock.sendNotification.mockReset();
   scheduleAtMock.mockClear();
   scheduleAtMock.mockImplementation((date: Date) => ({ kind: 'at-schedule', date }));
-  invokeMock.mockReset();
-  invokeMock.mockImplementation(() => Promise.resolve(undefined));
+  emitMock.mockReset();
+  emitMock.mockImplementation(() => Promise.resolve(undefined));
   setTauriContext(false);
   vi.useFakeTimers();
 });
@@ -282,27 +284,117 @@ describe('scheduleSystemNotification', () => {
     });
   });
 
-  it('schedules a timer when fireAt is in the future', async () => {
+  it('routes a future fireAt through the durable native scheduler on Tauri (#71)', async () => {
+    // #71: a future notification must NOT ride a bare in-process setTimeout
+    // (lost on app-quit). On Tauri it goes through scheduleAt, which EMITs to
+    // the Rust scheduler so the OS owns the fire time and it survives quit.
     setTauriContext(true);
     pluginMock.isPermissionGranted.mockResolvedValue(true);
 
+    const fireAt = Date.now() + 5000;
     const spec: NotificationSpec = {
       title: 'soon',
       body: 'in a bit',
       category: 'REMINDER',
       dedupe_key: 'test:soon',
     };
-    scheduleSystemNotification(spec, Date.now() + 5000);
+    scheduleSystemNotification(spec, fireAt);
 
+    // Durable native path: schedule emitted to Rust, no immediate ping.
+    await vi.waitFor(() => {
+      expect(emitMock).toHaveBeenCalledWith(
+        'ollie-schedule-notif',
+        expect.objectContaining({
+          id: 'test:soon',
+          title: 'soon',
+          body: 'in a bit',
+          fire_at_ms: fireAt,
+        }),
+      );
+    });
     expect(pluginMock.sendNotification).not.toHaveBeenCalled();
 
+    // No in-process timer was armed — advancing time fires nothing (the OS
+    // owns delivery, so the timer would be a double-fire if it existed).
+    await vi.advanceTimersByTimeAsync(5001);
+    expect(pluginMock.sendNotification).not.toHaveBeenCalled();
+  });
+
+  it('keeps a multi-day fireAt durable instead of a bare setTimeout (#71)', async () => {
+    // The core #71 case: a multi-day finance bill reminder. A bare setTimeout
+    // would be lost the moment the app quits; the durable path hands it to the
+    // OS. ~10 days is below the 365d horizon and above any plausible session.
+    setTauriContext(true);
+    pluginMock.isPermissionGranted.mockResolvedValue(true);
+
+    const fireAt = Date.now() + 10 * 24 * 60 * 60 * 1000;
+    const spec: NotificationSpec = {
+      title: 'rent due',
+      category: 'REMINDER',
+      dedupe_key: 'finance:bill_due_predicted:rent:123',
+    };
+    scheduleSystemNotification(spec, fireAt);
+
+    await vi.waitFor(() => {
+      expect(emitMock).toHaveBeenCalledWith(
+        'ollie-schedule-notif',
+        expect.objectContaining({
+          id: 'finance:bill_due_predicted:rent:123',
+          fire_at_ms: fireAt,
+        }),
+      );
+    });
+    expect(pluginMock.sendNotification).not.toHaveBeenCalled();
+  });
+
+  it('fires immediately on the in-process fallback off Tauri (web preview / vitest)', async () => {
+    // Off Tauri there is no native scheduler, so scheduleAt falls back to a
+    // setTimeout — acceptable here because there is no app-quit-survival to
+    // protect (web preview). Proves the future-fire path still delivers.
+    setTauriContext(false);
+
+    const spec: NotificationSpec = {
+      title: 'soon',
+      body: 'in a bit',
+      category: 'REMINDER',
+      dedupe_key: 'test:soon-web',
+    };
+    scheduleSystemNotification(spec, Date.now() + 5000);
+
+    // Let the async plugin loader settle so the fallback timer is armed.
+    await vi.advanceTimersByTimeAsync(0);
     await vi.advanceTimersByTimeAsync(5001);
 
     await vi.waitFor(() => {
-      expect(pluginMock.sendNotification).toHaveBeenCalledWith(
-        expect.objectContaining({ title: 'soon', body: 'in a bit' }),
-      );
+      // Off Tauri, sendSystemNotification degrades to console.log; assert the
+      // native emit was never used (no native scheduler available).
+      expect(emitMock).not.toHaveBeenCalledWith('ollie-schedule-notif', expect.anything());
     });
+  });
+
+  it('drops a fireAt beyond the schedule horizon instead of firing immediately (#48/#71)', async () => {
+    // A bare setTimeout delay past the 32-bit ceiling (~24.8d) overflows and
+    // fires instantly; scheduleAt's horizon guard must skip it, not ping now.
+    setTauriContext(true);
+    pluginMock.isPermissionGranted.mockResolvedValue(true);
+
+    const spec: NotificationSpec = {
+      title: 'far future',
+      category: 'REMINDER',
+      dedupe_key: 'test:overflow',
+    };
+    // 400 days out — unambiguously beyond MAX_SCHEDULE_HORIZON_MS (365d), so
+    // also past the ~24.8d overflow point. Must be dropped, not fired.
+    scheduleSystemNotification(spec, Date.now() + 400 * 24 * 60 * 60 * 1000);
+
+    // Nothing fires now (no immediate-overflow ping), and nothing is scheduled.
+    expect(pluginMock.sendNotification).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(emitMock).not.toHaveBeenCalledWith('ollie-schedule-notif', expect.anything());
+
+    // Advancing well past the 32-bit ceiling must NOT trigger a fire either.
+    await vi.advanceTimersByTimeAsync(2_147_483_648);
+    expect(pluginMock.sendNotification).not.toHaveBeenCalled();
   });
 });
 
@@ -321,12 +413,12 @@ describe('scheduleAt', () => {
       );
     });
     // Immediate path never touches the OS scheduler or the native plugin sched.
-    expect(invokeMock).not.toHaveBeenCalled();
+    expect(emitMock).not.toHaveBeenCalled();
     expect(scheduleAtMock).not.toHaveBeenCalled();
   });
 
-  it('hands a future reminder to the OS via schedule_local_notification in Tauri (no double-fire)', async () => {
-    // Durable path: the native command holds the notification so it fires even
+  it('hands a future reminder to the OS via the ollie-schedule-notif event in Tauri (no double-fire)', async () => {
+    // Durable path: the native listener holds the notification so it fires even
     // after the app quits. We must NOT also arm a setTimeout, or it would
     // double-fire (OS + in-process timer) once the timer elapses.
     setTauriContext(true);
@@ -335,14 +427,16 @@ describe('scheduleAt', () => {
     const fireAt = Date.now() + 60_000;
     scheduleAt(fireAt, { title: 'call', body: 'mama' }, 'reminder:call-mama');
 
-    // Let the async loader + invoke settle.
+    // Let the async loader + emit settle.
     await vi.advanceTimersByTimeAsync(0);
     await vi.waitFor(() => {
-      expect(invokeMock).toHaveBeenCalledWith('schedule_local_notification', {
+      expect(emitMock).toHaveBeenCalledWith('ollie-schedule-notif', {
         id: 'reminder:call-mama',
         title: 'call',
         body: 'mama',
-        fireAtMs: fireAt,
+        fire_at_ms: fireAt,
+        category_id: null,
+        extra_json: null,
       });
     });
 
@@ -359,8 +453,8 @@ describe('scheduleAt', () => {
 
     scheduleAt(Date.now() + 3_000, { title: 'remember', body: 'thing' }, 'reminder:remember');
 
-    // No native scheduler reachable — the OS command is never invoked.
-    expect(invokeMock).not.toHaveBeenCalled();
+    // No native scheduler reachable — the OS event is never emitted.
+    expect(emitMock).not.toHaveBeenCalled();
     expect(scheduleAtMock).not.toHaveBeenCalled();
 
     // Let the async loader settle so the setTimeout is registered.
@@ -374,22 +468,22 @@ describe('scheduleAt', () => {
       const msg = logSpy.mock.calls.find((c) => typeof c[0] === 'string' && c[0].includes('remember'));
       expect(msg).toBeDefined();
     });
-    expect(invokeMock).not.toHaveBeenCalled();
+    expect(emitMock).not.toHaveBeenCalled();
     logSpy.mockRestore();
   });
 
-  it('falls back to setTimeout when the native invoke rejects', async () => {
+  it('falls back to setTimeout when the native emit rejects', async () => {
     setTauriContext(true);
     pluginMock.isPermissionGranted.mockResolvedValue(true);
-    invokeMock.mockRejectedValue(new Error('command not registered'));
+    emitMock.mockRejectedValue(new Error('event blocked'));
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     scheduleAt(Date.now() + 4_000, { title: 'fallback', body: 'ping' }, 'reminder:fallback');
 
     // The native attempt happened and rejected; we should warn and arm a timer.
     await vi.waitFor(() => {
-      expect(invokeMock).toHaveBeenCalledWith(
-        'schedule_local_notification',
+      expect(emitMock).toHaveBeenCalledWith(
+        'ollie-schedule-notif',
         expect.objectContaining({ id: 'reminder:fallback' }),
       );
     });
@@ -418,20 +512,20 @@ describe('scheduleAt', () => {
     // Nothing fired — the timer was cleared. No native cancel either (fallback).
     const calls = logSpy.mock.calls.filter((c) => typeof c[0] === 'string' && c[0].includes('unwanted'));
     expect(calls).toHaveLength(0);
-    expect(invokeMock).not.toHaveBeenCalled();
+    expect(emitMock).not.toHaveBeenCalled();
     logSpy.mockRestore();
   });
 
-  it('cancel() invokes cancel_local_notification in Tauri context', async () => {
+  it('cancel() emits ollie-cancel-notif in Tauri context', async () => {
     setTauriContext(true);
     pluginMock.isPermissionGranted.mockResolvedValue(true);
 
     const handle = scheduleAt(Date.now() + 60_000, { title: 'oops', body: 'cancel' }, 'reminder:oops');
 
-    // Let the schedule invoke land so cancel knows it went native.
+    // Let the schedule emit land so cancel knows it went native.
     await vi.waitFor(() => {
-      expect(invokeMock).toHaveBeenCalledWith(
-        'schedule_local_notification',
+      expect(emitMock).toHaveBeenCalledWith(
+        'ollie-schedule-notif',
         expect.objectContaining({ id: 'reminder:oops' }),
       );
     });
@@ -439,14 +533,87 @@ describe('scheduleAt', () => {
     handle.cancel();
 
     await vi.waitFor(() => {
-      expect(invokeMock).toHaveBeenCalledWith('cancel_local_notification', {
-        id: 'reminder:oops',
-      });
+      expect(emitMock).toHaveBeenCalledWith('ollie-cancel-notif', 'reminder:oops');
     });
 
     // Nothing ever fired in-process.
     await vi.advanceTimersByTimeAsync(60_001);
     expect(pluginMock.sendNotification).not.toHaveBeenCalled();
     expect(scheduleAtMock).not.toHaveBeenCalled();
+  });
+
+  // ── #27: cancel() racing the async native-schedule path ──────────────────
+
+  it('#27 cancel() before the schedule emit commits ABORTS the schedule (no ollie-schedule-notif)', async () => {
+    setTauriContext(true);
+    pluginMock.isPermissionGranted.mockResolvedValue(true);
+
+    // Cancel synchronously, the instant after scheduleAt returns — before the
+    // async plugin loader / emit has had a chance to run. The synchronous
+    // `cancelled` flag must abort the schedule so the OS never holds it.
+    const handle = scheduleAt(Date.now() + 60_000, { title: 'undo me', body: 'fast' }, 'reminder:undo');
+    handle.cancel();
+
+    // Drain all pending async work (loader + the cancel's own loader call).
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.waitFor(() => {
+      // cancel() always emits the idempotent native cancel in a Tauri context.
+      expect(emitMock).toHaveBeenCalledWith('ollie-cancel-notif', 'reminder:undo');
+    });
+
+    // The schedule must NEVER have been committed — the race was won by cancel.
+    const scheduleEmits = emitMock.mock.calls.filter((c) => c[0] === 'ollie-schedule-notif');
+    expect(scheduleEmits).toHaveLength(0);
+
+    // And nothing fires after the fire time elapses.
+    await vi.advanceTimersByTimeAsync(60_001);
+    expect(pluginMock.sendNotification).not.toHaveBeenCalled();
+  });
+
+  it('#27 cancel() always emits the idempotent native cancel even if cancel beats the loader', async () => {
+    setTauriContext(true);
+    pluginMock.isPermissionGranted.mockResolvedValue(true);
+
+    const handle = scheduleAt(Date.now() + 30_000, { title: 'race', body: 'x' }, 'reminder:race');
+    // Cancel immediately — before any async settles.
+    handle.cancel();
+
+    await vi.waitFor(() => {
+      expect(emitMock).toHaveBeenCalledWith('ollie-cancel-notif', 'reminder:race');
+    });
+  });
+
+  it('#27 cancel() off-Tauri stays a pure timer-clear — never emits a native cancel', async () => {
+    setTauriContext(false);
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    const handle = scheduleAt(Date.now() + 5_000, { title: 'web', body: 'cancel' }, 'reminder:web');
+    await vi.advanceTimersByTimeAsync(0);
+    handle.cancel();
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    // No native cancel event off-Tauri; the timer clear is sufficient.
+    expect(emitMock).not.toHaveBeenCalled();
+    const calls = logSpy.mock.calls.filter((c) => typeof c[0] === 'string' && c[0].includes('web'));
+    expect(calls).toHaveLength(0);
+    logSpy.mockRestore();
+  });
+
+  // ── #92: defensive upper-horizon guard ──────────────────────────────────
+
+  it('#92 drops a fire time beyond the 1-year horizon — no emit, no timer', async () => {
+    setTauriContext(true);
+    pluginMock.isPermissionGranted.mockResolvedValue(true);
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const tooFar = Date.now() + 366 * 24 * 60 * 60 * 1000;
+    const handle = scheduleAt(tooFar, { title: 'far', body: 'future' }, 'reminder:far');
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(emitMock).not.toHaveBeenCalled();
+    expect(pluginMock.sendNotification).not.toHaveBeenCalled();
+    // cancel() on the no-op handle is safe.
+    expect(() => handle.cancel()).not.toThrow();
+    warnSpy.mockRestore();
   });
 });

@@ -30,7 +30,7 @@ import {
 } from 'react';
 import { Stack, Row } from '../../layout';
 import { Text, Input, Textarea, Button } from '../../ui';
-import { fonts, fontWeights, zIndex } from '../../theme/tokens';
+import { colors, fonts, fontWeights, radii, shadows, zIndex } from '../../theme/tokens';
 import { goals as goalsRepo, GoalCapError } from './repo';
 import type { GoalDraft } from './types';
 
@@ -158,10 +158,10 @@ export function GoalCreateModal({
         style={{
           width: '100%',
           maxWidth: 460,
-          background: 'var(--ollie-color-cream)',
-          border: '1px solid var(--ollie-color-hairline)',
-          borderRadius: 14,
-          boxShadow: '0 12px 40px rgba(20, 25, 20, 0.10)',
+          background: colors.cream,
+          border: 'none',
+          borderRadius: radii.surface,
+          boxShadow: shadows.raised,
           padding: '32px 28px',
           outline: 'none',
         }}
@@ -169,7 +169,7 @@ export function GoalCreateModal({
         <Stack gap={28}>
           {/* header */}
           <Stack gap={8}>
-            <Text scale="caption" color="var(--ollie-color-ink-faint)" style={SMCP_STYLE}>
+            <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
               new goal
             </Text>
             <div
@@ -178,7 +178,7 @@ export function GoalCreateModal({
                 fontFamily: fonts.serif,
                 fontSize: 28,
                 fontWeight: fontWeights.regular,
-                color: 'var(--ollie-color-ink)',
+                color: colors.ink,
                 letterSpacing: '-0.022em',
                 lineHeight: 1.15,
               }}
@@ -284,14 +284,15 @@ export function GoalCreateModal({
               aria-live="polite"
               style={{
                 padding: '14px 18px',
-                borderRadius: 10,
-                background: 'var(--ollie-color-paper)',
-                border: '1px solid var(--ollie-color-hairline)',
+                borderRadius: radii.card,
+                background: colors.paper,
+                border: 'none',
+                boxShadow: shadows.card,
                 fontFamily: fonts.serif,
                 fontStyle: 'italic',
                 fontSize: 15,
                 lineHeight: 1.5,
-                color: 'var(--ollie-color-sage-deep)',
+                color: colors.sageDeep,
               }}
             >
               {refusal}
@@ -338,7 +339,7 @@ function Field({
   return (
     <Stack gap={8}>
       <Stack gap={2}>
-        <Text scale="caption" color="var(--ollie-color-ink-soft)" style={SMCP_STYLE}>
+        <Text scale="caption" color={colors.inkSoft} style={SMCP_STYLE}>
           {label}
         </Text>
         <span
@@ -346,7 +347,7 @@ function Field({
             fontFamily: fonts.serif,
             fontStyle: 'italic',
             fontSize: 13,
-            color: 'var(--ollie-color-ink-faint)',
+            color: colors.inkFaint,
             letterSpacing: '-0.005em',
             lineHeight: 1.4,
           }}

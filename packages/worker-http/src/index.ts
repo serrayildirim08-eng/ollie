@@ -23,7 +23,14 @@ export function json(
 ): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { 'content-type': 'application/json', ...headers },
+    headers: {
+      'content-type': 'application/json',
+      // SECURITY (S5): defense-in-depth HSTS. Tell browsers/webviews to pin
+      // HTTPS for two years incl. subdomains, so a downgrade/interception can't
+      // reach these paid+authenticated endpoints. Callers may still override.
+      'strict-transport-security': 'max-age=63072000; includeSubDomains',
+      ...headers,
+    },
   });
 }
 
@@ -80,6 +87,28 @@ function stringifyDetail(detail: unknown): string {
   } catch {
     return String(detail).slice(0, 2000);
   }
+}
+
+/**
+ * SECURITY (audit #38): cheap memory-DoS guard. Returns `true` when the
+ * request's declared `Content-Length` exceeds `maxBytes`, so a handler can
+ * reject an oversized payload with a 413 BEFORE calling `req.json()` /
+ * `req.text()` (which would otherwise buffer the whole body into worker
+ * memory).
+ *
+ * A client can omit or understate Content-Length, so this is a fast first
+ * line of defense only — handlers must still cap the parsed field length
+ * (e.g. `body.text.length`) after parsing. Returns `false` when the header
+ * is absent or unparseable (caller then relies on the post-parse cap).
+ */
+export function exceedsContentLength(req: Request, maxBytes: number): boolean {
+  const declared = Number(req.headers.get('content-length'));
+  return Number.isFinite(declared) && declared > maxBytes;
+}
+
+/** 413 JSON Response — `{ "error": "payload_too_large" }`. */
+export function payloadTooLarge(code = 'payload_too_large'): Response {
+  return json({ error: code }, 413);
 }
 
 /** 404 JSON Response — `{ "error": "not_found" }`. */

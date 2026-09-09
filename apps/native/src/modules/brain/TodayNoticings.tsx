@@ -24,14 +24,15 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { useAuth } from '@clerk/clerk-react';
+import { useBearer } from '../../auth/useBearer';
 import type { ScoredNoticing, NoticingAction } from '@ollie/logic/brain';
 import { Stack } from '../../layout';
 import { Text } from '../../ui';
-import { fontSizes, lineHeights, space, radii, letterSpacings } from '../../theme/tokens';
+import { colors, fontSizes, lineHeights, space, radii, letterSpacings, shadows } from '../../theme/tokens';
 import { store } from '../../store';
 import { useAppLang } from '../../settings/appLang';
 import { selectTodaysNoticings, postponeNoticing, dismissNoticing } from './noticings';
+import { writeSnapshot } from '../../snapshot/writeSnapshot';
 import { resolveNoticingCopy, actionForNoticing } from './copy';
 import { executeAction } from './actions';
 
@@ -82,8 +83,14 @@ function useTodaysNoticings(getBearer: () => Promise<string | null>): {
           })),
         );
         setItems(resolved);
+        // A7: mirror today's picks + canned answers into the App Group snapshot
+        // for the widget / Siri (best-effort, fire-and-forget).
+        void writeSnapshot(
+          resolved.map((r) => ({ text: r.copy, hasAction: Boolean(r.action) })),
+        );
       } catch {
         setItems([]);
+        void writeSnapshot([]);
       }
     })();
   }, [getBearer, lang]);
@@ -107,8 +114,7 @@ function useTodaysNoticings(getBearer: () => Promise<string | null>): {
 }
 
 export function TodayNoticings(): JSX.Element | null {
-  const { getToken } = useAuth();
-  const getBearer = useCallback(async () => (await getToken().catch(() => null)) ?? null, [getToken]);
+  const getBearer = useBearer();
   const { items, refresh } = useTodaysNoticings(getBearer);
 
   const onPostpone = useCallback(
@@ -143,7 +149,7 @@ export function TodayNoticings(): JSX.Element | null {
 
   return (
     <Stack gap={space[2]} style={{ marginTop: space[6] }}>
-      <Text scale="caption" color="var(--ollie-color-sage)" style={KICKER_STYLE}>
+      <Text scale="caption" color={colors.sage} style={KICKER_STYLE}>
         worth a glance
       </Text>
 
@@ -151,13 +157,13 @@ export function TodayNoticings(): JSX.Element | null {
         <div
           key={item.noticing.id}
           style={{
-            background: 'var(--ollie-color-paper)',
-            border: '1px solid var(--ollie-color-hairline-soft)',
-            borderRadius: radii.md,
+            background: colors.paper,
+            boxShadow: shadows.card,
+            borderRadius: radii.card,
             padding: `${space[4]} ${space[5]}`,
           }}
         >
-          <Text scale="body" color="var(--ollie-color-ink)" style={{ lineHeight: lineHeights.lede }}>
+          <Text scale="body" color={colors.ink} style={{ lineHeight: lineHeights.lede }}>
             {item.copy}
           </Text>
 
@@ -166,7 +172,7 @@ export function TodayNoticings(): JSX.Element | null {
               <button
                 type="button"
                 onClick={() => onAccept(item)}
-                style={{ ...affordanceStyle, color: 'var(--ollie-color-ink)', fontWeight: 600 }}
+                style={{ ...affordanceStyle, color: colors.ink, fontWeight: 600 }}
               >
                 {item.action.label}
               </button>
@@ -181,7 +187,7 @@ export function TodayNoticings(): JSX.Element | null {
             <button
               type="button"
               onClick={() => onDismiss(item.noticing)}
-              style={{ ...affordanceStyle, color: 'var(--ollie-color-ink-faint)' }}
+              style={{ ...affordanceStyle, color: colors.inkFaint }}
             >
               dismiss
             </button>
@@ -197,7 +203,7 @@ const affordanceStyle: React.CSSProperties = {
   border: 'none',
   padding: 0,
   cursor: 'pointer',
-  color: 'var(--ollie-color-sage)',
+  color: colors.sage,
   fontVariantCaps: 'all-small-caps',
   letterSpacing: '0.08em',
   fontSize: fontSizes.caption,

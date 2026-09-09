@@ -90,6 +90,36 @@ export function getIntensity(e: MoodEvent): number | null {
   return typeof v === 'number' && Number.isFinite(v) ? v : null;
 }
 
+/**
+ * A calm, lowercase glance value for the Health room's read-only energy tile,
+ * derived from the latest energy/mood event. Prefers a free-text label the
+ * person actually typed; otherwise maps a numeric energy level (assumed 1–5,
+ * clamped) onto a descriptive word. Returns null when there is nothing to
+ * show, so the tile can fall back to a neutral resting state. No fabrication:
+ * a missing/garbage reading yields null rather than an invented value.
+ */
+export function energyGlanceLabel(e: MoodEvent | null): string | null {
+  if (!e) return null;
+  // A label the person typed wins — it is the most honest reflection.
+  const label = getLabel(e);
+  if (label) return label.toLowerCase();
+  const level = getEnergyLevel(e);
+  if (level == null) return null;
+  const clamped = Math.max(1, Math.min(5, Math.round(level)));
+  switch (clamped) {
+    case 1:
+      return 'very low';
+    case 2:
+      return 'low-ish';
+    case 3:
+      return 'steady';
+    case 4:
+      return 'good';
+    default:
+      return 'high';
+  }
+}
+
 /** Midnight-of-today in local time, ms since epoch. */
 export function startOfTodayMs(now: number = Date.now()): number {
   const d = new Date(now);

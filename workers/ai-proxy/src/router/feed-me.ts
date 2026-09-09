@@ -24,9 +24,10 @@
  * Spec: docs/handoffs/feed-me/00-SPEC.md
  */
 
-import { json, upstreamError } from '@ollie/worker-http';
+import { json, upstreamError, exceedsContentLength, payloadTooLarge } from '@ollie/worker-http';
 import { scrubPII, type Locale } from '@ollie/pii-scrub';
 import { verifyClerkJwt } from '../clerk-verify';
+import { deriveUserHash } from '../telemetry';
 import { groqChat, type GroqMessage } from '../groq';
 import { cloudflareJson, type CfAiBinding } from '../cloudflare-ai';
 import { openRouterJson } from '../openrouter';
@@ -59,7 +60,14 @@ export interface FeedMeEnv {
   /** Cloudflare Workers AI binding — same-platform fallback, separate quota. */
   AI?: CfAiBinding;
   T0_JWT_ENFORCED?: string;
+  /** 'production' on prod — refuses the x-user-id dev bypass there (audit #25). */
+  ENVIRONMENT?: string;
   CLERK_ISSUER?: string;
+  /** Server-side salt for the per-user routing_cache namespace (S2). Same
+   *  derivation as the telemetry tables — routing_cache rows are keyed by
+   *  salted SHA-256 user_hash, never the raw user id. Optional (unsalted but
+   *  still server-derived when absent). */
+  USER_HASH_SALT?: string;
 }
 
 // ─── types ───────────────────────────────────────────────────────────────────
@@ -122,6 +130,11 @@ const MAX_COUNT = 5;
 const PANTRY_MAX_ITEMS = 80;
 const PANTRY_MAX_ITEM_LEN = 100;
 const PET_NAME_MAX_LEN = 80;
+/** Memory-DoS bound (audit #38). Field-level caps below already bound the
+ *  parsed shape (≤80 items × ≤100 chars + small enums); 64KB is generous
+ *  headroom over a real body while blocking an arbitrary-volume payload from
+ *  being buffered via req.json(). */
+const MAX_BODY_BYTES = 64 * 1024;
 const COOK_SIGNAL_MIN_SAMPLE = 5;
 
 // ─── handler ─────────────────────────────────────────────────────────────────
@@ -137,8 +150,9 @@ export async function handleFeedMe(
     return json({ error: 'invalid_user_id' }, 400);
   }
 
-  // ── Auth + ownership ── fail CLOSED unless T0_JWT_ENFORCED === '0' (dev).
-  if (env.T0_JWT_ENFORCED !== '0') {
+  // ── Auth + ownership ── fail CLOSED unless dev (T0_JWT_ENFORCED==='0') AND not
+  //    production (audit #25: prod refuses the spoofable x-user-id bypass).
+  if (env.T0_JWT_ENFORCED !== '0' || env.ENVIRONMENT === 'production') {
     const auth = req.headers.get('authorization');
     if (!auth || !auth.startsWith('Bearer ')) {
       return json({ error: 'unauthorized' }, 401);
@@ -160,7 +174,18 @@ export async function handleFeedMe(
     }
   }
 
+  // Per-user routing_cache namespace (S2). pathUserId is the verified user
+  // (JWT sub === path param above); derive the same salted user_hash the
+  // telemetry tables use and thread it through every cache lookup + write so
+  // one user's recipe-cache rows can never be returned to another user.
+  const userHash = await deriveUserHash(pathUserId, env.USER_HASH_SALT);
+
   // ── Parse + validate body ────────────────────────────────────────────────
+  // Memory-DoS guard (audit #38): reject oversized bodies on Content-Length
+  // before buffering via req.json().
+  if (exceedsContentLength(req, MAX_BODY_BYTES)) {
+    return payloadTooLarge('body_too_large');
+  }
   let raw: unknown;
   try {
     raw = await req.json();
@@ -221,7 +246,7 @@ export async function handleFeedMe(
   // ── Cache lookup ─────────────────────────────────────────────────────────
   let cacheRow: CacheRow | null;
   try {
-    cacheRow = await cacheLookup(embedding, moduleLabel, env);
+    cacheRow = await cacheLookup(embedding, moduleLabel, userHash, env);
   } catch (err) {
     console.error('[feed-me] cache lookup failed, falling through to gemini', err);
     cacheRow = null;
@@ -352,6 +377,7 @@ export async function handleFeedMe(
     embedding,
     { suggestions: trimmed, language: batch.language },
     batch.language,
+    userHash,
     env,
   ).catch((e) => console.error('[feed-me] cache write failed', e));
 
@@ -666,6 +692,8 @@ function parseRecipeBatch(raw: unknown): RecipeBatch {
       diet: Array.isArray(r.diet) ? r.diet.filter((x): x is string => typeof x === 'string') : [],
       ingredients: Array.isArray(r.ingredients) ? coerceIngredients(r.ingredients) : [],
       steps: Array.isArray(r.steps) ? r.steps.filter((x): x is string => typeof x === 'string') : [],
+      stepsDetailed: coerceStepsDetailed(r.stepsDetailed),
+      prep: coercePrep(r.prep),
       prepMinutes: typeof r.prepMinutes === 'number' ? r.prepMinutes : 0,
       cookMinutes: typeof r.cookMinutes === 'number' ? r.cookMinutes : 0,
       servings: typeof r.servings === 'number' ? r.servings : 1,
@@ -673,6 +701,36 @@ function parseRecipeBatch(raw: unknown): RecipeBatch {
     });
   }
   return { suggestions, language };
+}
+
+/** Coerce the instructive steps array; returns undefined when absent/empty so
+ *  the field simply doesn't serialise (client falls back to plain `steps`). */
+function coerceStepsDetailed(raw: unknown): RecipeSuggestion['stepsDetailed'] {
+  if (!Array.isArray(raw)) return undefined;
+  const out: NonNullable<RecipeSuggestion['stepsDetailed']> = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const s = item as Record<string, unknown>;
+    if (typeof s.do !== 'string') continue;
+    out.push({
+      do: s.do,
+      cue: typeof s.cue === 'string' ? s.cue : undefined,
+      tip: typeof s.tip === 'string' ? s.tip : undefined,
+      minutes: typeof s.minutes === 'number' ? s.minutes : undefined,
+    });
+  }
+  return out.length > 0 ? out : undefined;
+}
+
+/** Coerce the optional prep strip; undefined when nothing usable. */
+function coercePrep(raw: unknown): RecipeSuggestion['prep'] {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const p = raw as Record<string, unknown>;
+  const prep: NonNullable<RecipeSuggestion['prep']> = {};
+  if (typeof p.pan === 'string') prep.pan = p.pan;
+  if (typeof p.heat === 'string') prep.heat = p.heat;
+  if (typeof p.handsOnMinutes === 'number') prep.handsOnMinutes = p.handsOnMinutes;
+  return prep.pan || prep.heat || typeof prep.handsOnMinutes === 'number' ? prep : undefined;
 }
 
 function coerceIngredients(raw: unknown[]): RecipeSuggestion['ingredients'] {
@@ -733,6 +791,7 @@ interface CacheRow {
 async function cacheLookup(
   embedding: number[],
   module: string,
+  userHash: string,
   env: FeedMeEnv,
 ): Promise<CacheRow | null> {
   const url = `${env.SUPABASE_URL.replace(/\/$/, '')}/rest/v1/rpc/routing_cache_lookup`;
@@ -747,9 +806,13 @@ async function cacheLookup(
       p_module: module,
       p_embedding: embedding,
       p_threshold: COSINE_THRESHOLD,
+      // Per-user namespace (S2): the RPC filters on this so the lookup can only
+      // match this user's own rows.
+      p_user_hash: userHash,
     }),
   });
   if (!res.ok) {
+    // 404 = per-user lookup overload not yet deployed → no hit, never cross-user.
     if (res.status === 404) return null;
     const detail = await res.text().catch(() => '');
     throw new Error(`routing_cache_lookup ${res.status}: ${detail.slice(0, 200)}`);
@@ -760,20 +823,26 @@ async function cacheLookup(
 }
 
 async function cacheHitUpdate(id: string, env: FeedMeEnv): Promise<void> {
-  const url = `${env.SUPABASE_URL.replace(/\/$/, '')}/rest/v1/routing_cache?id=eq.${encodeURIComponent(id)}`;
-  await fetch(url, {
-    method: 'PATCH',
+  // PostgREST does NOT support `{ increment: 1 }` in a PATCH body — it coerced
+  // hit_count to a JSON object and the request silently failed, so the
+  // popularity counter never moved (audit S2 · fix 2). Use an atomic SQL RPC
+  // instead (single round-trip, race-free). 404 = RPC not yet applied in this
+  // env → treat as a no-op (same tolerance as routing_cache_lookup).
+  const url = `${env.SUPABASE_URL.replace(/\/$/, '')}/rest/v1/rpc/routing_cache_increment`;
+  const res = await fetch(url, {
+    method: 'POST',
     headers: {
       'content-type': 'application/json',
       apikey: env.SUPABASE_SERVICE_ROLE,
       authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE}`,
       prefer: 'return=minimal',
     },
-    body: JSON.stringify({
-      hit_count: { increment: 1 },
-      last_hit_at: new Date().toISOString(),
-    }),
+    body: JSON.stringify({ p_id: id }),
   });
+  if (!res.ok && res.status !== 404) {
+    const detail = await res.text().catch(() => '');
+    throw new Error(`routing_cache_increment ${res.status}: ${detail.slice(0, 200)}`);
+  }
 }
 
 async function cacheWrite(
@@ -782,6 +851,7 @@ async function cacheWrite(
   embedding: number[],
   classification: unknown,
   language: string,
+  userHash: string,
   env: FeedMeEnv,
 ): Promise<void> {
   const url = `${env.SUPABASE_URL.replace(/\/$/, '')}/rest/v1/routing_cache`;
@@ -795,6 +865,8 @@ async function cacheWrite(
     },
     body: JSON.stringify({
       module,
+      // Per-user namespace (S2) — see route.ts cacheWrite.
+      user_hash: userHash,
       text_sample: text.slice(0, 500),
       embedding,
       classification,
@@ -930,10 +1002,10 @@ async function geminiSuggest(
     : `Suggest ${body.count} dishes I can cook from PANTRY: ${sanitizedPantry.join(', ')}. Diet: ${body.diet}. Respond in ${body.locale}.`;
   contents.push({ role: 'user', parts: [{ text: userTurn }] });
 
-  const url = `${GEMINI_API_BASE}/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
+  const url = `${GEMINI_API_BASE}/${GEMINI_MODEL}:generateContent`;
   const res = await fetch(url, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: systemPrompt }] },
       contents,

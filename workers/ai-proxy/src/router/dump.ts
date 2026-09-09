@@ -32,15 +32,16 @@
  * NEVER cached: raw fragment text, pass-2 segmentation output.
  */
 
-import { json, upstreamError } from '@ollie/worker-http';
+import { json, upstreamError, exceedsContentLength, payloadTooLarge } from '@ollie/worker-http';
 import { detectCrisis } from '@ollie/crisis-lexicon';
 import { verifyClerkJwt } from '../clerk-verify';
-import { scrubPII } from '../pii';
+import { scrubPII, asLocale } from '@ollie/pii-scrub';
 import { pass1Segment } from './segmentation';
-import { pass2Split } from './segmentation-llm';
+import { pass2SplitFragments } from './segmentation-llm';
 import { detectFragmentLanguage } from './lang-detect';
 import { classifyBatch, type ClassifyResult } from './dump-classify';
 import { injectScheduledAt } from './remindIn';
+import { writeInbox } from './server-apply';
 import {
   type Fragment,
   type FragmentLanguage,
@@ -55,6 +56,7 @@ import {
   type VectorizeIndex,
 } from './vectorize';
 import { base64ByteSize, isVisionImage, visionExtract, type VisionImage } from './vision';
+import { fetchWithTimeout, UpstreamTimeoutError, UPSTREAM_TIMEOUT_MS } from '../fetch-timeout';
 import type { CfAiBinding } from '../cloudflare-ai';
 
 /** Hard upper bound on the raw image/pdf bytes the worker accepts.
@@ -62,6 +64,15 @@ import type { CfAiBinding } from '../cloudflare-ai';
  *  hit the multi-MB range. Cap chosen to fit a multi-page receipt PDF
  *  or scanned form while still bounding worker memory + Gemini upload. */
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+/** Upper bound on a single dump's typed text (audit #47). A brain dump is short
+ *  by nature; 10k chars is far above any real dump but blocks an abusive payload
+ *  from reaching the segmenter / embedder / AI cascade. */
+const MAX_TEXT_CHARS = 10_000;
+/** Hard upper bound on the whole request body (audit #38). An image dump is
+ *  base64 (~1.37× the byte budget) plus JSON framing; this leaves generous
+ *  headroom over MAX_IMAGE_BYTES while blocking an arbitrary-volume payload
+ *  from being buffered into worker memory via req.json(). */
+const MAX_BODY_BYTES = Math.ceil(MAX_IMAGE_BYTES * 1.4) + 64 * 1024;
 
 const VOYAGE_MODEL = 'voyage-multilingual-2';
 const VOYAGE_EMBED_DIM = 1024;
@@ -81,17 +92,39 @@ export interface DumpRouteEnv {
   CLERK_ISSUER?: string;
   /** Staging-only side door for golden-test harness. When set, a request
    *  with `Authorization: Bearer <STAGING_TEST_BEARER>` bypasses Clerk JWT
-   *  verify and runs as the fixed userId `staging-test-user`. The secret
-   *  exists ONLY on `ollie-ai-proxy-staging`; prod never has it set, so
-   *  the branch is unreachable on prod. */
+   *  verify and runs as the fixed userId `staging-test-user`. Defense in depth
+   *  (audit #43): honored ONLY when ENVIRONMENT !== 'production', so even a
+   *  misconfigured prod secret cannot open the door. The secret also exists
+   *  only on `ollie-ai-proxy-staging`. */
   STAGING_TEST_BEARER?: string;
+  /** Environment marker from wrangler [vars]. 'production' on the prod deploy,
+   *  'staging' on ollie-ai-proxy-staging. Gates STAGING_TEST_BEARER (audit #43). */
+  ENVIRONMENT?: string;
   VECTORIZE_INDEX: VectorizeIndex;
   /** Cloudflare Workers AI binding — same-platform classify fallback (no key).
    *  Optional so the worker still boots if the binding is absent. */
   AI?: CfAiBinding;
+  /** A6b server-apply (dump_inbox). */
+  SUPABASE_URL?: string;
+  SUPABASE_SERVICE_ROLE?: string;
+  ENVELOPE_KEK?: string;
+  SERVER_APPLY_ENABLED?: string;
+  /** KV namespace used to dedupe retried dumps (idempotency). A request that
+   *  succeeded server-side but timed out client-side is retried by the client
+   *  with the SAME dumpId; the stored RouterOutput is replayed verbatim so the
+   *  fragments are not routed + cache-written a second time. Optional. */
+  CACHE_KV?: KVNamespace;
 }
 
 const STAGING_TEST_USER_ID = 'staging-test-user';
+
+/** TTL for the idempotency record. Long enough to cover any plausible client
+ *  retry window (network stall + user re-tap) without growing KV unbounded. */
+const IDEMPOTENCY_TTL_SEC = 60 * 60; // 1 hour
+
+function idempotencyKey(userId: string, dumpId: string): string {
+  return `dump:idem:${userId}:${dumpId}`;
+}
 
 export async function handleDumpRoute(
   req: Request,
@@ -119,14 +152,23 @@ export async function handleDumpRoute(
   }
   const bearer = auth.slice('Bearer '.length);
 
+  // Defense in depth (audit #43): the staging test bearer is honored ONLY off
+  // production, so a misconfigured prod secret can never bypass Clerk.
+  const stagingDoorAllowed = env.ENVIRONMENT !== 'production';
   let userId: string | null;
-  if (env.STAGING_TEST_BEARER && bearer === env.STAGING_TEST_BEARER) {
+  if (stagingDoorAllowed && env.STAGING_TEST_BEARER && bearer === env.STAGING_TEST_BEARER) {
     userId = STAGING_TEST_USER_ID;
   } else {
     userId = await verifyClerkJwt(bearer, { CLERK_ISSUER: env.CLERK_ISSUER });
   }
   if (!userId) {
     return json({ error: 'invalid_jwt' }, 401);
+  }
+
+  // Memory-DoS guard (audit #38): reject an oversized payload on its declared
+  // Content-Length BEFORE buffering the body via req.json().
+  if (exceedsContentLength(req, MAX_BODY_BYTES)) {
+    return payloadTooLarge('body_too_large');
   }
 
   // Parse body
@@ -156,8 +198,35 @@ export async function handleDumpRoute(
     return json({ error: 'missing_text' }, 400);
   }
 
+  if (userText.length > MAX_TEXT_CHARS) {
+    return json({ error: 'text_too_large' }, 413);
+  }
+
   if (hasImage && base64ByteSize((body.image as VisionImage).data) > MAX_IMAGE_BYTES) {
     return json({ error: 'image_too_large' }, 413);
+  }
+
+  const dumpId = body.dumpId ?? crypto.randomUUID();
+  const locale = body.locale ?? 'tr';
+
+  // Idempotency replay — a dump that succeeded server-side but timed out
+  // client-side is retried with the SAME dumpId. If we've already produced a
+  // RouterOutput for this (userId, dumpId), replay it verbatim WITHOUT
+  // re-running vision, classify, or any cache write. This is the harness-side
+  // dedupe: same op twice → run once, return the stored result. Best-effort —
+  // a KV read failure (or no binding) just falls through to a normal route.
+  if (env.CACHE_KV && body.dumpId) {
+    try {
+      const replay = await env.CACHE_KV.get(idempotencyKey(userId, dumpId));
+      if (replay) {
+        return new Response(replay, {
+          status: 200,
+          headers: { 'content-type': 'application/json', 'x-ollie-idempotent-replay': '1' },
+        });
+      }
+    } catch (err) {
+      console.error('[route/dump] idempotency lookup failed, routing fresh', err);
+    }
   }
 
   // Vision pre-pass — if image present, ask Gemini Flash 2.5 to describe
@@ -184,38 +253,33 @@ export async function handleDumpRoute(
       : `[image: ${visionDescription} ]`
     : userText;
 
-  const dumpId = body.dumpId ?? crypto.randomUUID();
-  const locale = body.locale ?? 'tr';
-
   // PII scrub once on the whole dump; preserves segmentation faithfulness.
-  const { scrubbed: cleanDump } = scrubPII(combinedDump);
+  //
+  // S9 fix: uses the shared @ollie/pii-scrub (locale-aware, multilingual
+  // names + the MEDICAL/MEDICATION/MENTAL_HEALTH/SEXUAL categories the
+  // worker-local scrubber lacked). FULL categories here — a brain dump can
+  // fan out to the research corpus and is embedded/classified by third-party
+  // models (Voyage/Groq/Gemini), so health terms + TR/ES names must be
+  // redacted BEFORE they leave. Layer-1 routing is module-coarse, so a
+  // "[MEDICAL]"/"[MENTAL_HEALTH]" placeholder still routes the fragment to
+  // the body module; the fine-grained symptom/drug extraction happens in
+  // Layer-2 /route/:module, which receives the raw fragment from the client
+  // and scrubs identity-only (see router/route.ts). `originalDump` returned
+  // to the client stays RAW; only the third-party-bound copy is scrubbed.
+  const { scrubbed: cleanDump } = scrubPII(combinedDump, asLocale(locale));
 
   // 2 + 3. Segmentation (pass-1 + pass-2 for flagged fragments).
+  // The flagged pass-2 splits are independent, so they run CONCURRENTLY
+  // (bounded fan-out) rather than serially — a multi-topic dump no longer
+  // pays N × the Groq round-trip (S2 · fix 1). Ordering + per-fragment unsplit
+  // fallback are preserved inside pass2SplitFragments.
   const pass1 = pass1Segment(cleanDump, locale);
-  const fragmentsText: string[] = [];
-  let pass2Triggered = 0;
-
-  for (const frag of pass1.fragments) {
-    if (frag.needsPass2) {
-      pass2Triggered++;
-      try {
-        const split = await pass2Split(frag.text, {
-          groq: env.GROQ_API_KEY,
-          gemini: env.GEMINI_API_KEY,
-          cfAI: env.AI,
-          openrouter: env.OPENROUTER_API_KEY,
-        });
-        if (split.length > 0) {
-          fragmentsText.push(...split);
-          continue;
-        }
-      } catch (err) {
-        // Pass-2 failure: fall back to the pass-1 fragment unsplit.
-        console.error('[route/dump] pass2 failed, using pass1 fragment', err);
-      }
-    }
-    fragmentsText.push(frag.text);
-  }
+  const { fragmentsText, pass2Triggered } = await pass2SplitFragments(pass1.fragments, {
+    groq: env.GROQ_API_KEY,
+    gemini: env.GEMINI_API_KEY,
+    cfAI: env.AI,
+    openrouter: env.OPENROUTER_API_KEY,
+  });
 
   // 5. Crisis check — all 3 lexicons against the WHOLE dump in parallel.
   // (Per fragment also acceptable; the lexicon library does the right
@@ -225,6 +289,33 @@ export async function handleDumpRoute(
   // ("kendime zarar vermek istiyorum" scrawled on paper) still triggers
   // the upstream lexicon path even with no typed text.
   const crisis = detectCrisis(combinedDump) ?? undefined;
+
+  // Crisis short-circuit (product decision 2026-06-15). When the lexicon flags
+  // a crisis phrase we deliberately keep NOTHING: no classification, no Voyage
+  // embed, no Vectorize cache write, no telemetry log of the raw text, and no
+  // server-apply inbox row. Ollie is not a crisis tool — it responds gently
+  // (soft client banner) and stores none of the input anywhere. We return only
+  // the crisis signal with an empty originalDump so the text isn't even echoed
+  // back in the response. This MUST stay above the embed/classify/cache/log/
+  // writeInbox path below.
+  if (crisis) {
+    return json({
+      schemaVersion: '1.0',
+      originalDump: '',
+      dumpId,
+      timestamp: Date.now(),
+      language: detectFragmentLanguage(combinedDump),
+      crisis,
+      fragments: [],
+      summary: {
+        moduleCount: {},
+        cacheHitRate: 0,
+        aiCalls: 0,
+        durationMs: Date.now() - t0,
+        pass2Triggered: 0,
+      },
+    } satisfies RouterOutput);
+  }
 
   // 6. Per-fragment classification.
   //    Pass A: embed + Vectorize cache lookup for every fragment.
@@ -381,16 +472,18 @@ export async function handleDumpRoute(
     moduleCount[f.module] = (moduleCount[f.module] ?? 0) + 1;
   }
 
+  // Telemetry log carries STRUCTURE ONLY, never user content (audit #44). The
+  // previous version logged combinedDump.slice(0,120) + each fragment's text,
+  // which dropped unscrubbed PII into Worker logs. We log lengths/shape instead.
   console.log(
     '[route/dump]',
     JSON.stringify({
-      input: combinedDump.slice(0, 120),
+      inputLen: combinedDump.length,
       visionUsed,
       fragments: fragments.map((f) => ({
-        text: f.text.slice(0, 60),
+        textLen: f.text.length,
         module: f.module,
         action: (f.payload as { action?: string }).action,
-        price: (f.payload as { price?: number }).price,
         confidence: f.confidence,
       })),
       aiCalls,
@@ -416,6 +509,29 @@ export async function handleDumpRoute(
     },
   };
 
+  // A6b: server-side durability. Mirror routed fragments into the encrypted
+  // dump_inbox so a dump that arrived while the app was CLOSED survives.
+  // Shadow/dual-write — gated by SERVER_APPLY_ENABLED, fire-and-forget.
+  keepAlive(
+    writeInbox(
+      env,
+      uid,
+      dumpId,
+      fragments.map((f) => ({ module: f.module, payload: f.payload })),
+    ).catch((err) => console.warn('[route/dump] writeInbox failed (non-fatal)', err)),
+  );
+  // #3: persist the result for idempotent replay (kept alive past the Response).
+  // Only when the client supplied a dumpId — a server-minted id can never be
+  // replayed by a retry. Crisis outputs stored too so a retry replays the verdict.
+  if (env.CACHE_KV && body.dumpId) {
+    const serialized = JSON.stringify(output);
+    keepAlive(
+      env.CACHE_KV.put(idempotencyKey(uid, dumpId), serialized, {
+        expirationTtl: IDEMPOTENCY_TTL_SEC,
+      }).catch((e) => console.error('[route/dump] idempotency store failed', e)),
+    );
+  }
+
   return json(output);
 }
 
@@ -424,19 +540,7 @@ export async function handleDumpRoute(
  *  re-order by that index so the result aligns positionally with `texts`
  *  regardless of response ordering. */
 async function voyageEmbedBatch(texts: string[], apiKey: string): Promise<number[][]> {
-  const res = await fetch('https://api.voyageai.com/v1/embeddings', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      input: texts,
-      model: VOYAGE_MODEL,
-      input_type: 'query',
-      output_dimension: VOYAGE_EMBED_DIM,
-    }),
-  });
+  const res = await voyageFetchWithRetry(texts, apiKey);
   if (!res.ok) {
     const detail = await res.text().catch(() => '');
     throw new Error(`voyage ${res.status}: ${detail.slice(0, 200)}`);
@@ -457,4 +561,62 @@ async function voyageEmbedBatch(texts: string[], apiKey: string): Promise<number
     out[slot] = row.embedding;
   });
   return out;
+}
+
+/** Voyage embed is the FIRST step of the whole dump pipeline — a single
+ *  transient blip (429 rate-limit or a 5xx) killed the ENTIRE dump (audit S2 ·
+ *  fix 4). Bounded retry: up to VOYAGE_MAX_RETRIES re-tries on 429/5xx or a
+ *  timeout, with short exponential backoff + jitter. A 4xx (other than 429) is
+ *  a real client error and is returned immediately (no point retrying). After
+ *  the cap we return the last response (or rethrow the last timeout) so the
+ *  caller's existing 502 voyage_embed_failed path still fires cleanly — no
+ *  infinite loop. Each attempt is individually timeout-bounded (fix 3). */
+const VOYAGE_MAX_RETRIES = 2;
+const VOYAGE_RETRY_BASE_MS = 250;
+
+async function voyageFetchWithRetry(texts: string[], apiKey: string): Promise<Response> {
+  const init: RequestInit = {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      input: texts,
+      model: VOYAGE_MODEL,
+      input_type: 'query',
+      output_dimension: VOYAGE_EMBED_DIM,
+    }),
+  };
+
+  let lastTimeout: unknown;
+  for (let attempt = 0; attempt <= VOYAGE_MAX_RETRIES; attempt++) {
+    try {
+      const res = await fetchWithTimeout(
+        'https://api.voyageai.com/v1/embeddings',
+        init,
+        UPSTREAM_TIMEOUT_MS.voyage,
+        'voyage',
+      );
+      // Success or a non-retryable status (2xx, or a 4xx that isn't 429) —
+      // hand it back to the caller as-is.
+      const retryable = res.status === 429 || res.status >= 500;
+      if (!retryable || attempt === VOYAGE_MAX_RETRIES) return res;
+      // Drain the body so the connection can be reused before we back off.
+      await res.text().catch(() => '');
+    } catch (err) {
+      // A timeout is transient — retry it like a 5xx. Any other thrown error
+      // (network/DNS) is also retried within the cap; on the last attempt it
+      // rethrows so the caller's catch maps it to 502.
+      if (!(err instanceof UpstreamTimeoutError) && !(err instanceof Error)) throw err;
+      lastTimeout = err;
+      if (attempt === VOYAGE_MAX_RETRIES) throw err;
+    }
+    // Exponential backoff with jitter before the next attempt.
+    const backoff = VOYAGE_RETRY_BASE_MS * 2 ** attempt + Math.floor(Math.random() * 100);
+    await new Promise((r) => setTimeout(r, backoff));
+  }
+  // Unreachable (the loop always returns/throws on the final attempt), but
+  // satisfies the type checker.
+  throw (lastTimeout instanceof Error ? lastTimeout : new Error('voyage exhausted retries'));
 }

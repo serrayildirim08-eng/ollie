@@ -123,7 +123,13 @@ export function correlateLutealAndSpending(
     const daysIn = daysIntoLuteal(sortedC, noonEpoch);
     if (daysIn == null) continue;
 
-    const spend = spendByDay.get(dKey) ?? 0;
+    // Only pair days that actually have a logged outbound transaction. Filling
+    // unlogged days with 0 injects structural zeros that bias Spearman ρ toward
+    // the (constant) day-index ↔ 0-spend slope and inflates the sample size,
+    // making a spurious correlation look well-powered. Absence of a record is
+    // "unknown", not "$0 spent".
+    if (!spendByDay.has(dKey)) continue;
+    const spend = spendByDay.get(dKey) as number;
     xs.push(daysIn);
     ys.push(spend);
   }

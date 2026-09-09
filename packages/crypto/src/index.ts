@@ -203,7 +203,14 @@ export async function decryptData<T = unknown>(
     payload.ciphertext as BufferSource,
   );
   const text = new TextDecoder().decode(plaintext);
-  return JSON.parse(text) as T;
+  // Guard the parse (audit #15): a corrupted/tampered ciphertext that still
+  // decrypts to non-JSON bytes would otherwise throw an opaque SyntaxError.
+  // Surface a clear, catchable decryption error instead.
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new Error('decryptData: decrypted payload is not valid JSON');
+  }
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -231,6 +238,51 @@ export function base64ToBytes(b64: string): Uint8Array {
     return out;
   }
   return new Uint8Array(g.Buffer.from(b64, 'base64'));
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Postgres bytea hex helpers — for upserting raw bytes into `bytea` columns
+// via PostgREST.
+//
+// Why: PostgREST does NOT base64-decode a string sent for a `bytea` column.
+// It stores the literal characters. A base64 string for a 12-byte IV is 16
+// ASCII chars → octet_length() = 16, which trips the
+// `check (octet_length(iv) = 12)` constraint on encrypted_state /
+// finance_records, rejecting every write (audit #1).
+//
+// The fix: send the Postgres hex input format — a `\x` prefix followed by
+// two hex chars per byte. PostgREST/Postgres decodes that to the exact raw
+// bytes, so a 12-byte IV stores as 12 bytes. On read, PostgREST returns the
+// same `\x`-hex form (bytea_output = 'hex' is the Postgres default).
+// ──────────────────────────────────────────────────────────────────────────
+
+/** Encode bytes as a Postgres `bytea` hex input literal: `\x` + lowercase hex. */
+export function bytesToPgHex(bytes: Uint8Array): string {
+  let hex = '';
+  for (let i = 0; i < bytes.byteLength; i++) {
+    hex += bytes[i].toString(16).padStart(2, '0');
+  }
+  return `\\x${hex}`;
+}
+
+/**
+ * Decode a value read back from a `bytea` column into bytes.
+ *
+ * Accepts the Postgres `\x`-hex form that PostgREST returns by default.
+ * Falls back to base64 for any legacy row that predates the hex fix (rows
+ * written before this change carry base64 ASCII bytes inside the bytea).
+ */
+export function pgHexToBytes(value: string): Uint8Array {
+  if (value.startsWith('\\x')) {
+    const hex = value.slice(2);
+    const out = new Uint8Array(hex.length / 2);
+    for (let i = 0; i < out.length; i++) {
+      out[i] = parseInt(hex.substr(i * 2, 2), 16);
+    }
+    return out;
+  }
+  // Legacy fallback: rows written before the hex fix stored base64.
+  return base64ToBytes(value);
 }
 
 // ──────────────────────────────────────────────────────────────────────────

@@ -53,18 +53,29 @@ import type { RouterOutput } from '../router/schema';
 
 // ─── env helpers ──────────────────────────────────────────────────────────────
 
-function workerUrl(key: string, fallback?: string): string {
-  const val = import.meta.env[key] as string | undefined;
+// Static allowlist of the ONLY env vars this module may read. Dynamic
+// `import.meta.env[key]` access forces Vite to serialize the ENTIRE env object
+// into the shipped bundle (every VITE_ var, secrets included) — each entry
+// below is a literal property access, so only these values get inlined.
+const WORKER_ENV = {
+  VITE_AI_PROXY_URL: import.meta.env.VITE_AI_PROXY_URL as string | undefined,
+  VITE_ROUTE_DUMP_URL: import.meta.env.VITE_ROUTE_DUMP_URL as string | undefined,
+  VITE_APNS_PUSH_URL: import.meta.env.VITE_APNS_PUSH_URL as string | undefined,
+  VITE_SENTRY_TUNNEL_URL: import.meta.env.VITE_SENTRY_TUNNEL_URL as string | undefined,
+} as const;
+
+function workerUrl(key: keyof typeof WORKER_ENV, fallback?: string): string {
+  const val = WORKER_ENV[key];
   if (val) return val.replace(/\/$/, '');
   if (fallback) return fallback;
   throw new Error(`[ollie/native] Missing worker URL env var: ${key}`);
 }
 
 // Lazy getters so missing env only throws when the function is actually called.
-const urls = {
+export const urls = {
   get aiProxy() { return workerUrl('VITE_AI_PROXY_URL', 'https://ollie-api.ollieapp.workers.dev'); },
   get routeDump() {
-    const override = import.meta.env.VITE_ROUTE_DUMP_URL as string | undefined;
+    const override = WORKER_ENV.VITE_ROUTE_DUMP_URL;
     if (override) return override.replace(/\/$/, '');
     return this.aiProxy;
   },
@@ -88,7 +99,7 @@ export function routeModule(
 ): Promise<ApiResult<RouteModuleResponse>> {
   const req: RouteModuleRequest = { module, text };
   return post<RouteModuleResponse>(
-    `${urls.aiProxy}/route/${module}`,
+    `${urls.aiProxy}/route/${encodeURIComponent(module)}`,
     req,
     { authJwt: opts.bearer, timeoutMs: opts.timeoutMs ?? 15_000 },
   );
@@ -422,22 +433,24 @@ async function safeText(res: Response): Promise<string | undefined> {
  * Forward a Claude Haiku request through the ai-proxy worker.
  * The worker hides ANTHROPIC_API_KEY; we never see it client-side.
  *
- * x-user-id header is injected if userId is provided — used for per-user
- * rate limiting in the worker (10 req/min).
+ * Auth: the worker now requires a verified Clerk session JWT (Bearer) and
+ * derives the per-user rate-limit key from the verified token `sub` — the
+ * old spoofable x-user-id header is ignored. Pass `bearer` (a Clerk JWT) or
+ * the call will 401. (This helper currently has no live caller; the real
+ * brain-dump flow goes through the Clerk-authed /route/dump endpoint.)
  */
 export function brainDump(
   req: BrainDumpRequest,
-  opts: { userId?: string; timeoutMs?: number } = {},
+  opts: { bearer?: string; timeoutMs?: number } = {},
 ): Promise<ApiResult<BrainDumpResponse>> {
-  const extra: Record<string, string> = {
-    'anthropic-beta': 'prompt-caching-2024-07-31',
-  };
-  if (opts.userId) extra['x-user-id'] = opts.userId;
-
   return post<BrainDumpResponse>(
     `${urls.aiProxy}/brain-dump`,
     req,
-    { extraHeaders: extra, timeoutMs: opts.timeoutMs ?? 10_000 },
+    {
+      extraHeaders: { 'anthropic-beta': 'prompt-caching-2024-07-31' },
+      authJwt: opts.bearer,
+      timeoutMs: opts.timeoutMs ?? 10_000,
+    },
   );
 }
 
@@ -467,12 +480,12 @@ export function enrichDump(
  */
 export function ingestEvent(
   req: IngestEventRequest,
-  opts: { timeoutMs?: number } = {},
+  opts: { timeoutMs?: number; authJwt?: string } = {},
 ): Promise<ApiResult<IngestEventResponse>> {
   return post<IngestEventResponse>(
     `${urls.aiProxy}/ingest-event`,
     req,
-    { timeoutMs: opts.timeoutMs ?? 8_000 },
+    { timeoutMs: opts.timeoutMs ?? 8_000, authJwt: opts.authJwt },
   );
 }
 

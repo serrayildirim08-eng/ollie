@@ -27,7 +27,7 @@
 import { useMemo, useState } from 'react';
 import { Stack } from '../layout';
 import { Text } from '../ui';
-import { fontSizes, lineHeights, space, radii, letterSpacings } from '../theme/tokens';
+import { colors, fontSizes, lineHeights, space, radii, letterSpacings, shadows } from '../theme/tokens';
 import { usePatterns, type PatternCard } from './usePatterns';
 
 export interface PatternCardsProps {
@@ -93,16 +93,16 @@ export function PatternCards({ module, max = 4 }: PatternCardsProps): JSX.Elemen
             key={key}
             style={{
               position: 'relative',
-              background: 'var(--ollie-color-paper)',
-              border: '1px solid var(--ollie-color-hairline-soft)',
-              borderRadius: radii.md,
+              background: colors.paper,
+              boxShadow: shadows.card,
+              borderRadius: radii.card,
               padding: `${space[4]} ${space[5]}`,
             }}
           >
             {card.title ? (
               <Text
                 scale="caption"
-                color="var(--ollie-color-sage)"
+                color={colors.sage}
                 style={{
                   display: 'block',
                   textTransform: 'uppercase',
@@ -117,7 +117,7 @@ export function PatternCards({ module, max = 4 }: PatternCardsProps): JSX.Elemen
 
             <Text
               scale="body"
-              color="var(--ollie-color-ink)"
+              color={colors.ink}
               style={{ lineHeight: lineHeights.lede, paddingRight: space[6] }}
             >
               {cardCopy(card)}
@@ -126,7 +126,7 @@ export function PatternCards({ module, max = 4 }: PatternCardsProps): JSX.Elemen
             {source ? (
               <Text
                 scale="caption"
-                color="var(--ollie-color-ink-faint)"
+                color={colors.inkFaint}
                 style={{ display: 'block', marginTop: space[2], fontSize: fontSizes.caption }}
               >
                 {source}
@@ -149,7 +149,7 @@ export function PatternCards({ module, max = 4 }: PatternCardsProps): JSX.Elemen
                 right: space[3],
                 background: 'transparent',
                 border: 'none',
-                color: 'var(--ollie-color-ink-faint)',
+                color: colors.inkFaint,
                 cursor: 'pointer',
                 fontSize: fontSizes.body,
                 lineHeight: 1,

@@ -30,7 +30,7 @@ export interface PayFrequencyEvidence {
   n_intervals: number;
   /** Median interval in days, or null when <2 events. */
   interval_days_median: number | null;
-  /** Scaled MAD (Rousseeuw σ ≈ 1.4826·MAD), or null when <2 events. */
+  /** RAW MAD (#104; σ ≈ 1.4826·MAD applied by readers), or null when <2 events. */
   interval_days_mad: number | null;
   /** Coefficient of variation (mad / median). Null when not computable. */
   cv: number | null;
@@ -97,9 +97,10 @@ export function classifyPayFrequency(
     intervals.push((events[i] - events[i - 1]) / DAY_MS);
   }
   const median = fMedian(intervals) ?? 0;
-  // fMad already returns scaled MAD (×1.4826) per math.ts contract
+  // fMad returns RAW MAD (#104). CV uses the consistency-scaled spread
+  // (σ≈1.4826·MAD) so the 0.1/0.3 confidence thresholds keep their meaning.
   const mad = fMad(intervals, median);
-  const cv = median > 0 ? mad / median : null;
+  const cv = median > 0 ? (1.4826 * mad) / median : null;
 
   let frequency: PayFrequencyLabel = 'random';
   if (median >= 6 && median <= 8) frequency = 'weekly';

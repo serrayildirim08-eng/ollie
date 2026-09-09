@@ -16,7 +16,7 @@
  * failure yields an empty surface rather than throwing into the UI.
  */
 
-import { selectNoticings } from '@ollie/logic/brain';
+import { selectNoticings, copyKindOf } from '@ollie/logic/brain';
 import type { NoticingCandidate, ScoredNoticing } from '@ollie/logic/brain';
 import type { Store } from '@ollie/store';
 
@@ -39,7 +39,7 @@ export const POSTPONE_MS = DAY_MS;
 const PATTERN_NAMESPACES = [
   'admin', 'body', 'goals', 'grocery', 'habits',
   'journal', 'pets', 'work', 'sleep', 'finance',
-  'cycle', 'medication',
+  'cycle', 'medication', 'chores',
 ] as const;
 
 /** A tolerant pattern-card row as stored under `<ns>.patterns`. */
@@ -111,20 +111,77 @@ function toCandidate(p: RawPattern, module: string): NoticingCandidate | null {
   };
 }
 
+/** STRING offer fields a detector may attach to a pattern card. */
+const OFFER_FACT_KEYS = [
+  'actionKind', 'taskText', 'dueDate', 'decisionId', 'decisionWhat',
+  // wave 2 — extra string offer facts:
+  'taskId', // chronic deferral → the source admin task id (→ sourceTaskId).
+  'sourceTaskId', // chronic deferral (synthesized) → same, alternate key.
+  'batchLabel', // renewal cluster → the batch block + reminder label.
+  'taskModule', // dateless ladder archive → which repo the task lives in.
+  'choreId', // chore-due offer → the chores registry id to mark done.
+  'choreName', // chore-due offer → the chore name (for copy / traceability).
+] as const;
+
+/** ARRAY (string[]) offer fields — wave-2 offers carry id lists. */
+const OFFER_FACT_ARRAY_KEYS = [
+  'taskIds', // paperwork piling → the stalled admin task ids to surface.
+  'renewalIds', // renewal cluster → the renewal ids the block covers.
+] as const;
+
+/** NUMERIC offer fields — wave-2 offers carry an absolute fire time. */
+const OFFER_FACT_NUMBER_KEYS = [
+  'batchFireAtMs', // renewal cluster → when the batch reminder should fire.
+] as const;
+
 /**
  * Recover the situation facts the Sprint-3 copy + action layers need from a raw
- * pattern card: the item names involved + the headline item's days-past. The
- * replenish ("milk") detector carries `items: [{name, days}]`; other detectors
- * that attach an items list work too. Returns null when there's nothing.
+ * pattern card:
+ *   - the item names involved + the headline item's days-past (the replenish
+ *     "milk" detector carries `items: [{name, days}]`; the sleep-debt detector
+ *     rides its deficit hours in the same `days` slot via a single synthetic
+ *     item), AND
+ *   - any OFFER fields a C-model detector attached so its noticing can carry an
+ *     action (admin renewal → add_admin_task, admin decision → surface_decision):
+ *     actionKind / taskText / dueDate / decisionId / decisionWhat.
+ *
+ * Returns null only when there is NOTHING to carry — i.e. neither item names nor
+ * an attached offer action. (A bare offer with no items still yields facts, so
+ * the action layer can read its payload — the milk path is unaffected.)
  */
-function factsOf(p: RawPattern): { items: string[]; days: number | null } | null {
+function factsOf(p: RawPattern): Record<string, unknown> | null {
   const list = Array.isArray(p.items) ? p.items : [];
   const items = list
     .map((it) => (it?.name ?? '').toString().trim())
     .filter(Boolean);
-  if (items.length === 0) return null;
   const firstDays = list.find((it) => typeof it?.days === 'number')?.days;
-  return { items, days: typeof firstDays === 'number' ? firstDays : null };
+
+  const offer: Record<string, unknown> = {};
+  for (const k of OFFER_FACT_KEYS) {
+    const v = (p as Record<string, unknown>)[k];
+    if (typeof v === 'string' && v.trim()) offer[k] = v.trim();
+  }
+  // wave 2 — array offer facts (id lists): keep only non-empty trimmed strings.
+  for (const k of OFFER_FACT_ARRAY_KEYS) {
+    const v = (p as Record<string, unknown>)[k];
+    if (Array.isArray(v)) {
+      const clean = v.map((x) => (x ?? '').toString().trim()).filter(Boolean);
+      if (clean.length > 0) offer[k] = clean;
+    }
+  }
+  // wave 2 — numeric offer facts (e.g. an absolute fire time).
+  for (const k of OFFER_FACT_NUMBER_KEYS) {
+    const v = (p as Record<string, unknown>)[k];
+    if (typeof v === 'number' && Number.isFinite(v)) offer[k] = v;
+  }
+  const hasOffer = Object.keys(offer).length > 0;
+
+  if (items.length === 0 && !hasOffer) return null;
+  return {
+    items,
+    days: typeof firstDays === 'number' ? firstDays : null,
+    ...offer,
+  };
 }
 
 /** Harm-kind → cold-start category the defer map understands. */
@@ -192,6 +249,12 @@ export async function gatherCandidates(store: Store): Promise<NoticingCandidate[
   } catch (err) {
     console.error('[brain] gather harm failed (non-fatal):', err);
   }
+
+  // NOTE — CHRONIC DEFERRAL (break_down_task offer) is emitted by the admin
+  // ORCHESTRATOR (packages/orchestrator/src/admin.ts), not synthesized here: it
+  // rides the normal `admin.patterns` → toCandidate pipeline above carrying
+  // `actionKind:'break_down_task'` + `taskText` + `taskId`. Keeping it there
+  // avoids double-offering the same task from two sources.
 
   return out;
 }
@@ -319,11 +382,20 @@ export async function selectTodaysNoticings(
       loadLearnedMap(),
     ]);
     const capacity = store.get<CapacityState>('shared', 'capacity', {})?.level ?? 'medium';
-    return selectNoticings(candidates, now, {
+    const selected = selectNoticings(candidates, now, {
       capacity,
       excludeIds: exclude,
       // USER PIN > learned (if confident) > cold-start, applied per candidate.
       resolveDeferability: makeDeferabilityResolver(learnedMap),
+    });
+    // Drop "generic" noise: a candidate whose category maps to no specific copy
+    // kind would only ever render the vague fallback ("something might be worth
+    // a glance") — that's not worth a card. Keep one only if it carries a real
+    // offered action (then the fallback copy + an accept affordance is useful).
+    return selected.filter((n) => {
+      if (copyKindOf({ category: n.category, module: n.module }) !== 'generic') return true;
+      const ak = (n.facts as { actionKind?: unknown } | null | undefined)?.actionKind;
+      return typeof ak === 'string' && ak.length > 0;
     });
   } catch (err) {
     console.error('[brain] selectTodaysNoticings failed (non-fatal):', err);

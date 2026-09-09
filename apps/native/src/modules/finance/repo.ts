@@ -16,6 +16,7 @@
 
 import { computeCadence, type CadenceEstimate } from '@ollie/cadence';
 import { sql } from '../../storage';
+import { newId } from '../../storage/id';
 import {
   normaliseCadence,
   normaliseCategory,
@@ -24,6 +25,7 @@ import {
   normaliseSentiment,
   normaliseSubscriptionName,
   type Cadence,
+  type FinanceAsset,
   type FinanceBill,
   type FinanceIncome,
   type FinanceRefund,
@@ -66,11 +68,6 @@ interface SubscriptionRow {
   [col: string]: unknown;
 }
 
-function newId(): string {
-  return typeof crypto !== 'undefined' && crypto.randomUUID
-    ? crypto.randomUUID()
-    : `f_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-}
 
 // ─── transactions ─────────────────────────────────────────────────────────
 
@@ -96,7 +93,7 @@ export const transactions = {
     const merchant = normaliseMerchant(input.merchant ?? null);
     const category = normaliseCategory(input.category ?? null);
     const now = Date.now();
-    const id = newId();
+    const id = newId('f_');
     await sql.execute(
       `INSERT INTO finance_transactions (id, amount, currency, merchant, category, occurred_at)
        VALUES (?, ?, ?, ?, ?, ?)`,
@@ -167,7 +164,7 @@ export const bills = {
       };
     }
 
-    const id = newId();
+    const id = newId('f_');
     await sql.execute(
       `INSERT INTO finance_bills (id, merchant, amount, currency, cadence, added_at)
        VALUES (?, ?, ?, ?, ?, ?)`,
@@ -237,7 +234,7 @@ export const subscriptions = {
       };
     }
 
-    const id = newId();
+    const id = newId('f_');
     await sql.execute(
       `INSERT INTO finance_subscriptions (id, name, amount, currency, cadence, added_at)
        VALUES (?, ?, ?, ?, ?, ?)`,
@@ -326,7 +323,7 @@ export const pending = {
     currency?: string | null;
     deadline?: string | null;
   }): Promise<PendingDecisionRow> {
-    const id = newId();
+    const id = newId('f_');
     const now = Date.now();
     const what = input.what.trim();
     const amount = input.amount ?? null;
@@ -449,7 +446,7 @@ export const income = {
     currency?: string | null;
     source?: string | null;
   }): Promise<FinanceIncome> {
-    const id = newId();
+    const id = newId('f_');
     const now = Date.now();
     const amount = input.amount ?? null;
     const currency = normaliseCurrency(input.currency ?? null);
@@ -473,6 +470,69 @@ export const income = {
 
   async remove(id: string): Promise<void> {
     await sql.execute(`DELETE FROM finance_income WHERE id = ?`, [id]);
+  },
+};
+
+// ─── assets ─────────────────────────────────────────────────────────────────
+//
+// Things you own with a value you type in (savings, gold, car). NOT money
+// flow — no bank link, no auto net-worth. Added + removed manually from the
+// box (no dump routing yet).
+
+interface AssetRow {
+  id: string;
+  name: string;
+  note: string | null;
+  value: number | null;
+  currency: string | null;
+  created_at: number;
+  [col: string]: unknown;
+}
+
+function rowToAsset(r: AssetRow): FinanceAsset {
+  return {
+    id: r.id,
+    name: r.name,
+    note: r.note ?? null,
+    value: r.value == null ? null : Number(r.value),
+    currency: normaliseCurrency(r.currency),
+    createdAt: r.created_at,
+  };
+}
+
+export const assets = {
+  async add(input: {
+    name: string;
+    note?: string | null;
+    value?: number | null;
+    currency?: string | null;
+  }): Promise<FinanceAsset> {
+    const id = newId('f_');
+    const now = Date.now();
+    const name = input.name.trim();
+    const note = input.note?.trim() || null;
+    const value =
+      typeof input.value === 'number' && Number.isFinite(input.value) ? input.value : null;
+    const currency = normaliseCurrency(input.currency ?? null);
+    await sql.execute(
+      `INSERT INTO finance_assets (id, name, note, value, currency, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [id, name, note, value, currency, now],
+    );
+    return { id, name, note, value, currency, createdAt: now };
+  },
+
+  async list(): Promise<FinanceAsset[]> {
+    const rows = await sql.select<AssetRow>(
+      `SELECT id, name, note, value, currency, created_at
+       FROM finance_assets
+       ORDER BY created_at DESC`,
+    );
+    return rows.map(rowToAsset);
+  },
+
+  async remove(id: string): Promise<void> {
+    await sql.execute(`DELETE FROM finance_assets WHERE id = ?`, [id]);
   },
 };
 
@@ -509,7 +569,7 @@ export const refunds = {
     merchant?: string | null;
     originalItem?: string | null;
   }): Promise<FinanceRefund> {
-    const id = newId();
+    const id = newId('f_');
     const now = Date.now();
     const amount = input.amount ?? null;
     const currency = normaliseCurrency(input.currency ?? null);
@@ -567,7 +627,7 @@ export const reflections = {
     category?: string | null;
     sentiment?: string | null;
   }): Promise<FinanceSpendingReflection> {
-    const id = newId();
+    const id = newId('f_');
     const now = Date.now();
     const note = input.note.trim();
     const category = input.category?.trim() || null;

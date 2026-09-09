@@ -7,21 +7,48 @@
 
 import type { CrisisSignal } from '@ollie/crisis-lexicon';
 
-export type Module =
-  | 'crisis'
-  | 'work'
-  | 'admin'
-  | 'pets'
-  | 'cycle'
-  | 'finance'
-  | 'sleep'
-  | 'body'
-  | 'mood'
-  | 'habits'
-  | 'goals'
-  | 'grocery'
-  | 'medication'
-  | 'dump_only';
+/**
+ * SINGLE SOURCE OF TRUTH for the set of routable module names (S2 · fix 2).
+ *
+ * The `Module` type is DERIVED from this array (`typeof MODULES[number]`), and
+ * `dump-classify.ts` imports MODULES for BOTH the Layer-1 router prompt's
+ * module enum AND its runtime `VALID_MODULES` coercion guard. Adding or
+ * removing a module is therefore a ONE-LINE change here — the type, the prompt,
+ * and the coercion guard all follow automatically, and they can no longer
+ * drift. (Pre-consolidation the list lived hand-synced in two places — the
+ * `Module` union here and a `const MODULES: Module[]` in dump-classify.ts — and
+ * had already started to drift; S2 audit.)
+ *
+ * One registry still lives OUTSIDE this file and must be kept in sync by hand:
+ *   - The `routing_cache.module` CHECK constraint in supabase/migrations/.
+ *     There is no compile-time link to a SQL string, so a drift test
+ *     (tests/module-registry.test.ts) asserts the CHECK lists every value in
+ *     MODULES. Adding a module here without updating the migration fails CI.
+ *
+ * The native router mirror (apps/native/src/router/schema.ts) is across the
+ * worker/native package boundary and is intentionally NOT consolidated here.
+ *
+ * Order is load-bearing only for the prompt's readability, not for correctness.
+ */
+export const MODULES = [
+  'crisis',
+  'work',
+  'admin',
+  'pets',
+  'cycle',
+  'finance',
+  'sleep',
+  'body',
+  'mood',
+  'habits',
+  'goals',
+  'grocery',
+  'medication',
+  'chores',
+  'dump_only',
+] as const;
+
+export type Module = (typeof MODULES)[number];
 
 export type FragmentLanguage = 'tr' | 'en' | 'es' | 'mixed' | 'unknown';
 

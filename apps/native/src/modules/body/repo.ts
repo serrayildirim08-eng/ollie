@@ -13,6 +13,7 @@
 
 import { computeCadence, type CadenceEstimate } from '@ollie/cadence';
 import { sql } from '../../storage/sqlite';
+import { newId } from '../../storage/id';
 import {
   normaliseLabel,
   startOfTodayMs,
@@ -35,11 +36,6 @@ interface SumRow {
   [col: string]: unknown;
 }
 
-function newId(): string {
-  return typeof crypto !== 'undefined' && crypto.randomUUID
-    ? crypto.randomUUID()
-    : `b_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-}
 
 function safeParse(raw: string): Record<string, unknown> {
   try {
@@ -81,7 +77,7 @@ export const events = {
     kind: BodyEventKind;
     data?: Record<string, unknown>;
   }): Promise<BodyEvent> {
-    const id = newId();
+    const id = newId('b_');
     const now = Date.now();
     const payload = input.data ?? {};
     await sql.execute(

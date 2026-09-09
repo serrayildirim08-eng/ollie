@@ -27,8 +27,8 @@
  *   - No request body content is ever logged.
  */
 
-import { scrubPII } from './pii';
-import { json, upstreamError } from '@ollie/worker-http';
+import { scrubPII, asLocale } from '@ollie/pii-scrub';
+import { json, upstreamError, exceedsContentLength, payloadTooLarge } from '@ollie/worker-http';
 
 /**
  * Server-side anonymized user identity (audit #4 — IDOR fix).
@@ -76,10 +76,51 @@ const ALLOWED_TABLES = new Set([
   'module_events',
   'crisis_events',
   'consent_audit',
+  'funnel_events',
 ]);
+
+// audit #155 — per-table column whitelist. /ingest-event forwards the client
+// row straight to the Supabase REST endpoint, so without this the only thing
+// stopping an arbitrary key from being written is the DB schema. Mirror each
+// telemetry table's columns here and drop anything not on the list before
+// forwarding. Keep in sync with supabase/migrations/*. `id` is omitted on
+// purpose — it is server-generated (gen_random_uuid default).
+const ALLOWED_COLUMNS: Record<string, Set<string>> = {
+  retention_events: new Set([
+    'user_hash', 'event_type', 'event_at', 'session_count',
+    'hours_since_install', 'country', 'locale', 'device_id', 'app_version',
+  ]),
+  session_events: new Set([
+    'user_hash', 'session_id', 'started_at', 'ended_at', 'duration_seconds',
+    'modules_opened', 'voice_used', 'text_used', 'brain_dumps_count',
+    'country', 'device_id', 'app_version',
+  ]),
+  module_events: new Set([
+    'user_hash', 'session_id', 'module', 'opened_at', 'closed_at',
+    'duration_seconds', 'actions_count', 'country',
+  ]),
+  crisis_events: new Set([
+    'event_at', 'country', 'hotline_shown', 'app_version',
+  ]),
+  consent_audit: new Set([
+    'user_hash', 'consent_necessary', 'consent_marketing', 'consented_at',
+    'event_source', 'ip_country', 'user_agent', 'app_version',
+  ]),
+  funnel_events: new Set([
+    'user_hash', 'event_type', 'value', 'minutes_since_install',
+    'app_version', 'app', 'event_at',
+  ]),
+};
 
 // 3 days — long enough that a wedged cron can still catch up after a weekend.
 const QUEUE_TTL_SEC = 60 * 60 * 24 * 3;
+/** Bound the raw dump text before scrubbing + queuing (audit #84). A brain
+ *  dump is short by nature; this mirrors the /route/dump 10k cap so an abusive
+ *  payload can't push unbounded text through the PII scrubber into the queue. */
+const MAX_RAW_TEXT_CHARS = 10_000;
+/** Whole-body memory-DoS bound (audit #38/#84): generous headroom over the
+ *  text cap + small metadata fields. */
+const MAX_ENRICH_BODY_BYTES = 64 * 1024;
 
 // ─── /enrich-dump ──────────────────────────────────────────────────────────────
 
@@ -117,6 +158,11 @@ export async function handleEnrichDump(
   env: EnrichEnv,
   userId: string,
 ): Promise<Response> {
+  // Memory-DoS guard (audit #38/#84): reject oversized bodies on Content-Length
+  // before buffering via req.json().
+  if (exceedsContentLength(req, MAX_ENRICH_BODY_BYTES)) {
+    return payloadTooLarge('body_too_large');
+  }
   let body: EnrichDumpRequest;
   try {
     body = (await req.json()) as EnrichDumpRequest;
@@ -142,14 +188,22 @@ export async function handleEnrichDump(
     return json({ error: 'invalid_modality' }, 400);
   }
 
+  // Bound raw_text before scrubbing + queuing (audit #84). Content-Length can
+  // be omitted/understated, so cap the parsed field too.
+  if (body.raw_text.length > MAX_RAW_TEXT_CHARS) {
+    return payloadTooLarge('raw_text_too_large');
+  }
+
   // US + cycle restriction — never queue cycle dumps from US users.
   const routingModule = typeof body.routing_module === 'string' ? body.routing_module : null;
   if (body.country === 'US' && routingModule === 'cycle') {
     return json({ id: null, queued: false, reason: 'us_cycle_restricted' });
   }
 
-  // PII scrub (layer 1).
-  const { scrubbed } = scrubPII(body.raw_text);
+  // PII scrub (layer 1). FULL categories — this raw_text is queued INTO the
+  // opt-in research corpus, so health/mental-health/sexual terms + locale-aware
+  // (TR/ES/EN) names must be redacted before it is persisted (S9).
+  const { scrubbed } = scrubPII(body.raw_text, asLocale(body.locale));
 
   // IDOR fix: ownership comes from the verified JWT, never the client field.
   const serverUserHash = await deriveUserHash(userId, env.USER_HASH_SALT);
@@ -218,6 +272,12 @@ export async function handleIngestEvent(
   if (!body.row || typeof body.row !== 'object' || Array.isArray(body.row)) {
     return json({ error: 'invalid_row' }, 400);
   }
+  // Size/shape bounds (audit #31). A telemetry row is small + flat; reject an
+  // oversized object before it reaches Supabase. 64 keys / 16 KiB is generous.
+  const rowKeys = Object.keys(body.row);
+  if (rowKeys.length > 64 || JSON.stringify(body.row).length > 16 * 1024) {
+    return json({ error: 'row_too_large' }, 413);
+  }
 
   // IDOR fix: force the row's identity to the verified user. These five
   // telemetry tables are anonymized + keyed by user_hash, so we overwrite any
@@ -240,6 +300,15 @@ export async function handleIngestEvent(
     return json({ error: 'supabase_not_configured' }, 500);
   }
 
+  // audit #155 — column whitelist. Drop any key the target table does not own
+  // so a caller can never write to (or probe for) columns outside the
+  // anonymized telemetry shape; we no longer rely on the DB to reject them.
+  const allowedColumns = ALLOWED_COLUMNS[body.table];
+  const row: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(body.row)) {
+    if (allowedColumns.has(key)) row[key] = value;
+  }
+
   const url = `${env.SUPABASE_URL.replace(/\/$/, '')}/rest/v1/${body.table}`;
   const resp = await fetch(url, {
     method: 'POST',
@@ -249,7 +318,7 @@ export async function handleIngestEvent(
       authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE}`,
       prefer: 'return=minimal',
     },
-    body: JSON.stringify(body.row),
+    body: JSON.stringify(row),
   });
 
   if (resp.ok) {

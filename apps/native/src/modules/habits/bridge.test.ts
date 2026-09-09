@@ -62,9 +62,22 @@ describe('habits bridge → orchestrator', () => {
     const habit = await registry.ensure('yoga');
     await completions.add(habit.id, FIXED_NOW);
 
-    // ── bridge: mirror SQLite → the store keys the watcher reads ──
+    // ── watcher: subscribe FIRST, then let the bridge write fire it ──
+    // Production-accurate ordering: the orchestrator subscribes to
+    // shared.habits_v2 at boot, and the all-modules bridge sweep is what
+    // actually writes the key. (The store no-ops a re-set of identical data
+    // since audit #64, so the watcher must be driven by a REAL change — the
+    // first write of the roster — not a redundant re-set of the same value.)
     const store = createStore(createMemoryAdapter());
+    const { createHabitsOrchestrator } = await import('@ollie/orchestrator');
+    const orch = createHabitsOrchestrator(store, { now: () => FIXED_NOW });
+    orch.init();
+
+    // ── bridge: mirror SQLite → the store keys the watcher reads ──
+    // This first write of shared.habits_v2 fires the subscription →
+    // scanCompletions runs synchronously; then flush the recompute debounce.
     await syncToStore(store);
+    vi.advanceTimersByTime(600);
 
     // sanity: the bridge wrote the roster in the watcher's shape, with the
     // completion newest-last (scanCompletions reads completions[last].ts).
@@ -73,15 +86,6 @@ describe('habits bridge → orchestrator', () => {
     );
     expect(roster).toHaveLength(1);
     expect(roster[0]!.completions.at(-1)!.ts).toBe(FIXED_NOW);
-
-    // ── watcher: init reads the mirrored roster + scans completions ──
-    const { createHabitsOrchestrator } = await import('@ollie/orchestrator');
-    const orch = createHabitsOrchestrator(store, { now: () => FIXED_NOW });
-    orch.init();
-    // Re-setting habits_v2 fires the subscription → scanCompletions runs
-    // synchronously; then flush the recompute debounce.
-    await syncToStore(store);
-    vi.advanceTimersByTime(600);
 
     // 1. the watcher recomputed off mirrored data
     expect(store.get<number>('habits', 'patternsLastComputedAt', 0)).toBe(FIXED_NOW);

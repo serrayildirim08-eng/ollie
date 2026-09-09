@@ -13,6 +13,37 @@
  */
 
 import type { FinanceAction, ModuleHandler, HandlerResult } from '../../router/schema';
+
+/**
+ * Canonical list of document types a `log_transaction.renewal_for` may mirror
+ * to an admin renewal. Single source of truth for the mirror whitelist (audit
+ * #135) so it cannot drift from a hand-typed Set scattered in the switch body.
+ *
+ * MUST stay in sync with the `renewal_for` enum in router/schema.ts
+ * (FinanceAction.log_transaction) and the worker prompt
+ * (workers/ai-proxy/src/router/dump-classify.ts). The type below is derived
+ * from this array, so a `renewal_for` value that typechecks here is, by
+ * construction, in the whitelist.
+ */
+export const RENEWAL_FOR_TYPES = [
+  'passport', 'license', 'visa', 'lease', 'insurance',
+  'id', 'work_permit', 'residency_permit',
+] as const;
+
+type RenewalForType = (typeof RENEWAL_FOR_TYPES)[number];
+
+// Compile-time guard: the schema's `renewal_for` enum and this list must be
+// identical. If either side adds/removes a value the `satisfies` below stops
+// typechecking, forcing the whitelist back in sync (audit #135). Extract the
+// enum from the schema action type.
+type SchemaRenewalFor = NonNullable<
+  Extract<FinanceAction, { action: 'log_transaction' }>['renewal_for']
+>;
+// Both directions: every list value is a schema value AND vice-versa.
+const _renewalForInSync = RENEWAL_FOR_TYPES satisfies readonly SchemaRenewalFor[];
+void (null as unknown as RenewalForType satisfies SchemaRenewalFor);
+void (null as unknown as SchemaRenewalFor satisfies RenewalForType);
+void _renewalForInSync;
 import { migrateFinance } from './migrate';
 import {
   bills,
@@ -44,10 +75,9 @@ export const financeHandler: ModuleHandler<'finance'> = {
         // a renewal-able document, also log an admin renewal so the upcoming
         // event surfaces in the admin box + /todo aggregate.
         // If the mirror fails we log but do NOT roll back the primary write.
-        const ALLOWED_RENEWAL_TYPES = new Set([
-          'passport', 'license', 'visa', 'lease', 'insurance',
-          'id', 'work_permit', 'residency_permit',
-        ]);
+        // Whitelist derives from the shared schema constant so it can never
+        // drift from the `renewal_for` enum (audit #135).
+        const ALLOWED_RENEWAL_TYPES: ReadonlySet<string> = new Set(RENEWAL_FOR_TYPES);
         let adminRenewalId: string | null = null;
         if (p.renewal_for && ALLOWED_RENEWAL_TYPES.has(p.renewal_for)) {
           try {

@@ -1,82 +1,123 @@
 /**
- * apps/api · /account/delete worker — Sprint B' tests
+ * apps/api · /account/delete worker — v2 tests
  *
- * Covers:
- *   - happy path: JWT verify → cascade DELETE every user-scoped table →
- *     auth.users delete LAST → 200 with row counts
- *   - 401 on missing/empty/invalid bearer
- *   - 403 on missing/wrong confirm token
- *   - 400 on malformed JSON body
- *   - 503 when SUPABASE_URL or service-role key not configured
- *   - 500 + partial on mid-cascade failure (auth.users NOT deleted)
- *   - 500 + partial on auth.users delete failure (cascade was done)
- *   - ORDER assertion: every cascade DELETE issued BEFORE the auth.users
- *     admin delete call
- *   - service-role key sent on cascade + admin call; NEVER as request
- *     output (defense in depth)
+ * The headline test SEEDS rows in EVERY user-scoped table (an in-memory fake
+ * PostgREST) and ASSERTS the user's rows are gone (count → 0) after delete —
+ * the opposite of the rejected v1 test, which asserted the core data tables
+ * were skipped. Both the clerk-identity (live) and legacy supabase-uuid paths
+ * are covered, plus the loud-fail guards (salt-missing, identity-config-missing)
+ * that prevent a fake "your data is deleted" success.
  */
 
 import { describe, it, expect } from 'vitest';
 import {
   runAccountDelete,
+  deriveUserHash,
+  isUuid,
   USER_SCOPED_TABLES,
   type AccountDeleteEnv,
+  type VerifiedIdentity,
 } from '../src/account-delete';
 
+const SALT = 'test-salt-value';
 const ENV: AccountDeleteEnv = {
   SUPABASE_URL: 'https://supa.test',
   SUPABASE_SERVICE_ROLE_KEY: 'sr-secret',
+  SUPABASE_ANON_KEY: 'anon-key',
+  CLERK_ISSUER: 'https://clerk.test',
+  CLERK_SECRET_KEY: 'sk_test_xxx',
+  USER_HASH_SALT: SALT,
 };
+
+const CLERK_ID = 'user_2abcDEF';
+const SUPA_UUID = '11111111-2222-3333-4444-555555555555';
 
 interface CallLog {
   method: string;
   url: string;
   headers: Record<string, string>;
-  body?: string;
 }
 
-interface FetchRouterOpts {
-  /** Result for GET /auth/v1/user (jwt verification). */
-  userResult: { status: number; body?: unknown };
-  /** Per-table override for DELETE /rest/v1/<table>. Default: 200 [] (0 rows). */
-  tableResults?: Record<string, { status: number; body?: unknown }>;
-  /** Result for DELETE /auth/v1/admin/users/{id}. Default: 204. */
-  adminDeleteResult?: { status: number; body?: unknown };
-}
+/**
+ * In-memory PostgREST + identity-delete fake.
+ *
+ * The DB is `Map<table, Row[]>`. Each row is keyed only by the identity
+ * column(s) relevant to that table — enough to make DELETE-by-filter faithful.
+ * DELETE removes matching rows and returns them (representation) so the handler
+ * can count. After the run, tests inspect the remaining rows per table.
+ */
+class FakeDb {
+  rows = new Map<string, Array<Record<string, string>>>();
+  calls: CallLog[] = [];
+  identityDeleteStatus = 204;
+  /** Per-table forced HTTP status (to simulate a mid-cascade failure). */
+  forceStatus: Record<string, number> = {};
 
-function makeFetch(opts: FetchRouterOpts): { fetchImpl: typeof fetch; calls: CallLog[] } {
-  const calls: CallLog[] = [];
-  const fetchImpl = (async (url: string | URL | Request, init?: RequestInit) => {
-    const u = String(url);
-    const headers: Record<string, string> = {};
-    const initHeaders = init?.headers as Record<string, string> | undefined;
-    if (initHeaders) for (const [k, v] of Object.entries(initHeaders)) headers[k.toLowerCase()] = v;
-    calls.push({ method: init?.method ?? 'GET', url: u, headers, body: init?.body as string | undefined });
+  seed(table: string, list: Array<Record<string, string>>): void {
+    this.rows.set(table, [...(this.rows.get(table) ?? []), ...list]);
+  }
 
-    if (u.endsWith('/auth/v1/user')) {
-      const { status, body } = opts.userResult;
-      return new Response(JSON.stringify(body ?? null), {
-        status,
-        headers: { 'content-type': 'application/json' },
+  remaining(table: string): number {
+    return (this.rows.get(table) ?? []).length;
+  }
+
+  get fetchImpl(): typeof fetch {
+    return (async (url: string | URL | Request, init?: RequestInit) => {
+      const u = String(url);
+      const headers: Record<string, string> = {};
+      const initHeaders = init?.headers as Record<string, string> | undefined;
+      if (initHeaders) for (const [k, v] of Object.entries(initHeaders)) headers[k.toLowerCase()] = v;
+      this.calls.push({ method: init?.method ?? 'GET', url: u, headers });
+
+      // identity delete (Clerk or Supabase admin)
+      if (u.includes('api.clerk.com/v1/users/') || u.includes('/auth/v1/admin/users/')) {
+        return new Response(null, { status: this.identityDeleteStatus });
+      }
+
+      // table delete
+      const m = u.match(/\/rest\/v1\/([^?]+)\?(.+)$/);
+      if (m && (init?.method ?? '') === 'DELETE') {
+        const table = m[1];
+        const query = m[2];
+        if (this.forceStatus[table]) {
+          return new Response(JSON.stringify({ msg: 'forced' }), { status: this.forceStatus[table] });
+        }
+        const match = this.matcher(query);
+        const all = this.rows.get(table) ?? [];
+        const kept = all.filter((r) => !match(r));
+        const removed = all.filter((r) => match(r));
+        this.rows.set(table, kept);
+        return new Response(JSON.stringify(removed), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+
+      return new Response('not found', { status: 404 });
+    }) as unknown as typeof fetch;
+  }
+
+  /** Parse a PostgREST filter into a row predicate. */
+  private matcher(query: string): (row: Record<string, string>) => boolean {
+    const decoded = decodeURIComponent(query);
+    // or=(a.eq.X,b.eq.X)
+    const orMatch = decoded.match(/^or=\((.+)\)$/);
+    if (orMatch) {
+      const clauses = orMatch[1].split(',').map((c) => {
+        const [col, , val] = c.split('.');
+        return { col, val };
       });
+      return (row) => clauses.some((cl) => row[cl.col] === cl.val);
     }
-    if (u.includes('/auth/v1/admin/users/')) {
-      const r = opts.adminDeleteResult ?? { status: 204 };
-      return new Response(r.body !== undefined ? JSON.stringify(r.body) : null, { status: r.status });
+    // col=eq.X
+    const eqMatch = decoded.match(/^([^=]+)=eq\.(.+)$/);
+    if (eqMatch) {
+      const col = eqMatch[1];
+      const val = eqMatch[2];
+      return (row) => row[col] === val;
     }
-    if (u.includes('/rest/v1/')) {
-      // Extract table name
-      const m = u.match(/\/rest\/v1\/([^?]+)/);
-      const table = m?.[1] ?? '';
-      const r = opts.tableResults?.[table] ?? { status: 200, body: [] };
-      return new Response(r.body !== undefined ? JSON.stringify(r.body) : null, {
-        status: r.status,
-        headers: { 'content-type': 'application/json' },
-      });
-    }
-    return new Response('not found', { status: 404 });
-  }) as unknown as typeof fetch;
-  return { fetchImpl, calls };
+    return () => false;
+  }
 }
 
 function postReq(body: unknown, headers: Record<string, string> = {}): Request {
@@ -87,236 +128,397 @@ function postReq(body: unknown, headers: Record<string, string> = {}): Request {
   });
 }
 
-describe('runAccountDelete · happy path', () => {
-  it('verifies JWT, cascades every table, deletes auth user LAST, returns 200 with counts', async () => {
-    const { fetchImpl, calls } = makeFetch({
-      userResult: { status: 200, body: { id: 'user-123' } },
-      tableResults: {
-        encrypted_state: { status: 200, body: [{ id: 'a' }, { id: 'b' }] },
-        finance_records: { status: 200, body: Array.from({ length: 42 }, (_, i) => ({ id: i })) },
-        plaid_inbox: { status: 200, body: [] },
-        plaid_items: { status: 200, body: [{ id: 'p1' }] },
-        scheduled_jobs: { status: 200, body: [{ id: 's1' }, { id: 's2' }] },
-        push_tokens: { status: 200, body: [{ id: 'tok-1' }] },
-        profiles: { status: 200, body: [{ id: 'user-123' }] },
-      },
-      adminDeleteResult: { status: 204 },
+/** Seed exactly the user's rows in every covered table. Returns expected counts. */
+async function seedAllTables(
+  db: FakeDb,
+  userId: string,
+  includeLegacyUuid: boolean,
+): Promise<Record<string, number>> {
+  const hash = await deriveUserHash(userId, SALT);
+  const expected: Record<string, number> = {};
+  for (const t of USER_SCOPED_TABLES) {
+    if (t.key === 'legacy-uuid' && !includeLegacyUuid) continue;
+    const value = t.key === 'hash' ? hash : userId;
+    // seed 2 of the user's rows + 1 other user's row (must survive)
+    const mine = [0, 1].map(() => {
+      const row: Record<string, string> = {};
+      row[t.columns[0]] = value;
+      return row;
     });
-    const req = postReq({ confirm: 'DELETE' }, { authorization: 'Bearer good-jwt' });
-    const r = await runAccountDelete(req, ENV, { fetchImpl });
+    const other: Record<string, string> = {};
+    other[t.columns[0]] = t.key === 'hash' ? 'someone-else-hash' : 'user_other';
+    db.seed(t.table, [...mine, other]);
+    expected[t.table] = 2;
+  }
+  return expected;
+}
+
+describe('runAccountDelete · seeds + erases EVERY user table (clerk identity)', () => {
+  it('deletes the user rows from all clerk + hash tables and leaves other users intact', async () => {
+    const db = new FakeDb();
+    const expected = await seedAllTables(db, CLERK_ID, /* includeLegacyUuid */ false);
+
+    const verifyIdentity = async (): Promise<VerifiedIdentity | null> => ({
+      userId: CLERK_ID,
+      identity: 'clerk',
+    });
+
+    const r = await runAccountDelete(
+      postReq({ confirm: 'DELETE' }, { authorization: 'Bearer good' }),
+      ENV,
+      { fetchImpl: db.fetchImpl, verifyIdentity },
+    );
+
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(r.user_id).toBe('user-123');
-    expect(r.deleted_tables).toEqual(USER_SCOPED_TABLES.map((t) => t.table));
-    expect(r.deleted_rows.encrypted_state).toBe(2);
-    expect(r.deleted_rows.finance_records).toBe(42);
-    expect(r.deleted_rows.plaid_inbox).toBe(0);
-    // F3: push_tokens is now explicitly cascaded + counted for the audit.
-    expect(r.deleted_tables).toContain('push_tokens');
-    expect(r.deleted_rows.push_tokens).toBe(1);
-    expect(r.auth_user_deleted).toBe(true);
+    expect(r.identity).toBe('clerk');
+    expect(r.user_id).toBe(CLERK_ID);
 
-    // Order: verify call → cascade DELETEs (in USER_SCOPED_TABLES order)
-    //        → admin user delete LAST.
-    expect(calls[0].url).toMatch(/\/auth\/v1\/user$/);
-    const tableCalls = calls.filter((c) => c.url.includes('/rest/v1/'));
-    expect(tableCalls.length).toBe(USER_SCOPED_TABLES.length);
-    USER_SCOPED_TABLES.forEach((t, i) => {
-      expect(tableCalls[i].url).toContain(`/rest/v1/${t.table}`);
-      expect(tableCalls[i].method).toBe('DELETE');
-      expect(tableCalls[i].headers.authorization).toBe('Bearer sr-secret');
-      expect(tableCalls[i].headers.apikey).toBe('sr-secret');
+    // Every clerk + hash table was deleted from, with the seeded count.
+    for (const t of USER_SCOPED_TABLES) {
+      if (t.key === 'legacy-uuid') {
+        // profiles: transparently skipped for a clerk identity, NOT claimed.
+        expect(r.deleted_tables).not.toContain(t.table);
+        expect(r.skipped_tables[t.table]).toBeTruthy();
+        continue;
+      }
+      expect(r.deleted_tables).toContain(t.table);
+      expect(r.deleted_rows[t.table]).toBe(expected[t.table]);
+      // CRITICAL: the user's rows are gone…
+      const other = t.columns[0];
+      const remaining = (db.rows.get(t.table) ?? []);
+      const userValue = t.key === 'hash' ? undefined : CLERK_ID;
+      expect(remaining.filter((row) => row[other] === userValue).length).toBe(0);
+      // …and exactly the other user's 1 row survives.
+      expect(remaining.length).toBe(1);
+    }
+
+    // hash tables: confirm the user's hash rows are gone (recompute the hash).
+    const hash = await deriveUserHash(CLERK_ID, SALT);
+    for (const t of USER_SCOPED_TABLES.filter((x) => x.key === 'hash')) {
+      const remaining = db.rows.get(t.table) ?? [];
+      expect(remaining.some((row) => t.columns.some((c) => row[c] === hash))).toBe(false);
+    }
+
+    // Identity deleted LAST via Clerk.
+    expect(r.auth_user_deleted).toBe(true);
+    const identityIdx = db.calls.findIndex((c) => c.url.includes('api.clerk.com/v1/users/'));
+    expect(identityIdx).toBe(db.calls.length - 1);
+    expect(db.calls[identityIdx].headers.authorization).toBe('Bearer sk_test_xxx');
+    expect(db.calls[identityIdx].url).toContain(encodeURIComponent(CLERK_ID));
+
+    // Every data DELETE used service-role, never leaked elsewhere.
+    const tableCalls = db.calls.filter((c) => c.url.includes('/rest/v1/'));
+    expect(tableCalls.length).toBe(USER_SCOPED_TABLES.length - 1); // minus profiles (skipped)
+    for (const c of tableCalls) {
+      expect(c.method).toBe('DELETE');
+      expect(c.headers.authorization).toBe('Bearer sr-secret');
+      expect(c.headers.apikey).toBe('sr-secret');
+    }
+  });
+});
+
+describe('runAccountDelete · legacy supabase-uuid identity also erases profiles', () => {
+  it('deletes from every table INCLUDING profiles when the identity is a uuid', async () => {
+    const db = new FakeDb();
+    await seedAllTables(db, SUPA_UUID, /* includeLegacyUuid */ true);
+    expect(isUuid(SUPA_UUID)).toBe(true);
+
+    const verifyIdentity = async (): Promise<VerifiedIdentity | null> => ({
+      userId: SUPA_UUID,
+      identity: 'supabase',
     });
-    const adminIdx = calls.findIndex((c) => c.url.includes('/auth/v1/admin/users/'));
-    expect(adminIdx).toBe(calls.length - 1);
-    expect(calls[adminIdx].method).toBe('DELETE');
-    expect(calls[adminIdx].url).toContain('user-123');
-    // Last call also uses service-role on both headers.
-    expect(calls[adminIdx].headers.authorization).toBe('Bearer sr-secret');
-    expect(calls[adminIdx].headers.apikey).toBe('sr-secret');
+
+    const r = await runAccountDelete(
+      postReq({ confirm: 'DELETE' }, { authorization: 'Bearer good' }),
+      ENV,
+      { fetchImpl: db.fetchImpl, verifyIdentity },
+    );
+
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.identity).toBe('supabase');
+    // profiles WAS deleted for the uuid identity.
+    expect(r.deleted_tables).toContain('profiles');
+    expect(r.deleted_rows.profiles).toBe(2);
+    expect(db.remaining('profiles')).toBe(1); // other user survives
+
+    // ALL tables now have zero of this user's rows.
+    for (const t of USER_SCOPED_TABLES) {
+      const remaining = db.rows.get(t.table) ?? [];
+      const userValue =
+        t.key === 'hash' ? await deriveUserHash(SUPA_UUID, SALT) : SUPA_UUID;
+      expect(remaining.some((row) => t.columns.some((c) => row[c] === userValue))).toBe(false);
+    }
+
+    // Identity removed via GoTrue admin (uuid path), LAST.
+    const idx = db.calls.findIndex((c) => c.url.includes('/auth/v1/admin/users/'));
+    expect(idx).toBe(db.calls.length - 1);
+    expect(db.calls.some((c) => c.url.includes('api.clerk.com'))).toBe(false);
+  });
+});
+
+describe('runAccountDelete · two-sided tables match either column', () => {
+  it('erases partner_pairs / invites rows where the user is on EITHER side', async () => {
+    const db = new FakeDb();
+    const hash = await deriveUserHash(CLERK_ID, SALT);
+    // user on the "hi" side of a pair, and the "invitee" side of an invite
+    db.seed('partner_pairs', [{ user_lo: 'user_other', user_hi: CLERK_ID }]);
+    db.seed('invites', [{ inviter_user_hash: 'someone-else-hash', invitee_user_hash: hash }]);
+    // plus the user on the "lo"/"inviter" side
+    db.seed('partner_pairs', [{ user_lo: CLERK_ID, user_hi: 'user_other2' }]);
+    db.seed('invites', [{ inviter_user_hash: hash, invitee_user_hash: 'someone-else-hash2' }]);
+
+    const verifyIdentity = async (): Promise<VerifiedIdentity | null> => ({
+      userId: CLERK_ID,
+      identity: 'clerk',
+    });
+
+    const r = await runAccountDelete(
+      postReq({ confirm: 'DELETE' }, { authorization: 'Bearer good' }),
+      ENV,
+      { fetchImpl: db.fetchImpl, verifyIdentity },
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.deleted_rows.partner_pairs).toBe(2);
+    expect(r.deleted_rows.invites).toBe(2);
+    expect(db.remaining('partner_pairs')).toBe(0);
+    expect(db.remaining('invites')).toBe(0);
+  });
+});
+
+describe('runAccountDelete · loud-fail guards (no fake success)', () => {
+  it('refuses (salt-missing) when USER_HASH_SALT is unset — would miss hash tables', async () => {
+    const db = new FakeDb();
+    await seedAllTables(db, CLERK_ID, false);
+    const r = await runAccountDelete(
+      postReq({ confirm: 'DELETE' }, { authorization: 'Bearer good' }),
+      { ...ENV, USER_HASH_SALT: undefined },
+      { fetchImpl: db.fetchImpl, verifyIdentity: async () => ({ userId: CLERK_ID, identity: 'clerk' }) },
+    );
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.code).toBe('salt-missing');
+    // CRITICAL: nothing was deleted.
+    expect(db.calls.filter((c) => c.url.includes('/rest/v1/'))).toEqual([]);
   });
 
-  it('treats 404 from admin user delete as success (idempotent retry)', async () => {
-    const { fetchImpl } = makeFetch({
-      userResult: { status: 200, body: { id: 'u-1' } },
-      adminDeleteResult: { status: 404, body: { msg: 'user not found' } },
-    });
+  it('refuses (identity-config-missing) when a clerk user arrives but CLERK_SECRET_KEY is unset', async () => {
+    const db = new FakeDb();
+    await seedAllTables(db, CLERK_ID, false);
     const r = await runAccountDelete(
-      postReq({ confirm: 'DELETE' }, { authorization: 'Bearer x' }),
-      ENV, { fetchImpl },
+      postReq({ confirm: 'DELETE' }, { authorization: 'Bearer good' }),
+      { ...ENV, CLERK_SECRET_KEY: undefined },
+      { fetchImpl: db.fetchImpl, verifyIdentity: async () => ({ userId: CLERK_ID, identity: 'clerk' }) },
+    );
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.code).toBe('identity-config-missing');
+    // CRITICAL: no data deleted before we knew we could remove the login.
+    expect(db.calls.filter((c) => c.url.includes('/rest/v1/'))).toEqual([]);
+  });
+});
+
+describe('runAccountDelete · auth + confirm guards', () => {
+  it('401-code on missing Authorization header', async () => {
+    const db = new FakeDb();
+    const r = await runAccountDelete(postReq({ confirm: 'DELETE' }), ENV, {
+      fetchImpl: db.fetchImpl,
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.code).toBe('no-jwt');
+  });
+
+  it('401-code on empty bearer', async () => {
+    const db = new FakeDb();
+    const r = await runAccountDelete(
+      postReq({ confirm: 'DELETE' }, { authorization: 'Bearer ' }),
+      ENV,
+      { fetchImpl: db.fetchImpl },
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.code).toBe('no-jwt');
+  });
+
+  it('bad-jwt when neither Clerk nor Supabase verifies the token (no deletes)', async () => {
+    const db = new FakeDb();
+    await seedAllTables(db, CLERK_ID, false);
+    const r = await runAccountDelete(
+      postReq({ confirm: 'DELETE' }, { authorization: 'Bearer forged' }),
+      ENV,
+      { fetchImpl: db.fetchImpl, verifyIdentity: async () => null },
+    );
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.code).toBe('bad-jwt');
+    expect(db.calls.filter((c) => c.url.includes('/rest/v1/'))).toEqual([]);
+  });
+
+  it('bad-confirm without { confirm: "DELETE" } (no verify, no deletes)', async () => {
+    const db = new FakeDb();
+    let verifyCalled = false;
+    const r = await runAccountDelete(
+      postReq({ confirm: 'delete' }, { authorization: 'Bearer good' }),
+      ENV,
+      {
+        fetchImpl: db.fetchImpl,
+        verifyIdentity: async () => {
+          verifyCalled = true;
+          return { userId: CLERK_ID, identity: 'clerk' };
+        },
+      },
+    );
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.code).toBe('bad-confirm');
+    expect(verifyCalled).toBe(false);
+    expect(db.calls).toEqual([]);
+  });
+
+  it('bad-json on malformed body', async () => {
+    const db = new FakeDb();
+    const req = new Request('https://worker.test/account/delete', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer good' },
+      body: '{not-json',
+    });
+    const r = await runAccountDelete(req, ENV, { fetchImpl: db.fetchImpl });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.code).toBe('bad-json');
+  });
+
+  it('config-missing when SUPABASE_URL absent', async () => {
+    const db = new FakeDb();
+    const r = await runAccountDelete(
+      postReq({ confirm: 'DELETE' }, { authorization: 'Bearer ok' }),
+      { ...ENV, SUPABASE_URL: '' },
+      { fetchImpl: db.fetchImpl },
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.code).toBe('config-missing');
+  });
+});
+
+describe('runAccountDelete · cascade + identity failures', () => {
+  it('mid-cascade failure → cascade-failed with partial, identity NOT deleted', async () => {
+    const db = new FakeDb();
+    await seedAllTables(db, CLERK_ID, false);
+    // first table in the list will hard-fail
+    const firstTable = USER_SCOPED_TABLES[0].table;
+    db.forceStatus[firstTable] = 500;
+
+    const r = await runAccountDelete(
+      postReq({ confirm: 'DELETE' }, { authorization: 'Bearer good' }),
+      ENV,
+      { fetchImpl: db.fetchImpl, verifyIdentity: async () => ({ userId: CLERK_ID, identity: 'clerk' }) },
+    );
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.code).toBe('cascade-failed');
+    expect(r.partial?.failed_table).toBe(firstTable);
+    expect(r.partial?.auth_user_deleted).toBe(false);
+    // identity delete never fired
+    expect(db.calls.some((c) => c.url.includes('api.clerk.com'))).toBe(false);
+  });
+
+  it('identity delete failure → auth-delete-failed, data already erased', async () => {
+    const db = new FakeDb();
+    await seedAllTables(db, CLERK_ID, false);
+    db.identityDeleteStatus = 500;
+
+    const r = await runAccountDelete(
+      postReq({ confirm: 'DELETE' }, { authorization: 'Bearer good' }),
+      ENV,
+      { fetchImpl: db.fetchImpl, verifyIdentity: async () => ({ userId: CLERK_ID, identity: 'clerk' }) },
+    );
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.code).toBe('auth-delete-failed');
+    expect(r.partial?.auth_user_deleted).toBe(false);
+    expect(db.calls.some((c) => c.url.includes('api.clerk.com'))).toBe(true);
+  });
+
+  it('404 from identity delete is treated as idempotent success', async () => {
+    const db = new FakeDb();
+    await seedAllTables(db, CLERK_ID, false);
+    db.identityDeleteStatus = 404;
+    const r = await runAccountDelete(
+      postReq({ confirm: 'DELETE' }, { authorization: 'Bearer good' }),
+      ENV,
+      { fetchImpl: db.fetchImpl, verifyIdentity: async () => ({ userId: CLERK_ID, identity: 'clerk' }) },
     );
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.auth_user_deleted).toBe(true);
   });
 });
 
-describe('runAccountDelete · auth guards', () => {
-  it('returns 401-code on missing Authorization header', async () => {
-    const { fetchImpl } = makeFetch({ userResult: { status: 200, body: { id: 'x' } } });
+describe('runAccountDelete · never leaks service-role', () => {
+  it('does not echo the service-role secret in any response field', async () => {
+    const db = new FakeDb();
+    await seedAllTables(db, CLERK_ID, false);
     const r = await runAccountDelete(
-      postReq({ confirm: 'DELETE' }),
-      ENV, { fetchImpl },
+      postReq({ confirm: 'DELETE' }, { authorization: 'Bearer good' }),
+      ENV,
+      { fetchImpl: db.fetchImpl, verifyIdentity: async () => ({ userId: CLERK_ID, identity: 'clerk' }) },
     );
-    expect(r.ok).toBe(false);
-    if (r.ok) return;
-    expect(r.code).toBe('no-jwt');
-  });
-
-  it('returns 401-code on empty bearer', async () => {
-    const { fetchImpl } = makeFetch({ userResult: { status: 200, body: { id: 'x' } } });
-    const r = await runAccountDelete(
-      postReq({ confirm: 'DELETE' }, { authorization: 'Bearer ' }),
-      ENV, { fetchImpl },
-    );
-    expect(r.ok).toBe(false);
-    if (r.ok) return;
-    expect(r.code).toBe('no-jwt');
-  });
-
-  it('returns bad-jwt when Supabase user lookup fails (401)', async () => {
-    const { fetchImpl, calls } = makeFetch({
-      userResult: { status: 401, body: { msg: 'invalid' } },
-    });
-    const r = await runAccountDelete(
-      postReq({ confirm: 'DELETE' }, { authorization: 'Bearer forged' }),
-      ENV, { fetchImpl },
-    );
-    expect(r.ok).toBe(false);
-    if (r.ok) return;
-    expect(r.code).toBe('bad-jwt');
-    // CRITICAL: no DELETEs fired on forged token.
-    expect(calls.filter((c) => c.url.includes('/rest/v1/'))).toEqual([]);
-    expect(calls.filter((c) => c.url.includes('/auth/v1/admin'))).toEqual([]);
-  });
-
-  it('returns bad-jwt when Supabase returns body with no id', async () => {
-    const { fetchImpl } = makeFetch({ userResult: { status: 200, body: { id: '' } } });
-    const r = await runAccountDelete(
-      postReq({ confirm: 'DELETE' }, { authorization: 'Bearer weird' }),
-      ENV, { fetchImpl },
-    );
-    expect(r.ok).toBe(false);
-    if (r.ok) return;
-    expect(r.code).toBe('bad-jwt');
+    expect(JSON.stringify(r)).not.toContain('sr-secret');
   });
 });
 
-describe('runAccountDelete · confirm token', () => {
-  it('returns bad-confirm without { confirm: "DELETE" }', async () => {
-    const { fetchImpl, calls } = makeFetch({ userResult: { status: 200, body: { id: 'u-1' } } });
-    const r = await runAccountDelete(
-      postReq({ confirm: 'delete' /* wrong case */ }, { authorization: 'Bearer good' }),
-      ENV, { fetchImpl },
-    );
-    expect(r.ok).toBe(false);
-    if (r.ok) return;
-    expect(r.code).toBe('bad-confirm');
-    // No DELETEs fired without correct confirm.
-    expect(calls.filter((c) => c.url.includes('/rest/v1/'))).toEqual([]);
-    expect(calls.filter((c) => c.url.includes('/auth/v1/admin'))).toEqual([]);
-    // Note: the verify call also did NOT fire — confirm token is checked
-    // before user lookup to avoid a probe-by-confirm attack.
-    expect(calls.filter((c) => c.url.endsWith('/auth/v1/user'))).toEqual([]);
-  });
-
-  it('returns bad-json on malformed body', async () => {
-    const { fetchImpl } = makeFetch({ userResult: { status: 200, body: { id: 'u-1' } } });
-    const req = new Request('https://worker.test/account/delete', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: 'Bearer good' },
-      body: '{not-json',
-    });
-    const r = await runAccountDelete(req, ENV, { fetchImpl });
-    expect(r.ok).toBe(false);
-    if (r.ok) return;
-    expect(r.code).toBe('bad-json');
+describe('isUuid', () => {
+  it('distinguishes Clerk ids from Supabase uuids', () => {
+    expect(isUuid(SUPA_UUID)).toBe(true);
+    expect(isUuid(CLERK_ID)).toBe(false);
+    expect(isUuid('not-a-uuid')).toBe(false);
   });
 });
 
-describe('runAccountDelete · config + cascade failures', () => {
-  it('returns config-missing when SUPABASE_URL absent', async () => {
-    const { fetchImpl } = makeFetch({ userResult: { status: 200, body: { id: 'x' } } });
-    const r = await runAccountDelete(
-      postReq({ confirm: 'DELETE' }, { authorization: 'Bearer ok' }),
-      { SUPABASE_URL: '', SUPABASE_SERVICE_ROLE_KEY: 'sr' },
-      { fetchImpl },
-    );
-    expect(r.ok).toBe(false);
-    if (r.ok) return;
-    expect(r.code).toBe('config-missing');
-  });
+describe('runAccountDelete · erases the DEVICE_TOKENS edge KV copy', () => {
+  it('deletes user:<id> from DEVICE_TOKENS and records device_tokens_kv', async () => {
+    const db = new FakeDb();
+    await seedAllTables(db, CLERK_ID, /* includeLegacyUuid */ false);
 
-  it('returns config-missing when service-role absent', async () => {
-    const { fetchImpl } = makeFetch({ userResult: { status: 200, body: { id: 'x' } } });
-    const r = await runAccountDelete(
-      postReq({ confirm: 'DELETE' }, { authorization: 'Bearer ok' }),
-      { SUPABASE_URL: 'https://supa', SUPABASE_SERVICE_ROLE_KEY: '' },
-      { fetchImpl },
-    );
-    expect(r.ok).toBe(false);
-    if (r.ok) return;
-    expect(r.code).toBe('config-missing');
-  });
-
-  it('mid-cascade failure → cascade-failed with partial, auth.users NEVER deleted', async () => {
-    const { fetchImpl, calls } = makeFetch({
-      userResult: { status: 200, body: { id: 'u-1' } },
-      tableResults: {
-        encrypted_state: { status: 200, body: [{ id: 'a' }] },
-        // finance_records is 2nd in USER_SCOPED_TABLES; simulate a 500 here.
-        finance_records: { status: 500, body: { msg: 'db down' } },
+    const kvDeletes: string[] = [];
+    const DEVICE_TOKENS = {
+      delete: async (key: string) => {
+        kvDeletes.push(key);
       },
+    } as unknown as KVNamespace;
+
+    const verifyIdentity = async (): Promise<VerifiedIdentity | null> => ({
+      userId: CLERK_ID,
+      identity: 'clerk',
     });
+
     const r = await runAccountDelete(
       postReq({ confirm: 'DELETE' }, { authorization: 'Bearer good' }),
-      ENV, { fetchImpl },
+      { ...ENV, DEVICE_TOKENS },
+      { fetchImpl: db.fetchImpl, verifyIdentity },
     );
-    expect(r.ok).toBe(false);
-    if (r.ok) return;
-    expect(r.code).toBe('cascade-failed');
-    expect(r.partial?.failed_table).toBe('finance_records');
-    expect(r.partial?.deleted_tables).toEqual(['encrypted_state']);
-    expect(r.partial?.deleted_rows.encrypted_state).toBe(1);
-    expect(r.partial?.auth_user_deleted).toBe(false);
-    // CRITICAL: admin user delete did NOT fire.
-    expect(calls.find((c) => c.url.includes('/auth/v1/admin/users/'))).toBeUndefined();
+
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(kvDeletes).toEqual([`user:${CLERK_ID}`]);
+    expect(r.deleted_tables).toContain('device_tokens_kv');
   });
 
-  it('auth-delete failure → cascade preserved, auth_user_deleted=false', async () => {
-    const { fetchImpl, calls } = makeFetch({
-      userResult: { status: 200, body: { id: 'u-1' } },
-      tableResults: Object.fromEntries(
-        USER_SCOPED_TABLES.map((t) => [t.table, { status: 200, body: [{ id: 'x' }] }]),
-      ),
-      adminDeleteResult: { status: 500, body: { msg: 'gotrue 5xx' } },
+  it('still succeeds and skips the KV step when DEVICE_TOKENS is unbound', async () => {
+    const db = new FakeDb();
+    await seedAllTables(db, CLERK_ID, /* includeLegacyUuid */ false);
+    const verifyIdentity = async (): Promise<VerifiedIdentity | null> => ({
+      userId: CLERK_ID,
+      identity: 'clerk',
     });
-    const r = await runAccountDelete(
-      postReq({ confirm: 'DELETE' }, { authorization: 'Bearer good' }),
-      ENV, { fetchImpl },
-    );
-    expect(r.ok).toBe(false);
-    if (r.ok) return;
-    expect(r.code).toBe('auth-delete-failed');
-    expect(r.partial?.deleted_tables).toEqual(USER_SCOPED_TABLES.map((t) => t.table));
-    expect(r.partial?.auth_user_deleted).toBe(false);
-    // admin call was attempted (just failed).
-    expect(calls.find((c) => c.url.includes('/auth/v1/admin/users/'))).toBeDefined();
-  });
-});
 
-describe('runAccountDelete · request body never leaks service-role', () => {
-  it('does not echo service-role secret back to caller in any response field', async () => {
-    const { fetchImpl } = makeFetch({
-      userResult: { status: 200, body: { id: 'u-1' } },
-      tableResults: Object.fromEntries(
-        USER_SCOPED_TABLES.map((t) => [t.table, { status: 200, body: [] }]),
-      ),
-    });
     const r = await runAccountDelete(
       postReq({ confirm: 'DELETE' }, { authorization: 'Bearer good' }),
-      ENV, { fetchImpl },
+      ENV,
+      { fetchImpl: db.fetchImpl, verifyIdentity },
     );
-    const serialised = JSON.stringify(r);
-    expect(serialised).not.toContain('sr-secret');
+
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.deleted_tables).not.toContain('device_tokens_kv');
   });
 });

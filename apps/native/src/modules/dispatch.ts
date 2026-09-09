@@ -22,6 +22,9 @@ import { store } from '../store';
 import { runAllSyncs } from '../bridge';
 import { recomputeBrain } from './brain';
 import { recordMoodFromDump } from '../bridge/mood';
+import { recordCoregulationFromDump } from '../bridge/coregulation';
+import { sweepDatelessLadders } from '../notify/datelessLadder';
+import { emitEvent } from '@ollie/orchestrator';
 
 export interface DispatchOptions {
   /**
@@ -43,6 +46,17 @@ export async function dispatchRouterOutput(
 
   const handlers = { ...stubHandlers, ...(opts.handlers ?? {}) };
   const entries: DispatchEntry[] = [];
+  // Items actually applied this dump — feeds the void:braindump:submitted event
+  // (audit S8 · gap 1) so the per-module orchestrator dump handlers (sleep /
+  // finance text re-parse, work / goals / habits / body / admin / dump
+  // recompute) fire. Drafts (needsConfirm) + no-handler fragments are excluded:
+  // nothing was written for them, so they aren't "submitted" work yet.
+  const submittedItems: Array<{
+    module: Module;
+    text: string;
+    intent: string;
+    confidence: number;
+  }> = [];
 
   // Sequential is fine here — module handlers are local + cheap. We avoid
   // Promise.all so the journal feed sees results in original fragment order
@@ -50,6 +64,14 @@ export async function dispatchRouterOutput(
   for (const fragment of output.fragments) {
     const handler = handlers[fragment.module];
     if (!handler) {
+      // No native handler for a module the worker routed to. `stubHandlers` is
+      // typed Record<Module,…> so this can't be a missing native handler — it
+      // means the worker's module list drifted ahead of the native Module type
+      // (separate packages, kept in sync by hand; audit #22). The raw dump text
+      // is still archived by DumpScreen, so the content itself is not lost, but
+      // the fragment is silently dropped — so we must SURFACE the drift, not bury
+      // it in a lone console.error nobody greps for (audit #130).
+      reportNoHandlerDrift(fragment.module);
       entries.push({
         fragment,
         result: { ok: false, note: `no handler for ${fragment.module}` },
@@ -71,12 +93,46 @@ export async function dispatchRouterOutput(
     try {
       const result = await handler.apply(fragment);
       entries.push({ fragment, result });
+      if (result.ok) {
+        const intent = (fragment.payload as { action?: unknown } | undefined)?.action;
+        submittedItems.push({
+          module: fragment.module,
+          text: fragment.text,
+          intent: typeof intent === 'string' ? intent : fragment.module,
+          confidence: fragment.confidence,
+        });
+      }
     } catch (err) {
       entries.push({
         fragment,
         result: { ok: false, note: handlerErrorNote(fragment.module, err) },
       });
     }
+  }
+
+  // ── audit S8 · gap 1 — emit void:braindump:submitted ─────────────────────
+  // The per-module orchestrators (sleep / finance / work / goals / habits /
+  // body / admin / dump / cycle) subscribe to this event to re-parse or
+  // recompute on a fresh dump. apps/native never emitted it, so ~9 dump
+  // handlers stayed dark — a dump's sleep/finance free text was never
+  // re-parsed by the watchers, and the others only re-ran on the store-key
+  // mirror below. We emit the registry's v:2 shape AFTER the handlers wrote
+  // (so a watcher that reads store sees fresh data once the mirror lands).
+  // Idempotent for subscribers: every handler debounces / dedupes. Emitted
+  // even with empty items (still a valid "a dump happened, re-look" signal);
+  // the crisis short-circuit above returns before this point, so a crisis
+  // dump never emits.
+  try {
+    emitEvent('void:braindump:submitted', {
+      v: 2,
+      items: submittedItems,
+      raw: output.originalDump ?? '',
+      ts: typeof output.timestamp === 'number' ? output.timestamp : Date.now(),
+      idempotency_key: output.dumpId ?? `dump:${Date.now()}`,
+      route_path: 'native:dispatch',
+    });
+  } catch {
+    // Bus emit is best-effort — never break dispatch on a subscriber fault.
   }
 
   // The great rewiring: handlers just wrote freshly-captured data into the
@@ -104,6 +160,13 @@ export async function dispatchRouterOutput(
   // may tick before the mirror lands; acceptable because each module's own
   // subscribed keys still fire on its next change, and the boot sync already
   // populated all foreign keys once.
+  // Audit S8 · gap 3 — append this dump's co-regulation signal (sentiment +
+  // whether a pet was present) to pets.coregulation_log. The pets bridge
+  // read-merges that key but never writes it; this is the "dump pet-mention
+  // flow" it expects. Synchronous + self-try/caught — runs before the async
+  // mirror so the pets watcher (which the mirror wakes) sees the new entry.
+  recordCoregulationFromDump(store, output);
+
   void Promise.all([
     runAllSyncs(store),
     recordMoodFromDump(store, output.originalDump).catch((err) => {
@@ -115,6 +178,9 @@ export async function dispatchRouterOutput(
     // dump bumped today's capture load + maybe its mood tag), so recompute
     // harm + capacity AFTER the sync. Best-effort; never blocks the ack.
     .then(() => recomputeBrain(store))
+    // Advance date-less reminder ladders (a fresh task may have just registered
+    // one; an existing one may have crossed a tier). Best-effort, non-blocking.
+    .then(() => sweepDatelessLadders(store))
     .catch((err) => {
 
       console.error('[bridge] post-dispatch sync failed (non-fatal):', err);
@@ -145,13 +211,78 @@ export async function applyFragment(
     return { ok: false, note: handlerErrorNote(fragment.module, err) };
   }
 
+  // A confirmed draft is a real write — notify the per-module dump handlers
+  // the same way a normal dump does (audit S8 · gap 1) so e.g. a confirmed
+  // sleep/finance fragment gets re-parsed by its watcher, not just mirrored.
+  if (result.ok) {
+    try {
+      const intent = (fragment.payload as { action?: unknown } | undefined)?.action;
+      emitEvent('void:braindump:submitted', {
+        v: 2,
+        items: [{
+          module: fragment.module,
+          text: fragment.text,
+          intent: typeof intent === 'string' ? intent : fragment.module,
+          confidence: fragment.confidence,
+        }],
+        raw: fragment.text,
+        ts: Date.now(),
+        idempotency_key: `confirm:${fragment.module}:${Date.now()}`,
+        route_path: 'native:confirm',
+      });
+    } catch {
+      /* best-effort */
+    }
+  }
+
   void runAllSyncs(store)
     .then(() => recomputeBrain(store))
+    .then(() => sweepDatelessLadders(store))
     .catch((err) => {
       console.error('[bridge] post-confirm sync failed (non-fatal):', err);
     });
 
   return result;
+}
+
+/**
+ * Surface a worker↔native module drift (audit #130). A fragment routed to a
+ * module with no native handler is dropped; without telemetry that drop is
+ * invisible until a user notices their dump "did nothing". We:
+ *   1. log a structured `metric` line (same JSON convention as dump_roundtrip /
+ *      screen_render) so it's greppable in device logs + ingestible by the
+ *      telemetry tail, AND
+ *   2. drop a Sentry breadcrumb when a Sentry SDK is present on the runtime
+ *      global (guarded — apps/native ships Sentry via tunnel config at runtime,
+ *      so the SDK may or may not be installed; never throw if it isn't).
+ * Carries the module name only — never fragment text — to keep dump content out
+ * of telemetry. Exported for the dispatch test that pins this branch.
+ */
+export function reportNoHandlerDrift(module: string): void {
+  const ts = Date.now();
+  console.error(
+    JSON.stringify({
+      metric: 'dispatch_no_handler',
+      module,
+      ts,
+      detail: `worker↔native module drift: no handler for "${module}" — fragment NOT routed (raw dump still archived)`,
+    }),
+  );
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const g: any = globalThis;
+    const sentry = g?.Sentry;
+    if (sentry && typeof sentry.addBreadcrumb === 'function') {
+      sentry.addBreadcrumb({
+        category: 'dispatch',
+        level: 'error',
+        message: 'no_handler module drift',
+        data: { module, ts },
+      });
+    }
+  } catch {
+    /* telemetry is best-effort — never break dispatch on a breadcrumb failure */
+  }
 }
 
 function handlerErrorNote(module: Module, err: unknown): string {

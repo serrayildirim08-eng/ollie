@@ -55,6 +55,8 @@ const TIERS: readonly SeverityTier[] = [1, 2, 3, 4];
  */
 type CompiledEntry = {
   test: (text: string) => boolean;
+  /** Locate the matched span [start, end) in `text`, or null if no match. */
+  match: (text: string) => { start: number; end: number } | null;
   pattern: string;
 };
 
@@ -70,15 +72,24 @@ function compile(
   if (cached) return cached;
 
   let test: (text: string) => boolean;
+  let match: (text: string) => { start: number; end: number } | null;
   if (entry.type === 'regex') {
     const re = new RegExp(entry.pattern, entry.flags ?? 'i');
     test = (text) => re.test(text);
+    match = (text) => {
+      const m = re.exec(text);
+      return m ? { start: m.index, end: m.index + m[0].length } : null;
+    };
   } else {
     const lower = entry.pattern.toLowerCase();
     test = (text) => text.toLowerCase().includes(lower);
+    match = (text) => {
+      const idx = text.toLowerCase().indexOf(lower);
+      return idx === -1 ? null : { start: idx, end: idx + lower.length };
+    };
   }
 
-  const compiled: CompiledEntry = { test, pattern: entry.pattern };
+  const compiled: CompiledEntry = { test, match, pattern: entry.pattern };
   compileCache.set(key, compiled);
   return compiled;
 }
@@ -95,17 +106,27 @@ export function detectCrisisIn(
   const lex = LEXICONS[language];
   if (!lex) return null;
 
-  // Exclusion guard — if ANY exclusion literal matches the text,
-  // require a stronger signal to override. Implementation: track
-  // whether an exclusion matched; if it did, only tier ≥ 2 counts.
+  // Exclusion guard — collect the span of EVERY exclusion literal present
+  // in the text. A tier-1 match is suppressed ONLY when its own matched span
+  // sits entirely inside an exclusion span (e.g. "killing it" swallowing a
+  // dance-floor sense). A real tier-1 signal elsewhere in the same dump is
+  // NOT suppressed just because an unrelated exclusion appears. Tier ≥ 2
+  // always fires (false-positive over false-negative).
   const lowered = text.toLowerCase();
-  let exclusionHit = false;
+  const exclusionSpans: { start: number; end: number }[] = [];
   for (const ex of lex.exclusions) {
-    if (lowered.includes(ex.toLowerCase())) {
-      exclusionHit = true;
-      break;
+    const needle = ex.toLowerCase();
+    let from = 0;
+    let idx = lowered.indexOf(needle, from);
+    while (idx !== -1) {
+      exclusionSpans.push({ start: idx, end: idx + needle.length });
+      from = idx + needle.length;
+      idx = lowered.indexOf(needle, from);
     }
   }
+
+  const inExclusion = (span: { start: number; end: number }): boolean =>
+    exclusionSpans.some((ex) => span.start >= ex.start && span.end <= ex.end);
 
   // Walk tiers HIGH → LOW so we surface the most severe match first.
   for (let i = TIERS.length - 1; i >= 0; i--) {
@@ -114,9 +135,12 @@ export function detectCrisisIn(
     for (const entry of tierEntries) {
       const compiled = compile(language, tier, entry);
       if (compiled.test(text)) {
-        // Exclusion guard: tier-1 hits suppressed if an exclusion matched.
-        // Tier ≥ 2 always fires (false-positive over false-negative).
-        if (exclusionHit && tier === 1) continue;
+        // Tier-1: suppress only if THIS match's span is covered by an
+        // exclusion. Tier ≥ 2 always fires.
+        if (tier === 1 && exclusionSpans.length > 0) {
+          const span = compiled.match(text);
+          if (span && inExclusion(span)) continue;
+        }
         return { tier, pattern: compiled.pattern };
       }
     }
@@ -143,11 +167,14 @@ export function detectCrisis(
   for (const lang of languages) {
     const hit = detectCrisisIn(text, lang);
     if (hit) {
+      // NEVER carry the matched raw text. Only lexicon coordinates
+      // (tier + language + pattern id) cross the wire — returning the
+      // matched line would leak crisis-dump content to the client and
+      // break the zero-storage invariant (audit #77).
       matches.push({
         language: lang,
         tier: hit.tier,
         pattern: hit.pattern,
-        line: extractMatchedLine(text, hit.pattern),
       });
     }
   }
@@ -165,27 +192,6 @@ export function detectCrisis(
     languages: matches.map((m) => m.language),
     matches,
   };
-}
-
-/**
- * Best-effort: pull the first line containing the matched pattern. Falls
- * back to the first non-empty line.
- */
-function extractMatchedLine(text: string, pattern: string): string {
-  const lines = text.split(/\r?\n/);
-  try {
-    const re = new RegExp(pattern, 'i');
-    for (const line of lines) {
-      if (re.test(line)) return line.trim();
-    }
-  } catch {
-    /* fallthrough — pattern is literal, find by substring */
-    const lowered = pattern.toLowerCase();
-    for (const line of lines) {
-      if (line.toLowerCase().includes(lowered)) return line.trim();
-    }
-  }
-  return lines.find((l) => l.trim().length > 0)?.trim() ?? text.trim();
 }
 
 /** Expose lexicon objects for tests + audit. Do not mutate. */

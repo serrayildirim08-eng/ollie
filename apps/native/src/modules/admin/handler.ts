@@ -7,12 +7,12 @@
  * future surface that wants to show what happened.
  */
 
-import type { AdminAction, ModuleHandler, HandlerResult, RemindIn } from '../../router/schema';
+import type { AdminAction, ModuleHandler, HandlerResult } from '../../router/schema';
 import { migrateAdmin } from './migrate';
 import { renewals, tasks } from './repo';
 import { inferInitialBallState } from './ballState';
-import { scheduleAt } from '../../notify/systemNotify';
-import { scheduleServerReminder } from '../../notify/serverReminder';
+import { planReminder } from '../../notify/taskReminder';
+import { startDatelessLadderFor } from '../../notify/datelessLadderHook';
 
 export const adminHandler: ModuleHandler<'admin'> = {
   module: 'admin',
@@ -35,10 +35,21 @@ export const adminHandler: ModuleHandler<'admin'> = {
           // move to `waiting` when the dump clearly signals a hand-off (#7)
           ballState: inferInitialBallState(p.text),
         });
-        // Time-deferred reminder side-effect (Approach B). The worker
-        // computes scheduledAtMs from the user's "in N min/hr" hint.
-        scheduleReminderIfPresent(p.remindIn, task.id, 'to do', p.text);
-        return { ok: true, note: `noted: ${p.text}`, deepLink: '/box/admin', undo: undoTask(task.id) };
+        // Reminder scheduling (manual one-shot). Brain-vs-body split: Layer 1
+        // only flags intent + extracts a time; ALL scheduling is here.
+        const reminderCascade = planReminder(p, task.id, 'admin', {
+          title: 'to do', body: p.text, module: 'admin', actionUrl: 'ollie://todo',
+        });
+        // DATE-LESS escalation ladder: a plain (non-reminder) task with NO
+        // dueDate gets a growing series of gentle reminders. Skipped for
+        // explicit reminders — the cascade / scheduled fire owns those.
+        if (!p.reminder) {
+          void startDatelessLadderFor({
+            module: 'admin', taskId: task.id, text: task.text,
+            dueDate: task.dueDate, createdAt: task.createdAt,
+          });
+        }
+        return { ok: true, note: `noted: ${p.text}`, deepLink: '/box/admin', undo: undoTask(task.id), reminderCascade };
       }
 
       case 'create_phone_task': {
@@ -50,10 +61,15 @@ export const adminHandler: ModuleHandler<'admin'> = {
           dueDate: p.dueDate ?? null,
         });
         const note = p.reason ? `call ${p.person} — ${p.reason}` : `call ${p.person}`;
-        // Time-deferred reminder side-effect (Approach B).
+        // Reminder scheduling (manual one-shot). `text` (the person) drives the
+        // "when?" card copy; the body is person · reason.
         const reminderBody = p.reason ? `${p.person} · ${p.reason}` : p.person;
-        scheduleReminderIfPresent(p.remindIn, task.id, 'call', reminderBody);
-        return { ok: true, note, deepLink: '/box/admin', undo: undoTask(task.id) };
+        const reminderCascade = planReminder(
+          p, task.id, 'admin',
+          { title: 'call', body: reminderBody, module: 'admin', actionUrl: 'ollie://todo' },
+          `call ${text}`,
+        );
+        return { ok: true, note, deepLink: '/box/admin', undo: undoTask(task.id), reminderCascade };
       }
 
       case 'schedule_appointment': {
@@ -97,37 +113,3 @@ function exhaustive(p: never): never {
   throw new Error(`admin: unhandled action ${JSON.stringify(p)}`);
 }
 
-/**
- * If a routed task carries a `remindIn` hint (worker-resolved against the
- * dump clock), schedule the notification for the same fire time via:
- *
- *   1. scheduleAt — on Tauri this hands the reminder to the native OS local
- *      scheduler (fires even if the app is QUIT); off Tauri it falls back to
- *      an in-process setTimeout (fires while the page is open).
- *   2. server-side Supabase `scheduled_jobs` row (scheduleServerReminder)
- *      — drained by the cron → APNs, so it fires even with the app fully
- *      CLOSED. No-op when not signed in / sync off / api absent.
- *
- * All paths carry the SAME stable id (`reminder:<taskId>`); the notify
- * dispatcher and the cron both honor dedupe_key, so whichever lands first
- * wins and the user is never double-pinged.
- *
- * Fire-and-forget — the schedule is a side-effect of the row write, never
- * a blocker. No-op when remindIn is absent or its scheduledAtMs is missing.
- */
-function scheduleReminderIfPresent(
-  remindIn: RemindIn | undefined,
-  taskId: string,
-  title: string,
-  body: string,
-): void {
-  if (!remindIn || typeof remindIn.scheduledAtMs !== 'number') return;
-  // Same stable id across all three paths (OS local notification, in-process
-  // timer, server-push job) so the dispatcher / cron dedupe to one ping.
-  const id = `reminder:${taskId}`;
-  scheduleAt(remindIn.scheduledAtMs, { title, body }, id);
-  scheduleServerReminder(
-    { title, body, category: 'REMINDER', dedupe_key: id },
-    remindIn.scheduledAtMs,
-  );
-}

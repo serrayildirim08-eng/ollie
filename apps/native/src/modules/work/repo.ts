@@ -17,6 +17,7 @@
 
 import { computeCadence, type CadenceEstimate } from '@ollie/cadence';
 import { sql } from '../../storage';
+import { newId } from '../../storage/id';
 import type {
   FocusSessionData,
   MeetingData,
@@ -70,11 +71,6 @@ interface WorkHandoffNoteRow {
   [col: string]: unknown;
 }
 
-function newId(): string {
-  return typeof crypto !== 'undefined' && crypto.randomUUID
-    ? crypto.randomUUID()
-    : `w_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-}
 
 function normaliseText(raw: string): string {
   return raw.trim().replace(/\s+/g, ' ');
@@ -171,7 +167,7 @@ export const tasks = {
       };
     }
 
-    const id = newId();
+    const id = newId('w_');
     await sql.execute(
       `INSERT INTO work_tasks (id, text, project, kind, due_date, done, created_at)
        VALUES (?, ?, ?, ?, ?, 0, ?)`,
@@ -223,6 +219,19 @@ export const tasks = {
     await sql.execute(
       `UPDATE work_tasks SET done = ?, created_at = ? WHERE id = ?`,
       [next, Date.now(), id],
+    );
+  },
+
+  /**
+   * Set a task's due date (ISO yyyy-mm-dd or null). Used by the brain's
+   * defer_tasks offer to push a non-urgent, due-today task to tomorrow. Only
+   * touches `due_date` — leaves `done` / `created_at` / ordering untouched so
+   * the row stays where it is in the list, just dated forward.
+   */
+  async setDueDate(id: string, dueDate: string | null): Promise<void> {
+    await sql.execute(
+      `UPDATE work_tasks SET due_date = ? WHERE id = ?`,
+      [dueDate, id],
     );
   },
 
@@ -329,7 +338,7 @@ export const scheduledBlocks = {
     startTs: number;
     durationMin?: number | null;
   }): Promise<WorkScheduledBlock> {
-    const id = newId();
+    const id = newId('w_');
     const now = Date.now();
     const label = input.label ? normaliseText(input.label) : null;
     const durationMin = input.durationMin ?? null;
@@ -390,7 +399,7 @@ export const handoffs = {
     text: string;
     project?: string | null;
   }): Promise<WorkHandoffNote> {
-    const id = newId();
+    const id = newId('w_');
     const ts = Date.now();
     const text = normaliseText(input.text);
     const project = input.project ? normaliseText(input.project) : null;
@@ -421,7 +430,7 @@ async function insertEvent(
   kind: WorkEventKind,
   data: WorkEventData,
 ): Promise<WorkEvent> {
-  const id = newId();
+  const id = newId('w_');
   const now = Date.now();
   await sql.execute(
     `INSERT INTO work_events (id, kind, data, logged_at)

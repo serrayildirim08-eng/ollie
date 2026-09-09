@@ -194,10 +194,29 @@ const SETS: Record<Locale, Set<string>> = {
   tr: new Set(TR_NAMES),
 };
 
+/**
+ * Locale-aware lowercase fold.
+ *
+ * Turkish has a dotted/dotless-i distinction: the capital "İ" (dotted) is the
+ * uppercase of "i", and "I" (dotless) is the uppercase of "ı". JS's default
+ * `String.toLowerCase()` folds "İ" to "i̇" (i + COMBINING DOT ABOVE),
+ * which never matches the plain "i" stored in the wordlist — so common Turkish
+ * names like İrem / İsmail / İbrahim slipped through unredacted (audit #76).
+ *
+ * For the `tr` locale we use `toLocaleLowerCase('tr')` so "İ" → "i" and
+ * "I" → "ı" correctly. Other locales keep the default fold (a Turkish fold
+ * would break English/Spanish names by mapping "I" → "ı").
+ */
+function foldName(word: string, locale: Locale): string {
+  return locale === 'tr' ? word.toLocaleLowerCase('tr') : word.toLowerCase();
+}
+
 /** Returns true if `word` (any case) is a likely person-name in `locale`. */
 export function isLikelyName(word: string, locale: Locale): boolean {
-  const lc = word.toLowerCase();
-  if (NAME_STOPLIST.has(lc)) return false;
+  const lc = foldName(word, locale);
+  // The stoplist is folded with the locale too so a Turkish-cased stoplist
+  // entry can't bypass via the dotted-i mismatch either.
+  if (NAME_STOPLIST.has(lc) || NAME_STOPLIST.has(word.toLowerCase())) return false;
   return SETS[locale].has(lc);
 }
 

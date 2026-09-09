@@ -18,6 +18,7 @@
     "@fontsource/dm-serif-display": "^5.2.8",
     "@ollie/api": "workspace:*",
     "@ollie/cadence": "workspace:*",
+    "@ollie/consent": "workspace:*",
     "@ollie/crypto": "workspace:*",
     "@ollie/logic": "workspace:*",
     "@ollie/notifications": "workspace:*",
@@ -25,13 +26,15 @@
     "@ollie/store": "workspace:*",
     "@supabase/supabase-js": "^2.106.1",
     "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-deep-link": "^2.4.9",
     "@tauri-apps/plugin-notification": "^2",
     "@tauri-apps/plugin-opener": "^2",
     "@tauri-apps/plugin-sql": "^2.4.0",
     "@tauri-apps/plugin-store": "^2.4.3",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "react-router": "^7.15.1"
+    "react-router": "^7.15.1",
+    "tauri-plugin-mobile-push-api": "^0.1.4"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",

@@ -35,11 +35,16 @@
  */
 
 import type { NotificationSpec } from '@ollie/notifications';
+import { track } from '../api/analytics';
 
 /** Shape of a CustomEvent we listen for on `window`. */
 export interface NotifyEventDetail {
   title: string;
   body?: string;
+  /** Registered category id → shows action buttons (A3). */
+  actionTypeId?: string;
+  /** Carried back to onAction so it knows what row to act on (A3). */
+  extra?: Record<string, unknown>;
 }
 
 /** Public custom-event name. Stable contract — do not rename. */
@@ -63,6 +68,8 @@ interface PluginApi {
     body?: string;
     icon?: string;
     sound?: string;
+    actionTypeId?: string;
+    extra?: Record<string, unknown>;
   }) => void;
 }
 
@@ -127,6 +134,9 @@ export async function requestNotificationPermission(): Promise<boolean> {
     const granted = await plugin.isPermissionGranted();
     if (granted) return true;
     const result = await plugin.requestPermission();
+    // Funnel telemetry: only when the OS prompt actually ran (not the
+    // already-granted short-circuit above). Fire-and-forget, consent-gated.
+    track('notif_permission', { value: result === 'granted' ? 'granted' : 'denied' });
     return result === 'granted';
   } catch (err) {
     console.warn('[systemNotify] permission flow failed', err);
@@ -164,7 +174,7 @@ export async function checkNotificationPermission(): Promise<'granted' | 'denied
  * in-app log; this function is the *additional* native OS ping that
  * surfaces even when the app window is minimised.
  */
-export async function sendSystemNotification({ title, body }: NotifyEventDetail): Promise<void> {
+export async function sendSystemNotification({ title, body, actionTypeId, extra }: NotifyEventDetail): Promise<void> {
   const plugin = await loadNotificationPlugin();
   if (!plugin) {
     // Web preview / vitest fallback — visible in the dev console.
@@ -188,6 +198,8 @@ export async function sendSystemNotification({ title, body }: NotifyEventDetail)
       body,
       icon: 'icons/128x128.png',
       sound: 'default',
+      actionTypeId,
+      extra,
     });
   } catch (err) {
     console.warn('[systemNotify] sendNotification failed', err);
@@ -241,12 +253,26 @@ export interface ScheduledNotificationHandle {
  *
  * Never throws.
  */
+/** Defensive upper bound on how far out scheduleAt will arm a reminder.
+ *  Callers re-derive intent-based fire times (see admin/work handlers #92),
+ *  but this is a belt-and-braces guard so a bogus far-future timestamp can
+ *  never arm a multi-year setTimeout or hand the OS an absurd schedule. */
+const MAX_SCHEDULE_HORIZON_MS = 365 * 24 * 60 * 60 * 1000;
+
 export function scheduleAt(
   at: number,
   payload: NotifyEventDetail,
   id: string,
 ): ScheduledNotificationHandle {
   const delay = at - Date.now();
+
+  // Beyond the sane horizon — almost certainly a clock-skew / bad-input bug
+  // (#92). Drop quietly rather than arm a years-long timer or hand the OS
+  // garbage.
+  if (delay > MAX_SCHEDULE_HORIZON_MS) {
+    console.warn('[systemNotify] scheduleAt fire time beyond horizon — dropping', id);
+    return { cancel: () => {} };
+  }
 
   // Past or near-immediate (< 1s) — fire now so we don't arm a no-op timer
   // or hand the OS a fire time it would treat as "now" anyway.
@@ -258,14 +284,34 @@ export function scheduleAt(
   // Mutable timer slot — the native path leaves this null (OS owns the fire);
   // the fallback / non-Tauri path fills it so cancel() can clear it.
   let timerId: ReturnType<typeof setTimeout> | null = null;
-  // Set once we've committed to the native OS scheduler, so cancel() knows to
-  // route through `cancel_local_notification` instead of clearing a timer.
-  let nativeScheduled = false;
+  // Flips true the moment cancel() is called. The async path-decider below
+  // checks this BEFORE the dynamic import and BEFORE emitting the schedule
+  // event, so a cancel that races ahead of the native schedule still wins: we
+  // never commit what was already cancelled. (Audit #27 — the OS notification
+  // used to fire after the user undid it because cancel() ran before the
+  // emit('ollie-schedule-notif') reached the Rust listener.)
+  let cancelled = false;
 
   const armTimer = (): void => {
+    // A cancel that landed while the plugin loader was resolving must not
+    // arm a stale timer.
+    if (cancelled) return;
     timerId = setTimeout(() => {
       void sendSystemNotification(payload);
     }, delay);
+  };
+
+  // Idempotently tell the OS to drop this id. The Rust cancel handler is a
+  // no-op when nothing is scheduled under `id`, so it is always safe to emit
+  // — even before (or without) a successful schedule. cancel() therefore
+  // fires this unconditionally rather than gating on a "did we schedule yet?"
+  // flag that the async race can leave stale.
+  const cancelNative = (): void => {
+    void import('@tauri-apps/api/event')
+      .then(({ emit }) => emit('ollie-cancel-notif', id))
+      .catch((err) => {
+        console.warn('[systemNotify] cancel emit failed', err);
+      });
   };
 
   // Decide the path asynchronously: loadNotificationPlugin() resolves whether
@@ -273,22 +319,33 @@ export function scheduleAt(
   // The handle is returned synchronously; cancel() reads the flags whenever
   // it's eventually called.
   void loadNotificationPlugin().then(async (plugin) => {
+    if (cancelled) return; // cancelled before we even chose a path
     if (!plugin) {
       // Web preview / vitest — no native scheduler, keep the timer fallback.
       armTimer();
       return;
     }
     try {
-      const { invoke } = await import('@tauri-apps/api/core');
-      // Tauri v2 maps the Rust snake_case param `fire_at_ms` to camelCase
-      // `fireAtMs` in this args object.
-      await invoke('schedule_local_notification', {
+      // The app is served over http://localhost, so the webview is a "remote"
+      // origin and the ACL blocks direct invoke() of our app commands. Events
+      // are permitted (core:event:default), so we EMIT and the Rust setup
+      // listener schedules. This is the path that survives app-quit.
+      const { emit } = await import('@tauri-apps/api/event');
+      // Re-check right before committing to the OS: cancel() may have run
+      // while the dynamic import above was in flight. Without this, the emit
+      // would commit a schedule the user already undid (#27).
+      if (cancelled) return;
+      await emit('ollie-schedule-notif', {
         id,
         title: payload.title,
         body: payload.body,
-        fireAtMs: at,
+        // Rust deserializes snake_case fields.
+        fire_at_ms: at,
+        // A3: native action buttons (macOS) — category + extra carried through
+        // so the Rust delegate can route a button tap back to JS.
+        category_id: payload.actionTypeId ?? null,
+        extra_json: payload.extra ? JSON.stringify(payload.extra) : null,
       });
-      nativeScheduled = true;
     } catch (err) {
       // Native scheduler unreachable/failed — fall back to the in-process
       // timer so an open app still fires (no double-fire: native didn't take).
@@ -299,17 +356,21 @@ export function scheduleAt(
 
   return {
     cancel: () => {
+      cancelled = true;
       if (timerId !== null) {
         clearTimeout(timerId);
         timerId = null;
       }
-      if (nativeScheduled) {
-        void import('@tauri-apps/api/core')
-          .then(({ invoke }) => invoke('cancel_local_notification', { id }))
-          .catch((err) => {
-            console.warn('[systemNotify] cancel_local_notification failed', err);
-          });
-      }
+      // Always emit the native cancel for this id, regardless of whether the
+      // async scheduler has reached emit('ollie-schedule-notif') yet. The
+      // Rust cancel handler is idempotent, so an early cancel that beats the
+      // schedule still removes it once it lands — and a cancel after a
+      // successful schedule removes it the obvious way. Skipped only when we
+      // KNOW we're off-Tauri (no plugin), where there is nothing native to
+      // cancel and the timer clear above is sufficient.
+      void loadNotificationPlugin().then((plugin) => {
+        if (plugin) cancelNative();
+      });
     },
   };
 }
@@ -352,27 +413,25 @@ export function installNotifyListener(target?: Window): () => void {
  * Adapter matching the orchestrator's `scheduleNotification` signature
  * `(spec: NotificationSpec, fireAt: number) => void`.
  *
- * Strategy:
- *   - If `fireAt` is in the past or within ~1s, deliver immediately via
- *     the system path AND fall through so the caller's existing
- *     @ollie/notifications log path still runs.
- *   - Otherwise, schedule an in-process timer (matches the existing
- *     `@ollie/notifications` fallback shape — Tauri's plugin has no
- *     native scheduler in 2.x, so timer is the canonical approach).
+ * Strategy: delegate to `scheduleAt`, the canonical durable scheduler.
+ * It already owns both halves of audit #71:
+ *   - overflow guard — drops fire times beyond MAX_SCHEDULE_HORIZON_MS so a
+ *     bare setTimeout delay never overflows the 32-bit signed-int ceiling
+ *     (~24.8d) and fires IMMEDIATELY.
+ *   - persistence-aware path — on Tauri it EMITs to the Rust scheduler, which
+ *     hands the fire time to the OS and survives app-quit. A multi-day finance
+ *     bill reminder routed here is therefore NOT lost when the app closes; the
+ *     in-process setTimeout is only a fallback for web preview / vitest where
+ *     no native scheduler exists.
  *
- * No persistence here — the dispatcher in @ollie/notifications already
- * persists `schedule_at` records across reloads. This adapter is the
- * thin glue between "orchestrator wants a notification at time X" and
- * the OS-level surface.
+ * The orchestrator's `dedupe_key` is the natural stable id — it's also what
+ * the native cancel path keys on, so reusing it keeps dedup/cancel coherent.
+ * Past or near-immediate fires deliver now (scheduleAt handles that too).
  */
 export function scheduleSystemNotification(spec: NotificationSpec, fireAt: number): void {
-  const now = Date.now();
-  const delay = Math.max(0, fireAt - now);
-  if (delay <= 0) {
-    void sendSystemNotification({ title: spec.title, body: spec.body });
-    return;
-  }
-  setTimeout(() => {
-    void sendSystemNotification({ title: spec.title, body: spec.body });
-  }, delay);
+  scheduleAt(
+    fireAt,
+    { title: spec.title, body: spec.body },
+    spec.dedupe_key ?? `notif:${spec.title}:${fireAt}`,
+  );
 }

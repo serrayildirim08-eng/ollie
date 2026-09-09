@@ -7,10 +7,11 @@
  * text, never the loudness.
  */
 
-import { useCallback, useEffect, useState } from 'react';
-import { useAuth } from '@clerk/clerk-react';
+import { useEffect, useState } from 'react';
+import { useBearer } from '../../auth/useBearer';
 import { Stack, Row } from '../../layout';
 import { Text } from '../../ui';
+import { colors, radii, shadows } from '../../theme/tokens';
 import { partnerRepo } from './repo';
 import { cardLine } from './interpret';
 import type { InterpretedState, PartnerPairing } from './types';
@@ -21,8 +22,7 @@ const SMCP: React.CSSProperties = {
 };
 
 export function PartnerCard(): JSX.Element | null {
-  const { getToken } = useAuth();
-  const getBearer = useCallback(async () => (await getToken()) ?? '', [getToken]);
+  const getBearer = useBearer();
   const [pairing, setPairing] = useState<PartnerPairing | null>(null);
   const [state, setState] = useState<InterpretedState | null>(null);
 
@@ -55,17 +55,18 @@ export function PartnerCard(): JSX.Element | null {
       gap={8}
       style={{
         padding: '18px 20px',
-        background: 'var(--ollie-color-paper)',
-        border: '1px solid var(--ollie-color-hairline-soft)',
-        borderRadius: 4,
+        background: colors.paper,
+        border: 'none',
+        borderRadius: radii.card,
+        boxShadow: shadows.card,
       }}
     >
       <Row justify="space-between" align="baseline">
-        <Text scale="caption" color="var(--ollie-color-ink-faint)" style={SMCP}>
+        <Text scale="caption" color={colors.inkFaint} style={SMCP}>
           {state.crisis ? 'your person' : 'with you'}
         </Text>
       </Row>
-      <Text scale="heading" color={state.crisis ? 'var(--ollie-color-sage-deep)' : 'var(--ollie-color-ink)'}>
+      <Text scale="heading" color={state.crisis ? colors.sageDeep : colors.ink}>
         {cardLine(pairing.partnerName, state)}
       </Text>
     </Stack>

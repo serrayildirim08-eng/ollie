@@ -28,12 +28,33 @@ export interface RecipeIngredient {
   unit?: string;
 }
 
+/** One instructive step: action + a sensory "look for" cue (removes guessing,
+ *  ADHD-first) + optional tip + optional per-step minutes. */
+export interface RecipeStep {
+  do: string;
+  cue?: string;
+  tip?: string;
+  minutes?: number;
+}
+
+/** Optional "before you start" strip for the recipe detail screen. */
+export interface RecipePrep {
+  pan?: string;
+  heat?: string;
+  handsOnMinutes?: number;
+}
+
 export interface RecipeSuggestion {
   dish: string;
   cuisine: string;
   diet: string[];
   ingredients: RecipeIngredient[];
   steps: string[];
+  /** Instructive steps (action + cue + optional tip). The detail screen prefers
+   *  these; plain `steps` stays as the back-compat / fallback shape. */
+  stepsDetailed?: RecipeStep[];
+  /** Optional pan / heat / hands-on strip. */
+  prep?: RecipePrep;
   prepMinutes: number;
   cookMinutes: number;
   servings: number;
@@ -108,6 +129,15 @@ const FEW_SHOT_EXAMPLES: Array<{ input: string; output: RecipeBatch }> = [
             'Crack eggs into the sauce, cover, cook 5 minutes until whites set.',
             'Top with crumbled feta and serve with bread.',
           ],
+          stepsDetailed: [
+            { do: 'Warm olive oil in a wide skillet.', cue: 'oil shimmers but does not smoke', minutes: 1 },
+            { do: 'Soften diced onion and bell pepper.', cue: 'translucent and soft, not browned', minutes: 5 },
+            { do: 'Stir in garlic and cumin.', cue: 'fragrant, about 30 seconds — do not let garlic brown' },
+            { do: 'Add chopped tomatoes and simmer.', cue: 'sauce thickens, a spoon leaves a brief trail', tip: 'a pinch of salt + sugar balances tart tomatoes', minutes: 10 },
+            { do: 'Make wells, crack in the eggs, cover.', cue: 'whites set, yolks still soft', minutes: 5 },
+            { do: 'Top with crumbled feta and serve with bread.' },
+          ],
+          prep: { pan: 'wide skillet, with a lid', heat: 'medium', handsOnMinutes: 8 },
           prepMinutes: 10,
           cookMinutes: 20,
           servings: 2,
@@ -315,7 +345,9 @@ RULES:
     • vegan → no meat, fish, shellfish, dairy, eggs, honey
     • mediterranean → emphasise olive oil, legumes, vegetables, fish over red meat
     • turkish → traditional Turkish dishes (mercimek, menemen, pilav, köfte, dolma, etc); ground in Turkish home cooking, not "Turkish-inspired" fusion.
-- STEPS: 3-7 short imperative sentences. No prose, no chatter, no "enjoy!".
+- STEPS: 3-7 short imperative sentences (plain \`steps\`). No prose, no chatter, no "enjoy!".
+- INSTRUCTIVE (\`stepsDetailed\`): mirror the steps as objects — \`do\` = the action (≤14 words); \`cue\` = a short "look for" sensory/doneness check that removes guesswork ("soft and translucent, not browned" / "whites set, yolks still soft"); \`tip\` = a brief aside ONLY when genuinely useful (omit otherwise); \`minutes\` = per-step time when meaningful. One cue per step, terse — never a paragraph.
+- PREP: fill \`prep\` with \`pan\` (e.g. "wide, with a lid"), \`heat\` (low/medium/high), \`handsOnMinutes\` (active minutes).
 - reasonSuggested: optional, ≤ 12 words. Mention a turning-soon pantry item naturally ("your tomatoes will turn soon") OR a signal-driven hint ("you cooked feta last week and loved it"). Omit if there is no genuine reason.
 - canonical: set to the canonical pantry name (lowercase) when the ingredient matches one of the PANTRY items; null when it is a fresh ingredient not in the pantry vocabulary.
 
@@ -370,6 +402,29 @@ function buildFunctionSchema(): Record<string, unknown> {
                 minItems: 3,
                 maxItems: 7,
                 items: { type: 'string' },
+              },
+              stepsDetailed: {
+                type: 'array',
+                minItems: 3,
+                maxItems: 7,
+                items: {
+                  type: 'object',
+                  required: ['do'],
+                  properties: {
+                    do: { type: 'string' },
+                    cue: { type: 'string' },
+                    tip: { type: 'string' },
+                    minutes: { type: 'number' },
+                  },
+                },
+              },
+              prep: {
+                type: 'object',
+                properties: {
+                  pan: { type: 'string' },
+                  heat: { type: 'string' },
+                  handsOnMinutes: { type: 'number' },
+                },
               },
               prepMinutes: { type: 'number' },
               cookMinutes: { type: 'number' },

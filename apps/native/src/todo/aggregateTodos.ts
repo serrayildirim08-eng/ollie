@@ -444,6 +444,22 @@ export function bucketTodos(
     .filter((b) => b.items.length > 0);
 }
 
+/**
+ * The "today surface" list: overdue + due-today + undated loose to-dos, with
+ * grocery shopping excluded (it lives only in the grocery module). This is the
+ * exact rule the TodoScreen renders and the Today's-Few pulse counts — keep it
+ * in one place so the two never drift.
+ */
+export function selectTodayList(
+  items: readonly TodoItem[],
+  today: string,
+): TodoItem[] {
+  return bucketTodos(items, today)
+    .filter((b) => b.id === 'today' || b.id === 'noDate')
+    .flatMap((b) => b.items)
+    .filter((it) => it.source !== 'grocery');
+}
+
 /** ISO yyyy-mm-dd diff in days (b - a). Positive = b is later than a.
  *  Uses Date.parse so daylight-savings edge cases don't lose a day. */
 function isoDayDiff(a: string, b: string): number {

@@ -75,10 +75,26 @@ export type { AppLang, CopyKind, CopyFacts, CopyActionKind } from './copy';
 export {
   actionLabel,
   buildAddToGroceryListAction,
+  buildDeferTasksAction,
+  buildAddAdminTaskAction,
+  buildSurfaceDecisionAction,
+  buildSurfaceTasksAction,
+  buildBreakDownTaskAction,
+  buildBatchBlockAction,
+  buildArchiveTaskAction,
+  buildMarkChoreDoneAction,
 } from './actions';
 export type {
   ActionKind,
   ActionPayload,
   AddToGroceryListPayload,
+  DeferTasksPayload,
+  AddAdminTaskPayload,
+  SurfaceDecisionPayload,
+  SurfaceTasksPayload,
+  BreakDownTaskPayload,
+  BatchBlockPayload,
+  ArchiveTaskPayload,
+  MarkChoreDonePayload,
   NoticingAction,
 } from './actions';

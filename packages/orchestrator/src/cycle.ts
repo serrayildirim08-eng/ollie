@@ -249,7 +249,7 @@ export function createCycleOrchestrator(
         ts: now,
       });
     } catch { /* non-fatal */ }
-    store.set('cycle', '_pillMissedEmittedDates', [...emitted, yesterdayKey]);
+    store.set('cycle', '_pillMissedEmittedDates', appendCapped([...emitted], [yesterdayKey]));
   }
 
   // ── full recompute ────────────────────────────────────────────────────────

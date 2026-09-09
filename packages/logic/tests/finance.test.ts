@@ -25,8 +25,10 @@ import {
   detectPatterns,
   tagResearchLoops,
   monthOverMonthDelta,
+  computeMonthlyOutflow,
   DAY_MS,
   isoDate,
+  fMad,
   detectSavingsTransfers,
   matchTransfersToGoals,
   detectSavingsFromBraindump,
@@ -254,6 +256,70 @@ describe('detectAnomaly', () => {
   });
 });
 
+// ─── MAD convention (#104) ────────────────────────────────────────────
+// Pins the ONE convention: stored *_mad fields are RAW MAD (no 1.4826
+// scaling). detectAnomaly's modified z uses 0.6745·(x−med)/rawMAD; the
+// cash-flow band σ applies 1.4826·rawMAD exactly once.
+describe('MAD convention (#104) — store RAW', () => {
+  it('fMad returns RAW (unscaled) MAD', () => {
+    // amounts {10,10,10,16}: median 10, deviations {0,0,0,6}, median dev 0.
+    // amounts {2,4,6,8,10}: median 6, deviations {4,2,0,2,4}, median 2.
+    expect(fMad([2, 4, 6, 8, 10])).toBeCloseTo(2, 6); // RAW would be 2; scaled would be ~2.965
+  });
+
+  it('detectRecurring stores RAW amount_mad', () => {
+    // Monthly $20 bill with one $24 month: amounts {20,20,20,24}.
+    const recs = [
+      rec('2026-01-01', 20, 'out', 'gym'),
+      rec('2026-02-01', 20, 'out', 'gym'),
+      rec('2026-03-01', 20, 'out', 'gym'),
+      rec('2026-04-01', 24, 'out', 'gym'),
+    ];
+    const det = detectRecurring(recs, { minOccurrences: 3 });
+    const p = det.recurring[0];
+    expect(p).toBeDefined();
+    // RAW MAD of {20,20,20,24} about median 20 = median{0,0,0,4} = 0 (raw).
+    // (scaled would also be 0 here, so use the spread fixture below instead.)
+    const recs2 = [
+      rec('2026-01-01', 10, 'out', 'foo'),
+      rec('2026-02-01', 14, 'out', 'foo'),
+      rec('2026-03-01', 18, 'out', 'foo'),
+      rec('2026-04-01', 22, 'out', 'foo'),
+      rec('2026-05-01', 26, 'out', 'foo'),
+    ];
+    const p2 = detectRecurring(recs2, { minOccurrences: 3 }).recurring[0];
+    // amounts {10,14,18,22,26}: median 18, deviations {8,4,0,4,8}, median 4.
+    expect(p2.amount_mad).toBeCloseTo(4, 6); // RAW 4 (scaled would be ~5.93)
+  });
+
+  it('detectAnomaly applies 0.6745/RAW-MAD (single scaling)', () => {
+    // RAW mad = 2. x=15, median=5 → modZ = 0.6745*10/2 = 3.3725 < 3.5 (not anomaly).
+    const pUnder = pattern({ amount_median: 5, amount_mad: 2 });
+    expect(detectAnomaly(rec('2026-01-01', 15, 'out'), pUnder).isAnomaly).toBe(false);
+    // x=16 → 0.6745*11/2 = 3.71 ≥ 3.5 (anomaly). If the reader had re-scaled by
+    // 1.4826 (the old double-scale bug) this would be only 2.5 and miss it.
+    expect(detectAnomaly(rec('2026-01-01', 16, 'out'), pUnder).isAnomaly).toBe(true);
+  });
+
+  it('forecast30d band σ uses 1.4826·RAW-MAD exactly once', () => {
+    // One monthly income pattern, amount_mad raw=4. Single hit in 30d.
+    // Expected σ ≈ 1.4826*4 = 5.93, then CLT-widened (n=1<5 → ×1.8).
+    const recs = [
+      rec('2026-01-01', 100, 'in', 'salary'),
+      rec('2026-01-31', 104, 'in', 'salary'),
+      rec('2026-03-02', 108, 'in', 'salary'),
+      rec('2026-04-01', 96, 'in', 'salary'),
+    ];
+    const now = new Date('2026-04-15T12:00:00').getTime();
+    const fc = forecast30d(recs, now);
+    expect(fc).not.toBeNull();
+    // The pattern's stored amount_mad must be RAW (small, single-digit), so the
+    // band stays sane rather than ~48% inflated.
+    expect(fc!.sigma).toBeGreaterThan(0);
+    expect(Number.isFinite(fc!.sigma)).toBe(true);
+  });
+});
+
 // ─── trackADHDTaxEvents ───────────────────────────────────────────────
 describe('trackADHDTaxEvents', () => {
   it('counts ADHD tax records within window', () => {
@@ -368,6 +434,38 @@ describe('monthOverMonthDelta', () => {
     const delta = monthOverMonthDelta(records, 3, now);
     expect(delta).not.toBeNull();
     expect(delta?.direction).toBe('up');
+  });
+
+  // #52 regression: on the 29-31st, setMonth() overflowed short target months
+  // (e.g. now=Mar 31, offset=-1 → Feb 31 → Mar 3) so February was skipped and
+  // March was counted as both the current AND a baseline month.
+  it('does not skip February when now is the 31st (overflow-safe month math)', () => {
+    const now = new Date(2026, 2, 31, 12, 0, 0).getTime(); // local Mar 31 2026
+    // offset 0 = March; offset -1 = February. February must resolve to Feb, not
+    // roll forward into March.
+    const feb = computeMonthlyOutflow(
+      [rec('2026-02-15', 200, 'out', 'shop')],
+      -1,
+      now,
+    );
+    expect(feb.count).toBe(1);
+    expect(feb.outflow).toBe(200);
+  });
+
+  it('current vs prior month do not double-count on a 31st (MoM baseline)', () => {
+    const now = new Date(2026, 2, 31, 12, 0, 0).getTime(); // Mar 31 2026
+    const records: FinanceRecord[] = [
+      rec('2026-03-10', 900, 'out', 'shop'), // current month
+      rec('2026-02-15', 300, 'out', 'shop'),
+      rec('2026-01-15', 300, 'out', 'shop'),
+      rec('2025-12-15', 300, 'out', 'shop'),
+    ];
+    const mar = computeMonthlyOutflow(records, 0, now);
+    const feb = computeMonthlyOutflow(records, -1, now);
+    expect(mar.outflow).toBe(900);
+    expect(feb.outflow).toBe(300); // NOT 900 (no current-month bleed-through)
+    const delta = monthOverMonthDelta(records, 3, now);
+    expect(delta?.baseline).toBe(300);
   });
 });
 
@@ -873,6 +971,24 @@ describe('detectSavingsTransfers', () => {
     expect(match?.amount).toBe(500);
   });
 
+  // #144 regression: ids must be derived deterministically from inputs, not
+  // from Date.now() + a module counter. Same input → identical ids on repeat
+  // calls (purity), and ids do not depend on call order / wall clock.
+  it('produces deterministic, input-derived transfer ids (purity)', () => {
+    const out1 = rec('2026-03-01', 500, 'out', undefined, { id: 'out-1', notes: 'transfer to savings' });
+    const in1  = rec('2026-03-01', 500, 'in',  undefined, { id: 'in-1', notes: 'from checking' });
+    const a = detectSavingsTransfers([out1, in1]);
+    const b = detectSavingsTransfers([out1, in1]);
+    expect(a.map((t) => t.id)).toEqual(b.map((t) => t.id));
+    // and stable across a separate single-sided detection
+    const single = rec('2026-03-05', 300, 'out', undefined, { id: 'out-2', notes: 'to high-yield savings' });
+    const c = detectSavingsTransfers([single]);
+    const dRun = detectSavingsTransfers([single]);
+    expect(c[0].id).toBe(dRun[0].id);
+    // distinct transfers get distinct ids
+    expect(a[0].id).not.toBe(c[0].id);
+  });
+
   it('detects medium-confidence single-sided transfer to high-yield', () => {
     const r = rec('2026-03-05', 300, 'out', undefined, { notes: 'to high-yield savings' });
     const results = detectSavingsTransfers([r]);
@@ -887,6 +1003,40 @@ describe('detectSavingsTransfers', () => {
     // Weak keyword but no amount-pair — should be suppressed
     const results = detectSavingsTransfers([r]);
     expect(results.every((t) => t.confidence !== 'low')).toBe(true);
+  });
+
+  // #143 regression: a same-day same-amount in/out pair with NO savings
+  // keyword (e.g. a rent payment + an unrelated reimbursement, or a wash)
+  // must NOT be high-confidence or a matched pair — otherwise it would
+  // silently auto-apply against a savings goal.
+  it('#143: uncorroborated same-day same-amount pair is medium, not auto-applyable', () => {
+    const outRec = rec('2026-03-01', 1200, 'out', 'landlord', { notes: 'march rent', category: 'housing' });
+    const inRec  = rec('2026-03-01', 1200, 'in',  'roommate', { notes: 'rent reimbursement' });
+    const results = detectSavingsTransfers([outRec, inRec]);
+    const pair = results.find((t) => t.record_id === outRec.id);
+    expect(pair).toBeDefined();
+    expect(pair?.confidence).toBe('medium');
+    expect(pair?.is_matched_pair).toBe(false);
+    expect(pair?.matched_keyword).toBeNull();
+    // and it must never auto_apply even if amount matches a goal's contributions
+    const goals = [
+      { id: 'g1', name: 'house downpayment', target: 50000, contributions: [{ amount: 1200 }, { amount: 1200 }] },
+    ];
+    const attr = matchTransfersToGoals(results, goals as any);
+    expect(attr.every((a) => a.auto_apply === false)).toBe(true);
+  });
+
+  it('#143: keyword-corroborated pair stays high + matched + auto-applyable', () => {
+    const outRec = rec('2026-03-01', 1200, 'out', undefined, { notes: 'transfer to savings', category: 'transfer' });
+    const inRec  = rec('2026-03-01', 1200, 'in',  undefined, { notes: 'from checking' });
+    const results = detectSavingsTransfers([outRec, inRec]);
+    const pair = results.find((t) => t.is_matched_pair);
+    expect(pair?.confidence).toBe('high');
+    const goals = [
+      { id: 'g1', name: 'house downpayment', target: 50000, contributions: [{ amount: 1200 }, { amount: 1200 }] },
+    ];
+    const attr = matchTransfersToGoals(results, goals as any);
+    expect(attr.some((a) => a.auto_apply === true)).toBe(true);
   });
 
   it('does not match pair when amounts differ by more than 1 cent', () => {

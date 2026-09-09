@@ -162,6 +162,17 @@ export function bhAdjust(pValues: readonly number[], q = 0.1): boolean[] {
   return rejected;
 }
 
+/**
+ * Fixed seed for the default bootstrap RNG.
+ *
+ * Must NOT be derived from `iters` (or any other tunable): coupling the seed
+ * to the iteration count means bumping `iters` silently changes the entire
+ * resample stream, so a CI "moves" for reasons unrelated to the data. A
+ * documented constant keeps the default deterministic and decoupled from the
+ * resolution knob; callers wanting a different stream pass an explicit `rng`.
+ */
+export const BOOTSTRAP_DEFAULT_SEED = 0x9e3779b9;
+
 /** Paired bootstrap confidence interval for a two-sample statistic. */
 export function bootstrapCI(
   xs: readonly number[],
@@ -169,7 +180,7 @@ export function bootstrapCI(
   statFn: (xs: number[], ys: number[]) => number,
   iters = 1000,
   alpha = 0.1,
-  rng: () => number = mulberry32(iters),
+  rng: () => number = mulberry32(BOOTSTRAP_DEFAULT_SEED),
 ): [number, number] {
   const n = xs.length;
   if (n < 2 || n !== ys.length) return [NaN, NaN];

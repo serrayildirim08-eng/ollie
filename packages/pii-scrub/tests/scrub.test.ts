@@ -43,9 +43,21 @@ describe('@ollie/pii-scrub · core regex layer', () => {
     expect(scrubbed).toContain('[NUMERIC]');
   });
 
-  it('preserves years (1900-2099)', () => {
+  it('preserves years (1900-2099) only with year context', () => {
     const { scrubbed } = scrubPII('met him back in 2014, what a year', 'en');
     expect(scrubbed).toContain('2014');
+  });
+
+  it('redacts a bare 4-digit number even in the year range (audit #171)', () => {
+    // No year context → could be a PIN/OTP/2FA code, must not leak.
+    const { scrubbed } = scrubPII('my pin is 2024 do not share', 'en');
+    expect(scrubbed).toContain('[NUMERIC]');
+    expect(scrubbed).not.toContain('2024');
+  });
+
+  it('keeps year-range numbers with a year-cue word (audit #171)', () => {
+    expect(scrubPII('founded in 2024', 'en').scrubbed).toContain('2024');
+    expect(scrubPII('graduated in the year 1999', 'en').scrubbed).toContain('1999');
   });
 
   it('preserves money amounts with currency prefix', () => {
@@ -72,6 +84,18 @@ describe('@ollie/pii-scrub · name wordlist layer', () => {
   it('redacts Turkish names with diacritics', () => {
     const { scrubbed } = scrubPII('ayşe yılmaz aradı', 'tr');
     expect(scrubbed).toContain('[NAME] [NAME]');
+  });
+
+  it('redacts Turkish dotted-İ initial names (audit #76 golden)', () => {
+    // Capital "İ" must fold to "i" under the Turkish locale (default
+    // toLowerCase yields "i̇" + combining dot and never matches the wordlist).
+    for (const name of ['İrem', 'İsmail', 'İbrahim', 'İlkay', 'İşıl']) {
+      const { scrubbed, redactions } = scrubPII(`bugün ${name} aradı`, 'tr');
+      const names = redactions.filter((r) => r.type === 'NAME');
+      expect(names.length, `${name} should be redacted`).toBeGreaterThan(0);
+      expect(scrubbed).toContain('[NAME]');
+      expect(scrubbed).not.toContain(name);
+    }
   });
 
   it('preserves module vocabulary (cycle/food/mood)', () => {

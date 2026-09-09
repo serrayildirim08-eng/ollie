@@ -16,6 +16,8 @@
  *   - Per typical receipt-sized image: ~$0.0001 - $0.0003.
  */
 
+import { fetchWithTimeout, UPSTREAM_TIMEOUT_MS } from '../fetch-timeout';
+
 const GEMINI_MODEL = 'gemini-2.5-flash';
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 
@@ -52,7 +54,7 @@ export async function visionExtract(
   image: VisionImage,
   geminiKey: string,
 ): Promise<VisionExtractResult> {
-  const url = `${GEMINI_API_BASE}/${GEMINI_MODEL}:generateContent?key=${geminiKey}`;
+  const url = `${GEMINI_API_BASE}/${GEMINI_MODEL}:generateContent`;
   const body = {
     systemInstruction: { parts: [{ text: VISION_SYSTEM_PROMPT }] },
     contents: [
@@ -67,19 +69,20 @@ export async function visionExtract(
     generationConfig: { temperature: 0.2, maxOutputTokens: 200 },
   };
 
-  let res = await fetch(url, {
+  // Per-call timeout (audit S2 · fix 3): the vision call is the heaviest dump
+  // upstream (image upload + multimodal decode); without a bound a stalled call
+  // pinned the Worker for the full 30s. On timeout fetchWithTimeout throws
+  // UpstreamTimeoutError, which dump.ts catches → clean 502 vision_failed.
+  const init: RequestInit = {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', 'x-goog-api-key': geminiKey },
     body: JSON.stringify(body),
-  });
+  };
+  let res = await fetchWithTimeout(url, init, UPSTREAM_TIMEOUT_MS.vision, 'vision');
 
   if (res.status === 429) {
     await new Promise((r) => setTimeout(r, 1000));
-    res = await fetch(url, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-    });
+    res = await fetchWithTimeout(url, init, UPSTREAM_TIMEOUT_MS.vision, 'vision');
   }
 
   if (!res.ok) {

@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Ollie",
-  "version": "0.1.0",
+  "version": "1.1.1",
   "identifier": "com.ollie.app",
   "build": {
     "beforeDevCommand": "pnpm dev",
@@ -24,6 +24,13 @@
       "csp": null
     }
   },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["ollie"]
+      }
+    }
+  },
   "bundle": {
     "active": true,
     "targets": "all",
@@ -33,6 +40,9 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "macOS": {
+      "entitlements": "Entitlements.plist"
+    }
   }
 }

@@ -14,8 +14,20 @@
  *                              userId?: string,   // for per-user rate-limit key
  *                              topic?: string }   // overrides bundle id
  *
- * Rate-limit: 5 req/sec per user via Cloudflare KV (RATE_KV).
+ * Rate-limit: per-user, enforced by the native Cloudflare Rate Limiting
+ * binding (RATE_LIMITER, atomic at the edge) when present, falling back to a
+ * best-effort KV fixed-window counter (RATE_KV) when the binding is absent.
  */
+
+import { createApnsJwtSigner } from '@ollie/apns-jwt';
+
+/**
+ * Cloudflare native Rate Limiting binding. `limit()` is atomic edge-side,
+ * which fixes the read-then-write race the KV counter has under burst.
+ */
+export interface RateLimiter {
+  limit(opts: { key: string }): Promise<{ success: boolean }>;
+}
 
 export interface Env {
   // Secrets — set via `wrangler secret put`.
@@ -32,6 +44,10 @@ export interface Env {
 
   // Bindings — set in wrangler.toml.
   RATE_KV: KVNamespace;
+  // Native Rate Limiting binding — atomic counter, preferred over RATE_KV.
+  // Optional so a deploy that has not yet picked up the [[ratelimits]] config
+  // still enforces a (racy) limit via the KV fallback.
+  RATE_LIMITER?: RateLimiter;
 }
 
 interface PushBody {
@@ -41,14 +57,12 @@ interface PushBody {
   topic?: string;
 }
 
-// ─── JWT cache (token is valid up to 1 hour per Apple spec) ────────────────────
+// ─── JWT signer (ES256 / Apple p8) ─────────────────────────────────────────────
+// Signing lives in the shared @ollie/apns-jwt package — one copy, shared with
+// apps/api. The signer caches the token in this module's scope (Apple: valid 1h;
+// re-signs ~15 min before expiry, so a token is reused for ~45 min).
 
-interface CachedJwt {
-  token: string;
-  exp: number;
-}
-
-let __jwtCache: CachedJwt | null = null;
+const apnsSigner = createApnsJwtSigner();
 
 // ─── handler ───────────────────────────────────────────────────────────────────
 
@@ -82,13 +96,20 @@ export default {
     if (!body.deviceToken || typeof body.deviceToken !== 'string') {
       return json({ error: 'missing_deviceToken' }, 400);
     }
+    // Validate the token shape before interpolating it into the APNs URL
+    // (audit #2). APNs tokens are hex; reject anything else so a malformed or
+    // hostile token cannot inject path segments into the request.
+    if (!/^[0-9a-fA-F]{32,200}$/.test(body.deviceToken)) {
+      return json({ error: 'invalid_deviceToken' }, 400);
+    }
     if (!body.payload || typeof body.payload !== 'object') {
       return json({ error: 'missing_payload' }, 400);
     }
 
-    // Rate-limit: 5 req/sec per user (or per-device-token if no userId).
+    // Rate-limit per user (or per-device-token if no userId). Prefers the
+    // native binding (atomic) and falls back to the KV fixed-window counter.
     const rateKey = `rl:apns:${body.userId ?? body.deviceToken}`;
-    const allowed = await checkRate(env.RATE_KV, rateKey, 5, 1);
+    const allowed = await checkRate(env.RATE_LIMITER, env.RATE_KV, rateKey, 5, 1);
     if (!allowed) {
       return json({ error: 'rate_limited' }, 429);
     }
@@ -124,14 +145,31 @@ export default {
   },
 };
 
-// ─── rate-limit helper (KV-backed token bucket) ────────────────────────────────
+// ─── rate-limit helper ──────────────────────────────────────────────────────────
 
+/**
+ * Rate-limit check. Prefers the native Cloudflare Rate Limiting binding, whose
+ * `limit()` is atomic at the edge — this fixes the read-then-write race the KV
+ * counter has, where N concurrent requests all read the same count and all pass
+ * the ceiling under burst.
+ *
+ * Falls back to the legacy KV fixed-window counter when the binding is absent
+ * (e.g. a deploy that has not yet picked up the [[ratelimits]] config). The
+ * fallback is best-effort: it is NOT atomic and can over-admit under a
+ * concurrent burst — the native binding is the enforced bound.
+ */
 async function checkRate(
+  limiter: RateLimiter | undefined,
   kv: KVNamespace,
   key: string,
   max: number,
   windowSec: number,
 ): Promise<boolean> {
+  if (limiter) {
+    const { success } = await limiter.limit({ key });
+    return success;
+  }
+  // Best-effort fallback — racy fixed-window KV counter.
   const now = Math.floor(Date.now() / 1000);
   const slot = `${key}:${Math.floor(now / windowSec)}`;
   const raw = await kv.get(slot);
@@ -144,57 +182,12 @@ async function checkRate(
 
 // ─── JWT signing (ES256 / Apple p8) ────────────────────────────────────────────
 
-async function getApnsJwt(env: Env): Promise<string> {
-  const now = Math.floor(Date.now() / 1000);
-  // Apple recommends regenerating no more than once every 20 minutes,
-  // and the token is valid for 1 hour. We reuse for 45 minutes.
-  if (__jwtCache && __jwtCache.exp - now > 900) {
-    return __jwtCache.token;
-  }
-
-  const header = { alg: 'ES256', kid: env.APPLE_KEY_ID };
-  const claims = { iss: env.APPLE_TEAM_ID, iat: now };
-
-  const encoder = new TextEncoder();
-  const headerB64 = b64url(encoder.encode(JSON.stringify(header)));
-  const claimsB64 = b64url(encoder.encode(JSON.stringify(claims)));
-  const signingInput = `${headerB64}.${claimsB64}`;
-
-  const keyBytes = pemToBinary(env.APPLE_AUTH_KEY);
-  const cryptoKey = await crypto.subtle.importKey(
-    'pkcs8',
-    keyBytes,
-    { name: 'ECDSA', namedCurve: 'P-256' },
-    false,
-    ['sign'],
-  );
-
-  const sigRaw = await crypto.subtle.sign(
-    { name: 'ECDSA', hash: 'SHA-256' },
-    cryptoKey,
-    encoder.encode(signingInput),
-  );
-
-  const token = `${signingInput}.${b64url(new Uint8Array(sigRaw))}`;
-  __jwtCache = { token, exp: now + 3600 };
-  return token;
-}
-
-function pemToBinary(pem: string): ArrayBuffer {
-  const cleaned = pem
-    .replace(/-----BEGIN [^-]+-----/g, '')
-    .replace(/-----END [^-]+-----/g, '')
-    .replace(/\s+/g, '');
-  const bin = atob(cleaned);
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  return bytes.buffer;
-}
-
-function b64url(bytes: Uint8Array): string {
-  let bin = '';
-  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
-  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+function getApnsJwt(env: Env): Promise<string> {
+  return apnsSigner.getApnsJwt({
+    authKey: env.APPLE_AUTH_KEY,
+    keyId: env.APPLE_KEY_ID,
+    teamId: env.APPLE_TEAM_ID,
+  });
 }
 
 // ─── tiny helpers ──────────────────────────────────────────────────────────────

@@ -188,6 +188,19 @@ export function medianIntervalDays(estimate: CadenceEstimate): number {
   return Math.round((estimate.medianIntervalMs / DAY_MS) * 10) / 10;
 }
 
+/**
+ * Human-readable day count for UI surfaces (e.g. "3 days", "1 day",
+ * "less than a day"). Rounds to the nearest whole day; sub-day values
+ * collapse to "less than a day" so we never render "0 days".
+ *
+ * Extracted from 9 verbatim per-Box copies — keep behavior identical.
+ */
+export function formatDays(d: number): string {
+  if (d < 1) return 'less than a day';
+  const rounded = Math.round(d);
+  return `${rounded} day${rounded === 1 ? '' : 's'}`;
+}
+
 // ─── private helpers ─────────────────────────────────────────────────────
 
 function sanitiseTimestamps(events: TimestampedEvent[]): number[] {

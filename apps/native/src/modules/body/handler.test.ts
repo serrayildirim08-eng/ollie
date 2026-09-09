@@ -31,6 +31,7 @@ vi.mock('./migrate', () => ({
 vi.mock('./repo', () => ({
   events: {
     add: vi.fn().mockResolvedValue({ id: 'mock-id' }),
+    remove: vi.fn().mockResolvedValue(undefined),
   },
 }));
 
@@ -41,6 +42,7 @@ vi.mock('../pets/migrate', () => ({
 vi.mock('../pets/repo', () => ({
   events: {
     logCare: vi.fn().mockResolvedValue({ id: 'pet-mock-id' }),
+    remove: vi.fn().mockResolvedValue(undefined),
   },
 }));
 
@@ -54,7 +56,9 @@ import type { Fragment } from '../../router/schema';
 
 const mockRouteModule = vi.mocked(routeModule);
 const mockEventsAdd = vi.mocked(events.add);
+const mockEventsRemove = vi.mocked(events.remove);
 const mockPetsLogCare = vi.mocked(petsEvents.logCare);
+const mockPetsRemove = vi.mocked(petsEvents.remove);
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -159,6 +163,102 @@ describe('bodyHandler — Layer 2 re-routing', () => {
       what: 'walk',
     });
 
+    expect(result.ok).toBe(true);
+  });
+
+  it('#91: undo on a pet-mirrored movement removes BOTH the body event AND the pets row', async () => {
+    mockEventsAdd.mockResolvedValueOnce({ id: 'body-row-1' } as never);
+    mockPetsLogCare.mockResolvedValueOnce({ id: 'pet-row-1' } as never);
+
+    const result = await bodyHandler.apply({
+      text: 'walked buddy',
+      language: 'en',
+      module: 'body',
+      payload: { module: 'body', action: 'log_movement', type: 'walk', pet: 'buddy' },
+      confidence: 0.9,
+      source: 'ai',
+    } as Fragment);
+
+    expect(result.ok).toBe(true);
+    expect(typeof result.undo).toBe('function');
+
+    await result.undo!();
+
+    // Both rows are removed — no orphan pets care row left behind.
+    expect(mockEventsRemove).toHaveBeenCalledWith('body-row-1');
+    expect(mockPetsRemove).toHaveBeenCalledWith('pet-row-1');
+  });
+
+  it('#91: undo on a movement WITHOUT a pet removes only the body event (no pets call)', async () => {
+    mockEventsAdd.mockResolvedValueOnce({ id: 'body-row-2' } as never);
+
+    const result = await bodyHandler.apply({
+      text: 'went for a run',
+      language: 'en',
+      module: 'body',
+      payload: { module: 'body', action: 'log_movement', type: 'run' },
+      confidence: 0.9,
+      source: 'ai',
+    } as Fragment);
+
+    await result.undo!();
+
+    expect(mockEventsRemove).toHaveBeenCalledWith('body-row-2');
+    expect(mockPetsRemove).not.toHaveBeenCalled();
+  });
+
+  it('Layer 2 returns an UNKNOWN action: falls back to original Layer 1 action', async () => {
+    // The AI emits an action this handler does not know. Adopting it would
+    // hit exhaustive() and throw, breaking the fallback. Must be rejected.
+    mockRouteModule.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      data: {
+        actions: [
+          {
+            module: 'body',
+            action: 'log_vibes',
+            data: JSON.stringify({ module: 'body', action: 'log_vibes', vibe: 'cosmic' }),
+          },
+        ],
+      },
+    });
+
+    const fragment = makeBodyFragmentNeedsConfirm('drank two glasses of water');
+    const result = await bodyHandler.apply(fragment);
+
+    // Falls back to the original Layer 1 water action — no throw.
+    expect(mockEventsAdd).toHaveBeenCalledOnce();
+    expect(mockEventsAdd).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'water' }),
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it('Layer 2 returns a known action MISSING its required field: falls back', async () => {
+    // log_symptom requires `symptom`; without it normaliseLabel/add would
+    // write a row with undefined label. Must be rejected → Layer 1 fallback.
+    mockRouteModule.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      data: {
+        actions: [
+          {
+            module: 'body',
+            action: 'log_symptom',
+            data: JSON.stringify({ module: 'body', action: 'log_symptom' }),
+          },
+        ],
+      },
+    });
+
+    const fragment = makeBodyFragmentNeedsConfirm('drank two glasses of water');
+    const result = await bodyHandler.apply(fragment);
+
+    expect(mockEventsAdd).toHaveBeenCalledOnce();
+    expect(mockEventsAdd).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'water' }),
+    );
     expect(result.ok).toBe(true);
   });
 

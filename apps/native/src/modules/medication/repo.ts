@@ -17,16 +17,24 @@
 
 import { computeCadence, type CadenceEstimate } from '@ollie/cadence';
 import { sql } from '../../storage';
+import { newId } from '../../storage/id';
 import {
   coerceKind,
   normaliseName,
   parseSchedule,
+  type CabinetItem,
   type EventKind,
   type Medication,
   type MedicationEvent,
   type MedicationEventWithName,
   type MedicationKind,
 } from './types';
+import {
+  coercePurpose,
+  purposeFor,
+  type MedPurpose,
+} from './purposeMap';
+import { decrementQty } from './lowStock';
 
 // Index signature satisfies the sql<T extends ShimRow>() constraint; the
 // strongly-typed properties still win in autocomplete + narrowing.
@@ -52,11 +60,17 @@ interface EventJoinRow extends EventRow {
   med_name: string;
 }
 
-function newId(): string {
-  return typeof crypto !== 'undefined' && crypto.randomUUID
-    ? crypto.randomUUID()
-    : `m_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+interface CabinetRow {
+  id: string;
+  name: string;
+  purpose: string;
+  dose_label: string | null;
+  qty: number | null;
+  low_flag: number;
+  created_at: number;
+  [col: string]: unknown;
 }
+
 
 // ─── registry ─────────────────────────────────────────────────────────────
 
@@ -94,7 +108,7 @@ export const medications = {
 
     const n = normaliseName(name);
     const now = Date.now();
-    const id = newId();
+    const id = newId('m_');
     await sql.execute(
       `INSERT INTO medications_registry (id, name, created_at, kind, schedule)
        VALUES (?, ?, ?, 'prescription', '[]')`,
@@ -117,6 +131,25 @@ export const medications = {
       `UPDATE medications_registry SET kind = ?, schedule = ? WHERE id = ?`,
       [profile.kind, JSON.stringify(profile.schedule), id],
     );
+  },
+
+  /**
+   * Merge "HH:MM" slots into a med's daily schedule, deduped + sorted. Ensures
+   * the med is registered first ("started magnesium at night" → adds the med +
+   * its evening slot so it shows on the today tab). Idempotent: re-adding the
+   * same slot is a no-op. Returns the updated medication.
+   */
+  async addScheduleSlots(name: string, slots: string[]): Promise<Medication> {
+    const med = await this.ensure(name);
+    const merged = parseSchedule([...med.schedule, ...slots]);
+    if (merged.length === med.schedule.length && merged.every((s, i) => s === med.schedule[i])) {
+      return med; // nothing new
+    }
+    await sql.execute(
+      `UPDATE medications_registry SET schedule = ? WHERE id = ?`,
+      [JSON.stringify(merged), med.id],
+    );
+    return { ...med, schedule: merged };
   },
 
   async remove(id: string): Promise<void> {
@@ -142,6 +175,135 @@ export const medications = {
   },
 };
 
+// ─── cabinet inventory ──────────────────────────────────────────────────────
+//
+// Stock view, deduped by normalised name (UNIQUE index). Every write path
+// goes through `upsert`, so a second "started magnesium" refreshes the row
+// rather than creating a duplicate — the same idempotency the registry uses.
+
+export const cabinet = {
+  async list(): Promise<CabinetItem[]> {
+    const rows = await sql.select<CabinetRow>(
+      `SELECT id, name, purpose, dose_label, qty, low_flag, created_at
+       FROM medication_cabinet
+       ORDER BY created_at DESC`,
+    );
+    return rows.map(rowToCabinetItem);
+  },
+
+  async findByName(name: string): Promise<CabinetItem | null> {
+    const n = normaliseName(name);
+    const rows = await sql.select<CabinetRow>(
+      `SELECT id, name, purpose, dose_label, qty, low_flag, created_at
+       FROM medication_cabinet WHERE name = ? LIMIT 1`,
+      [n],
+    );
+    return rows.length > 0 ? rowToCabinetItem(rows[0]!) : null;
+  },
+
+  /**
+   * Add / refresh a cabinet item, deduped by normalised name. Purpose is
+   * derived from the name (purposeMap) when the caller doesn't pass one;
+   * an explicit purpose (router Layer-2) wins. On an existing row we only
+   * OVERWRITE fields the caller actually supplied — a later bare "have
+   * magnesium" must not wipe a previously-entered dose or qty. Idempotent:
+   * the same add twice leaves one row.
+   */
+  async upsert(input: {
+    name: string;
+    purpose?: MedPurpose | null;
+    doseLabel?: string | null;
+    qty?: number | null;
+  }): Promise<CabinetItem> {
+    const name = normaliseName(input.name);
+    const purpose = input.purpose ? coercePurpose(input.purpose) : purposeFor(name);
+    const existing = await cabinet.findByName(name);
+
+    if (existing) {
+      const nextPurpose = input.purpose ? coercePurpose(input.purpose) : existing.purpose;
+      const nextDose =
+        input.doseLabel !== undefined ? input.doseLabel ?? null : existing.doseLabel;
+      const nextQty = input.qty !== undefined ? normQty(input.qty) : existing.qty;
+      await sql.execute(
+        `UPDATE medication_cabinet SET purpose = ?, dose_label = ?, qty = ? WHERE id = ?`,
+        [nextPurpose, nextDose, nextQty, existing.id],
+      );
+      return { ...existing, purpose: nextPurpose, doseLabel: nextDose, qty: nextQty };
+    }
+
+    const id = newId('mc_');
+    const now = Date.now();
+    const doseLabel = input.doseLabel ?? null;
+    const qty = input.qty !== undefined ? normQty(input.qty) : null;
+    await sql.execute(
+      `INSERT INTO medication_cabinet (id, name, purpose, dose_label, qty, low_flag, created_at)
+       VALUES (?, ?, ?, ?, ?, 0, ?)`,
+      [id, name, purpose, doseLabel, qty, now],
+    );
+    return { id, name, purpose, doseLabel, qty, lowFlag: false, createdAt: now };
+  },
+
+  /**
+   * Set the manual low-flag for a med by name (the override). Creates the
+   * cabinet row first when the med isn't stocked yet ("running low on vitamin
+   * d" before it was ever added). Idempotent — flagging low twice is one flag.
+   */
+  async setLowByName(name: string, low: boolean): Promise<CabinetItem> {
+    const item = (await cabinet.findByName(name)) ?? (await cabinet.upsert({ name }));
+    await sql.execute(
+      `UPDATE medication_cabinet SET low_flag = ? WHERE id = ?`,
+      [low ? 1 : 0, item.id],
+    );
+    return { ...item, lowFlag: low };
+  },
+
+  /** Set the low-flag by id (cabinet UI tap). */
+  async setLow(id: string, low: boolean): Promise<void> {
+    await sql.execute(
+      `UPDATE medication_cabinet SET low_flag = ? WHERE id = ?`,
+      [low ? 1 : 0, id],
+    );
+  },
+
+  /**
+   * Auto count-down: decrement a med's qty by one on a "taken" event, keyed
+   * by name. No-op when the med isn't in the cabinet or has no qty entered
+   * (manual-only items don't auto-count). Returns the new qty, or null.
+   */
+  async decrementOnTaken(name: string): Promise<number | null> {
+    const item = await cabinet.findByName(name);
+    if (!item || item.qty == null) return null;
+    const next = decrementQty(item.qty);
+    await sql.execute(`UPDATE medication_cabinet SET qty = ? WHERE id = ?`, [next, item.id]);
+    return next;
+  },
+
+  /** Update purpose / dose / qty from the cabinet UI editor. */
+  async update(
+    id: string,
+    patch: { purpose?: MedPurpose; doseLabel?: string | null; qty?: number | null },
+  ): Promise<void> {
+    const rows = await sql.select<CabinetRow>(
+      `SELECT id, name, purpose, dose_label, qty, low_flag, created_at
+       FROM medication_cabinet WHERE id = ? LIMIT 1`,
+      [id],
+    );
+    if (rows.length === 0) return;
+    const cur = rowToCabinetItem(rows[0]!);
+    const purpose = patch.purpose ? coercePurpose(patch.purpose) : cur.purpose;
+    const doseLabel = patch.doseLabel !== undefined ? patch.doseLabel ?? null : cur.doseLabel;
+    const qty = patch.qty !== undefined ? normQty(patch.qty) : cur.qty;
+    await sql.execute(
+      `UPDATE medication_cabinet SET purpose = ?, dose_label = ?, qty = ? WHERE id = ?`,
+      [purpose, doseLabel, qty, id],
+    );
+  },
+
+  async remove(id: string): Promise<void> {
+    await sql.execute(`DELETE FROM medication_cabinet WHERE id = ?`, [id]);
+  },
+};
+
 // ─── events ───────────────────────────────────────────────────────────────
 
 export const events = {
@@ -158,6 +320,20 @@ export const events = {
   async logMissed(input: { medName: string }): Promise<MedicationEvent> {
     const med = await medications.ensure(input.medName);
     return writeEvent(med.id, 'missed', {});
+  },
+
+  /** "later" — the user pushed a scheduled dose off for now (no cabinet
+   *  count-down; it's not taken, just set aside). */
+  async logLater(input: { medName: string }): Promise<MedicationEvent> {
+    const med = await medications.ensure(input.medName);
+    return writeEvent(med.id, 'later', {});
+  },
+
+  /** "skip today" — the user is intentionally skipping this dose. Calm, no
+   *  shame; does not decrement the cabinet. */
+  async logSkipped(input: { medName: string }): Promise<MedicationEvent> {
+    const med = await medications.ensure(input.medName);
+    return writeEvent(med.id, 'skipped', {});
   },
 
   async logSideEffect(input: { medName: string; note: string }): Promise<MedicationEvent> {
@@ -207,7 +383,7 @@ async function writeEvent(
   kind: EventKind,
   payload: Record<string, unknown>,
 ): Promise<MedicationEvent> {
-  const id = newId();
+  const id = newId('m_');
   const now = Date.now();
   const data = JSON.stringify(payload);
   await sql.execute(
@@ -249,6 +425,24 @@ function rowToEvent(r: EventRow): MedicationEvent {
 
 function rowToEventWithName(r: EventJoinRow): MedicationEventWithName {
   return { ...rowToEvent(r), medName: r.med_name };
+}
+
+function rowToCabinetItem(r: CabinetRow): CabinetItem {
+  return {
+    id: r.id,
+    name: r.name,
+    purpose: coercePurpose(r.purpose),
+    doseLabel: r.dose_label ?? null,
+    qty: r.qty == null ? null : Number(r.qty),
+    lowFlag: r.low_flag === 1,
+    createdAt: r.created_at,
+  };
+}
+
+/** Coerce a qty into a stored non-negative integer, or null when absent. */
+function normQty(raw: number | null | undefined): number | null {
+  if (raw == null || typeof raw !== 'number' || !Number.isFinite(raw)) return null;
+  return Math.max(0, Math.floor(raw));
 }
 
 function parseData(raw: string): Record<string, unknown> {

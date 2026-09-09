@@ -11,11 +11,11 @@
  * is short-circuited (no module updates) and a quiet banner surfaces.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '@clerk/clerk-react';
 import { Stack } from '../layout';
 import { Text } from '../ui';
-import { space } from '../theme/tokens';
+import { colors } from '../theme/tokens';
 import { BrainDumpInput } from './BrainDumpInput';
 import { dumpArchive } from './archive';
 import { tagDumpMood } from './mood-lexicon';
@@ -26,7 +26,15 @@ import { useAppLang } from '../settings/appLang';
 import { useFeature } from '../settings/features';
 import { crisisBannerCopy } from './crisisCopy';
 import { NeedsConfirmCard } from './NeedsConfirmCard';
+import { DumpReceipt } from './DumpReceipt';
+import { buildReceiptText } from './receiptCopy';
+import { FirstRunGuide } from './FirstRunGuide';
+import { ReminderWhenCard } from './ReminderWhenCard';
+import { scheduleReminderAt } from '../notify/taskReminder';
+import { resolveTimeOfDayFireAt, fallbackFireAt } from '../notify/reminderCascade';
+import type { HandlerResult } from '../router/schema';
 import { TodayNoticings } from '../modules/brain/TodayNoticings';
+import { TodayPulse } from '../todo/TodayPulse';
 import { GoalCreateModal } from '../modules/goals/GoalCreateModal';
 import { PartnerCard } from '../modules/partner';
 import styles from './DumpScreen.module.css';
@@ -40,29 +48,10 @@ const SMCP_STYLE: React.CSSProperties = {
 // Bumped a hair so the cleanup unmount lands just after the fade-out finishes
 // and the user never sees a hard cut.
 const ACK_FADE_MS = 2500;
-// Inline ack is much shorter — a quiet "okay" under the input, not a takeover.
-// Matches the `ollie-inline-ack` keyframe.
-const INLINE_FADE_MS = 1600;
-// Force-remount each ack so the CSS animation restarts on every dump even
-// when the same Ack node would otherwise persist across submits.
-let _ackTick = 0;
 
-// The full-screen sage flood is a celebration moment — it earns the takeover
-// ONCE per day (the first dump). Every dump after that gets a quiet inline
-// "okay" instead, so the most-repeated action in the app stops hijacking the
-// whole screen 30x/day (and finally matches the documented silent dump UX).
-// Best-effort localStorage gate; falls back to inline on any failure.
-function claimFirstFloodToday(): boolean {
-  try {
-    const today = new Date().toISOString().slice(0, 10);
-    const last = localStorage.getItem('ollie.ackFloodDate');
-    if (last === today) return false;
-    localStorage.setItem('ollie.ackFloodDate', today);
-    return true;
-  } catch {
-    return false;
-  }
-}
+// Matches the total duration of the `ollie-receipt` keyframe — the calm
+// "Saved to X" line fades itself out, then we unmount just after.
+const RECEIPT_FADE_MS = 4100;
 
 /** One pending confirmation card — keyed by fragment index in the last dispatch. */
 interface PendingConfirm {
@@ -78,6 +67,32 @@ interface PendingConfirm {
   fromPhoto: boolean;
 }
 
+/** One pending "when?" reminder card — a time-less "remind me to X" dump. */
+type PendingReminder = NonNullable<HandlerResult['reminderCascade']> & {
+  /** Stable id: dumpId + fragment index in that dispatch. */
+  cardId: string;
+};
+
+/** Deep link a reminder notification opens, per the source task repo. */
+function reminderActionUrl(module: 'admin' | 'work'): string {
+  return module === 'work' ? 'ollie://box/work' : 'ollie://todo';
+}
+
+/**
+ * Schedule a time-less reminder once the user has chosen (or defaulted to) a
+ * fire time. Deterministic harness path — no LLM. Reuses scheduleReminderAt so
+ * the OS-local + in-process + server-push fan-out + dedupe id all match the
+ * inline-scheduled reminders.
+ */
+function scheduleCascadeReminder(reminder: PendingReminder, fireAt: number): void {
+  scheduleReminderAt(fireAt, reminder.taskId, {
+    title: 'reminder',
+    body: reminder.text,
+    module: reminder.module,
+    actionUrl: reminderActionUrl(reminder.module),
+  });
+}
+
 function buildRouteLabel(entry: DispatchEntry): string {
   const { module, payload } = entry.fragment;
   // Every ActionPayload variant carries an `action` string discriminant.
@@ -91,11 +106,21 @@ function buildRouteLabel(entry: DispatchEntry): string {
 export function DumpScreen(): JSX.Element {
   const { getToken } = useAuth();
   const [ackKey, setAckKey] = useState<number | null>(null);
-  // Whether the live ack is the full-screen flood (day's first dump) or the
-  // quiet inline "okay" (every dump after).
-  const [floodMode, setFloodMode] = useState(false);
+  // Monotonic tick that forces the <Ack> to remount so its CSS animation
+  // restarts on every dump (audit #127). Component-local useRef, NOT a
+  // module-scope `let`: the old global was shared across every DumpScreen
+  // instance and never reset, so it leaked across HMR reloads + would collide
+  // if two screens ever mounted.
+  const ackTickRef = useRef(0);
+  // The post-dump receipt: a calm "Saved to X" line. Keyed by a monotonic tick
+  // so a fresh dump remounts it and restarts the fade. Null = nothing to show.
+  const [receipt, setReceipt] = useState<{ id: number; text: string } | null>(null);
+  const receiptTickRef = useRef(0);
   const [crisis, setCrisis] = useState<CrisisSignal | null>(null);
   const [pendingConfirms, setPendingConfirms] = useState<PendingConfirm[]>([]);
+  // Time-less "remind me to X" dumps surface a small "when?" card. The to-do
+  // already exists; choosing a time (or dismissing → 7pm) schedules the ping.
+  const [pendingReminders, setPendingReminders] = useState<PendingReminder[]>([]);
   // Partner is deferred out of v1 (audit #10) — its home ambient card only
   // shows when the feature flag is on.
   const partnerEnabled = useFeature('partner');
@@ -104,13 +129,40 @@ export function DumpScreen(): JSX.Element {
   // the user just completes obstacle/premortem/ulysses. Null = closed.
   const [goalDraft, setGoalDraft] = useState<{ what: string; why: string } | null>(null);
 
+  // First-run guide: a brand-new user (no dumps ever) gets a guided empty state
+  // under the box with example chips. Hidden the moment they dump. Default
+  // false so a returning user never flashes it before the archive check runs.
+  const [showGuide, setShowGuide] = useState(false);
+  // Bumped each time an example chip is tapped → re-seeds the dump textarea.
+  const [seed, setSeed] = useState<{ text: string; nonce: number }>({ text: '', nonce: 0 });
+
+  // Decide first-run once on mount: show the guide only when nothing has ever
+  // been dumped. hasAny() returns true on a read error, so a transient DB
+  // hiccup can't make a returning user look brand-new.
+  useEffect(() => {
+    let cancelled = false;
+    void dumpArchive.hasAny().then((has) => {
+      if (!cancelled && !has) setShowGuide(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // Auto-clear the ack so the DOM cleans up after the fade-out and the
   // screen returns to its quiet default state.
   useEffect(() => {
     if (ackKey === null) return;
-    const t = setTimeout(() => setAckKey(null), floodMode ? ACK_FADE_MS : INLINE_FADE_MS);
+    const t = setTimeout(() => setAckKey(null), ACK_FADE_MS);
     return () => clearTimeout(t);
-  }, [ackKey, floodMode]);
+  }, [ackKey]);
+
+  // Clear the receipt after it has faded so the home screen returns to quiet.
+  useEffect(() => {
+    if (receipt === null) return;
+    const t = setTimeout(() => setReceipt(null), RECEIPT_FADE_MS);
+    return () => clearTimeout(t);
+  }, [receipt]);
 
   // Fetch a Clerk session JWT for every dump request. The worker verifies
   // via JWKS at CLERK_ISSUER. Token has a short TTL (default ~60s) and
@@ -125,11 +177,14 @@ export function DumpScreen(): JSX.Element {
     setPendingConfirms((prev) => prev.filter((c) => c.id !== id));
   }, []);
 
+  const dismissReminder = useCallback((cardId: string) => {
+    setPendingReminders((prev) => prev.filter((r) => r.cardId !== cardId));
+  }, []);
+
   // Force-remount the Ack so its CSS animation restarts on every fire.
   const fireAck = useCallback(() => {
-    _ackTick += 1;
-    setFloodMode(claimFirstFloodToday());
-    setAckKey(_ackTick);
+    ackTickRef.current += 1;
+    setAckKey(ackTickRef.current);
   }, []);
 
   // Instant ack: fired SYNCHRONOUSLY by BrainDumpInput the moment a non-empty
@@ -138,7 +193,16 @@ export function DumpScreen(): JSX.Element {
   // (goal-intent waits for the modal save; crisis must never ack).
   const onSubmitted = useCallback(() => {
     fireAck();
+    // First dump submitted → the guide's job is done; the silent default takes
+    // over from here.
+    setShowGuide(false);
   }, [fireAck]);
+
+  // Tapping an example chip fills the dump box (and focuses it) so the user's
+  // first move is a single tap. The guide stays until they actually dump.
+  const onPickExample = useCallback((text: string) => {
+    setSeed((prev) => ({ text, nonce: prev.nonce + 1 }));
+  }, []);
 
   const onResult = useCallback(async (output: RouterOutput) => {
     // Goal intent → rich capture. When the AI classifies a fragment as a new
@@ -173,8 +237,17 @@ export function DumpScreen(): JSX.Element {
     // see it (audit §MISSING: native discarded dump text). We archive only
     // non-crisis dumps — a crisis fragment short-circuits dispatch and must not
     // be re-surfaced later. Best-effort: archive.record swallows its own errors.
+    //
+    // AWAIT, not fire-and-forget (audit #86): dispatchRouterOutput's post-write
+    // sweep calls the dump bridge's syncToStore, which reads dumpArchive.list()
+    // to mirror dump.items / journal.entries. If the archive write is still
+    // floating when that read runs, THIS dump is missing from the mirror for a
+    // whole cycle (the resurfacer + finance doom-buying + goals detectors don't
+    // see it until the NEXT dump triggers another sweep). Awaiting first
+    // guarantees the row is on disk before the sweep reads it. record() never
+    // throws, so this can't break the dump flow.
     if (!output.crisis) {
-      void dumpArchive.record({
+      await dumpArchive.record({
         id: output.dumpId,
         text: output.originalDump,
         modules: Array.from(new Set(output.fragments.map((f) => f.module))),
@@ -210,6 +283,12 @@ export function DumpScreen(): JSX.Element {
           routeLabel: buildRouteLabel(e),
           fromPhoto,
           onKeep: async () => {
+            // Dismiss FIRST, synchronously (audit #53): removing the card from
+            // pendingConfirms unmounts its keep/undo buttons in this same React
+            // commit, so a fast double-tap can't fire applyFragment twice (which
+            // would write the grey-zone fragment to the module repo twice). The
+            // write then runs after the card is already gone.
+            dismissConfirm(id);
             if (isDraft) {
               try {
                 await applyFragment(e.fragment);
@@ -217,9 +296,11 @@ export function DumpScreen(): JSX.Element {
                 console.error('[dump] draft apply failed', err);
               }
             }
-            dismissConfirm(id);
           },
           onUndo: async () => {
+            // Dismiss FIRST (audit #53): same double-tap guard as onKeep — undo
+            // dismisses synchronously so the row-removal can't run twice.
+            dismissConfirm(id);
             // draft → nothing was written; just drop it. legacy → remove row.
             if (!isDraft && realUndo) {
               try {
@@ -228,13 +309,42 @@ export function DumpScreen(): JSX.Element {
                 console.error('[dump] undo failed', err);
               }
             }
-            dismissConfirm(id);
           },
         };
       });
 
     if (cards.length > 0) {
       setPendingConfirms((prev) => [...prev, ...cards]);
+    }
+
+    // Time-less reminders ("remind me to call mom" with no time): the handler
+    // already created the durable to-do and handed back a reminderCascade; we
+    // surface a small "when?" card so the user can pick a time (or dismiss to
+    // the 7pm fallback). Scheduling itself is deterministic harness code.
+    const reminders: PendingReminder[] = dispatched.entries
+      .map((e, i) => {
+        const rc = e.result.reminderCascade;
+        return rc ? { ...rc, cardId: `${output.dumpId}-rem-${i}` } : null;
+      })
+      .filter((r): r is PendingReminder => r !== null);
+
+    if (reminders.length > 0) {
+      setPendingReminders((prev) => [...prev, ...reminders]);
+    }
+
+    // Post-dump receipt: tell her WHERE the dump landed (report §H). Only count
+    // fragments that were actually written — draft-first grey-zone fragments
+    // (e.result.draft) weren't saved yet, so the NeedsConfirmCard speaks for
+    // those instead. Module names only; buildReceiptText returns null when
+    // there's nothing nameable to acknowledge (e.g. goal-intent-only dumps,
+    // whose modal owns its own ack).
+    const writtenModules = dispatched.entries
+      .filter((e) => e.result.draft !== true)
+      .map((e) => e.fragment.module);
+    const receiptText = buildReceiptText(writtenModules);
+    if (receiptText !== null) {
+      receiptTickRef.current += 1;
+      setReceipt({ id: receiptTickRef.current, text: receiptText });
     }
 
     // No ack fired here anymore — it already flashed instantly on submit (see
@@ -248,17 +358,40 @@ export function DumpScreen(): JSX.Element {
     // flashed on submit. The `!crisis` render guard hides it reactively, but
     // we also clear it so it can't reappear if crisis is later dismissed.
     setAckKey(null);
+    // A crisis dump writes nothing and must never look "saved".
+    setReceipt(null);
     setCrisis(signal);
   }, []);
 
   return (
     <Stack gap={32}>
-      {/* Home is the COVER, not a registry: one centered serif question, no
-          kicker. This is the one screen allowed to center — every Box stays
-          left-aligned editorial, so the two never read as the same template. */}
-      <Stack gap={8} align="center" style={{ paddingTop: space[6] }}>
-        <Text scale="display" style={{ textAlign: "center" }}>
-          What's in your head?
+      <Stack gap={6}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+          <svg width={18} height={18} viewBox="0 0 24 24" aria-hidden>
+            <path
+              d="M21 4c-10 0-16 5-16 12 0 1.4.3 2.7.8 3.8C13 19 20 13 21 4z"
+              fill={colors.sageDeep}
+            />
+          </svg>
+          <span style={{ fontWeight: 600, letterSpacing: '0.5px', color: colors.sageDeep, fontSize: 16 }}>
+            ollie
+          </span>
+        </div>
+        <Text scale="caption" color={colors.inkSoft} style={SMCP_STYLE}>
+          good evening
+        </Text>
+        <Text
+          scale="title"
+          color={colors.ink}
+          style={{
+            fontFamily: 'var(--ollie-font-sans)',
+            fontSize: '26px',
+            fontWeight: 700,
+            lineHeight: 1.15,
+            letterSpacing: '-0.01em',
+          }}
+        >
+          what's on your mind?
         </Text>
       </Stack>
 
@@ -267,11 +400,14 @@ export function DumpScreen(): JSX.Element {
         onSubmitted={onSubmitted}
         onResult={onResult}
         onCrisis={onCrisis}
+        seed={seed}
       />
 
-      {/* Quiet inline ack — every dump after the day's first. A small "okay"
-          under the input that fades in ~1.6s, no screen takeover. */}
-      {!crisis && ackKey !== null && !floodMode && <InlineAck key={ackKey} />}
+      {!crisis && showGuide && <FirstRunGuide onPick={onPickExample} />}
+
+      {/* One calm orientation line — "today's clear." / "a few things for
+          today." Hidden during first-run (the guide speaks then) and on crisis. */}
+      {!crisis && !showGuide && <TodayPulse />}
 
       {/* The cross-life "today" surface — the PRIMARY brain surface (Sprint 2).
           Replaces the old per-module dump card here: the selection discipline
@@ -298,10 +434,11 @@ export function DumpScreen(): JSX.Element {
         />
       )}
 
-      {crisis && <CrisisBanner crisis={crisis} onDismiss={() => setCrisis(null)} />}
+      {crisis && <CrisisBanner onDismiss={() => setCrisis(null)} />}
 
-      {/* Full-screen sage flood — earned once per day, on the first dump. */}
-      {!crisis && ackKey !== null && floodMode && <Ack key={ackKey} />}
+      {!crisis && ackKey !== null && <Ack key={ackKey} />}
+
+      {!crisis && receipt !== null && <DumpReceipt key={receipt.id} text={receipt.text} />}
 
       {!crisis && pendingConfirms.length > 0 && (
         <Stack gap={10}>
@@ -313,6 +450,28 @@ export function DumpScreen(): JSX.Element {
               fromPhoto={card.fromPhoto}
               onKeep={card.onKeep}
               onUndo={card.onUndo}
+            />
+          ))}
+        </Stack>
+      )}
+
+      {!crisis && pendingReminders.length > 0 && (
+        <Stack gap={10}>
+          {pendingReminders.map((reminder) => (
+            <ReminderWhenCard
+              key={reminder.cardId}
+              reminderText={reminder.text}
+              onPick={(hhmm) => {
+                const fireAt = resolveTimeOfDayFireAt(hhmm);
+                // Unparseable preset → fall back to 7pm rather than no-op.
+                scheduleCascadeReminder(reminder, fireAt ?? fallbackFireAt());
+                dismissReminder(reminder.cardId);
+              }}
+              onDismiss={() => {
+                // No answer → 7pm today (rolls to tomorrow if already past 7pm).
+                scheduleCascadeReminder(reminder, fallbackFireAt());
+                dismissReminder(reminder.cardId);
+              }}
             />
           ))}
         </Stack>
@@ -334,30 +493,11 @@ function Ack(): JSX.Element {
   );
 }
 
-// ─── inline ack ─────────────────────────────────────────────────────────────
-// The quiet default: a small "okay" under the input that fades in then out.
-// No fixed positioning, no takeover — the dump UX stays silent (see memory
-// feedback-ollie-dump-ux-silent).
-
-function InlineAck(): JSX.Element {
-  return (
-    <div className={styles.inlineAck} role="status" aria-live="polite">
-      okay
-    </div>
-  );
-}
-
 // ─── crisis ───────────────────────────────────────────────────────────────
 
-function CrisisBanner({
-  crisis,
-  onDismiss,
-}: {
-  crisis: CrisisSignal;
-  onDismiss: () => void;
-}): JSX.Element {
+function CrisisBanner({ onDismiss }: { onDismiss: () => void }): JSX.Element {
   const lang = useAppLang();
-  const copy = crisisBannerCopy(lang, crisis.tier);
+  const copy = crisisBannerCopy(lang);
   const body = copy.body;
   return (
     <Stack
@@ -377,7 +517,7 @@ function CrisisBanner({
       </Text>
       <Text
         scale="caption"
-        color="var(--ollie-color-ink-faint)"
+        color={colors.inkFaint}
         as="button"
         onClick={onDismiss}
         style={{

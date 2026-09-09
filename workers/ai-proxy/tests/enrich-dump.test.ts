@@ -228,6 +228,29 @@ describe('handleEnrichDump · happy path', () => {
     expect(resp.status).toBe(400);
   });
 
+  // ── audit #84 — raw_text length cap ──────────────────────────────────────────
+  it('rejects raw_text over the char cap with 413 (audit #84)', async () => {
+    const { kv } = makeKv();
+    const resp = await handleEnrichDump(
+      makeReq(basePayload({ raw_text: 'x'.repeat(10_001) })),
+      ENRICH_ENV(kv),
+      UID,
+    );
+    expect(resp.status).toBe(413);
+    expect((await resp.json() as { error: string }).error).toBe('raw_text_too_large');
+  });
+
+  it('rejects an oversized body on Content-Length with 413 (audit #38)', async () => {
+    const { kv } = makeKv();
+    const req = new Request('https://worker.dev/enrich-dump', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'content-length': String(128 * 1024) },
+      body: JSON.stringify(basePayload()),
+    });
+    const resp = await handleEnrichDump(req, ENRICH_ENV(kv), UID);
+    expect(resp.status).toBe(413);
+  });
+
   // ── audit #4 — IDOR ────────────────────────────────────────────────────────
   it('ignores client user_hash and queues the server-derived hash instead', async () => {
     const { kv, data } = makeKv();

@@ -12,8 +12,35 @@
 import { NavLink } from "react-router";
 import { Row, Stack } from "../layout";
 import { Text } from "../ui";
-import { space } from "../theme/tokens";
+import { colors, space } from "../theme/tokens";
 import { primaryRoutes, type RouteEntry } from "./routes";
+
+// olive single-line tab icons, keyed by route id
+const TAB_ICON_PATHS: Record<string, string> = {
+  home: '<path d="M4 11l8-6 8 6v8a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z"/>',
+  todo: '<polyline points="3.5 12 5.5 14 8.5 10"/><path d="M11 7h10M11 12h10M11 17h10"/>',
+  modules:
+    '<rect x="4" y="4" width="7" height="7" rx="1.6"/><rect x="13" y="4" width="7" height="7" rx="1.6"/><rect x="4" y="13" width="7" height="7" rx="1.6"/><rect x="13" y="13" width="7" height="7" rx="1.6"/>',
+  settings:
+    '<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/>',
+};
+
+function TabIcon({ id }: { id: string }): JSX.Element {
+  return (
+    <svg
+      width={23}
+      height={23}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.7}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      dangerouslySetInnerHTML={{ __html: TAB_ICON_PATHS[id] ?? "" }}
+    />
+  );
+}
 
 const SMCP_STYLE: React.CSSProperties = {
   fontVariantCaps: "all-small-caps",
@@ -52,15 +79,13 @@ function Sidebar({ items }: ListProps) {
         width: 220,
         height: "100dvh",
         padding: `${space[6]} ${space[5]}`,
-        borderRight: `1px solid var(--ollie-color-hairline)`,
-        background: 'var(--ollie-color-cream)',
+        borderRight: `1px solid ${colors.hairline}`,
+        background: colors.cream,
         boxSizing: "border-box",
       }}
     >
       <Stack gap={space[4]}>
-        {/* Real masthead — serif wordmark in ink, not a faint smcp eyebrow.
-            The thin spine deserves a brand moment, not a label. */}
-        <Text scale="heading" color="var(--ollie-color-ink)">
+        <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
           Ollie
         </Text>
         <Stack gap={space[2]} as="ul" style={{ listStyle: "none", margin: 0, padding: 0 }}>
@@ -70,21 +95,18 @@ function Sidebar({ items }: ListProps) {
                 to={item.path}
                 end={item.path === "/"}
                 style={({ isActive }) => ({
-                  display: "flex",
-                  alignItems: "center",
-                  gap: space[3],
+                  display: "block",
                   padding: `${space[2]} 0`,
-                  color: isActive ? 'var(--ollie-color-ink)' : 'var(--ollie-color-ink-faint)',
+                  color: isActive ? colors.ink : colors.inkFaint,
                   fontWeight: isActive ? 500 : 400,
                   textDecoration: "none",
                   borderLeft: isActive
-                    ? `2px solid var(--ollie-color-ink)`
+                    ? `2px solid ${colors.ink}`
                     : "2px solid transparent",
                   paddingLeft: space[3],
                   transition: "color 180ms ease-out",
                 })}
               >
-                <NavIcon name={item.icon} />
                 <Text>{item.label}</Text>
               </NavLink>
             </li>
@@ -93,58 +115,6 @@ function Sidebar({ items }: ListProps) {
       </Stack>
     </nav>
   );
-}
-
-// Hand-rolled stroke icons — no icon dependency, matches the app's existing
-// inline-SVG idiom (GoalArc, SeedGlyph). Keyed by route.icon name.
-function NavIcon({ name }: { name?: string }): JSX.Element | null {
-  const common = {
-    width: 22,
-    height: 22,
-    viewBox: "0 0 24 24",
-    fill: "none",
-    stroke: "currentColor",
-    strokeWidth: 1.6,
-    strokeLinecap: "round" as const,
-    strokeLinejoin: "round" as const,
-    "aria-hidden": true,
-  };
-  switch (name) {
-    case "House":
-      return (
-        <svg {...common}>
-          <path d="M4 11.5 12 4l8 7.5" />
-          <path d="M6 10v9h12v-9" />
-        </svg>
-      );
-    case "ListChecks":
-      return (
-        <svg {...common}>
-          <path d="M10 6h10M10 12h10M10 18h10" />
-          <path d="m3 6 1.4 1.4L7 5" />
-          <path d="m3 12 1.4 1.4L7 11" />
-          <path d="m3 18 1.4 1.4L7 17" />
-        </svg>
-      );
-    case "SquaresFour":
-      return (
-        <svg {...common}>
-          <rect x="4" y="4" width="6.5" height="6.5" rx="1" />
-          <rect x="13.5" y="4" width="6.5" height="6.5" rx="1" />
-          <rect x="4" y="13.5" width="6.5" height="6.5" rx="1" />
-          <rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1" />
-        </svg>
-      );
-    case "Gear":
-      return (
-        <svg {...common}>
-          <circle cx="12" cy="12" r="3" />
-          <path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2" />
-        </svg>
-      );
-    default:
-      return null;
-  }
 }
 
 function BottomBar({ items }: ListProps) {
@@ -157,11 +127,12 @@ function BottomBar({ items }: ListProps) {
         bottom: 0,
         left: 0,
         right: 0,
-        height: 56,
-        borderTop: `1px solid var(--ollie-color-hairline)`,
-        background: 'var(--ollie-color-cream)',
+        height: 64,
+        background: colors.cream,
+        boxShadow: "0 -8px 24px rgba(120, 140, 122, 0.22)",
         paddingBottom: "env(safe-area-inset-bottom)",
         boxSizing: "content-box",
+        zIndex: 1000,
       }}
     >
       <Row
@@ -176,28 +147,36 @@ function BottomBar({ items }: ListProps) {
         }}
       >
         {capped.map((item) => (
-          <li key={item.id} style={{ flex: 1, height: "100%" }}>
-            {/* The WHOLE cell is the tap target (>=48px), not just the text —
-                fixes the sub-44px hit area the audit flagged. Icon over label. */}
+          <li key={item.id} style={{ flex: 1, textAlign: "center", height: "100%" }}>
             <NavLink
               to={item.path}
               end={item.path === "/"}
               style={({ isActive }) => ({
                 display: "flex",
+                width: "100%",
+                height: "100%",
                 flexDirection: "column",
                 alignItems: "center",
                 justifyContent: "center",
-                gap: 3,
-                width: "100%",
-                height: "100%",
-                minHeight: 48,
-                color: isActive ? 'var(--ollie-color-ink)' : 'var(--ollie-color-ink-faint)',
+                gap: 5,
+                minHeight: 44,
+                padding: `${space[2]} 0`,
+                color: isActive ? colors.sageDeep : colors.inkFaint,
                 textDecoration: "none",
-                fontWeight: isActive ? 500 : 400,
+                fontWeight: isActive ? 600 : 400,
+                transition: "color 180ms ease-out",
               })}
             >
-              <NavIcon name={item.icon} />
-              <Text scale="caption" style={SMCP_STYLE}>{item.label}</Text>
+              <TabIcon id={item.id} />
+              <span
+                style={{
+                  fontSize: "10px",
+                  letterSpacing: "0.08em",
+                  textTransform: "lowercase",
+                }}
+              >
+                {item.label.toLowerCase()}
+              </span>
             </NavLink>
           </li>
         ))}

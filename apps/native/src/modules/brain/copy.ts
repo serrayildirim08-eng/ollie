@@ -24,6 +24,14 @@ import {
   fallbackCopy,
   copyKindOf,
   buildAddToGroceryListAction,
+  buildDeferTasksAction,
+  buildAddAdminTaskAction,
+  buildSurfaceDecisionAction,
+  buildSurfaceTasksAction,
+  buildBreakDownTaskAction,
+  buildBatchBlockAction,
+  buildArchiveTaskAction,
+  buildMarkChoreDoneAction,
   type ScoredNoticing,
   type CopyFacts,
   type CopyActionKind,
@@ -40,13 +48,46 @@ const DAY_MS = 86_400_000;
 
 // ─── facts + action derivation (pure mapping over the candidate) ─────────────
 
+/** The recognised offer action kinds a detector can attach via `facts.actionKind`. */
+const OFFER_ACTION_KINDS: readonly CopyActionKind[] = [
+  'add_to_grocery_list',
+  'defer_tasks',
+  'add_admin_task',
+  'surface_decision',
+  // ── wave 2 ──
+  'surface_tasks',
+  'break_down_task',
+  'batch_block',
+  // ── dateless ladder final tier ──
+  'archive_task',
+  // ── chores ──
+  'mark_chore_done',
+] as const;
+
+/** Read the offer action a detector attached directly to the candidate's facts. */
+function attachedActionKind(n: ScoredNoticing): CopyActionKind | null {
+  const raw = (n.facts as { actionKind?: unknown } | null | undefined)?.actionKind;
+  if (typeof raw !== 'string') return null;
+  return (OFFER_ACTION_KINDS as readonly string[]).includes(raw)
+    ? (raw as CopyActionKind)
+    : null;
+}
+
 /**
- * The action a noticing can offer, by kind. Today only the grocery replenish
- * ("milk") noticing offers one; the framework is generic so more attach later.
+ * The action a noticing can offer, by kind. Two paths:
+ *   1. an action a detector attached directly (`facts.actionKind` — the admin
+ *      renewal/decision offers carry their own kind + payload data), OR
+ *   2. the kind inferred from the noticing's copy-kind:
+ *        - replenish ("milk")  → add_to_grocery_list
+ *        - sleep_debt          → defer_tasks
+ * The milk path (replenish → add_to_grocery_list) is unchanged.
  */
 function actionKindFor(n: ScoredNoticing): CopyActionKind | null {
+  const attached = attachedActionKind(n);
+  if (attached) return attached;
   const kind = copyKindOf({ category: n.category, module: n.module });
   if (kind === 'replenish') return 'add_to_grocery_list';
+  if (kind === 'sleep_debt') return 'defer_tasks';
   return null;
 }
 
@@ -70,15 +111,92 @@ export function factsForNoticing(n: ScoredNoticing): CopyFacts {
   };
 }
 
+/** Read a string field a detector attached to the candidate's facts bag. */
+function factString(n: ScoredNoticing, key: string): string {
+  const raw = (n.facts as Record<string, unknown> | null | undefined)?.[key];
+  return typeof raw === 'string' ? raw.trim() : '';
+}
+
+/** Read a string[] field a detector attached (wave-2 id lists). Empty when absent. */
+function factStringArray(n: ScoredNoticing, key: string): string[] {
+  const raw = (n.facts as Record<string, unknown> | null | undefined)?.[key];
+  if (!Array.isArray(raw)) return [];
+  return raw.map((x) => (x ?? '').toString().trim()).filter(Boolean);
+}
+
+/** Read a finite-number field a detector attached (wave-2 fire time). NaN when absent. */
+function factNumber(n: ScoredNoticing, key: string): number {
+  const raw = (n.facts as Record<string, unknown> | null | undefined)?.[key];
+  return typeof raw === 'number' && Number.isFinite(raw) ? raw : NaN;
+}
+
 /**
  * The suggested action descriptor for a noticing, or null if it offers none.
  * The native dispatcher (executeAction) turns this into a real repo call.
+ *
+ * Each kind builds from the data the detector carried:
+ *   - add_to_grocery_list → the recovered item names (milk path, unchanged).
+ *   - defer_tasks         → no per-task data; the executor resolves the set.
+ *   - add_admin_task      → the renewal's task text + due date.
+ *   - surface_decision    → the recurring-decision row id + what.
  */
 export function actionForNoticing(n: ScoredNoticing, lang: AppLang): NoticingAction | null {
-  if (actionKindFor(n) === 'add_to_grocery_list') {
-    return buildAddToGroceryListAction(itemNames(n), lang);
+  const kind = actionKindFor(n);
+  switch (kind) {
+    case 'add_to_grocery_list':
+      return buildAddToGroceryListAction(itemNames(n), lang);
+    case 'defer_tasks':
+      return buildDeferTasksAction(lang);
+    case 'add_admin_task':
+      return buildAddAdminTaskAction(
+        factString(n, 'taskText'),
+        factString(n, 'dueDate') || null,
+        lang,
+      );
+    case 'surface_decision':
+      return buildSurfaceDecisionAction(
+        factString(n, 'decisionId'),
+        factString(n, 'decisionWhat'),
+        lang,
+      );
+    case 'surface_tasks':
+      // paperwork piling → the stalled admin task ids to bring to today.
+      return buildSurfaceTasksAction(factStringArray(n, 'taskIds'), lang);
+    case 'break_down_task':
+      // chronic deferral → break the repeatedly-deferred task into a first step.
+      // The orchestrator carries the source id as `taskId`; accept `sourceTaskId`
+      // too for any future synthesized path.
+      return buildBreakDownTaskAction(
+        factString(n, 'taskText'),
+        factString(n, 'taskId') || factString(n, 'sourceTaskId'),
+        lang,
+      );
+    case 'batch_block':
+      // renewal cluster → batch the renewals into one day + an app-closed reminder.
+      return buildBatchBlockAction(
+        factString(n, 'batchLabel'),
+        factNumber(n, 'batchFireAtMs'),
+        factStringArray(n, 'renewalIds'),
+        lang,
+      );
+    case 'archive_task': {
+      // dateless ladder final tier → archive the long-untouched task. The
+      // ladder attaches the task's module + id to the candidate facts.
+      const mod = factString(n, 'taskModule');
+      if (mod !== 'admin' && mod !== 'work') return null;
+      return buildArchiveTaskAction(mod, factString(n, 'taskId'), lang);
+    }
+    case 'mark_chore_done':
+      // chore-due offer → mark the recurring chore done (resets its clock).
+      // The chores orchestrator attaches the registry id + name to the facts.
+      return buildMarkChoreDoneAction(
+        factString(n, 'choreId'),
+        factString(n, 'choreName'),
+        lang,
+      );
+    default:
+      return null;
   }
-  return null;
 }
 
 // ─── per-(noticing, day, lang) cache ─────────────────────────────────────────
@@ -94,8 +212,13 @@ function dayBucket(now: number): number {
   return Math.floor(now / DAY_MS);
 }
 
+// Bump when the copy logic changes in a way that should invalidate already-
+// cached sentences (e.g. the generic-placeholder fix). v2 retires any stale
+// "you have a generic situation" rows written before the fix.
+const COPY_CACHE_VERSION = 'v2';
+
 function cacheKey(noticingId: string, lang: AppLang, bucket: number): string {
-  return `${noticingId}|${lang}|${bucket}`;
+  return `${COPY_CACHE_VERSION}|${noticingId}|${lang}|${bucket}`;
 }
 
 async function readCache(key: string): Promise<string | null> {
@@ -162,6 +285,15 @@ export async function resolveNoticingCopy(
 
   const bucket = dayBucket(now);
   const key = cacheKey(n.id, lang, bucket);
+
+  // 0. A 'generic' kind means the candidate's category mapped to nothing
+  //    specific — there's nothing meaningful to hand the AI, and asking it to
+  //    phrase "situation: generic" produces meta-garbage ("you have a generic
+  //    situation"). Skip the AI entirely and use the clean fallback. This is a
+  //    hard guarantee the placeholder copy can never reach the surface.
+  if (facts.kind === 'generic') {
+    return fallback;
+  }
 
   // 1. Cached for this (noticing, day, lang)? Use it — no AI re-call on render.
   const cached = await readCache(key);

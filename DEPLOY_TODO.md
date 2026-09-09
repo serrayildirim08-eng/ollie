@@ -224,3 +224,89 @@ return `{success: false, reason: 'rate_limit', retry_after}`. UI shows
 
 - Cold-storage rotation cron.
 - B2B aggregate-rollup tables.
+
+---
+
+## DEPLOY_NOTES — queue-deploy blocker fix (2026-06-28)
+
+### What was broken
+
+Three Cloudflare Queue binding blocks were **live (uncommented) TOML** even
+though the comments right above them said "COMMENTED OUT". They pointed at
+`ollie-enrich-queue` / `ollie-enrich-dlq`, which are **not provisioned**. Any
+`wrangler deploy` (and the `deploy workers` GitHub Action, which fires on every
+push to `main` touching `workers/**`) would hard-fail on binding resolution,
+blocking ALL worker deploys — including hotfixes.
+
+- `workers/ai-proxy/wrangler.toml` — top-level `[[queues.producers]]`
+- `workers/ai-proxy/wrangler.toml` — `[[env.staging.queues.producers]]`
+  (this one was NOT flagged by the audit; it breaks `--env staging` too)
+- `workers/cron/wrangler.toml` — `[[queues.consumers]]` + DLQ
+
+### The fix (Option A — no Cloudflare provisioning needed)
+
+All three blocks are now commented out. This is **safe with zero code change**:
+`workers/ai-proxy/src/telemetry.ts` already guards with
+`if (env.ENRICH_QUEUE) { …send… } else { …KV q:enrich:* fallback… }`, and
+`workers/cron/src/index.ts` `scheduled()` still drains that KV queue every
+5 min via `drainEnrichQueue`. So enrichment keeps working on the KV path that
+the codebase already treats as live.
+
+> If you ever DO want native Queues (Option B): run
+> `wrangler queues create ollie-enrich-queue` + `wrangler queues create
+> ollie-enrich-dlq`, uncomment all three blocks **in lockstep**, AND disable
+> the KV-scan enrich branch in `cron` `scheduled()` so the queue consumer
+> doesn't double-process dumps (duplicate `enriched_signals` rows). Check
+> `wrangler queues list` first.
+
+### Manual deploy steps (Serra runs)
+
+CI: the `deploy workers` workflow (`.github/workflows/deploy-workers.yml`) runs
+on push to `main` under `workers/**`, or via **Actions → deploy workers → Run
+workflow** (workflow_dispatch). It now enforces deploy ordering: `cron` waits
+for `ai-proxy` + `apns-push` (cron has `[[services]]` bindings to both).
+
+Required **GitHub repo secrets** for CI:
+- `CLOUDFLARE_API_TOKEN` (Workers Scripts:Edit + the Queues/KV/Vectorize scopes)
+- `CLOUDFLARE_ACCOUNT_ID`
+
+If deploying by hand, order matters (service bindings): deploy
+`ollie-apns-push` and `ollie-ai-proxy` **before** `ollie-cron`.
+
+### Required per-worker secrets (`wrangler secret put` in each dir)
+
+- **ollie-ai-proxy**: `ANTHROPIC_API_KEY`, `SUPABASE_URL`,
+  `SUPABASE_SERVICE_ROLE`, `SUPABASE_ANON_KEY`, `CLERK_ISSUER`,
+  `VOYAGE_API_KEY`, `GROQ_API_KEY`. Leave `T0_JWT_ENFORCED` UNSET in prod;
+  `INVITE_BASE_URL` optional.
+- **ollie-cron**: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE`,
+  `SUPABASE_SERVICE_ROLE_KEY` (legacy alias), `APNS_INTERNAL_SECRET`
+  (must equal the apns-push value). `ANTHROPIC_API_KEY` only if you keep the
+  direct-key path (the drain routes through ai-proxy `/v1/messages`).
+- **ollie-apns-push**: `APPLE_AUTH_KEY`, `APPLE_KEY_ID`, `APPLE_TEAM_ID`,
+  `APPLE_BUNDLE_ID` (`app.ollie.ollie`), `APNS_INTERNAL_SECRET` (must equal
+  cron's value).
+- **ollie-sentry-tunnel**: none.
+
+KV / Vectorize / Rate-Limit / Workers-AI bindings are declared with real ids
+and auto-provision on deploy — no manual step.
+
+### Verify before deploy (creds-free dry run, per worker dir)
+
+```
+pnpm install
+pnpm dlx wrangler deploy --dry-run --outdir /tmp/wr-out                 # ai-proxy + cron
+pnpm dlx wrangler deploy --dry-run --outdir /tmp/wr-out --env staging   # ai-proxy only
+```
+
+A dry-run validates bindings + build without deploying. All should pass now
+that the three queue blocks are commented.
+
+### Adjacent latent bug — flagged, NOT fixed here (out of scope)
+
+`apps/api/wrangler.toml` has `DEVICE_TOKENS` KV
+`id = "REPLACE_AFTER_wrangler_kv_create_DEVICE_TOKENS"` — a placeholder that
+would fail a manual `apps/api` deploy. `apps/api` is **not** wired into
+`deploy-workers.yml` and the worker is currently undeployed, so it is not a CI
+blocker. Fix before any first `apps/api` deploy: `wrangler kv namespace create
+DEVICE_TOKENS` and paste the real id.

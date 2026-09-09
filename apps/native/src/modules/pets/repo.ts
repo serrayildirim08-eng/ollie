@@ -15,6 +15,7 @@
 
 import { computeCadence, type CadenceEstimate } from '@ollie/cadence';
 import { sql } from '../../storage';
+import { newId } from '../../storage/id';
 import {
   normalisePetName,
   normaliseSupplement,
@@ -34,11 +35,6 @@ interface PetEventRow {
   [col: string]: unknown;
 }
 
-function newId(): string {
-  return typeof crypto !== 'undefined' && crypto.randomUUID
-    ? crypto.randomUUID()
-    : `p_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-}
 
 // ─── events ───────────────────────────────────────────────────────────────
 
@@ -153,7 +149,7 @@ async function insert(
   kind: PetEventKind,
   data: PetEventData,
 ): Promise<PetEvent> {
-  const id = newId();
+  const id = newId('p_');
   const now = Date.now();
   await sql.execute(
     `INSERT INTO pets_events (id, pet_name, kind, data, logged_at)

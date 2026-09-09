@@ -31,6 +31,13 @@ vi.mock('../../storage', () => ({
 import { migrateCycle } from './migrate';
 import { cycleRepo } from './repo';
 
+/** Seed a period_start row at an exact timestamp (no public API for this). */
+function seedPeriodStart(occurredAt: number): void {
+  mockDb
+    .prepare('INSERT INTO cycle_events (id, kind, data, occurred_at) VALUES (?, ?, ?, ?)')
+    .run(`seed_${occurredAt}`, 'period_start', null, occurredAt);
+}
+
 beforeEach(async () => {
   await migrateCycle();
   mockDb.exec('DELETE FROM cycle_events');
@@ -74,6 +81,47 @@ describe('cycle repo · bleeding intensity', () => {
     expect(await cycleRepo.bleedingForDay(today)).toBe('clots');
     const list = await cycleRepo.list('bleeding', 10);
     expect(list).toHaveLength(2);
+  });
+});
+
+describe('cycle repo · current() day counter (#136 DST/local-day)', () => {
+  it('counts calendar days, not 24h blocks, across a local midnight', async () => {
+    // period_start late on day D (23:30 local); "now" is just after midnight
+    // on day D+1 (00:30 local) — only ~1h of wall-clock elapsed.
+    const startLocal = new Date();
+    startLocal.setHours(23, 30, 0, 0);
+    const startedAt = startLocal.getTime();
+    const nowLocal = new Date(startedAt);
+    nowLocal.setDate(nowLocal.getDate() + 1);
+    nowLocal.setHours(0, 30, 0, 0);
+
+    seedPeriodStart(startedAt);
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(nowLocal.getTime());
+    try {
+      const cur = await cycleRepo.current();
+      // Absolute-ms / 86_400_000 would floor to 0 here (the old bug); a local
+      // calendar-day diff correctly reports 1 — the next cycle day.
+      expect(cur?.daysSinceStart).toBe(1);
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  it('reports day 0 for a start earlier the same local day', async () => {
+    const startLocal = new Date();
+    startLocal.setHours(2, 0, 0, 0);
+    const startedAt = startLocal.getTime();
+    const nowLocal = new Date(startedAt);
+    nowLocal.setHours(22, 0, 0, 0); // 20h later, same calendar day
+
+    seedPeriodStart(startedAt);
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(nowLocal.getTime());
+    try {
+      const cur = await cycleRepo.current();
+      expect(cur?.daysSinceStart).toBe(0);
+    } finally {
+      nowSpy.mockRestore();
+    }
   });
 });
 

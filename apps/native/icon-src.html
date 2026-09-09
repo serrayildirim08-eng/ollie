@@ -1,0 +1,52 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+  html,body{margin:0;padding:0;width:1024px;height:1024px;overflow:hidden;}
+  :root{--leaf:#6f8a4f;--leaf2:#7d9a5b;--accent:#566f33;--trunk:#7a6a4a;}
+</style></head><body>
+<svg id="ic" width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="40%" r="78%">
+      <stop offset="0%" stop-color="#d6e1d1"/>
+      <stop offset="62%" stop-color="#c4d2c1"/>
+      <stop offset="100%" stop-color="#aebfa9"/>
+    </radialGradient>
+  </defs>
+  <rect width="1024" height="1024" fill="url(#bg)"/>
+  <g id="tree"></g>
+</svg>
+<script>
+function rnd(seed){ let x = Math.sin(seed*99.7)*43758.5; return x - Math.floor(x); }
+// Ported 1:1 from the cycle olive-tree (ollie-cycle-tree.html): full-growth tree,
+// crown low on the branches, phyllotaxis olives, rooted in a soil mound.
+function tree(cx, groundY, H){
+  const g = 0.85, shed = false, s = H/248;
+  let out='', canopy='';
+  out += '<ellipse cx="'+cx+'" cy="'+(groundY+2.5*s)+'" rx="'+(30*s)+'" ry="'+(8*s)+'" fill="#9c8b69" opacity="0.40"/>';
+  const trunkH = (54 + 56*g)*s, topY = groundY - trunkH;
+  out += '<path d="M '+cx+' '+groundY+' C '+(cx-6*s)+' '+(groundY-trunkH*0.5)+' '+(cx+5*s)+' '+(groundY-trunkH*0.7)+' '+cx+' '+topY+'" stroke="var(--trunk)" stroke-width="'+(5+3*g)*s+'" fill="none" stroke-linecap="round"/>';
+  out += '<path d="M '+cx+' '+(groundY-3*s)+' q '+(-7*s)+' '+(5*s)+' '+(-14*s)+' '+(6*s)+'" stroke="var(--trunk)" stroke-width="'+(3*s)+'" fill="none" stroke-linecap="round"/>';
+  out += '<path d="M '+cx+' '+(groundY-3*s)+' q '+(7*s)+' '+(5*s)+' '+(14*s)+' '+(6*s)+'" stroke="var(--trunk)" stroke-width="'+(3*s)+'" fill="none" stroke-linecap="round"/>';
+  out += '<ellipse cx="'+cx+'" cy="'+(groundY+3*s)+'" rx="'+(19*s)+'" ry="'+(6.5*s)+'" fill="#8a7656" opacity="0.6"/>';
+  out += '<path d="M '+cx+' '+(topY+22*s)+' q '+(-22*s)+' '+(-6*s)+' '+(-34*s)+' '+(-22*s)+'" stroke="var(--trunk)" stroke-width="'+(3+1.5*g)*s+'" fill="none" stroke-linecap="round"/>';
+  out += '<path d="M '+cx+' '+(topY+34*s)+' q '+(22*s)+' '+(-4*s)+' '+(34*s)+' '+(-20*s)+'" stroke="var(--trunk)" stroke-width="'+(3+1.5*g)*s+'" fill="none" stroke-linecap="round"/>';
+  const canopyR = (15 + 46*g)*s;
+  const cy = topY + canopyR*0.18 + trunkH*0.24*(1-g);
+  const leafRx = 6*s, leafRy = 2.8*s, maxLeaves = 190, n = Math.round(maxLeaves*g);
+  for(let i=0;i<n;i++){
+    const a = rnd(i+1)*Math.PI*2, rr = Math.sqrt(rnd(i+7))*canopyR;
+    const lx = cx + Math.cos(a)*rr, ly = cy + Math.sin(a)*rr*1.02 - canopyR*0.25;
+    const rot = rnd(i+13)*180, r3 = rnd(i+3);
+    const col = r3>0.62 ? 'var(--leaf2)' : (r3>0.28 ? 'var(--leaf)' : 'var(--accent)');
+    canopy += '<ellipse cx="'+lx.toFixed(1)+'" cy="'+ly.toFixed(1)+'" rx="'+leafRx.toFixed(1)+'" ry="'+leafRy.toFixed(1)+'" fill="'+col+'" transform="rotate('+rot.toFixed(0)+' '+lx.toFixed(1)+' '+ly.toFixed(1)+')" opacity="0.97"/>';
+  }
+  for(let i=0;i<5;i++){
+    const ang = i*2.39996 + 0.7;
+    const rr = canopyR*0.82*Math.sqrt((i+0.5)/5) + canopyR*0.06*(rnd(i+50)-0.5);
+    const ox = cx + Math.cos(ang)*rr, oy = cy + Math.sin(ang)*rr*0.82 + canopyR*0.06, orr = 4.6*s;
+    canopy += '<circle cx="'+ox.toFixed(1)+'" cy="'+oy.toFixed(1)+'" r="'+orr.toFixed(1)+'" fill="#2a3320"/>';
+    canopy += '<circle cx="'+(ox-orr*0.3).toFixed(1)+'" cy="'+(oy-orr*0.3).toFixed(1)+'" r="'+(orr*0.28).toFixed(1)+'" fill="rgba(255,255,255,.4)"/>';
+  }
+  document.getElementById('tree').innerHTML = out + canopy;
+}
+tree(512, 858, 880);
+</script>
+</body></html>

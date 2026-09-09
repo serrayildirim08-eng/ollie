@@ -95,6 +95,22 @@ describe('detectChangePoint', () => {
     const cp = detectChangePoint([28, 27, 29, 28, 28, 27, 28, 29, 28, 27, 28, 28]);
     expect(cp.detected).toBe(false);
   });
+
+  // #141 regression: when both windows have zero variance (perfectly regular
+  // cycles) the pooled sd is 0, so `delta > 2*0` previously fired on ANY
+  // nonzero shift. A 1-day jump must NOT register as a change-point.
+  it('does NOT fire on a 1-day shift between zero-variance windows', () => {
+    // older = [28×6], recent = [29×6] → delta 1, both variances 0.
+    const cp = detectChangePoint([28, 28, 28, 28, 28, 28, 29, 29, 29, 29, 29, 29]);
+    expect(cp.pooledSd).toBeGreaterThan(0); // floored, not 0
+    expect(cp.detected).toBe(false);
+  });
+
+  it('still fires on a large shift between zero-variance windows', () => {
+    // delta 10 still exceeds 2×floor(1.0) = 2.
+    const cp = detectChangePoint([28, 28, 28, 28, 28, 28, 38, 38, 38, 38, 38, 38]);
+    expect(cp.detected).toBe(true);
+  });
 });
 
 describe('robustStats', () => {
@@ -216,6 +232,18 @@ describe('computePhaseForDate', () => {
 
   it('returns luteal after the ovulation window', () => {
     expect(computePhaseForDate(cycles, lastStart + day(20))).toBe('luteal');
+  });
+
+  // #138 regression: without an upper day bound a stale last-cycle start makes
+  // every future date read as 'luteal' forever. Beyond avgCycle (28) + margin
+  // (7) = day 35, the phase is unknown (a missed/unlogged period).
+  it('returns luteal just inside the upper bound', () => {
+    expect(computePhaseForDate(cycles, lastStart + day(34))).toBe('luteal');
+  });
+
+  it('returns unknown well beyond avgCycle + margin', () => {
+    expect(computePhaseForDate(cycles, lastStart + day(45))).toBe('unknown');
+    expect(computePhaseForDate(cycles, lastStart + day(120))).toBe('unknown');
   });
 });
 

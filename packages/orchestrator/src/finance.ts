@@ -359,7 +359,7 @@ export function createFinanceOrchestrator(
           freshEmitted.push(id);
         }
         if (freshEmitted.length) {
-          store.set('finance', '_recurringCandidatesEmitted', [...seenEmit, ...freshEmitted]);
+          store.set('finance', '_recurringCandidatesEmitted', appendCapped([...seenEmit], freshEmitted));
         }
       } catch (err) {
         console.error('[orchestrator/finance] detectRecurringEarly failed', err);
@@ -640,10 +640,10 @@ export function createFinanceOrchestrator(
           }
         }
         if (newCancelled.length) {
-          store.set('finance', '_subCancelledIds', [...seenCancelled, ...newCancelled]);
+          store.set('finance', '_subCancelledIds', appendCapped([...seenCancelled], newCancelled));
         }
         if (newPaid.length) {
-          store.set('finance', '_billPaidOnTimeIds', [...seenPaidOnTime, ...newPaid]);
+          store.set('finance', '_billPaidOnTimeIds', appendCapped([...seenPaidOnTime], newPaid));
         }
       } catch (err) {
         console.error('[orchestrator/finance] subscription/bill transition emit failed', err);
@@ -766,7 +766,7 @@ export function createFinanceOrchestrator(
           });
         }
         if (freshAnomNotified.length) {
-          store.set('finance', '_anomalyNotifiedIds', [...seenAnomNotified, ...freshAnomNotified]);
+          store.set('finance', '_anomalyNotifiedIds', appendCapped([...seenAnomNotified], freshAnomNotified));
         }
       } catch (err) {
         console.error('[orchestrator/finance] anomaly_detected emit failed', err);

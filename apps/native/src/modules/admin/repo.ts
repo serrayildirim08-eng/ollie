@@ -20,6 +20,7 @@
 
 import { computeCadence, type CadenceEstimate } from '@ollie/cadence';
 import { sql } from '../../storage';
+import { newId } from '../../storage/id';
 import type { AdminRenewal, AdminTask, AdminTaskData, AdminTaskKind, BallState, RecurringDecisionRow } from './types';
 
 // Index signature satisfies the sql<T extends ShimRow>() constraint; the
@@ -45,11 +46,6 @@ interface RenewalRow {
   [col: string]: unknown;
 }
 
-function newId(): string {
-  return typeof crypto !== 'undefined' && crypto.randomUUID
-    ? crypto.randomUUID()
-    : `a_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-}
 
 // ─── tasks ────────────────────────────────────────────────────────────────
 
@@ -76,7 +72,7 @@ export const tasks = {
     dueDate?: string | null;
     ballState?: BallState;
   }): Promise<AdminTask> {
-    const id = newId();
+    const id = newId('a_');
     const now = Date.now();
     const data: AdminTaskData = input.data ?? ({ kind: input.kind } as AdminTaskData);
     const dueDate = input.dueDate ?? null;
@@ -113,6 +109,19 @@ export const tasks = {
     await sql.execute(
       `UPDATE admin_tasks SET ball_state = ?, last_transition_at = ?, done = ? WHERE id = ?`,
       [ballState, Date.now(), ballState === 'done' ? 1 : 0, id],
+    );
+  },
+
+  /**
+   * Set a task's due date (ISO yyyy-mm-dd or null). Used by the brain's
+   * defer_tasks offer to push a non-urgent, due-today task to tomorrow. Only
+   * touches `due_date` — never `ball_state` / `done` / `last_transition_at` —
+   * so deferring a date doesn't move the ball or alter completion.
+   */
+  async setDueDate(id: string, dueDate: string | null): Promise<void> {
+    await sql.execute(
+      `UPDATE admin_tasks SET due_date = ? WHERE id = ?`,
+      [dueDate, id],
     );
   },
 
@@ -169,7 +178,7 @@ export const renewals = {
    * legitimately log "passport" twice (once for self, once for partner).
    */
   async add(input: { renewalType: string; dueDate?: string | null }): Promise<AdminRenewal> {
-    const id = newId();
+    const id = newId('a_');
     const now = Date.now();
     const dueDate = input.dueDate ?? null;
     await sql.execute(
@@ -283,7 +292,7 @@ export const recurringDecisions = {
    * lands an `admin.recurring_decision` action).
    */
   async add(input: { what: string }): Promise<RecurringDecisionRow> {
-    const id = newId();
+    const id = newId('a_');
     const now = Date.now();
     await sql.execute(
       `INSERT INTO admin_recurring_decisions (id, what, decision, snooze_until_ms, created_at)
@@ -336,6 +345,18 @@ export const recurringDecisions = {
         [decision, id],
       );
     }
+  },
+
+  /**
+   * Clear any snooze on a decision so it re-enters `listOpen` (and leads
+   * /todo) today. Used by the brain's surface_decision offer — accepting
+   * "bring it to today" un-snoozes the row without recording a decision.
+   */
+  async unsnooze(id: string): Promise<void> {
+    await sql.execute(
+      `UPDATE admin_recurring_decisions SET snooze_until_ms = NULL WHERE id = ?`,
+      [id],
+    );
   },
 
   async remove(id: string): Promise<void> {

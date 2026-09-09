@@ -14,6 +14,7 @@
 
 import { computeCadence, type CadenceEstimate } from '@ollie/cadence';
 import { sql } from '../../storage';
+import { newId } from '../../storage/id';
 import {
   normaliseSymptom,
   type BleedingIntensity,
@@ -37,11 +38,22 @@ interface CycleEventRow {
  *  different cycle and the user is still bleeding. */
 const BLEEDING_WINDOW_MS = 8 * 24 * 60 * 60 * 1000;
 
-function newId(): string {
-  return typeof crypto !== 'undefined' && crypto.randomUUID
-    ? crypto.randomUUID()
-    : `c_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Whole calendar-days from `from` to `to` measured in LOCAL time.
+ *
+ * Dividing the absolute ms gap by 86_400_000 is off-by-one across a DST
+ * transition (a 23h or 25h local day) — e.g. a period started "yesterday"
+ * can read as 0 or 2 days ago. Snapping both ends to local midnight first
+ * (via the existing `startOfLocalDay`) makes "day N" stable regardless of
+ * clock shifts (#136). `Math.round` absorbs the ±1h DST jitter between the
+ * two midnights so the quotient lands on a clean integer.
+ */
+function localDayDiff(from: number, to: number): number {
+  return Math.round((startOfLocalDay(to) - startOfLocalDay(from)) / DAY_MS);
 }
+
 
 function rowToEvent(r: CycleEventRow): CycleEvent {
   let symptom: string | null = null;
@@ -72,7 +84,7 @@ async function insert(
   kind: CycleEventKind,
   data: Record<string, unknown> | null,
 ): Promise<CycleEvent> {
-  const id = newId();
+  const id = newId('c_');
   const now = Date.now();
   const encoded = data ? JSON.stringify(data) : null;
   await sql.execute(
@@ -128,7 +140,7 @@ export const cycleRepo = {
        WHERE kind = 'bleeding' AND occurred_at >= ? AND occurred_at < ?`,
       [dayStart, dayEnd],
     );
-    const id = newId();
+    const id = newId('c_');
     await sql.execute(
       `INSERT INTO cycle_events (id, kind, data, occurred_at) VALUES (?, 'bleeding', ?, ?)`,
       [id, JSON.stringify({ intensity }), at],
@@ -195,7 +207,7 @@ export const cycleRepo = {
     );
     const bleeding = endRows.length === 0;
 
-    const daysSinceStart = Math.floor((Date.now() - startedAt) / (24 * 60 * 60 * 1000));
+    const daysSinceStart = localDayDiff(startedAt, Date.now());
     return { startedAt, daysSinceStart, bleeding };
   },
 
@@ -249,7 +261,7 @@ async function insertAt(
   data: Record<string, unknown> | null,
   at: number,
 ): Promise<CycleEvent> {
-  const id = newId();
+  const id = newId('c_');
   const encoded = data ? JSON.stringify(data) : null;
   await sql.execute(
     `INSERT INTO cycle_events (id, kind, data, occurred_at) VALUES (?, ?, ?, ?)`,

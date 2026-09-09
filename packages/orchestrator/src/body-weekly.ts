@@ -308,17 +308,24 @@ export function nextSunday19(now: number): number {
 
 /**
  * ISO week key for dedup: YYYY-Www (ISO 8601 week).
- * Two computes in the same calendar week return the same key.
+ * Two computes in the same ISO week return the same key.
+ *
+ * THE canonical impl — UTC-based (#146). body-correlations.ts and goals.ts
+ * import this rather than carrying their own copies, so a date never maps to
+ * two different week keys depending on which detector computed it. UTC is the
+ * right frame for a cross-module dedupe key: it's stable regardless of the
+ * runtime's local timezone or DST.
  */
 export function isoWeekKey(ts: number): string {
   const d = new Date(ts);
-  // Get ISO week number
-  const dayOfWeek = d.getDay() === 0 ? 7 : d.getDay(); // Mon=1..Sun=7
+  // ISO week: Monday = day 1; shift so Monday is 0.
+  const day = (d.getUTCDay() + 6) % 7;
+  // Nearest Thursday (ISO rule: a week belongs to the year of its Thursday).
   const thursday = new Date(d);
-  thursday.setDate(d.getDate() - dayOfWeek + 4);
-  const jan1 = new Date(thursday.getFullYear(), 0, 1);
-  const weekNo = Math.ceil(((thursday.getTime() - jan1.getTime()) / DAY_MS + 1) / 7);
-  return `${thursday.getFullYear()}-W${String(weekNo).padStart(2, '0')}`;
+  thursday.setUTCDate(d.getUTCDate() - day + 3);
+  const yearStart = new Date(Date.UTC(thursday.getUTCFullYear(), 0, 1));
+  const weekNo = Math.ceil(((thursday.getTime() - yearStart.getTime()) / DAY_MS + 1) / 7);
+  return `${thursday.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
 }
 
 // ─── emit helper ────────────────────────────────────────────────────────────
@@ -403,14 +410,40 @@ export function scheduleWeeklyReview(
 ): () => void {
   let timer: ReturnType<typeof setTimeout> | null = null;
 
+  // Floor for any re-arm delay (audit #93). A setTimeout can fire early on
+  // suspend/resume or clock skew; without a floor a recomputed near-zero
+  // delay would busy-loop arm() → setTimeout(0) → arm() ... burning CPU.
+  const MIN_REARM_MS = 60_000;
+
   function arm(): void {
     const now = opts.now();
     const fireAt = nextSunday19(now);
+    // Pure scheduling delay must never be floored below 0, but we cap the
+    // tiny end so a fire-and-immediately-rearm can't spin.
     const delay = Math.max(0, fireAt - now);
     timer = setTimeout(() => {
       timer = null;
-      emitWeeklyReview(opts);
-      arm(); // re-schedule next week
+      // Only treat this as a real fire if the clock has actually reached
+      // the target. An early fire (skew/resume) re-arms instead of emitting.
+      if (opts.now() >= fireAt) {
+        emitWeeklyReview(opts);
+        // After a genuine fire, re-arm for next week with a floored delay so
+        // a clock that's still at/just-past 19:00 can't tight-loop.
+        rearmFloored();
+      } else {
+        rearmFloored();
+      }
+    }, delay);
+  }
+
+  function rearmFloored(): void {
+    const now = opts.now();
+    const fireAt = nextSunday19(now);
+    const delay = Math.max(MIN_REARM_MS, fireAt - now);
+    timer = setTimeout(() => {
+      timer = null;
+      if (opts.now() >= fireAt) emitWeeklyReview(opts);
+      rearmFloored();
     }, delay);
   }
 

@@ -10,12 +10,14 @@
  * Auth: T0_JWT_ENFORCED-gated, same as the other write endpoints.
  */
 
-import { json } from '@ollie/worker-http';
+import { json, upstreamError } from '@ollie/worker-http';
 import { verifyClerkJwt } from '../clerk-verify';
 
 export interface TranscribeEnv {
   GROQ_API_KEY: string;
   T0_JWT_ENFORCED?: string;
+  /** Cloudflare env name; "production" forces auth even if T0_JWT_ENFORCED='0' (S4e). */
+  ENVIRONMENT?: string;
   CLERK_ISSUER?: string;
 }
 
@@ -35,8 +37,8 @@ function extFor(contentType: string): string {
 }
 
 export async function handleTranscribe(req: Request, env: TranscribeEnv): Promise<Response> {
-  // ── Auth — fail CLOSED unless T0_JWT_ENFORCED === '0' (dev). ──────────────
-  if (env.T0_JWT_ENFORCED !== '0') {
+  // ── Auth — fail CLOSED unless T0_JWT_ENFORCED === '0' (dev) AND not prod. ──
+  if (env.T0_JWT_ENFORCED !== '0' || env.ENVIRONMENT === 'production') {
     const auth = req.headers.get('authorization');
     if (!auth || !auth.startsWith('Bearer ')) {
       return json({ error: 'unauthorized' }, 401);
@@ -71,19 +73,18 @@ export async function handleTranscribe(req: Request, env: TranscribeEnv): Promis
       body: form,
     });
   } catch (err) {
-    return json(
-      { error: 'transcribe_unreachable', detail: err instanceof Error ? err.message : String(err) },
-      502,
-    );
+    // Log the upstream detail server-side only (audit M7); the client gets a
+    // generic code + request id, never the raw Groq error text.
+    return upstreamError('transcribe_unreachable', 502, err, { endpoint: 'transcribe' });
   }
 
   if (!res.ok) {
     const detail = await res.text().catch(() => '');
-    // 429 (rate/quota) is recoverable — surface softly so the client can retry.
-    return json(
-      { error: 'transcribe_failed', detail: detail.slice(0, 200) },
-      res.status === 429 ? 429 : 502,
-    );
+    // 429 (rate/quota) is recoverable — keep the soft status so the client retries.
+    return upstreamError('transcribe_failed', res.status === 429 ? 429 : 502, detail, {
+      endpoint: 'transcribe',
+      upstream_status: res.status,
+    });
   }
 
   const data = (await res.json().catch(() => ({}))) as { text?: string };

@@ -6,7 +6,7 @@
  *      body.log_hunger
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // ─── module mocks ─────────────────────────────────────────────────────────────
 
@@ -139,8 +139,16 @@ describe('workHandler — cross-route', () => {
 });
 
 describe('workHandler — time-deferred reminder (remindIn)', () => {
+  // Pin the device clock so the #92 re-derivation (Date.now() + amount*unit)
+  // is deterministic and matches the worker stamp set to the same delta.
+  const NOW = 1_700_000_000_000;
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('create_task with remindIn schedules a "to do · text" notification at scheduledAtMs', async () => {
@@ -164,7 +172,12 @@ describe('workHandler — time-deferred reminder (remindIn)', () => {
     expect(vi.mocked(scheduleAt)).toHaveBeenCalledOnce();
     expect(vi.mocked(scheduleAt)).toHaveBeenCalledWith(
       fireAt,
-      { title: 'to do', body: 'ping boran' },
+      {
+        title: 'to do',
+        body: 'ping boran',
+        actionTypeId: 'OLLIE_REMINDER',
+        extra: { module: 'work', refId: 'task-mock-id' },
+      },
       'reminder:task-mock-id',
     );
     // Durable app-closed path fires too, same fireAt + stable dedupe_key.
@@ -174,6 +187,8 @@ describe('workHandler — time-deferred reminder (remindIn)', () => {
         body: 'ping boran',
         category: 'REMINDER',
         dedupe_key: 'reminder:task-mock-id',
+        action_url: 'ollie://box/work',
+        notification_category: 'OLLIE_REMINDER',
       },
       fireAt,
     );
@@ -186,6 +201,60 @@ describe('workHandler — time-deferred reminder (remindIn)', () => {
       module: 'work',
       payload: { module: 'work', action: 'create_task', text: 'write the PRD' },
       confidence: 0.92,
+      source: 'ai',
+    };
+
+    await workHandler.apply(fragment);
+
+    expect(vi.mocked(scheduleAt)).not.toHaveBeenCalled();
+    expect(vi.mocked(scheduleServerReminder)).not.toHaveBeenCalled();
+  });
+
+  // ── #92: work handler had the SAME worker-trust pattern the prior attempt
+  //         missed — re-derive + bounds-check here too. ──────────────────────
+
+  it('#92 re-derives the fire time from amount/unit, ignoring a skewed (past) worker stamp', async () => {
+    const skewedStamp = NOW - 10 * 60_000; // worker says 10min ago
+    const fragment: Fragment = {
+      text: 'remind me to ping boran in 10 minutes',
+      language: 'en',
+      module: 'work',
+      payload: {
+        module: 'work',
+        action: 'create_task',
+        text: 'ping boran',
+        remindIn: { amount: 10, unit: 'min', scheduledAtMs: skewedStamp },
+      },
+      confidence: 0.92,
+      source: 'ai',
+    };
+
+    await workHandler.apply(fragment);
+
+    const expectedFireAt = NOW + 10 * 60_000;
+    expect(vi.mocked(scheduleAt)).toHaveBeenCalledWith(
+      expectedFireAt,
+      expect.objectContaining({ title: 'to do', body: 'ping boran' }),
+      'reminder:task-mock-id',
+    );
+    expect(vi.mocked(scheduleServerReminder)).toHaveBeenCalledWith(
+      expect.objectContaining({ dedupe_key: 'reminder:task-mock-id' }),
+      expectedFireAt,
+    );
+  });
+
+  it('#92 rejects a past worker stamp with no usable amount — schedules NOTHING', async () => {
+    const fragment: Fragment = {
+      text: 'reminder',
+      language: 'en',
+      module: 'work',
+      payload: {
+        module: 'work',
+        action: 'create_task',
+        text: 'thing',
+        remindIn: { amount: 0, unit: 'min', scheduledAtMs: NOW - 60_000 },
+      },
+      confidence: 0.9,
       source: 'ai',
     };
 

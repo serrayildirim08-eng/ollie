@@ -2,15 +2,15 @@
 
 _Sampled per Phase 4 rule, not all verified. Ordered severity then confidence._
 
-- [ ] **#43** 🟠 _(conf 1/3)_ STAGING_TEST_BEARER backdoor can bypass Clerk JWT verification with no production guard  
+- [x] **#43** ✅FIXED 2026-06-15 🟠 _(conf 1/3)_ STAGING_TEST_BEARER backdoor can bypass Clerk JWT verification with no production guard  
       `/Users/serrayildirim/ollie/workers/ai-proxy/src/router/dump.ts:123`  · _Security & Authorization_
-- [ ] **#44** 🟠 _(conf 1/3)_ Raw unscrubbed user input logged in worker dump telemetry  
+- [x] **#44** ✅FIXED 2026-06-15 🟠 _(conf 1/3)_ Raw unscrubbed user input logged in worker dump telemetry  
       `/Users/serrayildirim/ollie/workers/ai-proxy/src/router/dump.ts:387`  · _Secrets & Token Exposure_
 - [ ] **#45** 🟠 _(conf 1/3)_ Unsafe parseFloat on budget env/KV values without bounds validation  
       `/Users/serrayildirim/ollie/workers/ai-proxy/src/label.ts:137-140`  · _Input Validation_
-- [ ] **#46** 🟠 _(conf 1/3)_ No request body size limit on /brain-dump and /v1/messages endpoints  
+- [x] **#46** ✅FIXED 2026-06-15 🟠 _(conf 1/3)_ No request body size limit on /brain-dump and /v1/messages endpoints  
       `/Users/serrayildirim/ollie/workers/ai-proxy/src/index.ts:389`  · _Input Validation_
-- [ ] **#47** 🟠 _(conf 1/3)_ Missing maximum text length validation in /route/dump  
+- [x] **#47** ✅FIXED 2026-06-15 🟠 _(conf 1/3)_ Missing maximum text length validation in /route/dump  
       `/Users/serrayildirim/ollie/workers/ai-proxy/src/router/dump.ts:148-157`  · _Input Validation_
 - [ ] **#48** 🟠 _(conf 1/3)_ UUID generation logic duplicated across 16+ module repositories  
       `apps/native/src/modules/goals/repo.ts:81-85`  · _Reinvented Wheels & Duplication_
@@ -66,21 +66,21 @@ _Sampled per Phase 4 rule, not all verified. Ordered severity then confidence._
       `/Users/serrayildirim/ollie/workers/ai-proxy/src/router/dump-schema.ts:19`  · _API Contract Consistency_
 - [ ] **#74** 🟠 _(conf 1/3)_ Idempotency-key infrastructure missing across dump/event ingestion (client + telemetry endpoints)  
       `/Users/serrayildirim/ollie/workers/ai-proxy/src/telemetry.ts:91-159`  · _Idempotency & Retry Harness_
-- [ ] **#75** 🟠 _(conf 1/3)_ partner sync tables missing GRANT statements (service_role cannot access)  
+- [x] **#75** ✅FIXED 2026-06-15 🟠 _(conf 1/3)_ partner sync tables missing GRANT statements (service_role cannot access)  
       `/Users/serrayildirim/ollie/supabase/migrations/20260602103016_partner_bilateral_sync.sql:47-55`  · _DB, Migrations & Schema_
-- [ ] **#76** 🟠 _(conf 1/3)_ grocery_purchase_history missing GRANT statements for authenticated role  
+- [x] **#76** ✅FIXED 2026-06-15 🟠 _(conf 1/3)_ grocery_purchase_history missing GRANT statements for authenticated role  
       `/Users/serrayildirim/ollie/supabase/migrations/20260522000001_grocery_purchase_history.sql:31-43`  · _DB, Migrations & Schema_
-- [ ] **#77** 🟠 _(conf 1/3)_ cook_history missing GRANT statements for authenticated and service_role  
+- [x] **#77** ✅FIXED 2026-06-15 🟠 _(conf 1/3)_ cook_history missing GRANT statements for authenticated and service_role  
       `/Users/serrayildirim/ollie/supabase/migrations/20260522000002_cook_history.sql:25-38`  · _DB, Migrations & Schema_
-- [ ] **#78** 🟠 _(conf 1/3)_ routing_cache missing GRANT statements (service_role worker cannot access)  
+- [x] **#78** ✅FIXED 2026-06-15 🟠 _(conf 1/3)_ routing_cache missing GRANT statements (service_role worker cannot access)  
       `/Users/serrayildirim/ollie/supabase/migrations/20260521000001_routing_cache.sql:70-78`  · _DB, Migrations & Schema_
-- [ ] **#79** 🟠 _(conf 1/3)_ Missing FORCE ROW LEVEL SECURITY on partner sync tables  
+- [x] **#79** ✅FIXED 2026-06-15 🟠 _(conf 1/3)_ Missing FORCE ROW LEVEL SECURITY on partner sync tables  
       `/Users/serrayildirim/ollie/supabase/migrations/20260602103016_partner_bilateral_sync.sql:47-49`  · _DB, Migrations & Schema_
-- [ ] **#80** 🟠 _(conf 1/3)_ Missing FORCE ROW LEVEL SECURITY on grocery_purchase_history  
+- [x] **#80** ✅FIXED 2026-06-15 🟠 _(conf 1/3)_ Missing FORCE ROW LEVEL SECURITY on grocery_purchase_history  
       `/Users/serrayildirim/ollie/supabase/migrations/20260522000001_grocery_purchase_history.sql:31`  · _DB, Migrations & Schema_
-- [ ] **#81** 🟠 _(conf 1/3)_ Missing FORCE ROW LEVEL SECURITY on cook_history  
+- [x] **#81** ✅FIXED 2026-06-15 🟠 _(conf 1/3)_ Missing FORCE ROW LEVEL SECURITY on cook_history  
       `/Users/serrayildirim/ollie/supabase/migrations/20260522000002_cook_history.sql:26`  · _DB, Migrations & Schema_
-- [ ] **#82** 🟠 _(conf 1/3)_ Missing FORCE ROW LEVEL SECURITY on routing_cache  
+- [x] **#82** ✅FIXED 2026-06-15 🟠 _(conf 1/3)_ Missing FORCE ROW LEVEL SECURITY on routing_cache  
       `/Users/serrayildirim/ollie/supabase/migrations/20260521000001_routing_cache.sql:70`  · _DB, Migrations & Schema_
 - [ ] **#83** 🟠 _(conf 1/3)_ N+1 store.update() calls in applyGroceryMutations loop  
       `/Users/serrayildirim/ollie/packages/orchestrator/src/braindump-dispatch.ts:400-812`  · _Performance & Cost_

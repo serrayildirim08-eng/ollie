@@ -54,9 +54,22 @@ import type {
 } from '@ollie/logic/goals';
 import type { NotificationSpec } from '@ollie/notifications';
 import type { Orchestrator } from './types';
+import { appendCapped } from './dedup-store';
+// Single canonical UTC-based week key, shared across detectors (#146).
+import { isoWeekKey } from './body-weekly';
 
 const DEBOUNCE_MS = 500;
 const DAY = 86_400_000;
+
+/**
+ * Clock-tick cadence for the cue scan (audit #8). goals scanCues only ran on
+ * boot + when goals.items changed, so a time-gated cue (weekly_check_in on a
+ * Sunday, deadline_30d / paused_14d crossing their threshold) was only
+ * delivered if a store write happened to land on the right day. A periodic
+ * tick re-evaluates the windows on wall-clock time, mirroring cycle.ts.
+ * 5 min is ample — these windows are day-scoped, not minute-scoped.
+ */
+const CUE_TICK_MS = 5 * 60_000;
 
 /** Minimum top/bottom velocity ratio before the gap cue fires. */
 export const VELOCITY_GAP_THRESHOLD = 2;
@@ -85,20 +98,6 @@ function flatten<T>(r: T | T[] | null): T[] {
   return [r];
 }
 
-/** ISO-8601 week key, e.g. "2026-W20", for week-scoped dedupe. */
-function isoWeekKey(ts: number): string {
-  const d = new Date(ts);
-  // Shift to UTC midnight, then to the Thursday of this ISO week.
-  const target = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
-  const dayNum = (target.getUTCDay() + 6) % 7; // Mon=0 … Sun=6
-  target.setUTCDate(target.getUTCDate() - dayNum + 3);
-  const firstThursday = new Date(Date.UTC(target.getUTCFullYear(), 0, 4));
-  const firstDayNum = (firstThursday.getUTCDay() + 6) % 7;
-  firstThursday.setUTCDate(firstThursday.getUTCDate() - firstDayNum + 3);
-  const week = 1 + Math.round((target.getTime() - firstThursday.getTime()) / (7 * DAY));
-  return `${target.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
-}
-
 /** UTC calendar-day key (YYYY-MM-DD) for day-scoped dedupe. */
 function utcDayKey(ts: number): string {
   return new Date(ts).toISOString().slice(0, 10);
@@ -125,9 +124,15 @@ export function createGoalsOrchestrator(
   const unsubs: Unsubscribe[] = [];
   let timer: ReturnType<typeof setTimeout> | null = null;
   let cueTimer: ReturnType<typeof setTimeout> | null = null;
+  let cueTick: ReturnType<typeof setInterval> | null = null;
 
-  /** Module-instance dedupe — one dispatch per logical cue. */
-  const firedCues = new Set<string>();
+  // Persisted cue dedupe (audit #96). The in-memory Set gives fast lookups
+  // within an instance; it is seeded from — and written back to — the store
+  // so a process restart does not re-fire cues that already went out. Keys
+  // embed a timestamp or record id, so appendCapped eviction is safe.
+  const firedCues = new Set<string>(
+    store.get<string[]>('goals', '_firedCueKeys', []) ?? [],
+  );
 
   function recomputePatterns(): void {
     try {
@@ -220,6 +225,7 @@ export function createGoalsOrchestrator(
     if (!scheduleNotification) return;
     if (firedCues.has(spec.dedupe_key)) return;
     firedCues.add(spec.dedupe_key);
+    store.set('goals', '_firedCueKeys', appendCapped([...firedCues], [spec.dedupe_key]));
     try {
       scheduleNotification(spec, getNow());
     } catch { /* non-fatal */ }
@@ -335,6 +341,12 @@ export function createGoalsOrchestrator(
     // Cue scan re-runs when goal items change.
     unsubs.push(store.subscribeKey('goals', 'items', scheduleCueScan));
 
+    // Clock tick (audit #8). Day-gated cues (weekly_check_in, deadline_30d,
+    // paused_14d) crossed their window with no store write, so they never
+    // fired. The tick re-evaluates them on wall-clock time. scanCues is
+    // idempotent (firedCues dedupe), so re-running it is free once fired.
+    cueTick = setInterval(() => scanCues(), CUE_TICK_MS);
+
     unsubs.push(
       events.on('void:braindump:submitted', (payload: unknown) => {
         try {
@@ -361,6 +373,7 @@ export function createGoalsOrchestrator(
     unsubs.splice(0).forEach((fn) => fn());
     if (timer) { clearTimeout(timer); timer = null; }
     if (cueTimer) { clearTimeout(cueTimer); cueTimer = null; }
+    if (cueTick) { clearInterval(cueTick); cueTick = null; }
     firedCues.clear();
     initialized = false;
   }

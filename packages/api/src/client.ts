@@ -317,8 +317,14 @@ export function createOllieAPI(cfg: OllieApiConfig = {}) {
             headers: { ...supabaseHeaders(), ...(opts.headers ?? {}) },
           });
         },
-        upsert<T>(table: string, rows: unknown, opts: RequestOptions = {}): Promise<OllieApiResult<T>> {
-          return request<T>('POST', supabaseRestUrl(table), {
+        upsert<T>(table: string, rows: unknown, opts: RequestOptions & { params?: Record<string, string> } = {}): Promise<OllieApiResult<T>> {
+          // PostgREST infers the conflict target from the primary key by
+          // default. When the upsert must resolve on a non-PK unique
+          // constraint (e.g. encrypted_state's (user_id, module)), the
+          // caller MUST pass `params: { on_conflict: 'user_id,module' }` —
+          // otherwise PostgREST treats the POST as a plain INSERT and the
+          // 2nd+ push for the same key 409s and retries forever.
+          return request<T>('POST', supabaseRestUrl(table, opts.params), {
             ...opts,
             body: rows,
             headers: {

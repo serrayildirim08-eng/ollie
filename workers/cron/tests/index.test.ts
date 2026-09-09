@@ -9,6 +9,8 @@
  * the secret is unset, and that a correct secret lets the route through.
  */
 
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import worker, { type Env } from '../src/index';
 
@@ -27,7 +29,6 @@ function makeEnv(over: Partial<Env> = {}): Env {
     CRON_TRIGGER_SECRET: 'cron-secret',
     SUPABASE_URL: 'https://x.supabase.co',
     SUPABASE_SERVICE_ROLE: 'sr',
-    SUPABASE_SERVICE_ROLE_KEY: 'sr-key',
     ...over,
   } as Env;
 }
@@ -107,5 +108,27 @@ describe('cron worker · F2 trigger-route auth', () => {
       ctx,
     );
     expect(res.status).toBe(404);
+  });
+});
+
+// Audit #175 — SUPABASE_SERVICE_ROLE_KEY was a dead second copy of the most
+// powerful key: declared in the Env interface (and documented) but never read.
+// The worker only ever uses SUPABASE_SERVICE_ROLE. Guard against the alias
+// creeping back in.
+describe('audit #175 — no dead SUPABASE_SERVICE_ROLE_KEY', () => {
+  const srcRoot = fileURLToPath(new URL('../src/', import.meta.url));
+
+  it('does not reference the dead SUPABASE_SERVICE_ROLE_KEY alias anywhere in src', () => {
+    for (const file of ['index.ts', 'drain.ts', 'flush-notifications.ts']) {
+      const text = readFileSync(`${srcRoot}${file}`, 'utf8');
+      expect(text, `${file} must not declare/read SUPABASE_SERVICE_ROLE_KEY`).not.toContain(
+        'SUPABASE_SERVICE_ROLE_KEY',
+      );
+    }
+  });
+
+  it('still uses the real SUPABASE_SERVICE_ROLE key', () => {
+    const drain = readFileSync(`${srcRoot}drain.ts`, 'utf8');
+    expect(drain).toContain('env.SUPABASE_SERVICE_ROLE');
   });
 });

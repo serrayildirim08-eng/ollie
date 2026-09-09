@@ -49,6 +49,16 @@ export type CopyKind =
   | 'deadline' // a deadline slipped / is near.
   | 'bill' // a bill looks due / late.
   | 'spoiled' // something in the kitchen probably turned.
+  | 'sleep_debt' // hours of sleep deficit piled up — may offer to lighten today.
+  | 'decision' // a recurring decision left open — may offer to bring to today.
+  | 'caffeine' // late caffeine ↔ sleep insight (B — insight only, no action).
+  // ── wave 2 (richer admin offers) ──
+  | 'paperwork_piling' // several admin tasks haven't moved — offer to surface them.
+  | 'chronic_deferral' // same task put off repeatedly — offer a smaller first step.
+  | 'renewal_cluster' // 2+ renewals land the same month — offer to batch them.
+  | 'task_archive' // a date-less task survived the whole reminder ladder — offer to archive.
+  | 'chore_due' // a recurring household chore is due by its cadence — offer to mark it done.
+  | 'duplicate' // two charges look like the same purchase (finance ADHD-tax detector).
   | 'generic';
 
 /**
@@ -70,7 +80,16 @@ export interface CopyFacts {
 }
 
 /** What an offered action does — used to phrase the offer ("add to list?"). */
-export type CopyActionKind = 'add_to_grocery_list';
+export type CopyActionKind =
+  | 'add_to_grocery_list'
+  | 'defer_tasks'
+  | 'add_admin_task'
+  | 'surface_decision'
+  | 'surface_tasks'
+  | 'break_down_task'
+  | 'batch_block'
+  | 'archive_task'
+  | 'mark_chore_done';
 
 // ─── kind resolution ─────────────────────────────────────────────────────────
 
@@ -82,6 +101,16 @@ export function copyKindOf(input: { category?: string | null; module?: string | 
   const cat = (input.category ?? '').toString().toLowerCase();
   const mod = (input.module ?? '').toString().toLowerCase();
   if (cat.includes('replenish')) return 'replenish';
+  if (cat.includes('sleep-debt') || cat.includes('sleep_debt')) return 'sleep_debt';
+  if (cat.includes('caffeine')) return 'caffeine';
+  if (cat.includes('paperwork')) return 'paperwork_piling';
+  if (cat.includes('chronic-deferral') || cat.includes('chronic_deferral')) return 'chronic_deferral';
+  if (cat.includes('renewal-cluster') || cat.includes('renewal_cluster')) return 'renewal_cluster';
+  if (cat.includes('task-archive') || cat.includes('task_archive')) return 'task_archive';
+  if (cat.includes('chore')) return 'chore_due';
+  if (cat.includes('duplicate')) return 'duplicate';
+  if (cat.includes('period')) return 'replenish'; // period_products → restock
+  if (cat.includes('decision')) return 'decision';
   if (cat.includes('spoiled')) return 'spoiled';
   if (cat.includes('bill') || cat.includes('late')) return 'bill';
   if (cat.includes('deadline') || cat.includes('overdue') || cat.includes('missed') || cat.includes('due')) {
@@ -101,6 +130,14 @@ const LANG_NAME: Record<AppLang, string> = {
 
 const ACTION_DESCRIPTION: Record<CopyActionKind, string> = {
   add_to_grocery_list: 'you can offer to add the item back onto the shopping list',
+  defer_tasks: "you can offer to push today's non-urgent tasks to tomorrow",
+  add_admin_task: 'you can offer to add it to the to-do list',
+  surface_decision: 'you can offer to bring the decision to today',
+  surface_tasks: "you can offer to bring these to today's focus",
+  break_down_task: 'you can offer to break it into a smaller first step',
+  batch_block: 'you can offer to batch them into one block',
+  archive_task: 'you can ask whether to keep it or archive it',
+  mark_chore_done: 'you can offer to mark the chore done for today',
 };
 
 /**
@@ -119,6 +156,8 @@ export function buildCopyPrompt(facts: CopyFacts, lang: AppLang): { system: stri
     `Voice: a quiet assistant stating a fact and, if there is an action, offering it once.`,
     `NOT warm-gushy, NOT jokey, NOT salesy, NOT cheerful. Never nag, never shame,`,
     `never mention streaks, never scold, never use urgency words like "must" or "now".`,
+    `Translate any item / product name into ${langName} (e.g. milk / leche / süt).`,
+    `EXCEPTION: keep brand names and proper nouns whose translation is unclear exactly as given.`,
     offer
       ? `If it helps, ${offer} — phrase it as a soft question (e.g. "want it back on the list?").`
       : `Do not invent an action; just note the situation in one calm sentence.`,
@@ -176,6 +215,86 @@ const FALLBACK: Record<CopyKind, Record<AppLang, Phrase>> = {
     en: () => `something in the kitchen probably turned — no rush, just a heads up.`,
     es: () => `algo en la cocina seguramente se echó a perder — sin prisa, solo un aviso.`,
     tr: () => `mutfakta bir şey büyük ihtimalle bozuldu — acelesi yok, sadece haber vereyim.`,
+  },
+  sleep_debt: {
+    en: (f) =>
+      typeof f.days === 'number' && f.days > 0
+        ? `about ${Math.round(f.days)} hours of sleep debt have piled up — keep today lighter?`
+        : `a little sleep debt has piled up — keep today lighter?`,
+    es: (f) =>
+      typeof f.days === 'number' && f.days > 0
+        ? `se han acumulado unas ${Math.round(f.days)} horas de sueño — ¿hacemos hoy más ligero?`
+        : `se ha acumulado algo de sueño — ¿hacemos hoy más ligero?`,
+    tr: (f) =>
+      typeof f.days === 'number' && f.days > 0
+        ? `yaklaşık ${Math.round(f.days)} saatlik uyku borcu birikmiş — bugünü hafif tutalım mı?`
+        : `biraz uyku borcu birikmiş — bugünü hafif tutalım mı?`,
+  },
+  decision: {
+    en: () => `a decision has been open for a while — bring it to today?`,
+    es: () => `una decisión lleva un tiempo pendiente — ¿la traemos a hoy?`,
+    tr: () => `bir karar bir süredir açık duruyor — bugüne getirelim mi?`,
+  },
+  paperwork_piling: {
+    en: (f) =>
+      typeof f.otherCount === 'number' && f.otherCount > 0
+        ? `${f.otherCount} admin things haven't moved in a while — bring them to today?`
+        : `a few admin things haven't moved in a while — bring them to today?`,
+    es: (f) =>
+      typeof f.otherCount === 'number' && f.otherCount > 0
+        ? `${f.otherCount} cosas administrativas llevan tiempo sin moverse — ¿las traemos a hoy?`
+        : `algunas cosas administrativas llevan tiempo sin moverse — ¿las traemos a hoy?`,
+    tr: (f) =>
+      typeof f.otherCount === 'number' && f.otherCount > 0
+        ? `${f.otherCount} idari iş bir süredir kıpırdamadı — bugüne getirelim mi?`
+        : `birkaç idari iş bir süredir kıpırdamadı — bugüne getirelim mi?`,
+  },
+  chronic_deferral: {
+    en: () => `you've put this off a few times — want to break it into a smaller first step?`,
+    es: () => `lo has pospuesto varias veces — ¿lo dividimos en un primer paso más pequeño?`,
+    tr: () => `bunu birkaç kez erteledin — daha küçük bir ilk adıma bölelim mi?`,
+  },
+  renewal_cluster: {
+    en: () => `two renewals land around the same time — batch them one day?`,
+    es: () => `dos renovaciones caen por las mismas fechas — ¿las juntamos un día?`,
+    tr: () => `iki yenileme aynı zamana denk geliyor — bir günde toplayalım mı?`,
+  },
+  // Dateless ladder final tier: the task has gone un-acted for a month of
+  // reminders. Ask once, calmly, whether it's still wanted or should archive.
+  task_archive: {
+    en: (f) => `"${itemOr(f, 'a task')}" has sat untouched for a while — still want it, or archive it?`,
+    es: (f) => `"${itemOr(f, 'una tarea')}" lleva tiempo sin tocarse — ¿la quieres aún o la archivo?`,
+    tr: (f) => `"${itemOr(f, 'bir görev')}" bir süredir el değmeden duruyor — hâlâ istiyor musun, yoksa arşivleyeyim mi?`,
+  },
+  // Insight-only (B): no offer, no action — just a calm observation. When the
+  // detector carried its measured onset delay (in facts.days), name it.
+  caffeine: {
+    en: (f) =>
+      typeof f.days === 'number' && f.days > 0
+        ? `late caffeine tends to delay your sleep by about ${Math.round(f.days)} minutes.`
+        : `late caffeine tends to delay your sleep a little.`,
+    es: (f) =>
+      typeof f.days === 'number' && f.days > 0
+        ? `la cafeína tarde suele retrasar tu sueño unos ${Math.round(f.days)} minutos.`
+        : `la cafeína tarde suele retrasar un poco tu sueño.`,
+    tr: (f) =>
+      typeof f.days === 'number' && f.days > 0
+        ? `geç saatte kafein uykunu yaklaşık ${Math.round(f.days)} dakika geciktiriyor.`
+        : `geç saatte kafein uykunu biraz geciktiriyor.`,
+  },
+  // A recurring household chore has reached its cadence. Name it + offer to
+  // mark it done — calm, one question, no nagging.
+  chore_due: {
+    en: (f) => `${itemOr(f, 'a chore')}'s about due — want to mark it done?`,
+    es: (f) => `${itemOr(f, 'una tarea')} toca pronto — ¿la marco como hecha?`,
+    tr: (f) => `${itemOr(f, 'bir iş')} yaklaştı — yaptım diye işaretleyeyim mi?`,
+  },
+  // a possible double-charge — calm, one soft question, no alarm. It's a
+  // guess (confidence-based), so it never asserts you definitely paid twice.
+  duplicate: {
+    en: (f) => `${itemOr(f, 'something')} looks like it might be a double charge — want to check?`,
+    es: (f) => `${itemOr(f, 'algo')} parece un posible cargo doble — ¿lo revisas?`,
+    tr: (f) => `${itemOr(f, 'bir şey')} iki kez ödenmiş olabilir gibi — bakmak ister misin?`,
   },
   generic: {
     en: () => `something might be worth a glance.`,

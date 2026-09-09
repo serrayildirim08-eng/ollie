@@ -22,6 +22,7 @@ import type {
 } from './types';
 import { DAY_MS } from './constants';
 import { mean, sampleSd } from './math';
+import { phaseForDay } from '../patterns/phase-fold';
 
 export function computePhaseForDate(
   cycles: readonly CycleRecord[] | undefined | null,
@@ -48,12 +49,16 @@ export function computePhaseForDate(
     .filter((d): d is number => typeof d === 'number');
   const menstrualEnd = bleeds.length ? Math.round(mean(bleeds)) : 5;
 
-  if (day <= menstrualEnd) return 'menstrual';
-  const fertileStart = avgCycle - 18;
-  const fertileEnd = avgCycle - 13;
-  if (day < fertileStart) return 'follicular';
-  if (day <= fertileEnd) return 'ovulation window';
-  return 'luteal';
+  // Upper bound: once we're well past the expected cycle length the last
+  // logged start is stale (a missed/unlogged period), so we can no longer say
+  // which phase the user is in. Without this, a single old start makes every
+  // future date read as 'luteal' forever. Margin allows for normal late cycles.
+  const margin = 7;
+  if (day > avgCycle + margin) return 'unknown';
+
+  // Finding #51: delegate to the ONE canonical classifier so this detector
+  // can't drift from phaseFold / correlateSymptom.
+  return phaseForDay(day, avgCycle, menstrualEnd);
 }
 
 export function deriveCycleStats(cycles: readonly CycleRecord[] | undefined | null): CycleStats {
@@ -138,12 +143,12 @@ export function correlateSymptom(
   let total = 0;
   byCycle.forEach((offsets, idx) => {
     const cycleLen = safeCycles[idx]?.cycleLengthDays ?? 28;
+    const bleedLen = safeCycles[idx]?.periodLengthDays;
     for (const off of offsets) {
       const day = Math.floor(off / DAY_MS) + 1;
-      let phase: Phase = 'luteal';
-      if (day <= 5) phase = 'menstrual';
-      else if (day < cycleLen - 17) phase = 'follicular';
-      else if (day <= cycleLen - 13) phase = 'ovulation window';
+      // Finding #51: use the ONE canonical classifier (was an inline copy that
+      // used `cycleLen-17` and `<`, disagreeing with phaseForDay's `cycleLen-18`).
+      const phase: Phase = phaseForDay(day, cycleLen, typeof bleedLen === 'number' ? bleedLen : undefined);
       phaseCount[phase]++;
       total++;
     }

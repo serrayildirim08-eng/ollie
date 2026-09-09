@@ -227,6 +227,55 @@ describe('sleepHandler — Layer 2 re-routing', () => {
     expect(result.ok).toBe(true);
   });
 
+  it('Layer 2 returns an UNKNOWN action: falls back to original Layer 1 action', async () => {
+    // Adopting an unknown action would hit exhaustive() and throw, breaking
+    // the fallback. Must be rejected → original log_sleep persists.
+    mockRouteModule.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      data: {
+        actions: [
+          {
+            module: 'sleep',
+            action: 'log_snore',
+            data: JSON.stringify({ module: 'sleep', action: 'log_snore', volume: 'loud' }),
+          },
+        ],
+      },
+    });
+
+    const fragment = makeSleepFragmentNeedsConfirm('slept 7 hours');
+    const result = await sleepHandler.apply(fragment);
+
+    expect(mockAddSleepLog).toHaveBeenCalledOnce();
+    expect(mockAddInsomnia).not.toHaveBeenCalled();
+    expect(result.ok).toBe(true);
+  });
+
+  it('Layer 2 returns a known action MISSING its required field: falls back', async () => {
+    // dream_log requires `text`; without it addDream would write undefined.
+    // Must be rejected → original log_sleep persists.
+    mockRouteModule.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      data: {
+        actions: [
+          {
+            module: 'sleep',
+            action: 'dream_log',
+            data: JSON.stringify({ module: 'sleep', action: 'dream_log' }),
+          },
+        ],
+      },
+    });
+
+    const fragment = makeSleepFragmentNeedsConfirm('slept 7 hours');
+    const result = await sleepHandler.apply(fragment);
+
+    expect(mockAddSleepLog).toHaveBeenCalledOnce();
+    expect(result.ok).toBe(true);
+  });
+
   it('confident sleep fragment: skips routeModule entirely', async () => {
     const fragment: Fragment = {
       text: '8 saat uyudum iyi',

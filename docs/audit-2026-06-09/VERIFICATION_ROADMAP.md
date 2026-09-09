@@ -2,6 +2,29 @@
 
 _Source: docs/audit-2026-06-09/FINAL_AUDIT.md · 274 findings · Branch feat/brain @ 2325ee5_
 
+> ## ⏱️ STATUS — last reconciled 2026-06-14 (against `main` / git log, not memory)
+>
+> The Phase-1 criticals were worked through `IMPLEMENTATION_PLAN_top10.md`, which uses a
+> **different numbering** than this file. Reconciled below. Verdicts re-checked against live code on 2026-06-14.
+>
+> | Roadmap # | Finding | Status | Evidence |
+> |---|---|---|---|
+> | #1 | Crisis signal schema mismatch | ✅ FIXED | `e435ce6` |
+> | #2 | Trilingual crisis banner | ✅ FIXED | `e435ce6` |
+> | #3 | Telemetry IDOR | ✅ FIXED | `e435ce6` |
+> | #4 | remindIn hint lost on demotion | ✅ FIXED | `e435ce6` (AI data-loss) |
+> | #5 | Crisis lexicon `PENDING_SERRA_APPROVAL` | ✅ RESOLVED by product decision (2026-06-15) | `90349c1` — crisis-line/hotline removed entirely; detection now triggers ONE soft non-referral message + stores nothing. The clinical "approve-the-hotline-copy" gate no longer applies, so it no longer blocks alpha. Lexicon word-list remains a soft-deflect trigger (optional future trim, not a blocker). |
+> | #6 | Gemini API key in URL query string | ✅ FIXED (2026-06-15) | `feb5a67` — moved to `x-goog-api-key` header in gemini/feed-me/vision (both retry paths); 1144 tests green |
+> | #7 | flush-notifications Promise.all no boundary | ✅ OK | `pushOne` returns `{ok}`, never throws → batch not aborted (`flush-notifications.ts:223`) |
+> | #8 | Non-numeric confidence coerced to 0 | ✅ FIXED | `e435ce6` (AI data-loss) |
+> | #9 | grocery_purchase_history `user_id uuid` vs text Clerk ID | ✅ FIXED in code (2026-06-15) | `6a7b374` — migration `20260615000001` flips column+RLS+RPC to text. ⚠️ NOT yet applied to live DB (apply at deploy) |
+> | #10 | push_tokens trigger `=` vs `:=` | ⚪ FALSE | PL/pgSQL accepts `=` as assignment; trigger works — not a bug |
+>
+> **Net (upd. 2026-06-15):** of the 10 roadmap criticals — **9 closed** (#1-4, #6, #7, #8, #9*, #5 resolved-by-removal), **1 false** (#10), **0 open**. *#9 fixed in code, DB apply pending at deploy. The 3 open criticals from this morning (#5/#6/#9) are now all handled.
+> Also shipped beyond this list (via plan top-10): SQLite migration runner, admin due-dates + ball_state resurfacing, draft-first 0.60-0.79, Partner behind a flag.
+>
+> **Phases 2-4 (findings #11+): NOT STARTED.** Checkboxes there are accurate (all open).
+
 ## Principle
 
 The audit FINDS; it does not CONFIRM. Confidence (how many of 3 rounds saw it) is a **prior, not a verdict**:
@@ -39,25 +62,25 @@ Order = **severity first, confidence second**. A critical-but-1/3 still gets ver
 
 **Done =** each has a verdict (REAL/FALSE/HUMAN) with evidence; every REAL has a repro test or a trace note; results logged in this file.
 
-- [ ] **#1** 🔴 _(conf 3/3)_ CrisisSignal schema mismatch between worker and native client (type/language vs tier/languages/matches)  
+- [x] **#1** ✅ 🔴 _(conf 3/3)_ CrisisSignal schema mismatch between worker and native client (type/language vs tier/languages/matches)  
       `/Users/serrayildirim/ollie/apps/native/src/router/schema.ts:72-77`  · _API Contract Consistency_
-- [ ] **#2** 🔴 _(conf 3/3)_ Crisis banner message + 'notice' kicker + dismiss affordance hardcoded English only  
+- [x] **#2** ✅ 🔴 _(conf 3/3)_ Crisis banner message + 'notice' kicker + dismiss affordance hardcoded English only  
       `/Users/serrayildirim/ollie/apps/native/src/dump/DumpScreen.tsx:303-308`  · _i18n Trilingual Coverage (EN/ES/TR)_
-- [ ] **#3** 🔴 _(conf 2/3)_ IDOR: telemetry endpoints verify JWT but never pass userId to handlers, which trust client-supplied user_hash…  
+- [x] **#3** ✅ 🔴 _(conf 2/3)_ IDOR: telemetry endpoints verify JWT but never pass userId to handlers, which trust client-supplied user_hash…  
       `/Users/serrayildirim/ollie/workers/ai-proxy/src/index.ts:315-343`  · _Security & Authorization_
-- [ ] **#4** 🔴 _(conf 2/3)_ remindIn hint silently lost when low-confidence fragments are demoted to dump_only  
+- [x] **#4** ✅ 🔴 _(conf 2/3)_ remindIn hint silently lost when low-confidence fragments are demoted to dump_only  
       `/Users/serrayildirim/ollie/workers/ai-proxy/src/router/dump.ts:281`  · _Dump Routing Flow Correctness_
 - [ ] **#5** 🔴 _(conf 2/3)_ Crisis lexicons marked PENDING_SERRA_APPROVAL — alpha-blocking safety gate (all 3 languages)  
       `/Users/serrayildirim/ollie/packages/crisis-lexicon/data/lexicon.en.json:4`  · _i18n Trilingual Coverage (EN/ES/TR)_
 - [ ] **#6** 🔴 _(conf 1/3)_ Gemini API key exposed in URL query string  
       `/Users/serrayildirim/ollie/workers/ai-proxy/src/router/vision.ts:55`  · _Input Validation_
-- [ ] **#7** 🔴 _(conf 1/3)_ Promise.all without error boundary in flush-notifications aborts the rest of the batch  
+- [x] **#7** ✅ 🔴 _(conf 1/3)_ Promise.all without error boundary in flush-notifications aborts the rest of the batch  
       `/Users/serrayildirim/ollie/workers/cron/src/flush-notifications.ts:223`  · _Error Handling & Resilience_
-- [ ] **#8** 🔴 _(conf 1/3)_ Non-numeric confidence coerced to 0, triggering spurious demotion and data loss  
+- [x] **#8** ✅ 🔴 _(conf 1/3)_ Non-numeric confidence coerced to 0, triggering spurious demotion and data loss  
       `/Users/serrayildirim/ollie/workers/ai-proxy/src/router/dump-classify.ts:200`  · _Dump Routing Flow Correctness_
 - [ ] **#9** 🔴 _(conf 1/3)_ grocery_purchase_history uses UUID for user_id but receives text Clerk IDs  
       `/Users/serrayildirim/ollie/supabase/migrations/20260522000001_grocery_purchase_history.sql:13`  · _DB, Migrations & Schema_
-- [ ] **#10** 🔴 _(conf 1/3)_ push_tokens_touch_updated_at() trigger uses comparison operator (=) instead of assignment (:=)  
+- [x] **#10** ⚪FALSE 🔴 _(conf 1/3)_ push_tokens_touch_updated_at() trigger uses comparison operator (=) instead of assignment (:=)  
       `/Users/serrayildirim/ollie/supabase/migrations/20260515000001_notification_delivery.sql:130`  · _DB, Migrations & Schema_
 
 ---

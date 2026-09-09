@@ -22,6 +22,8 @@ vi.mock('./migrate', () => ({
 
 vi.mock('./repo', () => ({
   tasks: { list: vi.fn() },
+  renewals: { listOpen: vi.fn().mockResolvedValue([]) },
+  recurringDecisions: { listOpen: vi.fn().mockResolvedValue([]) },
 }));
 
 import { tasks as tasksRepo } from './repo';

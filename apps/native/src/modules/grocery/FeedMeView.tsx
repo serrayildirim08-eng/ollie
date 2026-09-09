@@ -40,10 +40,11 @@ import {
   useState,
   type CSSProperties,
 } from 'react';
-import { useAuth, useUser } from '@clerk/clerk-react';
+import { useUser } from '@clerk/clerk-react';
+import { useBearer } from '../../auth/useBearer';
 import { Stack, Row } from '../../layout';
 import { Text } from '../../ui';
-import { fonts } from '../../theme/tokens';
+import { colors, fonts, shadows } from '../../theme/tokens';
 import { kv } from '../../storage';
 import { routeFeedMe, routeCookHistory } from '../../api/workers';
 import type {
@@ -53,6 +54,7 @@ import type {
   FeedRecipeSuggestion,
 } from '../../api/types';
 import { cookHistory as cookHistoryRepo, type CookHistoryEntry } from './repo';
+import { RecipeDetail } from './RecipeDetail';
 import type { PantryItem } from './types';
 
 // ─── tokens ────────────────────────────────────────────────────────────────
@@ -109,7 +111,7 @@ export function FeedMeView({
   shopNames,
   onAddToShop,
 }: FeedMeViewProps): JSX.Element {
-  const { getToken } = useAuth();
+  const getBearer = useBearer();
   const { user } = useUser();
 
   const [diet, setDiet] = useState<FeedDietFilter>('all');
@@ -117,6 +119,11 @@ export function FeedMeView({
   const [phase, setPhase] = useState<Phase>({ kind: 'idle' });
   const [recent, setRecent] = useState<CookHistoryEntry[]>([]);
   const [cookedIds, setCookedIds] = useState<Set<string>>(() => new Set());
+  // The recipe currently drilled into ("show me how ›"). When set, the tab
+  // shows the cream RecipeDetail screen instead of the suggestion list.
+  const [detail, setDetail] = useState<{ suggestion: FeedRecipeSuggestion; dishKey: string } | null>(
+    null,
+  );
 
   // Restore the persisted diet preference on mount. We accept either the
   // wire form ("all") or — defensively — a legacy chip label (e.g. an
@@ -164,7 +171,7 @@ export function FeedMeView({
     if (pantryEmpty || !userId) return;
     setPhase({ kind: 'loading' });
 
-    const bearer = (await getToken()) ?? '';
+    const bearer = (await getBearer()) ?? '';
     if (!bearer) {
       setPhase({ kind: 'error', reason: 'network' });
       return;
@@ -196,7 +203,7 @@ export function FeedMeView({
     // New round of suggestions — clear the previous "cooked" markers so
     // any reused dish names render fresh.
     setCookedIds(new Set());
-  }, [pantryEmpty, userId, getToken, pantryItems, diet, count]);
+  }, [pantryEmpty, userId, getBearer, pantryItems, diet, count]);
 
   const onCookedIt = useCallback(
     async (dishKey: string, suggestion: FeedRecipeSuggestion) => {
@@ -211,7 +218,7 @@ export function FeedMeView({
         return next;
       });
 
-      const bearer = (await getToken()) ?? '';
+      const bearer = (await getBearer()) ?? '';
       if (!bearer) return;
 
       const ingredientsUsed = suggestion.ingredients
@@ -258,8 +265,22 @@ export function FeedMeView({
         // swallow
       }
     },
-    [getToken],
+    [getBearer],
   );
+
+  // Drill-in: the recipe detail screen owns the whole tab while open.
+  if (detail) {
+    return (
+      <RecipeDetail
+        suggestion={detail.suggestion}
+        cooked={cookedIds.has(detail.dishKey)}
+        onCookedIt={() => void onCookedIt(detail.dishKey, detail.suggestion)}
+        shopNames={shopNames}
+        onAddToShop={onAddToShop}
+        onBack={() => setDetail(null)}
+      />
+    );
+  }
 
   return (
     <Stack gap={28}>
@@ -292,9 +313,7 @@ export function FeedMeView({
                 key={dishKey}
                 suggestion={s}
                 cooked={cookedIds.has(dishKey)}
-                onCookedIt={() => void onCookedIt(dishKey, s)}
-                shopNames={shopNames}
-                onAddToShop={onAddToShop}
+                onOpen={() => setDetail({ suggestion: s, dishKey })}
               />
             );
           })}
@@ -318,12 +337,12 @@ function FeedMeHeader(): JSX.Element {
           lineHeight: 1.05,
           letterSpacing: '-0.025em',
           fontWeight: 400,
-          color: 'var(--ollie-color-ink)',
+          color: colors.ink,
         }}
       >
         feed me
       </span>
-      <Text scale="body" color="var(--ollie-color-ink-soft)" style={{ maxWidth: 460 }}>
+      <Text scale="body" color={colors.inkSoft} style={{ maxWidth: 460 }}>
         from what&rsquo;s already in your pantry.
       </Text>
     </Stack>
@@ -337,8 +356,21 @@ function DietChipRow({
   diet: FeedDietFilter;
   onChoose: (wire: FeedDietFilter) => void;
 }): JSX.Element {
+  // Soft segmented control on a flat cream rail — the active diet sinks into
+  // an inset well with sageDeep text; the rest sit quiet and flush.
   return (
-    <Row gap={10} align="center" wrap>
+    <Row
+      gap={6}
+      align="center"
+      wrap
+      style={{
+        alignSelf: 'flex-start',
+        padding: 5,
+        borderRadius: 999,
+        background: colors.cream,
+        boxShadow: shadows.raisedSm,
+      }}
+    >
       {DIET_CHOICES.map((d) => {
         const on = d.wire === diet;
         return (
@@ -350,11 +382,10 @@ function DietChipRow({
             style={{
               padding: '7px 14px',
               borderRadius: 999,
-              border: `1px solid ${on ? 'var(--ollie-color-sage)' : 'var(--ollie-color-hairline)'}`,
-              background: on
-                ? 'color-mix(in srgb, var(--ollie-color-sage) 8%, transparent)'
-                : 'transparent',
-              color: on ? 'var(--ollie-color-sage)' : 'var(--ollie-color-ink-faint)',
+              border: 'none',
+              background: 'transparent',
+              boxShadow: on ? shadows.inset : 'none',
+              color: on ? colors.sageDeep : colors.inkFaint,
               fontSize: 11,
               fontWeight: 600,
               cursor: 'pointer',
@@ -394,7 +425,7 @@ function CountStepper({
           fontFamily: fonts.serif,
           fontSize: 18,
           letterSpacing: '-0.01em',
-          color: 'var(--ollie-color-ink)',
+          color: colors.ink,
           minWidth: 64,
           textAlign: 'center',
         }}
@@ -432,10 +463,10 @@ function FeedMeCta({
       style={{
         alignSelf: 'flex-start',
         padding: '12px 26px',
-        background: disabled ? 'transparent' : 'var(--ollie-color-sage)',
-        border: `1px solid ${disabled ? 'var(--ollie-color-hairline)' : 'var(--ollie-color-sage)'}`,
+        background: disabled ? 'transparent' : colors.sage,
+        border: `1px solid ${disabled ? colors.hairline : colors.sage}`,
         borderRadius: 999,
-        color: disabled ? 'var(--ollie-color-ink-faint)' : 'var(--ollie-color-cream)',
+        color: disabled ? colors.inkFaint : colors.cream,
         fontSize: 13,
         fontWeight: 600,
         cursor: disabled ? 'not-allowed' : 'pointer',
@@ -450,7 +481,7 @@ function FeedMeCta({
 
 function PantryEmptyHint(): JSX.Element {
   return (
-    <Text scale="caption" color="var(--ollie-color-ink-faint)">
+    <Text scale="caption" color={colors.inkFaint}>
       pantry&rsquo;s empty. dump what you bought and come back.
     </Text>
   );
@@ -459,7 +490,7 @@ function PantryEmptyHint(): JSX.Element {
 function LoadingLine(): JSX.Element {
   return (
     <Row gap={6} align="center" aria-live="polite">
-      <Text scale="caption" color="var(--ollie-color-ink-faint)">
+      <Text scale="caption" color={colors.inkFaint}>
         thinking
       </Text>
       <DotPulse />
@@ -486,7 +517,7 @@ function DotPulse(): JSX.Element {
             width: 4,
             height: 4,
             borderRadius: '50%',
-            background: 'var(--ollie-color-ink-faint)',
+            background: colors.inkFaint,
             animation: `ollie-feedme-pulse 1200ms ${i * 160}ms cubic-bezier(0.45, 0, 0.55, 1) infinite`,
           }}
         />
@@ -497,7 +528,7 @@ function DotPulse(): JSX.Element {
 
 function EmptyResultLine(): JSX.Element {
   return (
-    <Text scale="caption" color="var(--ollie-color-ink-faint)">
+    <Text scale="caption" color={colors.inkFaint}>
       couldn&rsquo;t dream anything up. add a couple more things to your pantry.
     </Text>
   );
@@ -505,7 +536,7 @@ function EmptyResultLine(): JSX.Element {
 
 function NetworkErrorLine(): JSX.Element {
   return (
-    <Text scale="caption" color="var(--ollie-color-ink-faint)">
+    <Text scale="caption" color={colors.inkFaint}>
       couldn&rsquo;t reach the kitchen — try in a moment.
     </Text>
   );
@@ -516,15 +547,12 @@ function NetworkErrorLine(): JSX.Element {
 function RecipeCard({
   suggestion,
   cooked,
-  onCookedIt,
-  shopNames,
-  onAddToShop,
+  onOpen,
 }: {
   suggestion: FeedRecipeSuggestion;
   cooked: boolean;
-  onCookedIt: () => void;
-  shopNames?: Set<string>;
-  onAddToShop?: (name: string, quantity?: number | null, unit?: string | null) => void;
+  /** Open the cream detail screen ("show me how ›"). */
+  onOpen: () => void;
 }): JSX.Element {
   const minutes = suggestion.prepMinutes + suggestion.cookMinutes;
   // Pull the first defined-but-non-generic diet tag for the subtitle. Most
@@ -539,253 +567,76 @@ function RecipeCard({
     .filter((i) => i.have)
     .map((i) => i.name);
 
-  // Collapsed by default — a clean stack of dish names — so the list stays
-  // scannable. Tapping the header reveals the full recipe (ingredients with
-  // quantities + numbered steps). One recipe open at a time keeps focus.
-  const [open, setOpen] = useState(false);
+  // Whether there's a recipe worth drilling into ("show me how ›").
   const hasRecipe = suggestion.steps.length > 0 || suggestion.ingredients.length > 0;
-
-  // Names the user has just tapped onto the shopping list this session — folded
-  // together with the names already on the list (shopNames) so a "need" item
-  // flips to "added" the moment it's tapped and stays that way.
-  const [addedNames, setAddedNames] = useState<Set<string>>(() => new Set());
-  const isAdded = (name: string): boolean =>
-    addedNames.has(name.toLowerCase()) || (shopNames?.has(name.toLowerCase()) ?? false);
 
   return (
     <article
+      role={hasRecipe ? 'button' : undefined}
+      tabIndex={hasRecipe ? 0 : undefined}
+      onClick={hasRecipe ? onOpen : undefined}
+      onKeyDown={
+        hasRecipe
+          ? (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onOpen();
+              }
+            }
+          : undefined
+      }
       style={{
         padding: '20px 22px',
-        background: 'var(--ollie-color-paper)',
-        border: '1px solid var(--ollie-color-hairline)',
-        borderRadius: 4,
+        background: colors.paper,
+        border: 'none',
+        borderRadius: 22,
+        boxShadow: shadows.card,
         display: 'flex',
         flexDirection: 'column',
         gap: 10,
+        cursor: hasRecipe ? 'pointer' : 'default',
+        textAlign: 'left',
       }}
     >
-      {/* A plain <div role="button"> rather than a real <button>: the header
-          contains block-level layout (<Row> → div, <Text scale="body"> → p),
-          which is invalid inside a <button> and makes browsers reparent the DOM
-          — that broke click handling on the whole card. */}
-      <div
-        role={hasRecipe ? 'button' : undefined}
-        tabIndex={hasRecipe ? 0 : undefined}
-        aria-expanded={hasRecipe ? open : undefined}
-        onClick={hasRecipe ? () => setOpen((v) => !v) : undefined}
-        onKeyDown={
-          hasRecipe
-            ? (e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  setOpen((v) => !v);
-                }
-              }
-            : undefined
-        }
+      <span
         style={{
-          textAlign: 'left',
-          cursor: hasRecipe ? 'pointer' : 'default',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 10,
-          width: '100%',
+          fontFamily: fonts.serif,
+          fontSize: 24,
+          lineHeight: 1.1,
+          letterSpacing: '-0.012em',
+          fontWeight: 400,
+          color: colors.ink,
         }}
       >
-        <Row justify="space-between" align="baseline" gap={12} style={{ width: '100%' }}>
-          <span
-            style={{
-              fontFamily: fonts.serif,
-              fontSize: 24,
-              lineHeight: 1.1,
-              letterSpacing: '-0.012em',
-              fontWeight: 400,
-              color: 'var(--ollie-color-ink)',
-            }}
-          >
-            {suggestion.dish}
-          </span>
-          {hasRecipe && (
-            <span
-              aria-hidden
-              style={{
-                flexShrink: 0,
-                fontSize: 11,
-                color: 'var(--ollie-color-ink-faint)',
-                ...SMCP_STYLE,
-              }}
-            >
-              {open ? 'hide' : 'recipe'}
-            </span>
-          )}
-        </Row>
+        {suggestion.dish}
+      </span>
 
-        <Text scale="caption" color="var(--ollie-color-ink-faint)">
-          {minutes > 0 ? `about ${minutes} min` : 'a few minutes'}
-          {specificDiet && ` · ${specificDiet}`}
-        </Text>
+      <Text scale="caption" color={colors.inkFaint}>
+        {minutes > 0 ? `about ${minutes} min` : 'a few minutes'}
+        {specificDiet && ` · ${specificDiet}`}
+      </Text>
 
-        {!open && usedIngredients.length > 0 && (
-          <span
-            style={{
-              fontSize: 11,
-              color: 'var(--ollie-color-ink-soft)',
-              ...SMCP_STYLE,
-            }}
-          >
-            {usedIngredients.join(' · ')}
-          </span>
-        )}
-      </div>
-
-      {open && hasRecipe && (
-        <Stack gap={14} style={{ marginTop: 4 }}>
-          {suggestion.ingredients.length > 0 && (
-            <Stack gap={6}>
-              <span style={{ fontSize: 11, color: 'var(--ollie-color-ink-faint)', ...SMCP_STYLE }}>
-                ingredients{suggestion.servings > 0 ? ` · serves ${suggestion.servings}` : ''}
-              </span>
-              {suggestion.ingredients.map((ing, i) => {
-                const label = [ing.qty ? String(ing.qty) : '', ing.unit ?? '', ing.name]
-                  .filter(Boolean)
-                  .join(' ');
-                const key = `${ing.name}-${i}`;
-
-                // Have it already → plain line, no affordance.
-                if (ing.have) {
-                  return (
-                    <Text key={key} scale="caption" color="var(--ollie-color-ink)">
-                      {label}
-                    </Text>
-                  );
-                }
-
-                const added = isAdded(ing.name);
-
-                // Missing + already on the list (or no add handler) → static
-                // "added"/"need" tag, nothing to tap.
-                if (added || !onAddToShop) {
-                  return (
-                    <Row key={key} gap={6} align="baseline">
-                      <Text scale="caption" color={added ? 'var(--ollie-color-sage)' : 'var(--ollie-color-ink-soft)'}>
-                        {label}
-                      </Text>
-                      <span
-                        style={{
-                          fontSize: 11,
-                          color: added ? 'var(--ollie-color-sage)' : 'var(--ollie-color-ink-faint)',
-                          fontWeight: added ? 600 : 400,
-                          ...SMCP_STYLE,
-                        }}
-                      >
-                        {added ? 'added' : 'need'}
-                      </span>
-                    </Row>
-                  );
-                }
-
-                // Missing → tap the row to add it to the shopping list.
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    aria-label={`add ${ing.name} to shopping list`}
-                    onClick={() => {
-                      onAddToShop(ing.name, ing.qty ?? null, ing.unit ?? null);
-                      setAddedNames((prev) => {
-                        const next = new Set(prev);
-                        next.add(ing.name.toLowerCase());
-                        return next;
-                      });
-                    }}
-                    style={{
-                      appearance: 'none',
-                      background: 'transparent',
-                      border: 'none',
-                      padding: 0,
-                      margin: 0,
-                      textAlign: 'left',
-                      cursor: 'pointer',
-                      display: 'inline-flex',
-                      alignItems: 'baseline',
-                      gap: 6,
-                    }}
-                  >
-                    <Text scale="caption" color="var(--ollie-color-ink-soft)">
-                      {label}
-                    </Text>
-                    <span
-                      style={{
-                        fontSize: 11,
-                        color: 'var(--ollie-color-sage)',
-                        fontWeight: 600,
-                        ...SMCP_STYLE,
-                      }}
-                    >
-                      + add
-                    </span>
-                  </button>
-                );
-              })}
-            </Stack>
-          )}
-
-          {suggestion.steps.length > 0 && (
-            <Stack gap={8}>
-              <span style={{ fontSize: 11, color: 'var(--ollie-color-ink-faint)', ...SMCP_STYLE }}>
-                steps
-              </span>
-              {suggestion.steps.map((step, i) => (
-                <Row key={i} gap={10} align="baseline">
-                  <span
-                    style={{
-                      flexShrink: 0,
-                      fontFamily: fonts.serif,
-                      fontSize: 13,
-                      color: 'var(--ollie-color-ink-faint)',
-                    }}
-                  >
-                    {i + 1}
-                  </span>
-                  <Text scale="body" color="var(--ollie-color-ink)">
-                    {step}
-                  </Text>
-                </Row>
-              ))}
-            </Stack>
-          )}
-        </Stack>
+      {usedIngredients.length > 0 && (
+        <span style={{ fontSize: 11, color: colors.inkSoft, ...SMCP_STYLE }}>
+          {usedIngredients.join(' · ')}
+        </span>
       )}
 
-      <Row justify="flex-end" align="center" style={{ marginTop: 4 }}>
+      <Row justify="space-between" align="center" gap={9} style={{ marginTop: 4 }}>
         {cooked ? (
-          <span
-            style={{
-              fontSize: 11,
-              color: 'var(--ollie-color-sage)',
-              fontWeight: 600,
-              ...SMCP_STYLE,
-            }}
-          >
-            cooked
-          </span>
+          <Row gap={7} align="center">
+            <CookTick done />
+            <span style={{ fontSize: 11, color: colors.sage, fontWeight: 600, ...SMCP_STYLE }}>
+              cooked
+            </span>
+          </Row>
         ) : (
-          <button
-            type="button"
-            onClick={onCookedIt}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              padding: 0,
-              cursor: 'pointer',
-              fontSize: 11,
-              color: 'var(--ollie-color-sage)',
-              fontWeight: 600,
-              ...SMCP_STYLE,
-            }}
-          >
-            cooked it
-          </button>
+          <span />
+        )}
+        {hasRecipe && (
+          <span style={{ fontSize: 13, color: colors.sage, fontWeight: 600 }}>
+            show me how ›
+          </span>
         )}
       </Row>
     </article>
@@ -809,7 +660,7 @@ function RecentStrip({ rows }: { rows: CookHistoryEntry[] }): JSX.Element | null
           border: 'none',
           padding: 0,
           cursor: 'pointer',
-          color: 'var(--ollie-color-ink-faint)',
+          color: colors.inkFaint,
           fontSize: 11,
           fontWeight: 600,
           display: 'inline-flex',
@@ -836,7 +687,7 @@ function RecentStrip({ rows }: { rows: CookHistoryEntry[] }): JSX.Element | null
         <Stack gap={6} as="ul" style={{ listStyle: 'none', padding: 0, margin: 0 }}>
           {rows.map((r) => (
             <li key={r.id}>
-              <Text scale="caption" color="var(--ollie-color-ink-soft)">
+              <Text scale="caption" color={colors.inkSoft}>
                 {r.recipeName} · {formatAgo(r.cookedAtMs)}
               </Text>
             </li>
@@ -849,18 +700,43 @@ function RecentStrip({ rows }: { rows: CookHistoryEntry[] }): JSX.Element | null
 
 // ─── helpers ──────────────────────────────────────────────────────────────
 
+/**
+ * The 24px neumorphic round on the "cooked it" affordance. Idle = a pressed
+ * inset well; done = a filled sageDeep disc. No checkmark glyph — the fill
+ * itself is the done signal, matching the editorial restraint elsewhere.
+ */
+function CookTick({ done }: { done: boolean }): JSX.Element {
+  return (
+    <span
+      aria-hidden
+      style={{
+        width: 24,
+        height: 24,
+        borderRadius: '50%',
+        flexShrink: 0,
+        background: done ? colors.sageDeep : colors.cream,
+        boxShadow: done
+          ? shadows.raisedSm
+          : 'inset 3px 3px 6px rgba(120,140,122,0.55), inset -3px -3px 6px rgba(255,255,255,0.85)',
+        transition: 'background 200ms cubic-bezier(0.18, 0, 0.22, 1)',
+      }}
+    />
+  );
+}
+
 function glyphButton(disabled: boolean): CSSProperties {
   return {
-    width: 28,
-    height: 28,
+    width: 32,
+    height: 32,
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
-    border: '1px solid var(--ollie-color-hairline)',
-    background: 'transparent',
+    border: 'none',
+    background: colors.cream,
+    boxShadow: disabled ? shadows.inset : shadows.raisedSm,
     borderRadius: 999,
     cursor: disabled ? 'not-allowed' : 'pointer',
-    color: disabled ? 'var(--ollie-color-ink-ghost)' : 'var(--ollie-color-ink-faint)',
+    color: disabled ? colors.inkGhost : colors.inkFaint,
     fontSize: 14,
     fontWeight: 400,
     padding: 0,

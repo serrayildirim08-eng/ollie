@@ -39,6 +39,8 @@ import {
   type CorrelationRunResult,
   type SnapshotStoreLike,
 } from '@ollie/logic/body';
+// Single canonical UTC-based week key, shared across detectors (#146).
+import { isoWeekKey } from './body-weekly';
 
 const DAY_MS = 86_400_000;
 const COOLDOWN_MS = 24 * 3600 * 1000;
@@ -164,25 +166,6 @@ export function nextLocal03(nowMs: number): number {
 
 // ─── APNs subscriber for pattern:detected ────────────────────────────────
 
-/**
- * Returns the ISO 8601 week key (YYYY-Www) for a given timestamp.
- * Used as the dedup + aggregation discriminator — one push per
- * correlator per week.
- */
-function isoWeekKey(ts: number): string {
-  const d = new Date(ts);
-  // ISO week: Monday = day 1; shift so Monday is 0
-  const day = (d.getUTCDay() + 6) % 7;
-  // Nearest Thursday (ISO rule: week belongs to the year of its Thursday)
-  const thursday = new Date(d);
-  thursday.setUTCDate(d.getUTCDate() - day + 3);
-  const yearStart = new Date(Date.UTC(thursday.getUTCFullYear(), 0, 1));
-  const week = Math.ceil(
-    ((thursday.getTime() - yearStart.getTime()) / 86_400_000 + 1) / 7,
-  );
-  return `${thursday.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
-}
-
 export interface PatternDetectedSubscriberOpts {
   /**
    * APNs push scheduler — injected by the app boot layer.
@@ -279,18 +262,28 @@ export function scheduleBodyCorrelationPass(
   const getNow = opts.now ?? (() => Date.now());
   let timer: ReturnType<typeof setTimeout> | null = null;
 
-  function arm(): void {
+  // Floor for any re-arm delay (audit #93). Guards against a setTimeout that
+  // fires early (suspend/resume, clock skew) busy-re-arming with a near-zero
+  // recomputed delay.
+  const MIN_REARM_MS = 60_000;
+
+  function arm(floor = false): void {
     const now = getNow();
     const fireAt = nextLocal03(now);
-    const delay = Math.max(0, fireAt - now);
+    const delay = floor ? Math.max(MIN_REARM_MS, fireAt - now) : Math.max(0, fireAt - now);
     timer = setTimeout(() => {
       timer = null;
-      try {
-        runBodyCorrelationPass({ store: opts.store, now: getNow });
-      } catch (err) {
-        console.warn('[orchestrator/body-correlations] scheduled pass failed:', err);
+      // Only run the pass if the clock has actually reached the target; an
+      // early fire re-arms instead. (runBodyCorrelationPass has its own 24h
+      // cooldown, so a stray run is harmless, but skipping it avoids churn.)
+      if (getNow() >= fireAt) {
+        try {
+          runBodyCorrelationPass({ store: opts.store, now: getNow });
+        } catch (err) {
+          console.warn('[orchestrator/body-correlations] scheduled pass failed:', err);
+        }
       }
-      arm();
+      arm(true); // re-arm with floored delay
     }, delay);
   }
 

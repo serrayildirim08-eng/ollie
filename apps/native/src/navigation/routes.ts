@@ -36,7 +36,7 @@ export interface RouteEntry {
 export const primaryRoutes: readonly RouteEntry[] = [
   { id: "home", path: "/", label: "Home", icon: "House", primary: true },
   { id: "todo", path: "/todo", label: "To-Do", icon: "ListChecks", primary: true },
-  { id: "modules", path: "/modules", label: "Modules", icon: "SquaresFour", primary: true },
+  { id: "modules", path: "/modules", label: "Rooms", icon: "SquaresFour", primary: true },
   { id: "settings", path: "/settings", label: "Settings", icon: "Gear", primary: true },
 ] as const;
 

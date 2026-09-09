@@ -18,6 +18,7 @@
 import { computeCadence, type CadenceEstimate } from '@ollie/cadence';
 import { detectLowMood } from '@ollie/logic/goals';
 import { sql } from '../../storage';
+import { newId } from '../../storage/id';
 import { migrateGoals } from './migrate';
 import {
   ACTIVE_GOAL_CAP,
@@ -78,11 +79,6 @@ interface EventRow {
   [col: string]: unknown;
 }
 
-function newId(): string {
-  return typeof crypto !== 'undefined' && crypto.randomUUID
-    ? crypto.randomUUID()
-    : `gl_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-}
 
 // ─── goals registry ───────────────────────────────────────────────────────
 
@@ -137,6 +133,14 @@ export const goals = {
    * Ensure a goal row exists for `name`. If absent, insert it; if present,
    * leave it alone but backfill `why` when we have one and the existing
    * row doesn't. Either way returns the canonical row.
+   *
+   * Enforces the active-goal cap on the INSERT path only: matching an
+   * existing goal (or backfilling its `why`) never adds an active goal so
+   * it always passes. Creating a new one at `ACTIVE_GOAL_CAP` throws
+   * `GoalCapError` — same gate as `create()` — so a dump can't slip past
+   * the cap (and the required why/obstacle/premortem capture) by going
+   * through `ensure`. Callers that prefer a soft fallback (notes landing in
+   * the unassigned bucket) catch `GoalCapError`.
    */
   async ensure(name: string, why?: string | null): Promise<Goal> {
     const n = normaliseName(name);
@@ -151,7 +155,11 @@ export const goals = {
       }
       return existing;
     }
-    const id = newId();
+    const count = await goals.activeCount();
+    if (count >= ACTIVE_GOAL_CAP) {
+      throw new GoalCapError();
+    }
+    const id = newId('gl_');
     const now = Date.now();
     await sql.execute(
       `INSERT INTO goals_registry (id, name, why, created_at)
@@ -186,7 +194,7 @@ export const goals = {
     if (count >= ACTIVE_GOAL_CAP) {
       throw new GoalCapError();
     }
-    const id = newId();
+    const id = newId('gl_');
     const now = Date.now();
     const name = normaliseName(draft.name);
     const why = draft.why ?? null;
@@ -228,7 +236,7 @@ export const goals = {
    */
   async recordMoodSignal(text: string): Promise<void> {
     await migrateGoals();
-    const id = newId();
+    const id = newId('gl_');
     const now = Date.now();
     await sql.execute(
       `INSERT INTO goals_mood_log (id, text, logged_at) VALUES (?, ?, ?)`,
@@ -301,7 +309,7 @@ export const events = {
     kind: GoalEventKind;
     text: string;
   }): Promise<GoalEvent> {
-    const id = newId();
+    const id = newId('gl_');
     const now = Date.now();
     await sql.execute(
       `INSERT INTO goals_events (id, goal_id, kind, text, logged_at)

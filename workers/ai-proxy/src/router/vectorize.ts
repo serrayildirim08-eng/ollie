@@ -75,6 +75,10 @@ export interface CacheRow {
   language: string;
   similarity: number;
   hitCount: number;
+  /** Original creation time (ms). Carried through so cacheHitBump can write it
+   *  back unchanged — otherwise the TTL clock would reset (or zero) on every
+   *  bump and the entry would self-expire after a single hit (audit S2 · fix 1). */
+  createdAt: number;
 }
 
 /**
@@ -118,6 +122,7 @@ export async function cacheLookup(
     language: typeof meta.language === 'string' ? meta.language : 'unknown',
     similarity: top.score,
     hitCount: typeof meta.hitCount === 'number' ? meta.hitCount : 0,
+    createdAt,
   };
 }
 
@@ -180,6 +185,12 @@ export async function cacheHitBump(
         language: row.language,
         hitCount: row.hitCount + 1,
         lastHitAt: Date.now(),
+        // PRESERVE the original createdAt. A re-upsert overwrites the whole
+        // metadata blob, so omitting this dropped createdAt to undefined → the
+        // next cacheLookup TTL check (Date.now() - 0 > TTL) treated the entry as
+        // expired and returned null, killing the cache after one hit (audit S2 ·
+        // fix 1). Fall back to now() only for a legacy row that never had one.
+        createdAt: row.createdAt > 0 ? row.createdAt : Date.now(),
       },
     },
   ]);

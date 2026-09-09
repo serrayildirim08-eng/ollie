@@ -13,6 +13,27 @@ import { pantry, shopping } from './repo';
 import { migrateFinance } from '../finance/migrate';
 import { transactions as financeTransactions } from '../finance/repo';
 
+/**
+ * Split a comma / newline-delimited grocery item string into individual item
+ * names. The dump router classifies a whole fragment as ONE grocery action
+ * (e.g. "rice, tomato paste, olive oil" → pantry_add with that full string as
+ * `item`), because pass-2 segmentation treats a same-intent list as a single
+ * unit. Without this split each list lands as one giant card. We itemize here,
+ * deterministically, so every item gets its own card AND inherits the action
+ * (pantry vs shopping) the router already decided for the fragment — no extra
+ * AI call, so it never rate-limits.
+ *
+ * Number-grouping guard: a comma is only a delimiter when it is NOT sitting
+ * between two digits, so "$1,500" / "1,000 ml" survive as one token.
+ */
+const LIST_DELIM_RE = /\s*\r?\n\s*|\s*,(?=\s*(?:\D|$))\s*/g;
+export function splitGroceryList(raw: string): string[] {
+  return raw
+    .split(LIST_DELIM_RE)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
+
 export const groceryHandler: ModuleHandler<'grocery'> = {
   module: 'grocery',
   async apply(fragment): Promise<HandlerResult> {
@@ -20,6 +41,35 @@ export const groceryHandler: ModuleHandler<'grocery'> = {
     const p = fragment.payload as GroceryAction;
     switch (p.action) {
       case 'pantry_add': {
+        // Multi-item list ("rice, tomato paste, olive oil") — itemize into
+        // separate pantry cards, each inheriting this fragment's pantry intent.
+        // We drop quantity/unit/price here: those describe the whole fragment
+        // and can't be safely attributed to one item in a list. Single-item
+        // dumps fall through to the rich path below (qty + finance mirror).
+        const names = splitGroceryList(p.item);
+        if (names.length > 1) {
+          const added: Array<{ id: string; name: string }> = [];
+          for (const name of names) {
+            const it = await pantry.add({ name });
+            try {
+              await pantry.refreshPrediction(it.id);
+            } catch (err) {
+              console.error('[grocery] refreshPrediction failed', err);
+            }
+            added.push({ id: it.id, name: it.name });
+          }
+          return {
+            ok: true,
+            note: `added ${added.length} items to your pantry`,
+            deepLink: '/box/grocery',
+            undo: async () => {
+              for (const it of added) {
+                try { await pantry.remove(it.id); } catch { /* best-effort */ }
+              }
+            },
+          };
+        }
+
         const item = await pantry.add({
           name: p.item,
           quantity: (p as { quantity?: number | null }).quantity ?? null,
@@ -75,6 +125,27 @@ export const groceryHandler: ModuleHandler<'grocery'> = {
       }
 
       case 'shopping_list_add': {
+        // Multi-item list — itemize into separate shopping cards, each
+        // inheriting this fragment's shopping intent. See pantry_add note.
+        const names = splitGroceryList(p.item);
+        if (names.length > 1) {
+          const added: Array<{ id: string; name: string }> = [];
+          for (const name of names) {
+            const it = await shopping.add({ name });
+            added.push({ id: it.id, name: it.name });
+          }
+          return {
+            ok: true,
+            note: `added ${added.length} items to your shopping list`,
+            deepLink: '/box/grocery',
+            undo: async () => {
+              for (const it of added) {
+                try { await shopping.remove(it.id); } catch { /* best-effort */ }
+              }
+            },
+          };
+        }
+
         const item = await shopping.add({
           name: p.item,
           quantity: (p as { quantity?: number | null }).quantity ?? null,

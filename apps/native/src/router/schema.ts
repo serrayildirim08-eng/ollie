@@ -31,6 +31,7 @@ export type Module =
   | 'goals'
   | 'grocery'
   | 'medication'
+  | 'chores'
   | 'dump_only';  // catch-all: archive only, no module action
 
 // ─────────────────────────────────────────────────────────────────────
@@ -89,12 +90,15 @@ export interface CrisisSignal {
   tier: CrisisTier;
   /** Which lexicons fired. */
   languages: CrisisLanguage[];
-  /** First matched entry per lexicon, for audit. */
+  /**
+   * First matched entry per lexicon, for audit. Lexicon coordinates ONLY
+   * (tier + language + pattern id) — the worker never sends the matched
+   * raw text, so the client never receives crisis-dump content (audit #77).
+   */
   matches: Array<{
     language: CrisisLanguage;
     tier: CrisisTier;
     pattern: string;
-    line: string;
   }>;
 }
 
@@ -144,6 +148,7 @@ export type ActionPayload =
   | GoalsAction
   | GroceryAction
   | MedicationAction
+  | ChoresAction
   | DumpOnlyAction;
 
 // ── BODY ─────────────────────────────────────────────────────────────
@@ -190,7 +195,7 @@ export type WorkAction =
    * to body.log_hunger. Approach B (see grocery/handler.ts).
    */
   | { module: 'work'; action: 'log_focus_session'; durationMin?: number; project?: string; skipped_meals?: boolean }
-  | { module: 'work'; action: 'create_task'; text: string; project?: string; remindIn?: RemindIn }
+  | ({ module: 'work'; action: 'create_task'; text: string; project?: string; remindIn?: RemindIn } & ReminderHints)
   | { module: 'work'; action: 'log_deadline'; text: string; dueDate?: string }
   | { module: 'work'; action: 'log_meeting'; with?: string; durationMin?: number }
   | { module: 'work'; action: 'distraction_journal'; what: string }
@@ -217,9 +222,28 @@ export interface RemindIn {
   scheduledAtMs: number;
 }
 
+/**
+ * Manual one-shot reminder hints (Layer 1 "brain" judgment only — the cascade,
+ * fallback, and scheduling math are deterministic harness code in
+ * notify/reminderCascade.ts + the module handlers). Set by the router for
+ * explicit "remind me to X" dumps:
+ *   - `reminder: true`     — the dump is an explicit reminder request. Drives
+ *                            the no-time "when?" cascade in DumpScreen.
+ *   - `remindAt: "HH:MM"`  — an absolute 24h-local clock time the user named
+ *                            ("at 6pm" → "18:00"). Scheduled for the next
+ *                            occurrence of that time (today, else tomorrow).
+ * `remindIn` (relative) stays the existing field for "in N min/hr".
+ */
+export type ReminderHints = {
+  /** True when the dump explicitly asked to be reminded ("remind me to X"). */
+  reminder?: boolean;
+  /** Absolute 24h-local clock time ("HH:MM") the user named, if any. */
+  remindAt?: string;
+};
+
 export type AdminAction =
-  | { module: 'admin'; action: 'create_task'; text: string; dueDate?: string; remindIn?: RemindIn }
-  | { module: 'admin'; action: 'create_phone_task'; person: string; reason?: string; dueDate?: string; remindIn?: RemindIn }
+  | ({ module: 'admin'; action: 'create_task'; text: string; dueDate?: string; remindIn?: RemindIn } & ReminderHints)
+  | ({ module: 'admin'; action: 'create_phone_task'; person: string; reason?: string; dueDate?: string; remindIn?: RemindIn } & ReminderHints)
   | { module: 'admin'; action: 'schedule_appointment'; what: string; date?: string }
   | { module: 'admin'; action: 'log_paperwork'; what: string; dueDate?: string }
   | { module: 'admin'; action: 'recurring_decision'; what: string }
@@ -352,10 +376,59 @@ export type GroceryAction =
 
 // ── MEDICATION ───────────────────────────────────────────────────────
 
+// Schedule events (the "today" tab) + cabinet inventory (the "cabinet" tab).
+//   - log_dose / missed_dose / side_effect_note — schedule-side dose events.
+//     `log_dose` also auto-decrements the cabinet qty for that med (count-down).
+//   - add_to_cabinet      — stock a med/supplement ("started X"). Optional
+//                           `purpose` (sleep|mood|pain|digestion|vitamins|other;
+//                           else derived from the name), `doseLabel` ("400mg"),
+//                           `qty` (units on hand), and a `schedule` of "HH:MM"
+//                           slots — when a time is given the schedule registry
+//                           gains that slot so it appears on the today tab.
+//   - set_low / set_have  — manual "running low" override and its clear.
+//   - mark_taken          — log a dose AND count down the cabinet (the cabinet's
+//                           own tick; equivalent to log_dose for inventory).
 export type MedicationAction =
   | { module: 'medication'; action: 'log_dose'; medName: string; dose?: string }
   | { module: 'medication'; action: 'missed_dose'; medName: string }
-  | { module: 'medication'; action: 'side_effect_note'; medName: string; note: string };
+  | { module: 'medication'; action: 'side_effect_note'; medName: string; note: string }
+  | {
+      module: 'medication';
+      action: 'add_to_cabinet';
+      medName: string;
+      purpose?: 'sleep' | 'mood' | 'pain' | 'digestion' | 'vitamins' | 'other';
+      doseLabel?: string;
+      qty?: number;
+      /** "HH:MM" 24h-local slots; non-empty → med also lands on the schedule. */
+      schedule?: string[];
+    }
+  | { module: 'medication'; action: 'set_low'; medName: string }
+  | { module: 'medication'; action: 'set_have'; medName: string }
+  | { module: 'medication'; action: 'mark_taken'; medName: string; dose?: string };
+
+// ── CHORES ───────────────────────────────────────────────────────────
+// Household cleaning / upkeep tasks. Distinct from grocery (buying/using
+// items) and admin (paperwork/appointments). `chore` is the free-text name
+// ("vacuum", "clean the kitchen", "do laundry").
+//   - chore_done           — a chore was done (✓). Resets a recurring chore's
+//                            cadence clock; one-offs drop off the to-do list.
+//   - add_chore            — a one-off chore to do (checkable).
+//   - add_recurring_chore  — a chore that recurs, either WEEKDAY-anchored
+//                            ("laundry on wednesdays" → weekdays:[3], local
+//                            0=Sun..6=Sat) or by INTERVAL ("every N days" →
+//                            cadenceDays). weekdays wins when present.
+
+export type ChoresAction =
+  | { module: 'chores'; action: 'chore_done'; chore: string }
+  | { module: 'chores'; action: 'add_chore'; chore: string }
+  | {
+      module: 'chores';
+      action: 'add_recurring_chore';
+      chore: string;
+      cadenceDays?: number;
+      /** Local weekdays [0=Sun..6=Sat] for a weekday-anchored chore. */
+      weekdays?: number[];
+    };
 
 // ── DUMP_ONLY · catch-all ────────────────────────────────────────────
 
@@ -396,4 +469,20 @@ export interface HandlerResult {
    * the handler did not persist (dump_only, validation reject, etc.).
    */
   undo?: () => Promise<void>;
+  /**
+   * Set by a handler when it created a durable to-do for an explicit reminder
+   * ("remind me to X") that arrived WITHOUT a time. The to-do already exists;
+   * DumpScreen surfaces a small "when?" card so the user can pick a time. If
+   * the user picks one the harness schedules then; if they dismiss it, the
+   * harness falls back to 7pm today (see notify/reminderCascade.ts). Omitted
+   * for reminders that already carried a time (those are scheduled inline).
+   */
+  reminderCascade?: {
+    /** The created task's row id — stable id for the scheduled notification. */
+    taskId: string;
+    /** Human task text, used for the reminder body + the "when?" card copy. */
+    text: string;
+    /** Which task repo the row lives in (drives notification tap routing). */
+    module: 'admin' | 'work';
+  };
 }

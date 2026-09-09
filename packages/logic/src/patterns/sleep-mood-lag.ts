@@ -6,13 +6,21 @@
  * Peak-|ρ| lag surfaces when:
  *   - N ≥ minSampleDays overlapping pairs (default 21)
  *   - |ρ| ≥ minAbsRho (default 0.3)
- *   - bootstrap 90% CI excludes zero (1000 iters, seeded RNG)
+ *   - it survives multiplicity control across the WHOLE 7-lag family.
  *
- * No BH FDR — we only surface the single peak-lag, equivalent to taking
- * the max over the 7-lag family; the CI gate does the honest work.
+ * Finding #105: picking the peak-|ρ| over 7 lags and then running a SINGLE
+ * bootstrap CI on that winner is post-selection inference — the winner's CI
+ * is optimistically narrow because we conditioned on it being the max, so
+ * false positives are inflated (~7× the nominal rate in the worst case).
+ *
+ * Honest fix (two complementary corrections):
+ *   1. Per-lag bootstrap two-sided p-values for every eligible lag, then
+ *      Benjamini–Hochberg across the family — the peak must survive BH(q).
+ *   2. The reported CI for the peak is Bonferroni-widened (alpha/numEligible),
+ *      so the surfaced interval reflects the multiplicity it was chosen from.
  */
 
-import { mulberry32, spearman, bootstrapCI } from './stats';
+import { mulberry32, spearman, bootstrapCI, bhAdjust } from './stats';
 import { dayKey } from '../util';
 import type { Confidence, DumpEntry, DetectorOptions, SleepMoodLagPattern, SleepSession } from './types';
 
@@ -37,6 +45,41 @@ export interface SleepMoodLagOptions extends DetectorOptions {
   minPerLag?: number;
   lags?: number[];
   seed?: number;
+  /** Benjamini–Hochberg false-discovery rate for the lag family (#105). */
+  fdrQ?: number;
+}
+
+/**
+ * Bootstrap two-sided p-value for H0: ρ == 0, by resampling pairs and
+ * measuring how often the bootstrap statistic lands on the opposite side of
+ * zero from the point estimate (then doubling). Uses an additive-smoothed
+ * count so a zero-crossing-free bootstrap yields p = 1/(iters+1), not 0.
+ */
+function bootstrapPValue(
+  xs: readonly number[],
+  ys: readonly number[],
+  pointEst: number,
+  iters: number,
+  rng: () => number,
+): number {
+  const n = xs.length;
+  if (n < 2 || n !== ys.length) return 1;
+  const sign = pointEst >= 0 ? 1 : -1;
+  let opposite = 0;
+  for (let b = 0; b < iters; b++) {
+    const bx = new Array<number>(n);
+    const by = new Array<number>(n);
+    for (let i = 0; i < n; i++) {
+      const j = Math.floor(rng() * n);
+      bx[i] = xs[j];
+      by[i] = ys[j];
+    }
+    const r = spearman(bx, by);
+    if (!Number.isFinite(r)) { opposite++; continue; }
+    if (sign * r <= 0) opposite++;
+  }
+  const oneSided = (opposite + 1) / (iters + 1);
+  return Math.min(1, 2 * oneSided);
 }
 
 export function detectSleepMoodLag(
@@ -49,6 +92,7 @@ export function detectSleepMoodLag(
   const minPerLag = opts.minPerLag ?? 10;
   const lags = opts.lags ?? [-3, -2, -1, 0, 1, 2, 3];
   const seed = opts.seed ?? 42;
+  const fdrQ = opts.fdrQ ?? 0.1;
 
   const sleepByDay = new Map<string, number>();
   for (const s of sleepSessions || []) {
@@ -68,7 +112,10 @@ export function detectSleepMoodLag(
   }
   if (moodByDay.size < 5) return null;
 
-  let best: { L: number; rho: number; xs: number[]; ys: number[]; n: number } | null = null;
+  // Build EVERY eligible lag's series first (the whole family), so we can
+  // apply multiplicity control across all of them rather than only the winner.
+  type Cand = { L: number; rho: number; xs: number[]; ys: number[]; n: number };
+  const cands: Cand[] = [];
   for (const L of lags) {
     const xs: number[] = [];
     const ys: number[] = [];
@@ -83,16 +130,30 @@ export function detectSleepMoodLag(
     if (xs.length < minPerLag) continue;
     const rho = spearman(xs, ys);
     if (!Number.isFinite(rho)) continue;
-    if (!best || Math.abs(rho) > Math.abs(best.rho)) {
-      best = { L, rho, xs, ys, n: xs.length };
-    }
+    cands.push({ L, rho, xs, ys, n: xs.length });
   }
-  if (!best) return null;
+  if (cands.length === 0) return null;
+
+  // Peak-|ρ| lag (the selection step that creates the bias #105 corrects for).
+  let best: Cand = cands[0];
+  for (const c of cands) if (Math.abs(c.rho) > Math.abs(best.rho)) best = c;
   if (Math.abs(best.rho) < minAbsRho) return null;
   if (best.n < minSampleDays) return null;
 
+  // #105 — multiplicity control. One seeded RNG drives every bootstrap so the
+  // result stays deterministic across the family.
   const rng = mulberry32(seed);
-  const ci = bootstrapCI(best.xs, best.ys, (xs, ys) => spearman(xs, ys), 1000, 0.1, rng);
+  const m = cands.length;
+  const pValues = cands.map((c) => bootstrapPValue(c.xs, c.ys, c.rho, 1000, rng));
+  const rejected = bhAdjust(pValues, fdrQ);
+  const bestIdx = cands.indexOf(best);
+  // The selected peak lag must survive Benjamini–Hochberg across the family.
+  if (!rejected[bestIdx]) return null;
+
+  // Report a Bonferroni-widened CI for the peak: dividing alpha by the number
+  // of eligible lags acknowledges the interval was chosen as the maximum.
+  const widenedAlpha = 0.1 / m;
+  const ci = bootstrapCI(best.xs, best.ys, (xs, ys) => spearman(xs, ys), 1000, widenedAlpha, rng);
   if (!Number.isFinite(ci[0]) || !Number.isFinite(ci[1])) return null;
   if (ci[0] <= 0 && ci[1] >= 0) return null;
 

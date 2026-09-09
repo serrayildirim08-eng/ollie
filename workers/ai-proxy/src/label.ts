@@ -24,7 +24,7 @@
  *   - Hard cap: 280 chars max scrubbed_text — long-tail dumps are truncated.
  */
 
-import { scrubPII } from './pii';
+import { scrubPII, asLocale } from '@ollie/pii-scrub';
 import { json, upstreamError } from '@ollie/worker-http';
 
 export interface LabelEnv {
@@ -71,6 +71,14 @@ const VALID_URGENCY = new Set(['now', 'soon', 'later', 'none']);
 const VALID_SECTORS = new Set([
   'tech', 'law', 'med', 'fin', 'edu', 'creative',
   'parenting', 'hospitality', 'gov', 'other',
+]);
+// Must stay in sync with the `adhd_pattern_tag` enum in the system prompt below.
+const VALID_ADHD_TAGS = new Set([
+  'hyperfocus', 'task-switching', 'deadline-anxiety', 'rejection-sensitivity',
+  'time-blindness', 'dopamine-seeking', 'executive-stall', 'overcommitment',
+  'interest-collapse', 'body-doubling', 'sensory-overload', 'emotional-flooding',
+  'rsd-spiral', 'pomodoro-success', 'meds-reflection', 'sleep-debt',
+  'cycle-luteal', 'none',
 ]);
 
 // System prompt is inlined here so the worker can ship as a single bundle.
@@ -126,8 +134,13 @@ export async function handleLabel(req: Request, env: LabelEnv): Promise<Response
 
   // Belt-and-suspenders: re-scrub server-side. Caller should already have
   // scrubbed, but if a dev wires the endpoint wrong we don't want raw text
-  // hitting Anthropic.
-  const safe = scrubPII(body.scrubbed_text).scrubbed.slice(0, MAX_SCRUBBED_CHARS);
+  // hitting Anthropic. FULL categories — this text is labeled INTO the
+  // research corpus, so medical/mental-health/sexual terms + locale-aware
+  // names must be stripped before Anthropic ever sees them (S9).
+  const safe = scrubPII(body.scrubbed_text, asLocale(body.locale)).scrubbed.slice(
+    0,
+    MAX_SCRUBBED_CHARS,
+  );
 
   // Cost cap — fail open with a neutral label rather than block writes when
   // the daily budget is hit. The orchestrator decides what to do (likely
@@ -251,7 +264,7 @@ export async function handleLabel(req: Request, env: LabelEnv): Promise<Response
 
 type ValidLabel = LabelResponse['label'];
 
-function validateLabel(raw: Record<string, unknown>):
+export function validateLabel(raw: Record<string, unknown>):
   | { ok: true; label: ValidLabel }
   | { ok: false; reason: string } {
   const mood = raw.mood_signal;
@@ -267,7 +280,8 @@ function validateLabel(raw: Record<string, unknown>):
     return { ok: false, reason: 'content_type' };
   if (typeof urgency !== 'string' || !VALID_URGENCY.has(urgency))
     return { ok: false, reason: 'urgency_tier' };
-  if (typeof tag !== 'string') return { ok: false, reason: 'adhd_pattern_tag_type' };
+  if (typeof tag !== 'string' || !VALID_ADHD_TAGS.has(tag))
+    return { ok: false, reason: 'adhd_pattern_tag' };
   if (typeof sector !== 'string' || !VALID_SECTORS.has(sector))
     return { ok: false, reason: 'sector_relevance' };
   if (typeof conf !== 'number' || conf < 0 || conf > 1)

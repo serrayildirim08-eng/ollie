@@ -31,8 +31,10 @@ import type {
   SignalCyclePhase,
 } from '@ollie/logic/body';
 import { computePhaseForDate } from '@ollie/logic/cycle';
+import { startOfLocalDay, addLocalDays } from '@ollie/logic/util';
 
 const DAY_MS = 86_400_000;
+const HOUR_MS = 3_600_000;
 
 /** signal ids this orchestrator owns — used to merge without clobbering. */
 const BODY_OWNED_SIGNAL_IDS = new Set<string>([
@@ -65,7 +67,15 @@ function buildPhaseMarkers(
   if (!Array.isArray(cycles) || cycles.length === 0) return [];
   const out: SignalCyclePhase[] = [];
   let lastPhase: string | null = null;
-  for (let t = fromTs; t <= toTs; t += DAY_MS) {
+  // Step by true LOCAL calendar days (anchored at local noon), not a fixed
+  // 24h += which skips/double-counts a day across DST and emits a marker `ts`
+  // that buckets to the wrong local day downstream.
+  const endNoon = startOfLocalDay(toTs) + 12 * HOUR_MS;
+  for (
+    let t = startOfLocalDay(fromTs) + 12 * HOUR_MS;
+    t <= endNoon;
+    t = addLocalDays(t, 1)
+  ) {
     let phase: string | null;
     try {
       phase = computePhaseForDate(

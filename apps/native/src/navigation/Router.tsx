@@ -10,63 +10,130 @@
  *   /box/<module>  — per-module box screens
  */
 
+import { useEffect } from "react";
 import { BrowserRouter, Link, Route, Routes } from "react-router";
-import { useUser, useClerk } from "@clerk/clerk-react";
+import { useAuth } from "@clerk/clerk-react";
 import { Layout } from "./Layout";
-import { useFeature } from "../settings/features";
-import { Stack, Row } from "../layout";
+import { useDeepLinks } from "./useDeepLinks";
+import {
+  registerOllieNotificationActions,
+  initNotificationActionRouter,
+  type ReminderActionMeta,
+} from "../notify/notificationActions";
+import { tasks as adminTasksRepo } from "../modules/admin";
+import { tasks as workTasksRepo } from "../modules/work";
+import { onTaskCompleted } from "../notify/datelessLadderHook";
+import { pullGroceryPantry } from "../sync/groceryPull";
+import { setAnalyticsBearer } from "../api/analytics";
+import { isFeatureEnabled } from "../settings/features";
+import { Stack, Row, Box } from "../layout";
 import { Text } from "../ui";
-import { useTheme } from "../theme/ThemeProvider";
-import type { ModePreference } from "../theme/mode";
+
+// calm sans title (redesign/olive-neumorphic) — replaces the giant editorial serif
+const TITLE_STYLE: React.CSSProperties = {
+  fontFamily: "var(--ollie-font-sans)",
+  fontSize: "26px",
+  fontWeight: 700,
+  lineHeight: 1.15,
+  letterSpacing: "-0.01em",
+};
+import { colors } from "../theme/tokens";
 import { DumpScreen } from "../dump";
-import { GroceryBox } from "../modules/grocery";
-import { PetsBox } from "../modules/pets";
-import { BodyBox } from "../modules/body";
-import { MoodBox } from "../modules/mood";
-import { WorkBox } from "../modules/work";
-import { FinanceBox } from "../modules/finance";
-import { SleepBox } from "../modules/sleep";
-import { AdminBox } from "../modules/admin";
-import { HabitsBox } from "../modules/habits";
-import { GoalsBox } from "../modules/goals";
-import { MedicationBox } from "../modules/medication";
-import { CycleBox } from "../modules/cycle";
-import { PartnerBox } from "../modules/partner";
+import { MODULE_MANIFEST, MODULE_GROUP_META } from "./moduleRegistry";
+import { HouseholdRoom } from "../rooms/HouseholdRoom";
+import { HealthRoom } from "../rooms/HealthRoom";
+import { ResponsibilitiesRoom } from "../rooms/ResponsibilitiesRoom";
+import { MoneyRoom } from "../rooms/MoneyRoom";
 import { TodoScreen } from "../todo/TodoScreen";
+import { SettingsScreen } from "../settings/SettingsScreen";
 import { useServerReminderBridge } from "../notify/serverReminderBridge";
+import { useApnsPushRegistration } from "../notify/apnsPushRegistration";
 
 const SMCP_STYLE: React.CSSProperties = {
   fontVariantCaps: "all-small-caps",
   letterSpacing: "0.08em",
 };
 
+/** Wires ollie:// deep links to navigation; must live inside <BrowserRouter>. */
+function DeepLinkBridge(): null {
+  useDeepLinks();
+  return null;
+}
+
+/** Wires the Clerk token getter into the analytics module so consent-gated
+ *  funnel/retention events queued at boot can flush once signed in. */
+function AnalyticsBridge(): null {
+  const { getToken } = useAuth();
+  useEffect(() => {
+    setAnalyticsBearer(() => getToken());
+  }, [getToken]);
+  return null;
+}
+
+/** A6b: pull server-applied grocery rows on open/focus (no-op unless flagged). */
+function GrocerySyncBridge(): null {
+  const { getToken } = useAuth();
+  useEffect(() => {
+    const run = () => void pullGroceryPantry(() => getToken());
+    run();
+    const onVis = () => { if (document.visibilityState === 'visible') run(); };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, [getToken]);
+  return null;
+}
+
+/** Maps a reminder's "got it ✓" tap to the source module's completion write,
+ *  then cancels any remaining date-less ladder tiers for the row. */
+async function completeReminderTarget(meta: ReminderActionMeta): Promise<void> {
+  if (meta.module === 'admin') {
+    await adminTasksRepo.markComplete(meta.refId);
+  } else {
+    await workTasksRepo.markComplete(meta.refId);
+  }
+  // Completing via the notification action cancels the rest of the ladder.
+  await onTaskCompleted(meta.module, meta.refId);
+}
+
+/** Registers notification action buttons + routes taps to completion/snooze (A3). */
+function NotificationActionBridge(): null {
+  useEffect(() => {
+    void registerOllieNotificationActions();
+    void initNotificationActionRouter(completeReminderTarget);
+  }, []);
+  return null;
+}
+
 export function Router() {
   // Wire the durable app-closed reminder path (Supabase scheduled_jobs →
   // cron → APNs). Mounted here under <SignedIn> so it always has a Clerk
   // identity to resolve. No-op until a device push token exists.
   useServerReminderBridge();
-  // Partner is deferred out of v1 behind a feature flag (audit #10). The module
-  // stays in the tree; its route only mounts when the flag is on.
-  const partnerEnabled = useFeature('partner');
+  // On native iOS, register the APNs device token to the push worker once
+  // signed in (no-op in browser / when unconfigured).
+  useApnsPushRegistration();
+  // Modules can be deferred behind a feature flag (audit #10). Flagged manifest
+  // entries only mount their /box route when the flag is on. Default-OFF today:
+  // partner, goals, habits, pets (see settings/features.ts).
+  const flagOn = (entry: (typeof MODULE_MANIFEST)[number]): boolean =>
+    entry.flag == null || isFeatureEnabled(entry.flag);
   return (
     <BrowserRouter>
+      <DeepLinkBridge />
+      <NotificationActionBridge />
+      <GrocerySyncBridge />
+      <AnalyticsBridge />
       <Routes>
         <Route element={<Layout />}>
           <Route index element={<DumpScreen />} />
-          <Route path="box/grocery" element={<GroceryBox />} />
-          <Route path="box/pets" element={<PetsBox />} />
-          <Route path="box/body" element={<BodyBox />} />
-          <Route path="box/mood" element={<MoodBox />} />
-          <Route path="box/work" element={<WorkBox />} />
-          <Route path="box/finance" element={<FinanceBox />} />
-          <Route path="box/sleep" element={<SleepBox />} />
-          <Route path="box/admin" element={<AdminBox />} />
-          <Route path="box/habits" element={<HabitsBox />} />
-          <Route path="box/goals" element={<GoalsBox />} />
-          <Route path="box/medication" element={<MedicationBox />} />
-          <Route path="box/cycle" element={<CycleBox />} />
-          {partnerEnabled ? <Route path="box/partner" element={<PartnerBox />} /> : null}
+          {MODULE_MANIFEST.filter(flagOn).map(({ id, Component }) => (
+            <Route key={id} path={`box/${id}`} element={<Component />} />
+          ))}
           <Route path="modules" element={<ModulesIndex />} />
+          <Route path="room/household" element={<HouseholdRoom />} />
+          <Route path="room/health" element={<HealthRoom />} />
+          <Route path="room/responsibilities" element={<ResponsibilitiesRoom />} />
+          <Route path="room/money" element={<MoneyRoom />} />
           <Route path="todo" element={<TodoScreen />} />
           <Route path="settings" element={<SettingsScreen />} />
           <Route path="box/:id" element={<BoxPlaceholder />} />
@@ -77,110 +144,165 @@ export function Router() {
   );
 }
 
-interface ModuleEntry { id: string; label: string; hint: string }
-
-interface ModuleGroup {
-  id: string;
-  label: string;
-  aside: string;
-  items: ModuleEntry[];
-}
-
-// Three rooms — see memory: project_ollie_4_modules_grouping (2026-05-28).
-// "you / your stuff / your responsibilities" is the user's mental model.
-const MODULE_GROUPS: ModuleGroup[] = [
-  {
-    id: "you",
-    label: "you",
-    aside: "how you are this week.",
-    items: [
-      { id: "body", label: "Body", hint: "water, movement, symptoms" },
-      { id: "mood", label: "Mood", hint: "feelings, energy, self-talk" },
-      { id: "sleep", label: "Sleep", hint: "logs + insomnia" },
-      { id: "cycle", label: "Cycle", hint: "period + symptoms" },
-      { id: "medication", label: "Medication", hint: "doses + side effects" },
-      { id: "habits", label: "Habits", hint: "what you do" },
-      { id: "goals", label: "Goals", hint: "what you're moving toward" },
-      { id: "partner", label: "Partner", hint: "an intimate window" },
-    ],
-  },
-  {
-    id: "your-stuff",
-    label: "your stuff",
-    aside: "what's in the kitchen, who's in the house.",
-    items: [
-      { id: "grocery", label: "Grocery", hint: "pantry + shopping" },
-      { id: "pets", label: "Pets", hint: "tontin + pinpon" },
-    ],
-  },
-  {
-    id: "your-responsibilities",
-    label: "your responsibilities",
-    aside: "things that won't wait.",
-    items: [
-      { id: "work", label: "Work", hint: "tasks + deadlines" },
-      { id: "admin", label: "Admin", hint: "renewals + paperwork" },
-      { id: "finance", label: "Finance", hint: "transactions + bills" },
-    ],
-  },
-];
-
 const ASIDE_STYLE: React.CSSProperties = {
   fontFamily: 'var(--ollie-font-serif)',
   fontStyle: 'italic',
   fontSize: 14,
-  color: 'var(--ollie-color-ink-faint)',
+  color: colors.inkFaint,
   margin: '-2px 0 12px',
   letterSpacing: '0.005em',
 };
 
 function ModulesIndex() {
-  // Hide feature-flagged-off modules (audit #10: Partner deferred from v1).
-  const partnerEnabled = useFeature('partner');
-  const groups = MODULE_GROUPS.map((g) => ({
-    ...g,
-    items: g.items.filter((m) => m.id !== 'partner' || partnerEnabled),
-  }));
+  // Build the rooms from the shared manifest (audit #178) — group metadata
+  // gives display order + asides; items come from the manifest, filtered by
+  // feature flag (default-OFF modules are hidden, see settings/features.ts).
+  // Roomed modules live in a room (their /box routes still exist, reached from
+  // the room). Household = grocery + chores; Health = sleep + cycle + body +
+  // medication + mood; Responsibilities = work + admin; Money = finance. All
+  // are lifted out of the flat module list here, so the flat groups render
+  // empty by design.
+  const ROOMED_IDS = new Set([
+    'grocery',
+    'chores',
+    'sleep',
+    'cycle',
+    'body',
+    'medication',
+    'mood',
+    'work',
+    'admin',
+    'finance',
+  ]);
+  const visible = MODULE_MANIFEST.filter(
+    (m) => (m.flag == null || isFeatureEnabled(m.flag)) && !ROOMED_IDS.has(m.id),
+  );
+  const groups = MODULE_GROUP_META.map((meta) => ({
+    ...meta,
+    items: visible.filter((m) => m.group === meta.id),
+  })).filter((g) => g.items.length > 0);
   return (
     <Stack gap={48}>
       <Stack gap={12}>
-        <Text scale="caption" color="var(--ollie-color-ink-faint)" style={SMCP_STYLE}>
-          modules
+        <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
+          rooms
         </Text>
-        <Text scale="display">All of it</Text>
-        <Text scale="body" color="var(--ollie-color-ink-soft)" style={{ maxWidth: 540 }}>
-          three rooms — yourself, your stuff, the things you owe.
+        <Text scale="title" color={colors.ink} style={TITLE_STYLE}>rooms</Text>
+        <Text scale="body" color={colors.inkSoft} style={{ maxWidth: 540 }}>
+          one calm screen per part of your life.
         </Text>
+      </Stack>
+
+      {/* Built rooms — Health first, then Household. */}
+      <Stack gap={8}>
+        <Text
+          scale="caption"
+          color={colors.inkFaint}
+          style={{ ...SMCP_STYLE, letterSpacing: "0.20em" }}
+        >
+          health
+        </Text>
+        <p style={ASIDE_STYLE}>sleep, energy, your cycle, water, the meds.</p>
+        <Link to="/room/health" style={{ textDecoration: "none", color: "inherit" }}>
+          <Box bg="cream" radius="card" shadow="raised" style={{ padding: "16px 18px" }}>
+            <Row gap={12} align="baseline" justify="space-between">
+              <Text scale="body">Health</Text>
+              <Text scale="caption" color={colors.inkFaint}>
+                sleep · cycle · body · medication
+              </Text>
+            </Row>
+          </Box>
+        </Link>
+      </Stack>
+
+      <Stack gap={8}>
+        <Text
+          scale="caption"
+          color={colors.inkFaint}
+          style={{ ...SMCP_STYLE, letterSpacing: "0.20em" }}
+        >
+          household
+        </Text>
+        <p style={ASIDE_STYLE}>the chores, the shopping, what&rsquo;s on the shelf.</p>
+        <Link to="/room/household" style={{ textDecoration: "none", color: "inherit" }}>
+          <Box bg="cream" radius="card" shadow="raised" style={{ padding: "16px 18px" }}>
+            <Row gap={12} align="baseline" justify="space-between">
+              <Text scale="body">Household</Text>
+              <Text scale="caption" color={colors.inkFaint}>
+                chores · grocery · pantry
+              </Text>
+            </Row>
+          </Box>
+        </Link>
+      </Stack>
+
+      <Stack gap={8}>
+        <Text
+          scale="caption"
+          color={colors.inkFaint}
+          style={{ ...SMCP_STYLE, letterSpacing: "0.20em" }}
+        >
+          responsibilities
+        </Text>
+        <p style={ASIDE_STYLE}>the things that won&rsquo;t wait — to-dos, focus, renewals.</p>
+        <Link to="/room/responsibilities" style={{ textDecoration: "none", color: "inherit" }}>
+          <Box bg="cream" radius="card" shadow="raised" style={{ padding: "16px 18px" }}>
+            <Row gap={12} align="baseline" justify="space-between">
+              <Text scale="body">Responsibilities</Text>
+              <Text scale="caption" color={colors.inkFaint}>
+                to-do · work · admin
+              </Text>
+            </Row>
+          </Box>
+        </Link>
+      </Stack>
+
+      <Stack gap={8}>
+        <Text
+          scale="caption"
+          color={colors.inkFaint}
+          style={{ ...SMCP_STYLE, letterSpacing: "0.20em" }}
+        >
+          money
+        </Text>
+        <p style={ASIDE_STYLE}>what&rsquo;s moving — the week and the bills, no budgets.</p>
+        <Link to="/room/money" style={{ textDecoration: "none", color: "inherit" }}>
+          <Box bg="cream" radius="card" shadow="raised" style={{ padding: "16px 18px" }}>
+            <Row gap={12} align="baseline" justify="space-between">
+              <Text scale="body">Money</Text>
+              <Text scale="caption" color={colors.inkFaint}>
+                spending · bills
+              </Text>
+            </Row>
+          </Box>
+        </Link>
       </Stack>
 
       {groups.map((group) => (
         <Stack key={group.id} gap={8}>
           <Text
             scale="caption"
-            color="var(--ollie-color-ink-faint)"
+            color={colors.inkFaint}
             style={{ ...SMCP_STYLE, letterSpacing: "0.20em" }}
           >
             {group.label}
           </Text>
           <p style={ASIDE_STYLE}>{group.aside}</p>
-          <Stack gap={0}>
-            {group.items.map((m, i) => (
+          <Stack gap={12}>
+            {group.items.map((m) => (
               <Link
                 key={m.id}
                 to={`/box/${m.id}`}
-                style={{
-                  textDecoration: "none",
-                  color: "inherit",
-                  borderTop: i === 0 ? "1px solid var(--ollie-color-hairline)" : "none",
-                  borderBottom: "1px solid var(--ollie-color-hairline)",
-                }}
+                style={{ textDecoration: "none", color: "inherit" }}
               >
-                <Row gap={12} align="baseline" justify="space-between" style={{ padding: "16px 0" }}>
-                  <Text scale="body">{m.label}</Text>
-                  <Text scale="caption" color="var(--ollie-color-ink-faint)">
-                    {m.hint}
-                  </Text>
-                </Row>
+                <Box bg="cream" radius="card" shadow="raised" style={{ padding: "16px 18px" }}>
+                  <Row gap={12} align="baseline" justify="space-between">
+                    <Text scale="body">{m.label}</Text>
+                    <Text scale="caption" color={colors.inkFaint}>
+                      {m.hint}
+                    </Text>
+                  </Row>
+                </Box>
               </Link>
             ))}
           </Stack>
@@ -190,102 +312,12 @@ function ModulesIndex() {
   );
 }
 
-const APPEARANCE_OPTIONS: ReadonlyArray<{ value: ModePreference; label: string }> = [
-  { value: "light", label: "light" },
-  { value: "dark", label: "dark" },
-  { value: "system", label: "system" },
-];
-
-/** Light / Dark / System picker — drives the whole app via setPreference. */
-function AppearanceControl(): React.ReactElement {
-  const { preference, setPreference } = useTheme();
-  return (
-    <Row gap={20}>
-      {APPEARANCE_OPTIONS.map((opt) => {
-        const active = preference === opt.value;
-        return (
-          <button
-            key={opt.value}
-            onClick={() => setPreference(opt.value)}
-            aria-pressed={active}
-            style={{
-              background: "none",
-              border: "none",
-              padding: "8px 0",
-              cursor: "pointer",
-              fontVariantCaps: "all-small-caps",
-              letterSpacing: "0.08em",
-              fontSize: 13,
-              color: active
-                ? "var(--ollie-color-ink)"
-                : "var(--ollie-color-ink-faint)",
-              borderBottom: active
-                ? "1px solid var(--ollie-color-ink)"
-                : "1px solid transparent",
-            }}
-          >
-            {opt.label}
-          </button>
-        );
-      })}
-    </Row>
-  );
-}
-
-function SettingsScreen() {
-  const { user } = useUser();
-  const { signOut } = useClerk();
-  return (
-    <Stack gap={32}>
-      <Stack gap={8}>
-        <Text scale="caption" color="var(--ollie-color-ink-faint)" style={SMCP_STYLE}>
-          settings
-        </Text>
-        <Text scale="display">Settings</Text>
-      </Stack>
-
-      <Stack gap={16}>
-        <Stack gap={4}>
-          <Text scale="caption" color="var(--ollie-color-ink-faint)" style={SMCP_STYLE}>
-            account
-          </Text>
-          <Text scale="body">{user?.primaryEmailAddress?.emailAddress ?? "—"}</Text>
-        </Stack>
-
-        <Stack gap={8}>
-          <Text scale="caption" color="var(--ollie-color-ink-faint)" style={SMCP_STYLE}>
-            appearance
-          </Text>
-          <AppearanceControl />
-        </Stack>
-
-        <button
-          onClick={() => void signOut()}
-          style={{
-            alignSelf: "flex-start",
-            background: "none",
-            border: "none",
-            padding: "12px 0",
-            color: 'var(--ollie-color-ink-faint)',
-            cursor: "pointer",
-            fontVariantCaps: "all-small-caps",
-            letterSpacing: "0.08em",
-            fontSize: 13,
-          }}
-        >
-          sign out
-        </button>
-      </Stack>
-    </Stack>
-  );
-}
-
 function BoxPlaceholder() {
   return (
     <Stack gap={16}>
-      <Text scale="caption" color="var(--ollie-color-ink-faint)" style={SMCP_STYLE}>Box</Text>
+      <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>Box</Text>
       <Text scale="display">{readBoxIdFromPath()}</Text>
-      <Text color="var(--ollie-color-ink-faint)">Screen slot — not yet built.</Text>
+      <Text color={colors.inkFaint}>Screen slot — not yet built.</Text>
     </Stack>
   );
 }
@@ -293,7 +325,7 @@ function BoxPlaceholder() {
 function NotFoundPlaceholder() {
   return (
     <Stack gap={16}>
-      <Text scale="caption" color="var(--ollie-color-ink-faint)" style={SMCP_STYLE}>404</Text>
+      <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>404</Text>
       <Text scale="display">Not here.</Text>
     </Stack>
   );

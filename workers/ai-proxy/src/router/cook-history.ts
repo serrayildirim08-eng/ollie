@@ -38,6 +38,8 @@ export interface CookHistoryEnv {
   SUPABASE_SERVICE_ROLE: string;
   /** Set to "1" to enforce Clerk JWT auth. Mirrors PurchaseEnv. */
   T0_JWT_ENFORCED?: string;
+  /** 'production' on prod — refuses the x-user-id dev bypass there (audit #30). */
+  ENVIRONMENT?: string;
   CLERK_ISSUER?: string;
 }
 
@@ -77,9 +79,10 @@ export async function handleCookHistory(
   req: Request,
   env: CookHistoryEnv,
 ): Promise<Response> {
-  // 1. Auth gate — fail CLOSED unless T0_JWT_ENFORCED === '0' (dev only).
+  // 1. Auth gate — fail CLOSED unless T0_JWT_ENFORCED === '0' (dev only) AND not
+  //    production (audit #30: prod refuses the spoofable x-user-id bypass).
   let userId: string | null;
-  if (env.T0_JWT_ENFORCED !== '0') {
+  if (env.T0_JWT_ENFORCED !== '0' || env.ENVIRONMENT === 'production') {
     const auth = req.headers.get('authorization');
     if (!auth || !auth.startsWith('Bearer ')) {
       return json({ error: 'unauthorized' }, 401);

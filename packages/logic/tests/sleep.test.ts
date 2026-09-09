@@ -237,6 +237,28 @@ describe('computeSleepDebt', () => {
     const d = computeSleepDebt(recs, 8);
     expect(d.totalDeficitHours).toBeCloseTo(10, 1);
   });
+
+  // #145 regression: the window cutoff must be a day boundary, not now-W*DAY_MS.
+  // Otherwise whether the oldest night is included depends on the time-of-day
+  // of `now` (off-by-one). With W=14 and a night exactly 14 days before now's
+  // local day, the count must be identical regardless of now's clock time.
+  it('window membership is independent of now-time-of-day (day-boundary cutoff)', () => {
+    const W = 14;
+    // 15 consecutive nights ending on Jan 20; night 14 days before Jan 20 is
+    // Jan 06 — it must be the boundary-included night.
+    const recs: SleepRecord[] = [];
+    for (let dom = 6; dom <= 20; dom++) {
+      recs.push(makeRecord(`2026-01-${String(dom).padStart(2, '0')}`, 6 * 60));
+    }
+    const nowMorning = new Date(2026, 0, 20, 1, 0, 0).getTime();   // 01:00 local
+    const nowEvening = new Date(2026, 0, 20, 23, 0, 0).getTime();  // 23:00 local
+    const dM = computeSleepDebt(recs, 8, W, nowMorning);
+    const dE = computeSleepDebt(recs, 8, W, nowEvening);
+    expect(dM.nightsCounted).toBe(dE.nightsCounted);
+    expect(dM.totalDeficitHours).toBe(dE.totalDeficitHours);
+    // Jan 06..Jan 20 inclusive = 15 nights within the [now-14d-day, now] window.
+    expect(dM.nightsCounted).toBe(15);
+  });
 });
 
 // ─── pattern detectors ───────────────────────────────────────────────
@@ -271,11 +293,18 @@ describe('detectWeekendRecoveryIllusion', () => {
     // Build 28 records: weekdays ~5h, weekends ~7.5h
     const dayNames = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
     const recs: SleepRecord[] = [];
-    const base = new Date('2026-01-05'); // Monday
+    // Construct each day in LOCAL time so the iso `night_of` key and the
+    // weekday agree with how the detector re-derives the weekday
+    // (`night_of + 'T12:00:00'`). A UTC-parsed `new Date('2026-01-05')` shifts
+    // both the weekday and the iso by a day in west-of-UTC zones.
     for (let i = 0; i < 28; i++) {
-      const d = new Date(base);
-      d.setDate(base.getDate() + i);
-      const iso = d.toISOString().slice(0, 10);
+      const d = new Date(2026, 0, 5 + i); // local Monday 2026-01-05 + i days
+      const iso =
+        d.getFullYear() +
+        '-' +
+        String(d.getMonth() + 1).padStart(2, '0') +
+        '-' +
+        String(d.getDate()).padStart(2, '0');
       const day = dayNames[d.getDay()];
       const tst = ['fri', 'sat'].includes(day) ? 450 : 300; // 7.5h vs 5h
       recs.push(makeRecord(iso, tst));
@@ -415,11 +444,17 @@ describe('forecastTonightHeuristic', () => {
     // and every other day is long (8h). Forecasting for a Friday should land
     // below the un-adjusted recency mean.
     const recs: SleepRecord[] = [];
-    const base = new Date('2026-04-03'); // a Friday
+    // Build days in LOCAL time so the iso `night_of` and weekday agree with how
+    // the forecaster derives a record's weekday (local `night_of + 'T12:00:00'`
+    // → getDay()). A UTC-parsed base shifts both by a day west of UTC.
     for (let i = 0; i < 21; i++) {
-      const d = new Date(base);
-      d.setDate(base.getDate() + i);
-      const iso = d.toISOString().slice(0, 10);
+      const d = new Date(2026, 3, 3 + i); // local Friday 2026-04-03 + i days
+      const iso =
+        d.getFullYear() +
+        '-' +
+        String(d.getMonth() + 1).padStart(2, '0') +
+        '-' +
+        String(d.getDate()).padStart(2, '0');
       const isFriday = d.getDay() === 5;
       recs.push(makeRecord(iso, isFriday ? 240 : 480));
     }

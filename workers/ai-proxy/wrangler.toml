@@ -3,6 +3,15 @@ main = "src/index.ts"
 compatibility_date = "2025-09-23"
 compatibility_flags = ["nodejs_compat"]
 
+# Plaintext environment marker. Used as a code-level guard so the staging-only
+# test bearer (STAGING_TEST_BEARER) can NEVER bypass Clerk on production even if
+# the secret is ever misconfigured here (audit #43). Production = "production".
+[vars]
+ENVIRONMENT = "production"
+# Global daily AI-call ceiling across ALL users (audit H2 circuit-breaker).
+# Defaults to 20000 in code when unset; raise/lower here to tune. Not secret.
+# GLOBAL_DAILY_AI_MAX = "20000"
+
 # ─── KV bindings ───────────────────────────────────────────────────────────────
 # Run once:
 #   wrangler kv:namespace create CACHE_KV
@@ -43,7 +52,8 @@ binding = "AI"
 # `period` must be 10 or 60. namespace_id is an arbitrary positive integer,
 # unique per limiter within the account.
 #
-# AI_RATE_LIMITER   — /brain-dump + /v1/messages : 10 requests / 60s per user.
+# AI_RATE_LIMITER   — /brain-dump + /v1/messages + /route/dump + /route/:module
+#                     : 10 requests / 60s per user (most expensive AI-cost calls).
 # TELEM_RATE_LIMITER — /enrich-dump + /ingest-event + /label : 10 / 60s per user.
 [[ratelimits]]
 name = "AI_RATE_LIMITER"
@@ -69,9 +79,9 @@ simple = { limit = 10, period = 60 }
 #      workers/cron/wrangler.toml
 #   4. deploy ai-proxy, then cron
 #
-[[queues.producers]]
-binding = "ENRICH_QUEUE"
-queue = "ollie-enrich-queue"
+# [[queues.producers]]
+# binding = "ENRICH_QUEUE"
+# queue = "ollie-enrich-queue"
 
 # ─── secrets (set with `wrangler secret put`) ──────────────────────────────────
 # ANTHROPIC_API_KEY       — sk-ant-… key. NEVER ship to the client.
@@ -114,6 +124,17 @@ queue = "ollie-enrich-queue"
 [env.staging]
 name = "ollie-ai-proxy-staging"
 
+# Staging is the ONLY environment where STAGING_TEST_BEARER is honored (audit #43).
+[env.staging.vars]
+ENVIRONMENT = "staging"
+
+# NOTE (audit H4): staging shares these KV namespace ids with production.
+# That is safe ONLY because the cache key is env-scoped in code
+# (`cache:ai:<ENVIRONMENT>:<hash>` in index.ts), so staging writes can never
+# be read by production. RATE_KV is the fallback counter only — production
+# uses the native rate-limit binding (split below), so the fallback path is
+# not exercised in prod. For full isolation, provision dedicated staging
+# namespaces and swap the ids here.
 [[env.staging.kv_namespaces]]
 binding = "CACHE_KV"
 id = "6031aea7f9c14f96884e55ec1be527f3"
@@ -122,24 +143,36 @@ id = "6031aea7f9c14f96884e55ec1be527f3"
 binding = "RATE_KV"
 id = "5e222944bc8f450cb3cca05e709e3b88"
 
+# Staging MUST NOT share the production routing-cache index (audit H4): a
+# staging run would write vectors that production then retrieves. Provision
+# once before the first `wrangler deploy --env staging`:
+#   wrangler vectorize create ollie-routing-cache-staging --dimensions=1024 --metric=cosine
 [[env.staging.vectorize]]
 binding = "VECTORIZE_INDEX"
-index_name = "ollie-routing-cache"
+index_name = "ollie-routing-cache-staging"
 
 # Workers AI binding (named envs don't inherit the top-level [ai]).
 [env.staging.ai]
 binding = "AI"
 
+# Distinct namespace_ids from production (2001/2002) so a staging stress test
+# cannot exhaust a production user's rate-limit bucket (audit H4). The id is an
+# arbitrary integer Cloudflare auto-provisions on deploy — no CLI step.
 [[env.staging.ratelimits]]
 name = "AI_RATE_LIMITER"
-namespace_id = "2001"
+namespace_id = "3001"
 simple = { limit = 10, period = 60 }
 
 [[env.staging.ratelimits]]
 name = "TELEM_RATE_LIMITER"
-namespace_id = "2002"
+namespace_id = "3002"
 simple = { limit = 10, period = 60 }
 
-[[env.staging.queues.producers]]
-binding = "ENRICH_QUEUE"
-queue = "ollie-enrich-queue"
+# COMMENTED OUT (same reason as the top-level [[queues.producers]] above):
+# an uncommented producer pointing at the not-yet-provisioned
+# `ollie-enrich-queue` makes `wrangler deploy --env staging` FAIL. The
+# staging worker falls back to the KV queue (env.ENRICH_QUEUE undefined)
+# until the queue is created. Uncomment in lockstep with the top-level block.
+# [[env.staging.queues.producers]]
+# binding = "ENRICH_QUEUE"
+# queue = "ollie-enrich-queue"

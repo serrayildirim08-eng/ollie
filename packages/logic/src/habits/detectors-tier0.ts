@@ -24,7 +24,7 @@ import {
   completionsInWindow,
   buildDayCompletionMap,
 } from './helpers';
-import { DAY_MS } from '../util';
+import { DAY_MS, eachLocalDayKey, addLocalDays } from '../util';
 
 // ─── externalization-gap ──────────────────────────────────────────────
 
@@ -110,7 +110,7 @@ export function detectLutealCollapseLegacy(
     if ('start' in p && 'end' in p && 'name' in p) {
       const s = Math.max(p.start, windowStart);
       const e = Math.min(p.end, now);
-      for (let t = s; t <= e; t += DAY_MS) dayPhase.set(dayKey(t), p.name);
+      for (const k of eachLocalDayKey(s, e)) dayPhase.set(k, p.name);
     }
   }
 
@@ -187,13 +187,12 @@ export function detectStressCollapseLegacy(
   for (const k of stressDays) {
     const t = Date.parse(k + 'T12:00:00');
     if (isNaN(t)) continue;
-    postStressDays.add(dayKey(t + DAY_MS));
+    postStressDays.add(dayKey(addLocalDays(t, 1)));
   }
 
   let postCompletions = 0, postDays = 0;
   let baselineCompletions = 0, baselineDays = 0;
-  for (let t = windowStart; t <= now; t += DAY_MS) {
-    const k = dayKey(t);
+  for (const k of eachLocalDayKey(windowStart, now)) {
     const cs = dayCompletions.get(k) ?? 0;
     if (postStressDays.has(k)) { postCompletions += cs; postDays++; }
     else if (!stressDays.has(k)) { baselineCompletions += cs; baselineDays++; }
@@ -260,8 +259,7 @@ export function detectSensoryFlag(
   if (sensoryDays.size < minSensoryDays) return null;
 
   let sensoryCompletions = 0, baselineCompletions = 0, baselineDays = 0;
-  for (let t = windowStart; t <= now; t += DAY_MS) {
-    const k = dayKey(t);
+  for (const k of eachLocalDayKey(windowStart, now)) {
     const cs = dayCompletions.get(k) ?? 0;
     if (sensoryDays.has(k)) sensoryCompletions += cs;
     else { baselineCompletions += cs; baselineDays++; }
@@ -514,26 +512,48 @@ export function detectFrictionSignatureLegacy(
 
   const dowCount = [0, 0, 0, 0, 0, 0, 0];
   const dowDays = [0, 0, 0, 0, 0, 0, 0];
-  for (let t = windowStart; t <= now; t += DAY_MS) {
-    dowDays[new Date(t).getDay()]++;
+  for (const k of eachLocalDayKey(windowStart, now)) {
+    // Read weekday from the key's local noon — DST-stable, one count per day.
+    dowDays[new Date(Date.parse(k + 'T12:00:00')).getDay()]++;
   }
-  for (const h of arr) {
-    const c = h.completions ?? [];
+  // Count at most one completion per habit per local day, so the per-weekday
+  // rate is a true fraction in [0,1]. Without the dedupe a habit logged twice
+  // on one day inflates dowCount and the rate can exceed 1.
+  const seenHabitDay = new Set<string>();
+  for (let hi = 0; hi < arr.length; hi++) {
+    const c = arr[hi].completions ?? [];
     for (const e of c) {
       if (!e || typeof e.ts !== 'number' || e.ts < windowStart || e.ts > now) continue;
-      dowCount[new Date(e.ts).getDay()]++;
+      const d = new Date(e.ts);
+      const dow = d.getDay();
+      const dayKey = `${hi}|${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+      if (seenHabitDay.has(dayKey)) continue;
+      seenHabitDay.add(dayKey);
+      dowCount[dow]++;
     }
   }
 
+  // Only weekdays that actually occurred in the window have a defined rate.
+  // Resolving peak/valley over the full 0-padded array can otherwise pick a
+  // zero-data weekday as the "valley" (rate 0 by construction, not by data).
+  const covered: number[] = [];
+  for (let i = 0; i < 7; i++) if (dowDays[i] > 0) covered.push(i);
+  if (covered.length < 2) return null;
   const dowRate = dowCount.map((c, i) => dowDays[i] === 0 ? 0 : c / (dowDays[i] * arr.length));
-  const max = Math.max(...dowRate);
-  const min = Math.min(...dowRate.filter((_, i) => dowDays[i] > 0));
+  let peakIdx = covered[0];
+  let valleyIdx = covered[0];
+  for (const i of covered) {
+    if (dowRate[i] > dowRate[peakIdx]) peakIdx = i;
+    if (dowRate[i] < dowRate[valleyIdx]) valleyIdx = i;
+  }
+  const max = dowRate[peakIdx];
+  const min = dowRate[valleyIdx];
   const spread = max - min;
   if (spread < minSpread) return null;
 
   const NAMES = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
-  const peakDow = NAMES[dowRate.indexOf(max)];
-  const valleyDow = NAMES[dowRate.indexOf(min)];
+  const peakDow = NAMES[peakIdx];
+  const valleyDow = NAMES[valleyIdx];
   return {
     pattern: 'friction-signature',
     confidence: spread >= 0.6 ? 'high' : 'medium',
@@ -574,13 +594,12 @@ export function detectSleepHabitCouplingLegacy(
     if (r.hours >= shortHoursThreshold) continue;
     const t = Date.parse(r.night_of + 'T12:00:00');
     if (isNaN(t) || t < windowStart || t > now) continue;
-    shortNights.add(dayKey(t + DAY_MS));
+    shortNights.add(dayKey(addLocalDays(t, 1)));
   }
   if (shortNights.size < minShortNights) return null;
 
   let postCompletions = 0, postDays = 0, baselineCompletions = 0, baselineDays = 0;
-  for (let t = windowStart; t <= now; t += DAY_MS) {
-    const k = dayKey(t);
+  for (const k of eachLocalDayKey(windowStart, now)) {
     const cs = dayCompletions.get(k) ?? 0;
     if (shortNights.has(k)) { postCompletions += cs; postDays++; }
     else { baselineCompletions += cs; baselineDays++; }
@@ -619,6 +638,13 @@ export function detectHabitRebirthLegacy(
   const windowDays = o.windowDays ?? 60;
   const windowStart = now - windowDays * DAY_MS;
 
+  // Finding #139: a restart is a gap that is ABNORMAL *for that habit*, not a
+  // fixed ≥7-day gap. A genuinely weekly habit has ~7-day gaps by design, so
+  // the old absolute rule counted every normal weekly cadence as a "restart"
+  // (a weekly habit "restarted" every week). We infer each habit's expected
+  // cadence from its own median inter-completion interval and only count a gap
+  // as a restart when it materially exceeds that cadence.
+  const gapMultiple = o.restartGapMultiple ?? 2.5; // gap must be ≥ 2.5× the habit's typical interval
   const arr = history.habits ?? [];
   let restarts = 0;
   for (const h of arr) {
@@ -626,8 +652,26 @@ export function detectHabitRebirthLegacy(
       .filter(e => e && typeof e.ts === 'number' && e.ts >= windowStart)
       .map(e => e.ts)
       .sort((a, b) => a - b);
-    for (let i = 1; i < c.length; i++) {
-      if ((c[i] - c[i - 1]) >= minGapDays * DAY_MS) restarts++;
+    if (c.length < 2) continue;
+    const gaps: number[] = [];
+    for (let i = 1; i < c.length; i++) gaps.push(c[i] - c[i - 1]);
+    // Expected cadence = median gap (robust to the long restart gaps
+    // themselves). Only meaningful with ≥3 gaps; with a single gap there is no
+    // cadence to compare against, so fall back to the absolute floor.
+    let cadenceThreshold = minGapDays * DAY_MS;
+    if (gaps.length >= 3) {
+      const sortedGaps = [...gaps].sort((a, b) => a - b);
+      const mid = Math.floor(sortedGaps.length / 2);
+      const medianGap =
+        sortedGaps.length % 2 === 0
+          ? (sortedGaps[mid - 1] + sortedGaps[mid]) / 2
+          : sortedGaps[mid];
+      // A restart must clear BOTH the per-habit cadence-relative threshold AND
+      // the absolute floor (so very high-frequency habits don't trip on noise).
+      cadenceThreshold = Math.max(medianGap * gapMultiple, minGapDays * DAY_MS);
+    }
+    for (const g of gaps) {
+      if (g >= cadenceThreshold) restarts++;
     }
   }
   if (restarts < minRestarts) return null;
@@ -676,12 +720,11 @@ export function detectSelfTalkCouplingLegacy(
   for (const k of negDays) {
     const t = Date.parse(k + 'T12:00:00');
     if (isNaN(t)) continue;
-    for (let i = 1; i <= followDays; i++) followSet.add(dayKey(t + i * DAY_MS));
+    for (let i = 1; i <= followDays; i++) followSet.add(dayKey(addLocalDays(t, i)));
   }
 
   let postCompletions = 0, postDays = 0, baselineCompletions = 0, baselineDays = 0;
-  for (let t = windowStart; t <= now; t += DAY_MS) {
-    const k = dayKey(t);
+  for (const k of eachLocalDayKey(windowStart, now)) {
     const cs = dayCompletions.get(k) ?? 0;
     if (followSet.has(k)) { postCompletions += cs; postDays++; }
     else if (!negDays.has(k)) { baselineCompletions += cs; baselineDays++; }

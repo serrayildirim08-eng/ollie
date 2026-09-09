@@ -112,6 +112,46 @@ describe('sleep orchestrator', () => {
     expect(debt!.nightsCounted).toBeGreaterThan(0);
   });
 
+  it('emits the sleep-debt-high offer (defer_tasks) above threshold', () => {
+    // 21 nights alternating 5h/8h → debt well over 3h, nights ≥ 5.
+    store.set('sleep', 'records', makeSleepRecords(FIXED_NOW));
+    orch.init();
+
+    const patterns = store.get<Array<Record<string, unknown>>>('sleep', 'patterns', []) ?? [];
+    const offer = patterns.find((p) => p.pattern === 'sleep-debt-high');
+    expect(offer).toBeDefined();
+    expect(offer!.category).toBe('sleep-debt');
+    expect(offer!.actionKind).toBe('defer_tasks');
+    expect(offer!.urgencyAt).toBe(FIXED_NOW);
+    // deficit hours ride in a synthetic item's `days` slot for the copy layer.
+    const items = offer!.items as Array<{ name: string; days: number }>;
+    expect(items[0].days).toBeGreaterThan(0);
+  });
+
+  it('does NOT emit the sleep-debt offer below the debt threshold', () => {
+    // 6 on-target nights (7.5h) → ~zero debt → no offer.
+    const records = makeSleepRecords(FIXED_NOW, 6).map((r) => ({
+      ...r,
+      tst_min: 450, // exactly target (7.5h) → no deficit
+      time_in_bed_min: 470,
+      efficiency: 450 / 470,
+    }));
+    store.set('sleep', 'records', records);
+    orch.init();
+
+    const patterns = store.get<Array<Record<string, unknown>>>('sleep', 'patterns', []) ?? [];
+    expect(patterns.some((p) => p.pattern === 'sleep-debt-high')).toBe(false);
+  });
+
+  it('suppresses the sleep-debt offer when show_sleep_debt is false', () => {
+    store.set('sleep', 'records', makeSleepRecords(FIXED_NOW));
+    store.set('sleep', 'settings', { show_sleep_debt: false });
+    orch.init();
+
+    const patterns = store.get<Array<Record<string, unknown>>>('sleep', 'patterns', []) ?? [];
+    expect(patterns.some((p) => p.pattern === 'sleep-debt-high')).toBe(false);
+  });
+
   it('populates patterns array and emits sleep:pattern_detected for new patterns', () => {
     // Seed records with enough data to fire weekend_recovery_illusion:
     // clear weekday-short / weekend-long split over ≥2 weeks.

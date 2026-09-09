@@ -7,13 +7,14 @@
  * surface that wants to show what happened.
  */
 
-import type { ModuleHandler, HandlerResult, WorkAction, RemindIn } from '../../router/schema';
+import type { ModuleHandler, HandlerResult, WorkAction } from '../../router/schema';
 import { migrateWork } from './migrate';
 import { tasks, events } from './repo';
 import { migrateBody } from '../body/migrate';
 import { events as bodyEvents } from '../body/repo';
-import { scheduleAt, sendSystemNotification } from '../../notify/systemNotify';
-import { scheduleServerReminder } from '../../notify/serverReminder';
+import { sendSystemNotification } from '../../notify/systemNotify';
+import { planReminder } from '../../notify/taskReminder';
+import { startDatelessLadderFor } from '../../notify/datelessLadderHook';
 
 export const workHandler: ModuleHandler<'work'> = {
   module: 'work',
@@ -69,9 +70,22 @@ export const workHandler: ModuleHandler<'work'> = {
           project: p.project ?? null,
           kind: 'task',
         });
-        // Time-deferred reminder side-effect (Approach B). The worker resolved
-        // scheduledAtMs against its clock; we just hand it to the OS.
-        scheduleReminderIfPresent(p.remindIn, task.id, 'to do', p.text);
+        // Manual one-shot reminder (brain-vs-body split: Layer 1 flags intent +
+        // time; scheduling/cascade is deterministic). Explicit clock time / "in
+        // N min" are scheduled here; a time-less "remind me" returns a cascade
+        // descriptor so DumpScreen can ask "when?".
+        const reminderCascade = planReminder(p, task.id, 'work', {
+          title: 'to do', body: p.text, module: 'work', actionUrl: 'ollie://box/work',
+        });
+        // DATE-LESS escalation ladder: a plain (non-reminder) work task carries
+        // no due date, so it gets the growing-gap reminder series. Skipped for
+        // explicit reminders — the cascade / scheduled fire owns those.
+        if (!p.reminder) {
+          void startDatelessLadderFor({
+            module: 'work', taskId: task.id, text: task.text,
+            dueDate: task.dueDate, createdAt: task.createdAt,
+          });
+        }
         // NOTE: tasks.add upserts on (text, done=0). Undo removes the row
         // regardless of whether it was fresh or refreshed — see finance.add_bill
         // comment for the same trade-off rationale.
@@ -80,6 +94,7 @@ export const workHandler: ModuleHandler<'work'> = {
           note: `added task: ${task.text}`,
           deepLink: '/box/work',
           undo: undoTask(task.id),
+          reminderCascade,
         };
       }
 
@@ -156,36 +171,3 @@ function exhaustive(p: never): never {
   throw new Error(`work: unhandled action ${JSON.stringify(p)}`);
 }
 
-/**
- * Schedule a reminder for the same fire time when the routed task carries a
- * worker-resolved `remindIn` hint:
- *
- *   1. scheduleAt — on Tauri this hands the reminder to the native OS local
- *      scheduler (fires even if the app is QUIT); off Tauri it falls back to
- *      an in-process setTimeout (fires while the page is open).
- *   2. server-side Supabase `scheduled_jobs` row (scheduleServerReminder)
- *      — drained by the cron → APNs, so it fires even with the app fully
- *      CLOSED. No-op when not signed in / sync off / api absent.
- *
- * All paths carry the SAME stable id (`reminder:<taskId>`) so they can never
- * double-fire. Mirrors the admin handler's helper —
- * intentionally not promoted to a shared util while only two callers exist
- * (Approach B's cross-route hint pattern keeps logic with its primary
- * handler; collapse later if a third caller appears).
- */
-function scheduleReminderIfPresent(
-  remindIn: RemindIn | undefined,
-  taskId: string,
-  title: string,
-  body: string,
-): void {
-  if (!remindIn || typeof remindIn.scheduledAtMs !== 'number') return;
-  // Same stable id across all three paths (OS local notification, in-process
-  // timer, server-push job) so the dispatcher / cron dedupe to one ping.
-  const id = `reminder:${taskId}`;
-  scheduleAt(remindIn.scheduledAtMs, { title, body }, id);
-  scheduleServerReminder(
-    { title, body, category: 'REMINDER', dedupe_key: id },
-    remindIn.scheduledAtMs,
-  );
-}

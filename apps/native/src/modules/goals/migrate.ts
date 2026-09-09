@@ -92,7 +92,12 @@ export function migrateGoals(): Promise<void> {
       if (!have.has('ulysses_contract')) {
         await sql.execute(`ALTER TABLE goals_registry ADD COLUMN ulysses_contract TEXT`);
       }
-    })();
+    })().catch((e) => {
+      // A transient SQLite failure must not brick the module for the whole
+      // session — clear the memo so the next call retries.
+      migrationPromise = null;
+      throw e;
+    });
   }
   return migrationPromise;
 }

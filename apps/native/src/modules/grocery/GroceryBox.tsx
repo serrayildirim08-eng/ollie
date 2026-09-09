@@ -40,16 +40,27 @@
  *     which depend on `patterns` selectors not present in this repo
  */
 
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from 'react';
+import {
+  formatDays,
   daysSinceLast,
   isOverdue,
   medianIntervalDays,
   type CadenceEstimate,
 } from '@ollie/cadence';
-import { Stack, Row } from '../../layout';
+import { Stack, Row, Box } from '../../layout';
 import { Text } from '../../ui';
+import { colors, radii, shadows } from '../../theme/tokens';
 import { WhenCaption } from '../../lib/WhenCaption';
+import { useModuleData } from '../../lib/useModuleData';
 import { PatternCards } from '../../patterns/PatternCards';
 import { migrateGrocery } from './migrate';
 import {
@@ -61,7 +72,8 @@ import type { PantryItem, ShoppingItem } from './types';
 import { FeedMeView } from './FeedMeView';
 import { GroceryNow } from './GroceryNow';
 import { ageOf, type AgingState } from './aging';
-import { loadShelfLifeTable, lookupDays } from './shelfLifeCache';
+import { loadShelfLifeTable, lookupDays, lookupCategory } from './shelfLifeCache';
+import { aisleFor, AISLE_ORDER, type Aisle } from './aisles';
 
 // ─── style atoms ──────────────────────────────────────────────────────────
 
@@ -69,8 +81,6 @@ const SMCP_STYLE: CSSProperties = {
   fontVariantCaps: 'all-small-caps',
   letterSpacing: '0.08em',
 };
-
-const POLL_MS = 6000;
 
 type Mode = 'now' | 'shop' | 'pantry' | 'feed-me';
 
@@ -84,7 +94,6 @@ export function GroceryBox(): JSX.Element {
   const [cadenceByName, setCadenceByName] = useState<Map<string, CadenceEstimate>>(
     () => new Map(),
   );
-  const [ready, setReady] = useState(false);
   // Pantry is the default — it's the surface you live in most of the time.
   // Shop mode is for the few minutes you're actually adding to the list.
   // Persisted in sessionStorage so a hot-reload / refresh keeps you on the
@@ -107,6 +116,16 @@ export function GroceryBox(): JSX.Element {
   // the pantry view recompute aging states without a poll cycle.
   const [shelfTableTick, setShelfTableTick] = useState(0);
 
+  // Ids whose auto-archive is in flight OR already done this session (audit
+  // #134). The auto-archive effect closes over the pantryItems snapshot, and a
+  // transient poll snapshot can still contain a row we already kicked off an
+  // archive() for before refresh() pulled the archived_at_ms update — without
+  // this guard the effect re-fires archive() for the same id, doubling the
+  // write. A row that genuinely comes back (unarchived) gets a NEW lifecycle
+  // before it could age out again, so never clearing here is safe for the
+  // session; the set resets naturally on remount.
+  const archivingRef = useRef<Set<string>>(new Set());
+
   const refresh = useCallback(async () => {
     const [p, a, s, pred] = await Promise.all([
       pantryRepo.list(),
@@ -126,38 +145,18 @@ export function GroceryBox(): JSX.Element {
     setCadenceByName(new Map(pairs));
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      await migrateGrocery();
-      if (cancelled) return;
-      await refresh();
-      if (cancelled) return;
-      setReady(true);
-      // Kick the shelf-life table load — non-blocking. When it resolves
-      // we bump the tick so the pantry recomputes aging from the live table.
+  const { ready } = useModuleData({
+    migrationKey: 'grocery',
+    migrate: migrateGrocery,
+    refresh,
+    // Kick the shelf-life table load — non-blocking. When it resolves we bump
+    // the tick so the pantry recomputes aging from the live table.
+    onFirstLoad: (cancelled) => {
       void loadShelfLifeTable().then(() => {
-        if (!cancelled) setShelfTableTick((n) => n + 1);
+        if (!cancelled()) setShelfTableTick((n) => n + 1);
       });
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [refresh]);
-
-  useEffect(() => {
-    const t = setInterval(() => {
-      void refresh();
-    }, POLL_MS);
-    const onFocus = () => {
-      void refresh();
-    };
-    window.addEventListener('focus', onFocus);
-    return () => {
-      clearInterval(t);
-      window.removeEventListener('focus', onFocus);
-    };
-  }, [refresh]);
+    },
+  });
 
   const handleRemovePantry = useCallback(
     async (id: string) => {
@@ -211,9 +210,17 @@ export function GroceryBox(): JSX.Element {
     const now = Date.now();
     const toArchive = pantryItems.filter((it) => {
       const days = lookupDays(it.name);
-      return ageOf(it.addedAt, days, now) === 'should_archive';
+      // Skip ids already being archived this session (audit #134) so a
+      // transient poll snapshot can't re-fire archive() for the same row.
+      return (
+        ageOf(it.addedAt, days, now) === 'should_archive' &&
+        !archivingRef.current.has(it.id)
+      );
     });
     if (toArchive.length === 0) return;
+    // Mark in-flight BEFORE awaiting so a re-render mid-archive (poll tick,
+    // shelfTableTick) recomputes toArchive with these ids already excluded.
+    for (const it of toArchive) archivingRef.current.add(it.id);
     let cancelled = false;
     (async () => {
       for (const it of toArchive) {
@@ -309,11 +316,23 @@ export function GroceryBox(): JSX.Element {
           surface, which carries its own clean heading (redesign parity). */}
       {mode !== 'now' && (
         <Stack gap={12}>
-          <Text scale="caption" color="var(--ollie-color-ink-faint)" style={SMCP_STYLE}>
+          <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
             box · grocery
           </Text>
-          <Text scale="display">Grocery</Text>
-          <Text scale="body" color="var(--ollie-color-ink-soft)" style={{ maxWidth: 460 }}>
+          <Text
+            scale="title"
+            color={colors.ink}
+            style={{
+              fontFamily: 'var(--ollie-font-sans)',
+              fontSize: '26px',
+              fontWeight: 700,
+              lineHeight: 1.15,
+              letterSpacing: '-0.01em',
+            }}
+          >
+            grocery
+          </Text>
+          <Text scale="body" color={colors.inkSoft} style={{ maxWidth: 460 }}>
             a list you talk to, a pantry that watches what you have.
           </Text>
         </Stack>
@@ -330,7 +349,7 @@ export function GroceryBox(): JSX.Element {
       <PatternCards module="grocery" />
 
       {!ready ? (
-        <Text scale="caption" color="var(--ollie-color-ink-faint)">
+        <Text scale="caption" color={colors.inkFaint}>
           loading…
         </Text>
       ) : mode === 'now' ? (
@@ -397,8 +416,21 @@ function ModeSwitch({
   mode: Mode;
   onChange: (m: Mode) => void;
 }): JSX.Element {
+  // Soft segmented control — the active pill sinks into an inset well with
+  // sageDeep text; the inactive pills sit flush + quiet. The track itself is
+  // a flat cream rail so the pressed tab reads as a pressed key.
   return (
-    <Row gap={28} align="center" style={{ paddingBottom: 2 }}>
+    <Row
+      gap={6}
+      align="center"
+      style={{
+        alignSelf: 'flex-start',
+        padding: 5,
+        borderRadius: radii.pill,
+        background: colors.cream,
+        boxShadow: shadows.raisedSm,
+      }}
+    >
       {MODE_ORDER.map((m) => {
         const on = m === mode;
         return (
@@ -410,12 +442,13 @@ function ModeSwitch({
             style={{
               background: 'transparent',
               border: 'none',
-              borderBottom: `2px solid ${on ? 'var(--ollie-color-sage)' : 'transparent'}`,
-              padding: '0 0 7px 0',
+              borderRadius: radii.pill,
+              boxShadow: on ? shadows.inset : 'none',
+              padding: '8px 16px',
               fontSize: 14,
               fontWeight: on ? 600 : 500,
               letterSpacing: '-0.01em',
-              color: on ? 'var(--ollie-color-ink)' : 'var(--ollie-color-ink-faint)',
+              color: on ? colors.sageDeep : colors.inkFaint,
               cursor: 'pointer',
               transition: 'color 200ms cubic-bezier(0.18, 0, 0.22, 1)',
             }}
@@ -462,14 +495,14 @@ function ShopList({
       {items.length > 0 && (
         <>
           {/* the running stat above the torn note */}
-          <Text scale="caption" color="var(--ollie-color-ink-faint)" style={{ letterSpacing: '0.02em' }}>
-            <strong style={{ color: 'var(--ollie-color-ink)', fontWeight: 600 }}>{openCount}</strong>
+          <Text scale="caption" color={colors.inkFaint} style={{ letterSpacing: '0.02em' }}>
+            <strong style={{ color: colors.ink, fontWeight: 600 }}>{openCount}</strong>
             {" on the list · tap one when it's in the basket"}
           </Text>
 
-          {/* THE LIST — a torn-paper note, hairline rules, soft round tick */}
-          <Stack gap={0}>
-            {items.map((row, i) => (
+          {/* THE LIST — raised neumorphic cards, soft round tick well */}
+          <Stack gap={12}>
+            {items.map((row) => (
               <button
                 key={row.id}
                 type="button"
@@ -480,13 +513,11 @@ function ShopList({
                   display: 'flex',
                   alignItems: 'center',
                   gap: 15,
-                  padding: '15px 2px',
-                  borderTop: `1px solid var(--ollie-color-hairline)`,
-                  borderBottom:
-                    i === items.length - 1 ? `1px solid var(--ollie-color-hairline)` : 'none',
-                  borderLeft: 'none',
-                  borderRight: 'none',
-                  background: 'transparent',
+                  padding: '16px 18px',
+                  border: 'none',
+                  borderRadius: 22,
+                  background: colors.cream,
+                  boxShadow: shadows.raised,
                   cursor: 'pointer',
                   textAlign: 'left',
                   fontFamily: 'inherit',
@@ -508,7 +539,7 @@ function ShopList({
                       fontSize: 17,
                       fontWeight: 400,
                       letterSpacing: '-0.01em',
-                      color: 'var(--ollie-color-ink)',
+                      color: colors.ink,
                     }}
                   >
                     {row.name}
@@ -521,7 +552,7 @@ function ShopList({
                       fontSize: 13,
                       fontWeight: 500,
                       letterSpacing: '0.01em',
-                      color: 'var(--ollie-color-ink-faint)',
+                      color: colors.inkFaint,
                       flexShrink: 0,
                     }}
                   >
@@ -570,32 +601,24 @@ function LikelyNeededSection({
   onStillHave: (row: PantryItem) => void;
 }): JSX.Element {
   return (
-    <Stack gap={0} style={{ marginTop: 16 }} aria-label="likely needed">
-      {/* hairline rule above + 11px smcp sage section caption */}
-      <div
+    <Stack gap={12} style={{ marginTop: 16 }} aria-label="likely needed">
+      {/* 11px smcp sage section caption */}
+      <span
         style={{
-          borderTop: `1px solid var(--ollie-color-hairline)`,
-          paddingTop: 16,
+          ...SMCP_STYLE,
+          fontSize: 11,
+          color: colors.sage,
+          letterSpacing: '0.08em',
+          fontStyle: 'italic',
         }}
       >
-        <span
-          style={{
-            ...SMCP_STYLE,
-            fontSize: 11,
-            color: 'var(--ollie-color-sage)',
-            letterSpacing: '0.08em',
-            fontStyle: 'italic',
-          }}
-        >
-          {'≈'} likely needed
-        </span>
-      </div>
-      <Stack gap={0} style={{ marginTop: 12 }}>
-        {items.map((row, i) => (
+        {'≈'} likely needed
+      </span>
+      <Stack gap={12}>
+        {items.map((row) => (
           <LikelyNeededRow
             key={row.id}
             row={row}
-            isLast={i === items.length - 1}
             onAdd={onAdd}
             onStillHave={onStillHave}
           />
@@ -607,24 +630,16 @@ function LikelyNeededSection({
 
 function LikelyNeededRow({
   row,
-  isLast,
   onAdd,
   onStillHave,
 }: {
   row: PantryItem;
-  isLast: boolean;
   onAdd: (row: PantryItem) => void;
   onStillHave: (row: PantryItem) => void;
 }): JSX.Element {
   const [open, setOpen] = useState(false);
   return (
-    <div
-      style={{
-        borderTop: `1px solid var(--ollie-color-hairline)`,
-        borderBottom: isLast ? `1px solid var(--ollie-color-hairline)` : 'none',
-        padding: '13px 2px',
-      }}
-    >
+    <Box bg="cream" radius="card" shadow="raised" style={{ padding: '14px 18px' }}>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -649,7 +664,7 @@ function LikelyNeededRow({
             fontSize: 16,
             fontWeight: 400,
             letterSpacing: '-0.01em',
-            color: 'var(--ollie-color-ink)',
+            color: colors.ink,
           }}
         >
           {row.name}
@@ -657,7 +672,7 @@ function LikelyNeededRow({
         <span
           style={{
             fontSize: 11,
-            color: 'var(--ollie-color-ink-soft)',
+            color: colors.inkSoft,
             fontStyle: 'italic',
             letterSpacing: '0.02em',
           }}
@@ -676,7 +691,7 @@ function LikelyNeededRow({
               border: 'none',
               padding: 0,
               fontSize: 11,
-              color: 'var(--ollie-color-sage)',
+              color: colors.sage,
               cursor: 'pointer',
               fontFamily: 'inherit',
               transition: 'color 200ms cubic-bezier(0.18, 0, 0.22, 1)',
@@ -693,7 +708,7 @@ function LikelyNeededRow({
               border: 'none',
               padding: 0,
               fontSize: 11,
-              color: 'var(--ollie-color-ink-soft)',
+              color: colors.inkSoft,
               cursor: 'pointer',
               fontFamily: 'inherit',
               transition: 'color 200ms cubic-bezier(0.18, 0, 0.22, 1)',
@@ -703,11 +718,109 @@ function LikelyNeededRow({
           </button>
         </Row>
       )}
-    </div>
+    </Box>
   );
 }
 
 // ─── pantry view ──────────────────────────────────────────────────────────
+
+// ─── aisle accordion ──────────────────────────────────────────────────────
+
+/**
+ * One collapsible aisle section in the pantry. Header = a tiny olive dot (the
+ * marker Serra chose over emojis) + the aisle name + item count, with a small
+ * amber dot when anything in the aisle is running low, and a caret that rotates
+ * on open. Defaults OPEN — nothing's hidden by default (hidden = forgotten, bad
+ * for ADHD); the user can fold an aisle they don't care about right now.
+ */
+function AisleAccordion({
+  label,
+  count,
+  hasLow,
+  children,
+}: {
+  label: string;
+  count: number;
+  hasLow: boolean;
+  children: ReactNode;
+}): JSX.Element {
+  const [open, setOpen] = useState(true);
+  return (
+    <Stack gap={open ? 12 : 0}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        style={{
+          appearance: 'none',
+          background: 'transparent',
+          border: 'none',
+          padding: '6px 2px',
+          cursor: 'pointer',
+          width: '100%',
+        }}
+      >
+        <Row gap={9} align="center">
+          {/* the olive dot marker */}
+          <span
+            aria-hidden
+            style={{
+              width: 7,
+              height: 7,
+              borderRadius: '50%',
+              background: colors.sageDeep,
+              flexShrink: 0,
+            }}
+          />
+          <Text
+            scale="caption"
+            color={colors.inkSoft}
+            style={{ fontVariantCaps: 'all-small-caps', letterSpacing: '0.08em', fontWeight: 600 }}
+          >
+            {label}
+          </Text>
+          <Text scale="caption" color={colors.inkFaint}>
+            {count}
+          </Text>
+          {hasLow && (
+            <span
+              aria-label="running low"
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: '50%',
+                background: colors.amber,
+                flexShrink: 0,
+              }}
+            />
+          )}
+          <span style={{ marginLeft: 'auto', display: 'inline-flex' }}>
+            <svg
+              width="11"
+              height="11"
+              viewBox="0 0 10 10"
+              aria-hidden
+              style={{
+                transform: open ? 'rotate(90deg)' : 'rotate(0deg)',
+                transition: 'transform 200ms cubic-bezier(0.18, 0, 0.22, 1)',
+              }}
+            >
+              <path
+                d="M3 1.5 L6.5 5 L3 8.5"
+                fill="none"
+                stroke={colors.inkFaint}
+                strokeWidth={1.4}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </span>
+        </Row>
+      </button>
+      {open && children}
+    </Stack>
+  );
+}
 
 function PantryList({
   items,
@@ -748,31 +861,60 @@ function PantryList({
     return map;
   }, [items, shelfTick]);
 
+  // Group the pantry into store aisles (produce → … → household). The worker
+  // ShelfCategory drives it when known; aisleFor falls back to a keyword map.
+  // Computed off `shelfTick` too so it re-buckets once the category table loads.
+  const aislesGrouped = useMemo(() => {
+    const byAisle = new Map<Aisle, PantryItem[]>();
+    for (const it of items) {
+      const aisle = aisleFor(it.name, lookupCategory(it.name));
+      const bucket = byAisle.get(aisle);
+      if (bucket) bucket.push(it);
+      else byAisle.set(aisle, [it]);
+    }
+    void shelfTick;
+    return byAisle;
+  }, [items, shelfTick]);
+
   if (items.length === 0 && archivedItems.length === 0) return <ColdPantry />;
 
   return (
     <Stack gap={14}>
       {items.length > 0 && (
         <>
-          <Text scale="caption" color="var(--ollie-color-ink-faint)" style={{ letterSpacing: '0.02em' }}>
-            <strong style={{ color: 'var(--ollie-color-ink)', fontWeight: 600 }}>{totalCount}</strong>
+          <Text scale="caption" color={colors.inkFaint} style={{ letterSpacing: '0.02em' }}>
+            <strong style={{ color: colors.ink, fontWeight: 600 }}>{totalCount}</strong>
             {' in the pantry'}
           </Text>
 
-          <Stack gap={0}>
-            {items.map((item, i) => (
-              <PantryRow
-                key={item.id}
-                item={item}
-                aging={agingByName.get(item.id) ?? 'fresh'}
-                cadence={cadenceByName.get(item.name)}
-                isLast={i === items.length - 1}
-                onRemove={onRemove}
-                onStillHere={onStillHere}
-                onGone={onGone}
-                onSetRemindMe={onSetRemindMe}
-              />
-            ))}
+          <Stack gap={12}>
+            {AISLE_ORDER.map(({ key, label }) => {
+              const aisleItems = aislesGrouped.get(key);
+              if (!aisleItems || aisleItems.length === 0) return null;
+              return (
+                <AisleAccordion
+                  key={key}
+                  label={label}
+                  count={aisleItems.length}
+                  hasLow={aisleItems.some((it) => it.lowFlag)}
+                >
+                  <Stack gap={12}>
+                    {aisleItems.map((item) => (
+                      <PantryRow
+                        key={item.id}
+                        item={item}
+                        aging={agingByName.get(item.id) ?? 'fresh'}
+                        cadence={cadenceByName.get(item.name)}
+                        onRemove={onRemove}
+                        onStillHere={onStillHere}
+                        onGone={onGone}
+                        onSetRemindMe={onSetRemindMe}
+                      />
+                    ))}
+                  </Stack>
+                </AisleAccordion>
+              );
+            })}
           </Stack>
         </>
       )}
@@ -797,7 +939,6 @@ function PantryRow({
   item,
   aging,
   cadence,
-  isLast,
   onRemove,
   onStillHere,
   onGone,
@@ -806,7 +947,6 @@ function PantryRow({
   item: PantryItem;
   aging: AgingState;
   cadence: CadenceEstimate | undefined;
-  isLast: boolean;
   onRemove: (id: string) => void;
   onStillHere: (id: string) => void;
   onGone: (id: string) => void;
@@ -820,24 +960,23 @@ function PantryRow({
   const showStillHere = aging === 'still_here_prompt';
 
   return (
-    <Row
-      gap={14}
-      align="flex-start"
-      justify="space-between"
+    <Box
+      bg="cream"
+      radius="card"
+      shadow="raised"
       style={{
-        padding: '15px 2px',
-        borderTop: `1px solid var(--ollie-color-hairline)`,
-        borderBottom: isLast ? `1px solid var(--ollie-color-hairline)` : 'none',
+        padding: '16px 18px',
         opacity: faded ? 0.6 : 1,
         transition: 'opacity 240ms cubic-bezier(0.18, 0, 0.22, 1)',
       }}
     >
+    <Row gap={14} align="flex-start" justify="space-between">
       <Stack gap={4} style={{ flex: 1, minWidth: 0 }}>
         <Row gap={10} align="baseline" style={{ flexWrap: 'wrap' }}>
           <span
             style={{
               fontSize: 15,
-              color: 'var(--ollie-color-ink)',
+              color: colors.ink,
               fontWeight: 500,
               letterSpacing: '-0.012em',
             }}
@@ -852,7 +991,7 @@ function PantryRow({
                 fontWeight: 600,
                 letterSpacing: '0.08em',
                 textTransform: 'uppercase',
-                color: 'var(--ollie-color-amber)',
+                color: colors.amber,
               }}
             >
               low
@@ -877,7 +1016,7 @@ function PantryRow({
           <span
             style={{
               fontSize: 12,
-              color: 'var(--ollie-color-ink-faint)',
+              color: colors.inkFaint,
               fontWeight: 500,
               letterSpacing: '0.02em',
             }}
@@ -896,6 +1035,7 @@ function PantryRow({
         <RemoveButton onClick={() => onRemove(item.id)} />
       </Row>
     </Row>
+    </Box>
   );
 }
 
@@ -927,7 +1067,7 @@ function RemindToggle({
         padding: '4px 6px',
         margin: 0,
         fontSize: 11,
-        color: remindMe ? 'var(--ollie-color-sage)' : 'var(--ollie-color-ink-faint)',
+        color: remindMe ? colors.sage : colors.inkFaint,
         cursor: 'pointer',
         fontFamily: 'inherit',
         flexShrink: 0,
@@ -971,7 +1111,7 @@ function StillHereAffordance({
           padding: 0,
           margin: 0,
           fontSize: 11,
-          color: 'var(--ollie-color-sage)',
+          color: colors.sage,
           cursor: 'pointer',
           fontFamily: 'inherit',
         }}
@@ -991,7 +1131,7 @@ function StillHereAffordance({
           border: 'none',
           padding: 0,
           fontSize: 11,
-          color: 'var(--ollie-color-sage)',
+          color: colors.sage,
           cursor: 'pointer',
           fontFamily: 'inherit',
         }}
@@ -1007,7 +1147,7 @@ function StillHereAffordance({
           border: 'none',
           padding: 0,
           fontSize: 11,
-          color: 'var(--ollie-color-ink-soft)',
+          color: colors.inkSoft,
           cursor: 'pointer',
           fontFamily: 'inherit',
         }}
@@ -1033,7 +1173,7 @@ function ArchivedSection({
 }): JSX.Element {
   const [open, setOpen] = useState(false);
   return (
-    <Stack gap={0} style={{ marginTop: 24 }}>
+    <Stack gap={12} style={{ marginTop: 24 }}>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -1041,13 +1181,13 @@ function ArchivedSection({
         style={{
           ...SMCP_STYLE,
           width: '100%',
-          background: 'none',
+          background: colors.cream,
           border: 'none',
-          borderTop: `1px solid var(--ollie-color-hairline)`,
-          borderBottom: `1px solid var(--ollie-color-hairline)`,
-          padding: '10px 2px',
+          borderRadius: 22,
+          boxShadow: shadows.raisedSm,
+          padding: '12px 18px',
           fontSize: 11,
-          color: 'var(--ollie-color-ink-faint)',
+          color: colors.inkFaint,
           textAlign: 'left',
           cursor: 'pointer',
           fontFamily: 'inherit',
@@ -1056,24 +1196,20 @@ function ArchivedSection({
         {items.length} archived
       </button>
       {open && (
-        <Stack gap={0}>
-          {items.map((item, i) => (
-            <Row
+        <Stack gap={12}>
+          {items.map((item) => (
+            <Box
               key={item.id}
-              gap={14}
-              align="center"
-              justify="space-between"
-              style={{
-                padding: '12px 2px',
-                borderBottom:
-                  i === items.length - 1 ? `1px solid var(--ollie-color-hairline)` : 'none',
-                opacity: 0.6,
-              }}
+              bg="cream"
+              radius="card"
+              shadow="raisedSm"
+              style={{ padding: '12px 18px', opacity: 0.7 }}
             >
+            <Row gap={14} align="center" justify="space-between">
               <span
                 style={{
                   fontSize: 14,
-                  color: 'var(--ollie-color-ink-soft)',
+                  color: colors.inkSoft,
                   fontWeight: 500,
                   letterSpacing: '-0.01em',
                 }}
@@ -1089,7 +1225,7 @@ function ArchivedSection({
                   border: 'none',
                   padding: 0,
                   fontSize: 10,
-                  color: 'var(--ollie-color-sage)',
+                  color: colors.sage,
                   cursor: 'pointer',
                   fontFamily: 'inherit',
                 }}
@@ -1097,6 +1233,7 @@ function ArchivedSection({
                 bring back
               </button>
             </Row>
+            </Box>
           ))}
         </Stack>
       )}
@@ -1106,55 +1243,54 @@ function ArchivedSection({
 
 // ─── cold states ──────────────────────────────────────────────────────────
 
-/** the bare torn-note hero — three hairline rules waiting for lines */
+/** the torn-note hero — a soft raised card holding three waiting-line stubs */
 function EmptyNote(): JSX.Element {
   const STUBS = [96, 64, 78];
   return (
-    <div
-      aria-hidden
+    <Box
+      bg="cream"
+      radius="card"
+      shadow="raised"
       style={{
-        width: 188,
-        display: 'flex',
-        flexDirection: 'column',
+        width: 220,
         marginBottom: 8,
+        padding: '16px 18px',
       }}
     >
-      {STUBS.map((w, i) => (
-        <div
-          key={w}
-          style={{
-            height: 46,
-            borderBottom:
-              i === STUBS.length - 1
-                ? 'none'
-                : `1px dashed var(--ollie-color-hairline)`,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 13,
-            padding: '0 4px',
-          }}
-        >
-          <span
+      <div aria-hidden style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {STUBS.map((w) => (
+          <div
+            key={w}
             style={{
-              width: 21,
-              height: 21,
-              borderRadius: '50%',
-              border: `1.6px solid var(--ollie-color-hairline)`,
-              flexShrink: 0,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 13,
             }}
-          />
-          <span
-            style={{
-              flex: `0 0 ${w}px`,
-              height: 6,
-              borderRadius: 3,
-              background: 'var(--ollie-color-hairline)',
-              opacity: 0.7,
-            }}
-          />
-        </div>
-      ))}
-    </div>
+          >
+            <span
+              style={{
+                width: 21,
+                height: 21,
+                borderRadius: '50%',
+                background: colors.cream,
+                boxShadow:
+                  'inset 3px 3px 6px rgba(120,140,122,0.45), inset -3px -3px 6px rgba(255,255,255,0.85)',
+                flexShrink: 0,
+              }}
+            />
+            <span
+              style={{
+                flex: `0 0 ${w}px`,
+                height: 6,
+                borderRadius: 3,
+                background: colors.hairline,
+                opacity: 0.7,
+              }}
+            />
+          </div>
+        ))}
+      </div>
+    </Box>
   );
 }
 
@@ -1162,7 +1298,7 @@ function ColdShop(): JSX.Element {
   return (
     <Stack gap={20} align="center">
       <EmptyNote />
-      <Text scale="caption" color="var(--ollie-color-ink-faint)" style={{ letterSpacing: '0.02em' }}>
+      <Text scale="caption" color={colors.inkFaint} style={{ letterSpacing: '0.02em' }}>
         nothing on the list yet
       </Text>
       <Text
@@ -1206,22 +1342,23 @@ function ColdPantry(): JSX.Element {
 
 // ─── tiny shared primitives ───────────────────────────────────────────────
 
-/** the round amber/sage tick on the left of a shopping row */
+/** the round neumorphic tick well on the left of a shopping row */
 function TickCircle(): JSX.Element {
   return (
     <span
       aria-hidden
       style={{
-        width: 23,
-        height: 23,
+        width: 24,
+        height: 24,
         borderRadius: '50%',
-        border: `1.8px solid var(--ollie-color-hairline)`,
-        background: 'transparent',
+        background: colors.cream,
+        boxShadow:
+          'inset 3px 3px 6px rgba(120,140,122,0.55), inset -3px -3px 6px rgba(255,255,255,0.85)',
         flexShrink: 0,
         display: 'inline-flex',
         alignItems: 'center',
         justifyContent: 'center',
-        transition: 'border-color 200ms cubic-bezier(0.18, 0, 0.22, 1)',
+        transition: 'box-shadow 200ms cubic-bezier(0.18, 0, 0.22, 1)',
       }}
     />
   );
@@ -1243,7 +1380,7 @@ function SageNote({
           width: 7,
           height: 7,
           borderRadius: '50%',
-          background: 'var(--ollie-color-sage)',
+          background: colors.sage,
           flexShrink: 0,
           marginTop: 8,
         }}
@@ -1251,7 +1388,7 @@ function SageNote({
       <span
         style={{
           fontSize: 14,
-          color: 'var(--ollie-color-ink-soft)',
+          color: colors.inkSoft,
           fontWeight: 500,
           letterSpacing: '-0.01em',
           lineHeight: 1.5,
@@ -1273,7 +1410,7 @@ function RemoveButton({ onClick }: { onClick: () => void }): JSX.Element {
         background: 'none',
         border: 'none',
         padding: '4px 8px',
-        color: 'var(--ollie-color-ink-faint)',
+        color: colors.inkFaint,
         cursor: 'pointer',
         fontVariantCaps: 'all-small-caps',
         letterSpacing: '0.08em',
@@ -1317,7 +1454,7 @@ function CadenceHint({ estimate }: { estimate: CadenceEstimate | undefined }): J
     <span
       style={{
         fontSize: 11,
-        color: overdue ? 'var(--ollie-color-amber)' : 'var(--ollie-color-ink-faint)',
+        color: overdue ? colors.amber : colors.inkFaint,
         fontWeight: 500,
         letterSpacing: '0.02em',
         fontVariantCaps: 'all-small-caps',
@@ -1329,11 +1466,6 @@ function CadenceHint({ estimate }: { estimate: CadenceEstimate | undefined }): J
   );
 }
 
-function formatDays(d: number): string {
-  if (d < 1) return 'less than a day';
-  const rounded = Math.round(d);
-  return `${rounded} day${rounded === 1 ? '' : 's'}`;
-}
 
 function pluralDays(d: number): string {
   if (d <= 0) return 'today';

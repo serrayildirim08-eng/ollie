@@ -18,14 +18,35 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["devtools"] }
+# `devtools` is NOT forced on here (audit M9): Tauri already enables the
+# WebKit inspector automatically in debug builds, and listing the feature would
+# also ship it in release binaries (an info-disclosure surface on a device).
+tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 tauri-plugin-sql = { version = "2", features = ["sqlite"] }
 tauri-plugin-store = "2"
 tauri-plugin-notification = "2"
 tauri-plugin-localhost = "2"
+tauri-plugin-deep-link = "2"
+tauri-plugin-mobile-push = "0.1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+
+# ── Device encryption (alpha blocker #3) ────────────────────────────────────
+# rusqlite with the SQLCipher bundle does double duty:
+#   1. Feature-unifies the single `libsqlite3-sys` build (also used by sqlx via
+#      tauri-plugin-sql) to SQLCipher, so the whole DB is encryptable. Verify
+#      on device: `PRAGMA cipher_version` must return a non-empty string.
+#   2. Provides the connection + `rusqlite::ffi` symbols (sqlite3_auto_extension
+#      / sqlite3_exec) used by secure_db.rs to key every connection and to run
+#      the one-shot plaintext->encrypted migration.
+rusqlite = { version = "0.32", features = ["bundled-sqlcipher-vendored-openssl"] }
+# DB key lives in the OS keychain (macOS Security.framework / iOS Keychain
+# Services) -- never a plaintext file. iOS needs the keychain-access-group
+# entitlement (Entitlements.plist) for this to succeed on device.
+keyring = { version = "3", features = ["apple-native"] }
+getrandom = "0.2"
+base64 = "0.22"
 
 # Apple-only: typed bindings to UNUserNotificationCenter for OS-level local
 # notifications that survive the app being quit (macOS 10.14+ and iOS).
@@ -39,6 +60,12 @@ objc2-foundation = { version = "0.3", default-features = false, features = [
     "NSDate",
     "NSError",
     "NSPredicate",
+    "NSSet",
+    "NSDictionary",
+    "NSEnumerator",
+    "NSFileManager",
+    "NSURL",
+    "NSData",
     # Apple Reminders need a due-date as date *components* (year/month/day/hour/
     # minute) rather than an absolute NSDate; NSCalendar builds those from a date.
     "NSCalendar",
@@ -66,6 +93,11 @@ objc2-user-notifications = { version = "0.3", default-features = false, features
     "UNNotificationTrigger",
     "UNNotificationSound",
     "UNUserNotificationCenter",
+    # A3: custom action buttons on macOS via native categories + delegate.
+    "UNNotificationAction",
+    "UNNotificationCategory",
+    "UNNotificationResponse",
+    "UNNotification",
 ] }
 block2 = "0.6"
 

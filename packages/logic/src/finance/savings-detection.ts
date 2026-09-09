@@ -8,8 +8,11 @@
  * braindump text, then attempts to attribute them to named savings goals.
  *
  * Confidence rules:
- *   high   — outbound+inbound same-day same-amount pair, OR explicit goal
- *             name in memo → auto-update goal progress
+ *   high   — outbound+inbound same-day same-amount pair *corroborated by a
+ *             savings keyword* (#143), OR explicit goal name in memo →
+ *             auto-update goal progress
+ *   medium — same-day same-amount pair with NO savings keyword (could be a
+ *             refund/wash) → surface card, never auto-apply
  *   medium — keyword match in memo with plausible amount → surface card
  *   low    — weak keyword match or ambiguous → ignore / don't surface
  */
@@ -88,9 +91,29 @@ function extractAmount(text: string): number | null {
   return null;
 }
 
-let _idCounter = 0;
-function nextId(): string {
-  return `st-${Date.now()}-${++_idCounter}`;
+/**
+ * Deterministic, purity-preserving id for a detected transfer.
+ *
+ * The previous implementation used `Date.now()` plus a module-level counter,
+ * which made `detectSavingsTransfers` non-pure (same input → different ids on
+ * each call / across runs) and order-coupled via shared mutable state. The id
+ * is now a stable hash of the fields that define the transfer, so identical
+ * inputs always yield identical ids.
+ */
+function transferId(parts: {
+  record_id: string;
+  paired_record_id: string | null;
+  date: string;
+  amount: number;
+}): string {
+  const key = `${parts.record_id}|${parts.paired_record_id ?? ''}|${parts.date}|${parts.amount}`;
+  // 32-bit FNV-1a — deterministic, no I/O, collision-resistant enough for ids.
+  let h = 0x811c9dc5;
+  for (let i = 0; i < key.length; i++) {
+    h ^= key.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return `st-${(h >>> 0).toString(36)}`;
 }
 
 // ─── detectSavingsTransfers ───────────────────────────────────────────────
@@ -132,17 +155,38 @@ export function detectSavingsTransfers(transactions: FinanceRecord[]): SavingsTr
       pairedOutboundIds.add(out.id ?? '');
       pairedInboundIds.add(match.id ?? '');
       const memo = out.notes ?? out.merchant ?? null;
-      const kw = SAVINGS_KEYWORDS.find((k) => k.re.test(memo ?? ''))?.keyword ?? null;
+      // Finding #143: a same-day, same-amount in/out pair is NOT proof of a
+      // savings transfer on its own — a rent payment + a reimbursement, or any
+      // wash/refund, looks identical. Require a corroborating savings keyword
+      // on EITHER side (memo / merchant / category) before granting high
+      // confidence + is_matched_pair (which gates downstream auto_apply).
+      const outText = [out.notes, out.merchant, out.category].filter(Boolean).join(' ');
+      const inText = [match.notes, match.merchant, match.category].filter(Boolean).join(' ');
+      const hit =
+        SAVINGS_KEYWORDS.find((k) => k.re.test(outText)) ??
+        SAVINGS_KEYWORDS.find((k) => k.re.test(inText)) ??
+        null;
+      // 'deposit' / 'save' alone are weak — don't let them carry a high-conf pair.
+      const strongHit = hit && hit.keyword !== 'deposit' && hit.keyword !== 'save' ? hit : null;
+      const corroborated = strongHit != null;
       results.push({
-        id: nextId(),
+        id: transferId({
+          record_id: out.id ?? '',
+          paired_record_id: match.id ?? null,
+          date: out.event_date,
+          amount: out.amount as number,
+        }),
         record_id: out.id ?? '',
         paired_record_id: match.id ?? null,
         amount: out.amount as number,
         date: out.event_date,
         memo,
-        matched_keyword: kw,
-        confidence: 'high',
-        is_matched_pair: true,
+        matched_keyword: strongHit?.keyword ?? null,
+        // Corroborated pair → high + treated as a matched pair (auto-applyable).
+        // Uncorroborated coincidental pair → medium, NOT a matched pair, so the
+        // goal matcher will never auto_apply it.
+        confidence: corroborated ? 'high' : 'medium',
+        is_matched_pair: corroborated,
       });
     }
   }
@@ -160,7 +204,12 @@ export function detectSavingsTransfers(transactions: FinanceRecord[]): SavingsTr
     if (confidence === 'low') continue;
 
     results.push({
-      id: nextId(),
+      id: transferId({
+        record_id: out.id ?? '',
+        paired_record_id: null,
+        date: out.event_date,
+        amount: out.amount as number,
+      }),
       record_id: out.id ?? '',
       paired_record_id: null,
       amount: out.amount as number,

@@ -36,7 +36,7 @@ Deploy `ollie-apns-push` FIRST so this binding resolves.
 
 ```
 wrangler secret put SUPABASE_URL                # https://<ref>.supabase.co
-wrangler secret put SUPABASE_SERVICE_ROLE_KEY   # server-only, NEVER in client
+wrangler secret put SUPABASE_SERVICE_ROLE       # server-only, NEVER in client
 ```
 
 ## Deploy

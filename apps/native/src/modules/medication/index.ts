@@ -7,9 +7,19 @@ import { medications as medicationsRepo, cadence as cadenceRepo } from './repo';
 
 export { medicationHandler } from './handler';
 export { migrateMedication } from './migrate';
-export { events, medications, cadence } from './repo';
+export { events, medications, cabinet, cadence } from './repo';
 export { MedicationBox } from './MedicationBox';
+export {
+  purposeFor,
+  purposeLabel,
+  coercePurpose,
+  PURPOSE_ORDER,
+  MED_PURPOSES,
+  type MedPurpose,
+} from './purposeMap';
+export { isLow, daysOfSupply, decrementQty } from './lowStock';
 export type {
+  CabinetItem,
   EventKind,
   Medication,
   MedicationEvent,

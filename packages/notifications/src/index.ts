@@ -41,6 +41,10 @@ import {
   type SleepSettingsLike,
 } from './suppression';
 
+// Re-export the canonical "HH:MM" parser so reminder scheduling (apps/native ·
+// notify/reminderCascade.ts) shares one time-of-day grammar with quiet-hours.
+export { parseHHMM } from './suppression';
+
 export type {
   NotificationBackend,
   NotificationCategory,
@@ -122,6 +126,26 @@ function rebuildAggregator(): void {
       state.flushTimers.delete(group);
     },
     deliver: (spec) => {
+      // Re-check the daily cap at FLUSH time (audit #167). The cap was checked
+      // when the spec was enqueued, but the aggregation window can be tens of
+      // minutes long — other notifications may have consumed the budget since.
+      // Delivering the digest unconditionally would bypass the cap.
+      if (state.store) {
+        const budget = readBudget(state.store);
+        const todayCount = countDeliveredToday(state.store, Date.now());
+        if (todayCount >= budget.daily_cap) {
+          appendLog(state.store, {
+            ts: Date.now(),
+            dedupe_key: spec.dedupe_key,
+            category: spec.category,
+            title: spec.title,
+            delivered: false,
+            reason: 'budget',
+            aggregation_group: spec.aggregation_group,
+          });
+          return;
+        }
+      }
       void deliverNow(spec, /* alreadyAggregated */ true);
     },
   });
@@ -156,14 +180,34 @@ function resumeScheduled(): void {
   const survivors: ScheduledRecord[] = [];
   for (const r of list) {
     if (r.fireAt <= now) {
-      // Missed firing window while app was closed — deliver now via
-      // immediate path. Backends that own native scheduling (Capacitor,
-      // Electron) will have fired their own platform notification; this
-      // covers the web fallback case.
-      void deliverImmediate(r.spec);
+      // Missed firing window while the app was closed.
+      //
+      // Audit #70 / NC6 (regression): records that carry a truthy
+      // `platform_id` were scheduled with the NATIVE OS scheduler
+      // (Capacitor / Electron / Tauri local notification). The OS already
+      // fired — or will fire — that notification on its own. Re-delivering
+      // here would double-ping the exact bug the NC6 fix in notify() was
+      // meant to kill. Skip those.
+      //
+      // Records with NO platform_id are the JS-fallback (web) case: the
+      // in-process timer that would have fired died with the previous
+      // process, so nothing delivered. Catch those up — but route through
+      // the FULL notify() pipeline (dedupe + per-category mute + daily cap)
+      // rather than the raw immediate path, so a missed reminder can't blow
+      // past the budget or re-fire something already seen this 24h window.
+      if (!r.platform_id) {
+        void notify(r.spec);
+      }
     } else {
       survivors.push(r);
-      scheduleInProcessTimer(r);
+      // Same NC6 guard for the not-yet-fired case: if the native OS scheduler
+      // owns this record (truthy platform_id), it will fire on its own at
+      // fireAt. Arming an in-process timer too would double-fire once the
+      // timer elapses. Only re-arm the JS fallback timer for records the OS
+      // is NOT holding.
+      if (!r.platform_id) {
+        scheduleInProcessTimer(r);
+      }
     }
   }
   writeScheduled(survivors);

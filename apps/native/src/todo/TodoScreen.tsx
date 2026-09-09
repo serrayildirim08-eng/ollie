@@ -31,7 +31,7 @@ import {
 } from 'react';
 import { Row, Stack } from '../layout';
 import { Text } from '../ui';
-import { durations, easings } from '../theme/tokens';
+import { colors, durations, easings, radii, shadows } from '../theme/tokens';
 import {
   migrateAdmin,
   recurringDecisions as adminDecisionsRepo,
@@ -48,6 +48,7 @@ import {
   shopping as groceryShoppingRepo,
 } from '../modules/grocery';
 import { migrateWork, tasks as workTasksRepo } from '../modules/work';
+import { onTaskCompleted } from '../notify/datelessLadderHook';
 import {
   aggregateTodos,
   bucketTodos,
@@ -85,10 +86,13 @@ async function markComplete(item: TodoItem): Promise<void> {
       return;
     }
     await adminTasksRepo.markComplete(item.rowId);
+    // Completing in-app cancels any remaining date-less ladder tiers.
+    await onTaskCompleted('admin', item.rowId);
     return;
   }
   if (item.source === 'work') {
     await workTasksRepo.markComplete(item.rowId);
+    await onTaskCompleted('work', item.rowId);
     return;
   }
   // source === 'grocery'
@@ -257,34 +261,50 @@ export function TodoScreen(): JSX.Element {
     () =>
       bucketTodos(items, today)
         .filter((b) => b.id === 'today' || b.id === 'noDate')
-        .flatMap((b) => b.items),
+        .flatMap((b) => b.items)
+        // Product decision (2026-06-23): grocery shopping items live ONLY in
+        // the grocery module, not the to-do surface. Buying things stays out
+        // of the "today" task list to keep it uncluttered.
+        .filter((it) => it.source !== 'grocery'),
     [items, today],
   );
 
   return (
     <Stack gap={48}>
       <Stack gap={12}>
-        <Text scale="caption" color="var(--ollie-color-ink-faint)" style={SMCP_STYLE}>
+        <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
           to-do
         </Text>
-        <Text scale="display">Today</Text>
-        <Text scale="body" color="var(--ollie-color-ink-soft)" style={{ maxWidth: 540 }}>
-          what's on you today.
+        <Text
+          scale="title"
+          color={colors.ink}
+          style={{
+            fontFamily: 'var(--ollie-font-sans)',
+            fontSize: '26px',
+            fontWeight: 700,
+            lineHeight: 1.15,
+            letterSpacing: '-0.01em',
+          }}
+        >
+          today
+        </Text>
+        <Text scale="body" color={colors.inkSoft} style={{ maxWidth: 540 }}>
+          everything due today, in one place.
         </Text>
       </Stack>
 
       {!ready ? (
-        <Text scale="caption" color="var(--ollie-color-ink-faint)">
+        <Text scale="caption" color={colors.inkFaint}>
           loading…
         </Text>
       ) : todayList.length === 0 ? (
-        <Text scale="body" color="var(--ollie-color-ink-faint)" data-testid="todo-empty">
+        <Text scale="body" color={colors.inkFaint} data-testid="todo-empty">
           {items.length === 0
             ? 'nothing on the list yet. brain dump something to fill it.'
             : 'nothing for today. rest easy.'}
         </Text>
       ) : (
-        <Stack gap={0} as="ul" style={LIST_RESET} data-testid="bucket-today">
+        <Stack gap={12} as="ul" style={LIST_RESET} data-testid="bucket-today">
           {todayList.map((item, i) => (
             item.kind === 'decision' ? (
               <DecisionRow
@@ -319,7 +339,7 @@ interface TodoRowProps {
   readonly onComplete: (item: TodoItem) => void | Promise<void>;
 }
 
-function TodoRow({ item, first, fading, onComplete }: TodoRowProps): JSX.Element {
+function TodoRow({ item, fading, onComplete }: TodoRowProps): JSX.Element {
   const [hover, setHover] = useState(false);
   const handleClick = useCallback(() => {
     void onComplete(item);
@@ -338,8 +358,6 @@ function TodoRow({ item, first, fading, onComplete }: TodoRowProps): JSX.Element
     <li
       style={{
         ...LIST_ITEM_RESET,
-        borderTop: first ? '1px solid var(--ollie-color-hairline)' : 'none',
-        borderBottom: '1px solid var(--ollie-color-hairline)',
         opacity: fading ? 0 : 1,
         transition: `opacity ${FADE_OUT_MS}ms ${easings.calmOut}`,
       }}
@@ -355,29 +373,35 @@ function TodoRow({ item, first, fading, onComplete }: TodoRowProps): JSX.Element
         onMouseLeave={() => setHover(false)}
         style={{
           cursor: 'pointer',
-          padding: `${ROW_PAD_Y}px 0`,
+          padding: '16px 18px',
           outline: 'none',
+          background: colors.cream,
+          borderRadius: radii.card,
+          boxShadow: shadows.raised,
         }}
       >
-        <Row gap={16} align="baseline" justify="space-between">
-          <Row gap={14} align="baseline" style={{ minWidth: 0, flex: 1 }}>
+        <Row gap={16} align="center" justify="space-between">
+          <Row gap={14} align="center" style={{ minWidth: 0, flex: 1 }}>
             <span
               aria-hidden="true"
               style={{
-                width: BULLET_SIZE,
-                height: BULLET_SIZE,
-                background: hover ? 'var(--ollie-color-sage)' : 'var(--ollie-color-ink)',
+                width: 24,
+                height: 24,
+                borderRadius: '50%',
+                background: colors.cream,
+                boxShadow: hover
+                  ? `inset 2px 2px 5px rgba(120,140,122,0.5), inset -2px -2px 5px rgba(255,255,255,0.8)`
+                  : `inset 3px 3px 6px rgba(120,140,122,0.55), inset -3px -3px 6px rgba(255,255,255,0.85)`,
                 display: 'inline-block',
-                marginTop: 8,
                 flexShrink: 0,
-                transition: `background ${durations.tap} ${easings.calmOut}`,
+                transition: `box-shadow ${durations.tap} ${easings.calmOut}`,
               }}
             />
             <Text
               scale="body"
               style={{
                 textDecoration: hover ? 'line-through' : 'none',
-                color: hover ? 'var(--ollie-color-ink-faint)' : 'var(--ollie-color-ink)',
+                color: hover ? colors.inkFaint : colors.ink,
                 transition: `color ${durations.tap} ${easings.calmOut}`,
                 wordBreak: 'break-word',
               }}
@@ -388,7 +412,7 @@ function TodoRow({ item, first, fading, onComplete }: TodoRowProps): JSX.Element
           <Row gap={12} align="baseline" style={{ flexShrink: 0 }}>
             <Text
               scale="caption"
-              color="var(--ollie-color-ink-faint)"
+              color={colors.inkFaint}
               style={SMCP_STYLE}
             >
               {sourceLabel(item.source)}
@@ -396,7 +420,7 @@ function TodoRow({ item, first, fading, onComplete }: TodoRowProps): JSX.Element
             {hover ? (
               <Text
                 scale="caption"
-                color="var(--ollie-color-sage)"
+                color={colors.sage}
                 style={SMCP_STYLE}
                 data-testid="todo-done-affordance"
               >
@@ -453,8 +477,8 @@ function DecisionRow({ item, first, fading, onDecide }: DecisionRowProps): JSX.E
     <li
       style={{
         ...LIST_ITEM_RESET,
-        borderTop: first ? '1px solid var(--ollie-color-hairline)' : 'none',
-        borderBottom: '1px solid var(--ollie-color-hairline)',
+        borderTop: first ? `1px solid ${colors.hairline}` : 'none',
+        borderBottom: `1px solid ${colors.hairline}`,
         opacity: fading ? 0 : 1,
         transition: `opacity ${FADE_OUT_MS}ms ${easings.calmOut}`,
       }}
@@ -468,7 +492,7 @@ function DecisionRow({ item, first, fading, onDecide }: DecisionRowProps): JSX.E
               style={{
                 width: BULLET_SIZE,
                 height: BULLET_SIZE,
-                background: 'var(--ollie-color-ink)',
+                background: colors.ink,
                 display: 'inline-block',
                 marginTop: 8,
                 flexShrink: 0,
@@ -476,14 +500,14 @@ function DecisionRow({ item, first, fading, onDecide }: DecisionRowProps): JSX.E
             />
             <Text
               scale="body"
-              style={{ color: 'var(--ollie-color-ink)', wordBreak: 'break-word' }}
+              style={{ color: colors.ink, wordBreak: 'break-word' }}
             >
               {item.text}
             </Text>
           </Row>
           <Text
             scale="caption"
-            color="var(--ollie-color-ink-faint)"
+            color={colors.inkFaint}
             style={SMCP_STYLE}
           >
             {sourceLabel(item.source)}
@@ -498,7 +522,7 @@ function DecisionRow({ item, first, fading, onDecide }: DecisionRowProps): JSX.E
           <button
             type="button"
             aria-label={`cancel: ${item.text}`}
-            style={{ ...DECISION_BTN_STYLE, color: 'var(--ollie-color-sage)' }}
+            style={{ ...DECISION_BTN_STYLE, color: colors.sage }}
             onClick={handleCancel}
             data-testid={`decision-cancel-${item.id}`}
           >
@@ -507,7 +531,7 @@ function DecisionRow({ item, first, fading, onDecide }: DecisionRowProps): JSX.E
           <button
             type="button"
             aria-label={`keep: ${item.text}`}
-            style={{ ...DECISION_BTN_STYLE, color: 'var(--ollie-color-ink)' }}
+            style={{ ...DECISION_BTN_STYLE, color: colors.ink }}
             onClick={handleKeep}
             data-testid={`decision-keep-${item.id}`}
           >
@@ -516,7 +540,7 @@ function DecisionRow({ item, first, fading, onDecide }: DecisionRowProps): JSX.E
           <button
             type="button"
             aria-label={`decide later: ${item.text}`}
-            style={{ ...DECISION_BTN_STYLE, color: 'var(--ollie-color-ink-soft)' }}
+            style={{ ...DECISION_BTN_STYLE, color: colors.inkSoft }}
             onClick={handleLater}
             data-testid={`decision-later-${item.id}`}
           >

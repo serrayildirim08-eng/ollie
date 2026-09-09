@@ -21,14 +21,18 @@
  */
 
 import { getShelfLifeAll } from '../../api/workers';
+import type { ShelfLifeEntry } from '../../api/types';
 import { kv } from '../../storage';
 
-const TABLE_KEY = 'ollie:shelflife:v1';
+// v2: the table now stores rich entries ({ days, category }) instead of a flat
+// number map. Bumping the key drops any v1 disk cache (wrong shape) so the
+// first boot refetches cleanly.
+const TABLE_KEY = 'ollie:shelflife:v2';
 const ETAG_KEY = 'ollie:shelflife:etag';
 
 /** What we keep in memory + on disk. */
 export interface ShelfLifeTable {
-  items: Record<string, number>;
+  items: Record<string, ShelfLifeEntry>;
   aliases: Record<string, string>;
   version: number;
 }
@@ -109,17 +113,32 @@ export async function refresh(): Promise<void> {
  * and `"  whole milk "` resolve identically.
  */
 export function lookupDays(rawName: string): number | null {
+  const entry = resolveEntry(rawName);
+  return entry ? entry.days : null;
+}
+
+/**
+ * Synchronous category lookup — the pantry aisle grouping reads this. Returns
+ * the worker ShelfCategory string (e.g. "dairy", "personal_care") or `null`
+ * when the table hasn't loaded or the item is unknown (the aisle categoriser
+ * then falls back to its keyword map).
+ */
+export function lookupCategory(rawName: string): string | null {
+  const entry = resolveEntry(rawName);
+  return entry ? entry.category : null;
+}
+
+/** Resolve a raw name to its rich entry: direct canonical hit, else alias. */
+function resolveEntry(rawName: string): ShelfLifeEntry | null {
   if (!memo) return null;
   const key = normalise(rawName);
   if (!key) return null;
-  // Direct hit on canonical.
   const direct = memo.items[key];
-  if (typeof direct === 'number') return direct;
-  // Try alias resolution.
+  if (direct) return direct;
   const canonical = memo.aliases[key];
   if (canonical) {
     const aliased = memo.items[canonical];
-    if (typeof aliased === 'number') return aliased;
+    if (aliased) return aliased;
   }
   return null;
 }

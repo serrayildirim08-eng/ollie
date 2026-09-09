@@ -36,7 +36,7 @@
 import type { NotificationSpec } from '@ollie/notifications';
 import { createApnsJwtSigner } from '@ollie/apns-jwt';
 import { Router } from '@ollie/worker-http';
-import { handleAccountDelete } from './account-delete';
+import { handleAccountDelete, verifyIdentity } from './account-delete';
 
 export interface Env {
   APNS_KEY_ID: string;
@@ -48,8 +48,15 @@ export interface Env {
   SUPABASE_SERVICE_ROLE_KEY?: string;
   SCHEDULED_JOBS_ENABLED?: string;
   APNS_USE_SANDBOX: string;
+  /** Server-to-server secret for /send (cron → push dispatch). NEVER shipped in
+   *  the client — /register-token now authenticates with the user's Clerk JWT. */
   REGISTER_SHARED_SECRET: string;
   DEVICE_TOKENS: KVNamespace;
+  /** Clerk JWKS issuer — required to verify the client's JWT on /register-token
+   *  so a client can only register a token for itself (audit H9). */
+  CLERK_ISSUER?: string;
+  /** apikey for the Supabase /auth/v1/user fallback verify path. */
+  SUPABASE_ANON_KEY?: string;
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -243,7 +250,7 @@ async function supabaseSelect<T>(env: Env, table: string, params: Record<string,
 }
 
 async function updateJob(env: Env, id: string, patch: Record<string, unknown>): Promise<void> {
-  const url = `${env.SUPABASE_URL}/rest/v1/scheduled_jobs?id=eq.${id}`;
+  const url = `${env.SUPABASE_URL}/rest/v1/scheduled_jobs?id=eq.${encodeURIComponent(id)}`;
   try {
     await fetch(url, {
       method: 'PATCH',
@@ -304,10 +311,20 @@ interface RegisterBody {
 }
 
 async function handleRegister(req: Request, env: Env): Promise<Response> {
-  const auth = req.headers.get('authorization') ?? '';
-  if (!auth.startsWith('Bearer ') || auth.slice(7) !== env.REGISTER_SHARED_SECRET) {
+  // Auth (audit H9): the client proves identity with its Clerk JWT (x-user-jwt)
+  // and we derive user_id from the VERIFIED sub — a client can only register a
+  // token for itself. The old REGISTER_SHARED_SECRET shipped inside the app, so
+  // anyone could extract it and register (or send) for any user_id; it no longer
+  // gates registration. body.user_id, if present, is ignored.
+  const jwt = req.headers.get('x-user-jwt') ?? '';
+  const identity = jwt
+    ? await verifyIdentity(jwt, env, fetch.bind(globalThis))
+    : null;
+  if (!identity) {
     return new Response('unauthorized', { status: 401 });
   }
+  const userId = identity.userId;
+
   let body: RegisterBody;
   try { body = (await req.json()) as RegisterBody; }
   catch { return new Response('bad json', { status: 400 }); }
@@ -315,14 +332,13 @@ async function handleRegister(req: Request, env: Env): Promise<Response> {
   if (!body.token || !body.platform) {
     return new Response('missing fields', { status: 400 });
   }
-  const key = body.user_id ? `user:${body.user_id}` : `token:${body.token}`;
   await env.DEVICE_TOKENS.put(
-    key,
+    `user:${userId}`,
     JSON.stringify({
       token: body.token,
       platform: body.platform,
       device_id: body.device_id,
-      user_id: body.user_id,
+      user_id: userId,
       registered_at: Date.now(),
     }),
   );
@@ -332,11 +348,9 @@ async function handleRegister(req: Request, env: Env): Promise<Response> {
   // can JOIN it on user_id. KV is not joinable from that worker. Best
   // effort — a Postgres failure must not fail registration (the legacy
   // KV-based apps/api cron path still works off the KV write above).
-  if (body.user_id) {
-    await mirrorTokenToPostgres(env, body).catch((err) => {
-      console.error('[register] push_tokens mirror failed', err);
-    });
-  }
+  await mirrorTokenToPostgres(env, { ...body, user_id: userId }).catch((err) => {
+    console.error('[register] push_tokens mirror failed', err);
+  });
 
   return Response.json({ ok: true });
 }
@@ -386,6 +400,10 @@ interface SendBody {
 }
 
 async function handleSend(req: Request, env: Env): Promise<Response> {
+  // Server-to-server ONLY (cron → dispatch). REGISTER_SHARED_SECRET must never
+  // ship in a client (audit H9) — now that /register-token uses the Clerk JWT,
+  // the client no longer carries this secret, so it stays server-side and the
+  // server legitimately specifies which user_id to notify.
   const auth = req.headers.get('authorization') ?? '';
   if (!auth.startsWith('Bearer ') || auth.slice(7) !== env.REGISTER_SHARED_SECRET) {
     return new Response('unauthorized', { status: 401 });
@@ -458,6 +476,12 @@ async function sendApns(
   deviceToken: string,
   spec: NotificationSpec,
 ): Promise<ApnsResult> {
+  // Validate the device token before interpolating it into the request URL
+  // (audit #2). APNs tokens are hex; reject anything else so a malformed/hostile
+  // token cannot inject path segments or headers into the APNs request.
+  if (!/^[0-9a-fA-F]{32,200}$/.test(deviceToken)) {
+    return { ok: false, status: 400, reason: 'invalid_device_token' };
+  }
   const host = env.APNS_USE_SANDBOX === '1'
     ? 'api.sandbox.push.apple.com'
     : 'api.push.apple.com';

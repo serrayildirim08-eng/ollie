@@ -19,6 +19,23 @@ vi.mock('../src/clerk-verify', () => ({
   verifyClerkJwt: vi.fn(async () => 'user_smoke_test'),
 }));
 
+/** Minimal in-memory KV stub — enough for the idempotency replay path
+ *  (get / put). TTL is ignored; tests don't advance time. */
+function makeKv(): KVNamespace {
+  const store = new Map<string, string>();
+  return {
+    get: vi.fn(async (key: string) => store.get(key) ?? null),
+    put: vi.fn(async (key: string, value: string) => {
+      store.set(key, value);
+    }),
+    delete: vi.fn(async (key: string) => {
+      store.delete(key);
+    }),
+    list: vi.fn(async () => ({ keys: [], list_complete: true, cacheStatus: null })),
+    getWithMetadata: vi.fn(async () => ({ value: null, metadata: null, cacheStatus: null })),
+  } as unknown as KVNamespace;
+}
+
 function makeVectorize(): VectorizeIndex {
   return {
     query: vi.fn(async () => ({ matches: [], count: 0 })),
@@ -133,6 +150,36 @@ describe('/route/dump — smoke', () => {
     expect(body.crisis).toBeUndefined();
   });
 
+  it('crisis short-circuits: returns the signal but stores/processes NOTHING', async () => {
+    const env = makeEnv();
+    // Turkish tier-2 phrase the lexicon catches.
+    const res = await handleDumpRoute(
+      makeReq({ text: 'kendime zarar vermek istiyorum' }),
+      env,
+    );
+    expect(res.status).toBe(200);
+
+    const body = (await res.json()) as {
+      originalDump: string;
+      fragments: unknown[];
+      summary: { aiCalls: number };
+      crisis?: { tier: number };
+    };
+
+    // crisis surfaced for the client's soft banner…
+    expect(body.crisis).toBeDefined();
+    expect(body.crisis?.tier).toBeGreaterThanOrEqual(2);
+    // …but nothing was classified, echoed, or stored.
+    expect(body.fragments).toEqual([]);
+    expect(body.originalDump).toBe('');
+    expect(body.summary.aiCalls).toBe(0);
+    // No embed / classify / cache / inbox round-trips happened at all — the
+    // short-circuit returns before any external call (proves zero persistence).
+    expect(fetchSpy).not.toHaveBeenCalled();
+    // The Vectorize cache was never written either.
+    expect((env.VECTORIZE_INDEX.upsert as ReturnType<typeof vi.fn>)).not.toHaveBeenCalled();
+  });
+
   it('returns 401 when authorization header missing', async () => {
     const env = makeEnv();
     const req = new Request('https://worker.dev/route/dump', {
@@ -154,6 +201,59 @@ describe('/route/dump — smoke', () => {
     const env = makeEnv();
     const res = await handleDumpRoute(makeReq({}), env);
     expect(res.status).toBe(400);
+  });
+
+  it('returns 413 when text exceeds the max length (audit #47)', async () => {
+    const env = makeEnv();
+    const res = await handleDumpRoute(makeReq({ text: 'a'.repeat(10_001) }), env);
+    expect(res.status).toBe(413);
+    expect(fetchSpy).not.toHaveBeenCalled(); // rejected before any AI/embed call
+  });
+
+  it('returns 413 when Content-Length exceeds the body cap before parsing (audit #38)', async () => {
+    const env = makeEnv();
+    const req = new Request('https://worker.dev/route/dump', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: 'Bearer fake-clerk-token',
+        'content-length': String(20 * 1024 * 1024),
+      },
+      body: JSON.stringify({ text: 'süt aldım' }),
+    });
+    const res = await handleDumpRoute(req, env);
+    expect(res.status).toBe(413);
+    expect((await res.json() as { error: string }).error).toBe('body_too_large');
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('STAGING_TEST_BEARER is REFUSED on production — falls through to Clerk (audit #43)', async () => {
+    const { verifyClerkJwt } = await import('../src/clerk-verify');
+    vi.mocked(verifyClerkJwt).mockClear();
+    const env = makeEnv({ ENVIRONMENT: 'production', STAGING_TEST_BEARER: 'door-secret' });
+    const req = new Request('https://worker.dev/route/dump', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer door-secret' },
+      body: JSON.stringify({ text: 'süt aldım' }),
+    });
+    await handleDumpRoute(req, env);
+    // The door was NOT taken: Clerk verification ran on the bearer instead.
+    expect(vi.mocked(verifyClerkJwt)).toHaveBeenCalledWith('door-secret', expect.anything());
+  });
+
+  it('STAGING_TEST_BEARER works on non-production (staging) — skips Clerk (audit #43)', async () => {
+    const { verifyClerkJwt } = await import('../src/clerk-verify');
+    vi.mocked(verifyClerkJwt).mockClear();
+    const env = makeEnv({ ENVIRONMENT: 'staging', STAGING_TEST_BEARER: 'door-secret' });
+    const req = new Request('https://worker.dev/route/dump', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer door-secret' },
+      body: JSON.stringify({ text: 'süt aldım' }),
+    });
+    const res = await handleDumpRoute(req, env);
+    expect(res.status).toBe(200);
+    // Door taken → Clerk verify never called.
+    expect(vi.mocked(verifyClerkJwt)).not.toHaveBeenCalled();
   });
 
   it('injects scheduledAtMs into payload when Layer 1 emits a remindIn hint', async () => {
@@ -213,6 +313,36 @@ describe('/route/dump — smoke', () => {
     expect(remindIn?.scheduledAtMs).toBeLessThanOrEqual(after + 60_000);
   });
 
+  it('NEVER logs the raw user dump text to any console.* sink (audit #44)', async () => {
+    const env = makeEnv();
+    // Reuse the smoke-test's known-200 single-fragment phrase (the default fetch
+    // mock classifies any dump as grocery/pantry_add) but append a distinctive
+    // secret token. The token would be a privacy leak if it ever reached Worker
+    // logs; it must NOT appear in any console.{log,info,warn,error} arg.
+    const SECRET = 'gizli-sir-12345';
+    const RAW = `süt aldım ${SECRET}`;
+
+    const sinks = ['log', 'info', 'warn', 'error'] as const;
+    const spies = sinks.map((m) => vi.spyOn(console, m).mockImplementation(() => {}));
+
+    // The default beforeEach fetch impl classifies any dump as grocery/pantry_add.
+    const res = await handleDumpRoute(makeReq({ text: RAW }), env);
+    expect(res.status).toBe(200);
+
+    const allArgs = spies.flatMap((s) => s.mock.calls.flat());
+    // At least one structural telemetry line was emitted (proves we are actually
+    // exercising the logging path, not vacuously passing).
+    expect(allArgs.some((a) => typeof a === 'string' && a.includes('[route/dump]'))).toBe(true);
+    // …but the raw text — and its distinctive secret fragment — never appear.
+    for (const arg of allArgs) {
+      const s = typeof arg === 'string' ? arg : JSON.stringify(arg);
+      expect(s).not.toContain(RAW);
+      expect(s).not.toContain(SECRET);
+    }
+
+    for (const s of spies) s.mockRestore();
+  });
+
   it('drops a malformed remindIn (no scheduledAtMs surfaced)', async () => {
     const env = makeEnv();
 
@@ -258,5 +388,221 @@ describe('/route/dump — smoke', () => {
     // The primary write payload still goes through; only remindIn is dropped.
     expect(body.fragments[0].payload.text).toBe('do thing');
     expect(body.fragments[0].payload.remindIn).toBeUndefined();
+  });
+
+  it('replays the stored result on a retry with the same dumpId (no second route/write)', async () => {
+    const env = makeEnv({ CACHE_KV: makeKv() });
+
+    // First request: real route. One Voyage embed + one Groq classify.
+    const res1 = await handleDumpRoute(
+      makeReq({ text: 'süt aldım', dumpId: 'dump-retry-1' }),
+      env,
+    );
+    expect(res1.status).toBe(200);
+    expect(res1.headers.get('x-ollie-idempotent-replay')).toBeNull();
+    const body1 = await res1.json();
+    const callsAfterFirst = fetchSpy.mock.calls.length;
+    expect(callsAfterFirst).toBeGreaterThan(0);
+
+    // Retry with the SAME dumpId (client timed out, words still in box).
+    const res2 = await handleDumpRoute(
+      makeReq({ text: 'süt aldım', dumpId: 'dump-retry-1' }),
+      env,
+    );
+    expect(res2.status).toBe(200);
+    // Replay header set, and NO additional upstream calls (no Voyage, no Groq).
+    expect(res2.headers.get('x-ollie-idempotent-replay')).toBe('1');
+    expect(fetchSpy.mock.calls.length).toBe(callsAfterFirst);
+    const body2 = await res2.json();
+    // Identical output — same dumpId, same fragments — so the client dispatch
+    // is byte-for-byte the first result and cannot double-write.
+    expect(body2).toEqual(body1);
+  });
+
+  it('mints distinct ids and routes fresh when dumpId differs', async () => {
+    const env = makeEnv({ CACHE_KV: makeKv() });
+    const res1 = await handleDumpRoute(makeReq({ text: 'süt aldım', dumpId: 'a' }), env);
+    const callsAfterFirst = fetchSpy.mock.calls.length;
+    const res2 = await handleDumpRoute(makeReq({ text: 'süt aldım', dumpId: 'b' }), env);
+    expect(res1.status).toBe(200);
+    expect(res2.status).toBe(200);
+    // Different dumpId → not a replay → second route really runs (more calls).
+    expect(res2.headers.get('x-ollie-idempotent-replay')).toBeNull();
+    expect(fetchSpy.mock.calls.length).toBeGreaterThan(callsAfterFirst);
+  });
+
+  // ── Voyage embed timeout (fix 3) + transient retry (fix 4) ──────────────────
+
+  const groqGroceryResponse = () =>
+    new Response(
+      JSON.stringify({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                results: [
+                  { module: 'grocery', action: 'pantry_add', confidence: 0.93, payload: { item: 'süt' } },
+                ],
+              }),
+            },
+            finish_reason: 'stop',
+          },
+        ],
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+
+  const voyageOkResponse = () =>
+    new Response(JSON.stringify({ data: [{ embedding: Array(1024).fill(0.1) }] }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+
+  it('fix 4: a transient Voyage 429 is retried and the dump still succeeds', async () => {
+    const env = makeEnv();
+    let voyageCalls = 0;
+    fetchSpy.mockReset();
+    fetchSpy.mockImplementation(async (input: Request | string | URL) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : input.toString();
+      if (url.includes('voyageai.com')) {
+        voyageCalls++;
+        // First attempt: transient rate-limit. Second attempt: success.
+        return voyageCalls === 1
+          ? new Response('rate limited', { status: 429 })
+          : voyageOkResponse();
+      }
+      if (url.includes('api.groq.com')) return groqGroceryResponse();
+      return new Response('not found', { status: 404 });
+    });
+
+    const res = await handleDumpRoute(makeReq({ text: 'süt aldım' }), env);
+    expect(res.status).toBe(200);
+    expect(voyageCalls).toBe(2); // retried once, then succeeded
+    const body = (await res.json()) as { fragments: Array<{ module: string }> };
+    expect(body.fragments[0].module).toBe('grocery');
+  });
+
+  it('fix 4: a PERSISTENT Voyage 429 fails cleanly (502) without looping forever', async () => {
+    const env = makeEnv();
+    let voyageCalls = 0;
+    fetchSpy.mockReset();
+    fetchSpy.mockImplementation(async (input: Request | string | URL) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : input.toString();
+      if (url.includes('voyageai.com')) {
+        voyageCalls++;
+        return new Response('rate limited', { status: 429 });
+      }
+      return new Response('not found', { status: 404 });
+    });
+
+    const res = await handleDumpRoute(makeReq({ text: 'süt aldım' }), env);
+    expect(res.status).toBe(502);
+    expect((await res.json()) as { error: string }).toMatchObject({ error: 'voyage_embed_failed' });
+    // Bounded: 1 initial + 2 retries = 3 attempts, then give up (no infinite loop).
+    expect(voyageCalls).toBe(3);
+  });
+
+  it('fix 3: a Voyage timeout is the handled 502 path, not a hang', async () => {
+    const env = makeEnv();
+    let voyageCalls = 0;
+    fetchSpy.mockReset();
+    fetchSpy.mockImplementation(async (input: Request | string | URL) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : input.toString();
+      if (url.includes('voyageai.com')) {
+        voyageCalls++;
+        // Mimic AbortSignal.timeout() firing: fetch rejects with a TimeoutError
+        // DOMException, which fetchWithTimeout normalizes to UpstreamTimeoutError.
+        throw new DOMException('The operation timed out.', 'TimeoutError');
+      }
+      return new Response('not found', { status: 404 });
+    });
+
+    const res = await handleDumpRoute(makeReq({ text: 'süt aldım' }), env);
+    expect(res.status).toBe(502);
+    expect((await res.json()) as { error: string }).toMatchObject({ error: 'voyage_embed_failed' });
+    // A timeout is transient → retried within the bound, then handled cleanly.
+    expect(voyageCalls).toBe(3);
+  });
+
+  // ── S9 PII redaction gap ──────────────────────────────────────────────────
+  // The worker-local scrubber had no MEDICAL/MEDICATION/MENTAL_HEALTH/SEXUAL
+  // category and only matched Western names, so a Turkish dump about a health
+  // condition reached Voyage/Groq (and could be queued into the research
+  // corpus) UNREDACTED. /route/dump now uses @ollie/pii-scrub with FULL
+  // categories + locale-aware names. This proves the leak is closed.
+  it('S9: redacts medical + medication + mental-health + Turkish name before anything leaves to Voyage/Groq', async () => {
+    const env = makeEnv();
+    const upstream: string[] = [];
+    let voyageBody = '';
+    fetchSpy.mockReset();
+    fetchSpy.mockImplementation(async (input: Request | string | URL, init?: RequestInit) => {
+      const url =
+        typeof input === 'string' ? input : input instanceof Request ? input.url : input.toString();
+      const reqBody =
+        input instanceof Request
+          ? await input.clone().text()
+          : init?.body
+            ? String(init.body)
+            : '';
+      upstream.push(reqBody);
+      if (url.includes('voyageai.com')) {
+        voyageBody = reqBody;
+        const parsed = JSON.parse(reqBody) as { input: string[] };
+        return new Response(
+          JSON.stringify({
+            data: parsed.input.map((_, i) => ({ embedding: Array(1024).fill(0.1), index: i })),
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url.includes('api.groq.com')) {
+        return new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    results: [
+                      { module: 'body', action: 'log_symptom', confidence: 0.9, payload: {} },
+                    ],
+                  }),
+                },
+                finish_reason: 'stop',
+              },
+            ],
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      return new Response('not found', { status: 404 });
+    });
+
+    // One Turkish sentence (terminal '.', no conjunction → single fragment):
+    // "Mehmet Öztürk told me I had a panic attack about the diabetes med Lustral."
+    const dumpText =
+      'Mehmet Öztürk bana diyabet ilacı Lustral konusunda panik atak yaşadığımı söyledi.';
+    const res = await handleDumpRoute(makeReq({ text: dumpText, locale: 'tr' }), env);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { crisis?: unknown; originalDump: string };
+    // Not a crisis term → normal route (no short-circuit), so it DID flow to upstream.
+    expect(body.crisis).toBeUndefined();
+
+    // The Voyage input is exactly the scrubbed fragment text (no system prompt
+    // noise), so it is the cleanest proof of what left the worker.
+    expect(voyageBody).not.toBe('');
+    expect(voyageBody).toContain('[NAME]'); // Mehmet + Öztürk
+    expect(voyageBody).toContain('[MEDICAL]'); // diyabet
+    expect(voyageBody).toContain('[MEDICATION]'); // Lustral
+    expect(voyageBody).toContain('[MENTAL_HEALTH]'); // panik atak
+
+    // NOTHING raw may appear in ANY upstream request body.
+    const allSent = upstream.join('\n');
+    for (const leak of ['Mehmet', 'Öztürk', 'diyabet', 'Lustral', 'panik atak']) {
+      expect(allSent).not.toContain(leak);
+    }
+
+    // originalDump is echoed back to the CLIENT (the user's own device), not a
+    // third party, so it intentionally stays raw.
+    expect(body.originalDump).toContain('Mehmet');
   });
 });

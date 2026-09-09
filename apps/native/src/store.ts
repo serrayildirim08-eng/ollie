@@ -26,6 +26,7 @@
 
 import {
   browserAdapter,
+  partitionedAdapter,
   createStore,
   runMigrations,
 } from '@ollie/store';
@@ -38,10 +39,14 @@ import {
   type CadenceSourceFn,
 } from '@ollie/orchestrator';
 import type { NotificationSpec } from '@ollie/notifications';
+import { installBackend, installStore as installNotificationStore } from '@ollie/notifications';
 import { isOverdue } from '@ollie/cadence';
 import { scheduleSystemNotification } from './notify/systemNotify';
+import { tauriBackend } from './notify/tauriBackend';
 import { runAllSyncs } from './bridge';
 import { recomputeBrain } from './modules/brain';
+import { installRenewalEscalation } from './modules/admin/renewalEscalation';
+import { setLadderStore, sweepDatelessLadders } from './notify/datelessLadder';
 import { enumerateCadences as enumerateGrocery } from './modules/grocery';
 import { enumerateCadences as enumerateBody } from './modules/body';
 import { enumerateCadences as enumerateHabits } from './modules/habits';
@@ -53,9 +58,49 @@ import { enumerateCadences as enumerateGoals } from './modules/goals';
 import { enumerateCadences as enumerateAdmin } from './modules/admin';
 import { enumerateCadences as enumerateCycle } from './modules/cycle';
 import { enumerateCadences as enumerateMedication } from './modules/medication';
+import { enumerateCadences as enumerateChores } from './modules/chores';
 
-runMigrations(browserAdapter);
-export const store = createStore(browserAdapter);
+/**
+ * Device-encryption (alpha blocker #3): the four most sensitive module mirrors
+ * (cycle / medication / mood / dump + the derived `journal`) are routed to an
+ * in-memory partition so they never persist as plaintext localStorage. The
+ * durable copy is the SQLCipher-encrypted SQLite DB; these mirrors are rebuilt
+ * from it on every boot by `runAllSyncs` below, so the watchers see live data
+ * with zero behavioural change. The wrapper is fully synchronous + infallible,
+ * so the store's sync read/write contract (and the orchestrator's synchronous
+ * watcher reads) is preserved exactly. See packages/store/src/adapter.ts.
+ *
+ * One adapter instance is shared by runMigrations + createStore so the
+ * one-time plaintext eviction (in the wrapper's constructor) and the
+ * getAllKeys() union are consistent across both.
+ */
+const adapter = partitionedAdapter(browserAdapter);
+runMigrations(adapter);
+export const store = createStore(adapter);
+
+/**
+ * Notification wiring (audit S8 · gap 2). The @ollie/notifications dispatcher
+ * defaults to a NOOP backend with no store, so EVERY notify() call — most
+ * importantly the cadence-scanner's overdue cues — was silently dropped on
+ * device. Two installs fix that, and MUST run before orchestrator.init() arms
+ * the cadence scanner's (debounced) boot scan:
+ *
+ *   1. installBackend(tauriBackend) — routes deliver/schedule onto the real
+ *      Tauri OS notification path (Notification Center / iOS lock screen).
+ *   2. installNotificationStore(store) — activates the dispatcher's
+ *      suppression (quiet hours + focus), daily budget, per-category mute,
+ *      24h dedupe, and delivery log against the same store. WITHOUT this the
+ *      cadence-scanner's documented "notify() handles suppression/budget/
+ *      dedupe" contract was a no-op.
+ *
+ * Both are idempotent (HMR / StrictMode re-eval safe).
+ */
+installBackend(tauriBackend);
+installNotificationStore(store);
+
+// Let the date-less ladder clear persisted state without an explicit store arg
+// (e.g. from the notification-action completion path). See notify/datelessLadder.
+setLadderStore(store);
 
 /**
  * Dev-only wrapper around an enumerateCadences adapter. Passes entries
@@ -96,6 +141,7 @@ const cadenceSources: Record<string, CadenceSourceFn> = {
   admin: withDevLog('admin', enumerateAdmin),
   cycle: withDevLog('cycle', enumerateCycle),
   medication: withDevLog('medication', enumerateMedication),
+  chores: withDevLog('chores', enumerateChores),
 };
 
 /**
@@ -141,6 +187,15 @@ void runAllSyncs(store)
   .catch((err) => {
     // eslint-disable-next-line no-console
     console.error('[brain] boot recompute failed (non-fatal):', err);
+  })
+  // Advance every date-less task's escalating reminder ladder to the present:
+  // schedule any newly-due tier (app-quit-safe) + surface the archive offer once
+  // the full ladder has elapsed. Idempotent; skips while go-dark. Runs on boot
+  // (here) and after each dump (modules/dispatch.ts). Best-effort.
+  .then(() => sweepDatelessLadders(store))
+  .catch((err) => {
+    // eslint-disable-next-line no-console
+    console.error('[ladder] boot sweep failed (non-fatal):', err);
   });
 
 /**
@@ -155,6 +210,16 @@ const patternPushUnsub = initPatternDetectedSubscriber({
   scheduleNotification,
 });
 
+/**
+ * Wave-2 renewal escalation: the admin orchestrator emits
+ * admin:renewal_notify_due (~1 month → app-closed local notification) and
+ * admin:renewal_autotodo_due (~1 week → auto-add to /todo). This native
+ * consumer performs those side effects (the orchestrator can't — no native
+ * dep). Idempotent via persisted markers; torn down on quit. See
+ * modules/admin/renewalEscalation.ts.
+ */
+const renewalEscalationUnsub = installRenewalEscalation(store);
+
 if (typeof window !== 'undefined') {
   // Tauri windows fire `beforeunload` on app quit / dev-server reload —
   // this lets the scanner cancel its boot timer / interval / visibility
@@ -162,6 +227,7 @@ if (typeof window !== 'undefined') {
   window.addEventListener('beforeunload', () => {
     orchestrator.teardown();
     patternPushUnsub();
+    renewalEscalationUnsub();
   });
 }
 

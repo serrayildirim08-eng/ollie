@@ -63,8 +63,13 @@ export async function verifyClerkJwt(
   if (!jwt || typeof jwt !== 'string') return null;
   try {
     const jwks = getJwks(env.CLERK_ISSUER);
+    // Pin the signature algorithm to RS256 (Clerk's) — defence-in-depth against
+    // alg-confusion (audit L1). Audience is intentionally not checked: Clerk
+    // session tokens don't carry a stable `aud`, and the per-app issuer URL is
+    // already the security boundary.
     const { payload }: { payload: JWTPayload } = await jwtVerify(jwt, jwks, {
       issuer: env.CLERK_ISSUER,
+      algorithms: ['RS256'],
     });
     const sub = payload.sub;
     return typeof sub === 'string' && sub ? sub : null;

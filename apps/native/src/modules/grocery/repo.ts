@@ -14,6 +14,7 @@
 
 import { computeCadence, type CadenceEstimate } from '@ollie/cadence';
 import { sql } from '../../storage';
+import { newId } from '../../storage/id';
 import { isCriticalReminderLocal } from './criticalReminder';
 import { predictOutAt } from './predict';
 import { lookupDays } from './shelfLifeCache';
@@ -57,11 +58,6 @@ interface PurchaseLogRow {
   [col: string]: unknown;
 }
 
-function newId(): string {
-  return typeof crypto !== 'undefined' && crypto.randomUUID
-    ? crypto.randomUUID()
-    : `g_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-}
 
 // ─── pantry ───────────────────────────────────────────────────────────────
 
@@ -190,7 +186,7 @@ export const pantry = {
       };
     }
 
-    const id = newId();
+    const id = newId('g_');
     await sql.execute(
       `INSERT INTO grocery_pantry
          (id, name, quantity, unit, added_at, low_flag, archived_at_ms,
@@ -298,7 +294,7 @@ export const pantry = {
       await sql.execute(
         `INSERT INTO grocery_pantry (id, name, quantity, unit, added_at, low_flag, archived_at_ms)
          VALUES (?, ?, NULL, NULL, ?, 1, NULL)`,
-        [newId(), n, Date.now()],
+        [newId('g_'), n, Date.now()],
       );
       return;
     }
@@ -513,7 +509,7 @@ export const shopping = {
       return { id: row.id, name: row.name, quantity, unit, addedAt: now };
     }
 
-    const id = newId();
+    const id = newId('g_');
     await sql.execute(
       `INSERT INTO grocery_shopping (id, name, quantity, unit, added_at)
        VALUES (?, ?, ?, ?, ?)`,
@@ -590,7 +586,7 @@ function rowToShoppingItem(r: ShoppingRow): ShoppingItem {
 async function logPurchase(name: string, ts: number): Promise<void> {
   await sql.execute(
     `INSERT INTO grocery_purchase_log (id, name, logged_at) VALUES (?, ?, ?)`,
-    [newId(), name, ts],
+    [newId('g_'), name, ts],
   );
 }
 
@@ -667,7 +663,7 @@ export const cookHistory = {
     ingredients?: Array<{ name: string; canonical: string | null }>;
     cookedAtMs?: number;
   }): Promise<CookHistoryEntry> {
-    const id = newId();
+    const id = newId('g_');
     const cookedAtMs = input.cookedAtMs ?? Date.now();
     const ingredients = input.ingredients ?? [];
     await sql.execute(

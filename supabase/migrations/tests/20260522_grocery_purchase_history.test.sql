@@ -63,7 +63,7 @@ END $$;
 
 DO $$
 DECLARE
-  v_user uuid := '00000000-0000-0000-0000-000000000001';
+  v_user text := '00000000-0000-0000-0000-000000000001';
   v_count int;
 BEGIN
   SELECT count(*) INTO v_count
@@ -80,7 +80,7 @@ END $$;
 
 DO $$
 DECLARE
-  v_user     uuid        := '00000000-0000-0000-0000-000000000002';
+  v_user     text        := '00000000-0000-0000-0000-000000000002';
   v_ts       timestamptz := '2026-01-01T10:00:00Z';
   v_median   numeric;
   v_samples  int;
@@ -113,7 +113,7 @@ END $$;
 
 DO $$
 DECLARE
-  v_user    uuid    := '00000000-0000-0000-0000-000000000003';
+  v_user    text    := '00000000-0000-0000-0000-000000000003';
   v_base    timestamptz := '2026-01-01T10:00:00Z';
   v_median  numeric;
   v_samples int;
@@ -147,7 +147,7 @@ END $$;
 
 DO $$
 DECLARE
-  v_user    uuid    := '00000000-0000-0000-0000-000000000004';
+  v_user    text    := '00000000-0000-0000-0000-000000000004';
   v_base    timestamptz := '2026-02-01T10:00:00Z';
   v_median  numeric;
   v_samples int;
@@ -180,7 +180,7 @@ END $$;
 
 DO $$
 DECLARE
-  v_user   uuid        := '00000000-0000-0000-0000-000000000005';
+  v_user   text        := '00000000-0000-0000-0000-000000000005';
   v_base   timestamptz := '2026-03-01T10:00:00Z';
   v_count  int;
 BEGIN
@@ -205,7 +205,7 @@ END $$;
 
 DO $$
 DECLARE
-  v_user uuid := '00000000-0000-0000-0000-000000000006';
+  v_user text := '00000000-0000-0000-0000-000000000006';
 BEGIN
   BEGIN
     INSERT INTO grocery_purchase_history (user_id, canonical, source, ts)
@@ -221,7 +221,7 @@ END $$;
 
 DO $$
 DECLARE
-  v_user uuid := '00000000-0000-0000-0000-000000000007';
+  v_user text := '00000000-0000-0000-0000-000000000007';
   v_id   uuid;
 BEGIN
   INSERT INTO grocery_purchase_history (user_id, canonical, source, ts)

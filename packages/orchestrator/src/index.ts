@@ -26,6 +26,7 @@ import { createWorkOrchestrator } from './work';
 import { createGoalsOrchestrator } from './goals';
 import { createBurhanOrchestrator } from './burhan';
 import { createMedicationOrchestrator } from './medication';
+import { createChoresOrchestrator } from './chores';
 import { scheduleWeeklyReview } from './body-weekly';
 import { scheduleBodyCorrelationPass, runBodyCorrelationPass } from './body-correlations';
 import { createOrphanCueBridge } from './orphan-cue-bridge';
@@ -38,6 +39,12 @@ import {
 
 export type { Orchestrator } from './types';
 export { appendCapped, DEFAULT_DEDUP_CAP } from './dedup-store';
+// Re-export the in-process event bus so native consumers (which depend on
+// @ollie/orchestrator, not @ollie/events directly) can subscribe to the SAME
+// singleton the orchestrators emit on — e.g. the wave-2 renewal-escalation
+// consumer listening for admin:renewal_notify_due / admin:renewal_autotodo_due.
+export { on as onEvent, emit as emitEvent } from '@ollie/events';
+export type { Unsubscribe } from '@ollie/events';
 export { createCycleOrchestrator } from './cycle';
 export { createPetsOrchestrator } from './pets';
 export { createBodyOrchestrator } from './body';
@@ -53,6 +60,12 @@ export { createWorkOrchestrator } from './work';
 export { createGoalsOrchestrator } from './goals';
 export { createBurhanOrchestrator } from './burhan';
 export { createMedicationOrchestrator } from './medication';
+export {
+  createChoresOrchestrator,
+  isRecordDue,
+  buildChoreDueCopy,
+} from './chores';
+export type { ChoreRecord, ChorePattern, ChoresOrchestratorOptions } from './chores';
 export {
   createOrphanCueBridge,
   appendCueTelemetry,
@@ -98,26 +111,6 @@ export type {
 export { runBodySignalsPass } from './body-signals';
 export type { RunBodySignalsOpts } from './body-signals';
 export {
-  routeBrainDump,
-  dispatchAction,
-  applyGroceryMutations,
-  matchItem,
-} from './braindump-dispatch';
-export type {
-  RouteBrainDumpResult,
-  DispatchLocale,
-  DispatchOptions,
-  FinanceSlice,
-  GroceryPurchaseEvent,
-  GroceryRoutedItem,
-  GroceryRoutedAction,
-  GroceryRoutingResult,
-  GroceryRoutingSource,
-  GroceryListContext,
-  GroceryMutationEntry,
-  GroceryMutationReverse,
-} from './braindump-dispatch';
-export {
   createMatterRoutingOrchestrator,
   runMatterRoutingPass,
   collectRoutableDumps,
@@ -158,6 +151,7 @@ export interface RootOrchestrator extends Orchestrator {
   goals: ReturnType<typeof createGoalsOrchestrator>;
   burhan: ReturnType<typeof createBurhanOrchestrator>;
   medication: ReturnType<typeof createMedicationOrchestrator>;
+  chores: ReturnType<typeof createChoresOrchestrator>;
   orphanCueBridge: ReturnType<typeof createOrphanCueBridge>;
   matterRouting: ReturnType<typeof createMatterRoutingOrchestrator>;
   cadenceScanner: CadenceScanner;
@@ -223,6 +217,7 @@ export function createOrchestrator(
   const medicationOrch = createMedicationOrchestrator(store, {
     scheduleNotification: opts.scheduleNotification,
   });
+  const choresOrch = createChoresOrchestrator(store);
   // Audit #3: gives every orphan cross-module cue a real consumer.
   const orphanCueBridge = createOrphanCueBridge(store);
   // WORK-VISION Phase 2: batches dumps → matters (deterministic, no AI).
@@ -266,6 +261,7 @@ export function createOrchestrator(
     goals: goalsOrch,
     burhan: burhanOrch,
     medication: medicationOrch,
+    chores: choresOrch,
     orphanCueBridge,
     matterRouting: matterRoutingOrch,
     cadenceScanner,
@@ -285,6 +281,7 @@ export function createOrchestrator(
       goalsOrch.init();
       burhanOrch.init();
       medicationOrch.init();
+      choresOrch.init();
       orphanCueBridge.init();
       matterRoutingOrch.init();
       cadenceScanner.init();
@@ -327,6 +324,7 @@ export function createOrchestrator(
       goalsOrch.teardown();
       burhanOrch.teardown();
       medicationOrch.teardown();
+      choresOrch.teardown();
       orphanCueBridge.teardown();
       matterRoutingOrch.teardown();
       cadenceScanner.teardown();

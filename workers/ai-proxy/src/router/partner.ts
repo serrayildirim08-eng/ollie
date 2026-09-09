@@ -12,17 +12,25 @@
  * `sub` is the user id); fail CLOSED unless T0_JWT_ENFORCED === '0' (dev).
  */
 
-import { json } from '@ollie/worker-http';
+import { json, upstreamError, exceedsContentLength, payloadTooLarge } from '@ollie/worker-http';
 import { verifyClerkJwt } from '../clerk-verify';
 
 export interface PartnerEnv {
   SUPABASE_URL: string;
   SUPABASE_SERVICE_ROLE: string;
   T0_JWT_ENFORCED?: string;
+  /** 'production' on prod — refuses the x-user-id dev bypass there (audit #30). */
+  ENVIRONMENT?: string;
   CLERK_ISSUER?: string;
 }
 
 const CODE_TTL_SEC = 30 * 60;
+/** Snapshot bounds (audit #38, #154). A snapshot is ≤5 short phrases + a word;
+ *  cap the whole body and each phrase so an oversized payload neither reaches
+ *  worker memory nor lands ≤5 arbitrarily large strings on the partner. */
+const MAX_SNAPSHOT_BODY_BYTES = 16 * 1024;
+const MAX_PHRASE_LEN = 200;
+const MAX_PHRASES = 5;
 
 interface Snapshot {
   phrases: string[];
@@ -33,7 +41,8 @@ interface Snapshot {
 }
 
 async function resolveUser(req: Request, env: PartnerEnv): Promise<string | null> {
-  if (env.T0_JWT_ENFORCED !== '0') {
+  // x-user-id dev bypass is refused on production even if T0_JWT_ENFORCED='0' (audit #30).
+  if (env.T0_JWT_ENFORCED !== '0' || env.ENVIRONMENT === 'production') {
     const auth = req.headers.get('authorization');
     if (!auth || !auth.startsWith('Bearer ')) return null;
     return await verifyClerkJwt(auth.slice('Bearer '.length), env);
@@ -86,7 +95,7 @@ async function mintCode(env: PartnerEnv, me: string): Promise<Response> {
     body: JSON.stringify({ code, user_id: me, expires_at: expires }),
     prefer: 'return=minimal',
   });
-  if (!res.ok) return json({ error: 'mint_failed', detail: (await res.text()).slice(0, 200) }, 502);
+  if (!res.ok) return upstreamError('mint_failed', 502, await res.text(), { endpoint: 'partner' });
   return json({ code, expiresInSec: CODE_TTL_SEC });
 }
 
@@ -119,7 +128,7 @@ async function pair(req: Request, env: PartnerEnv, me: string): Promise<Response
     body: JSON.stringify({ user_lo: lo, user_hi: hi }),
     prefer: 'return=minimal,resolution=merge-duplicates',
   });
-  if (!create.ok) return json({ error: 'pair_failed', detail: (await create.text()).slice(0, 200) }, 502);
+  if (!create.ok) return upstreamError('pair_failed', 502, await create.text(), { endpoint: 'partner' });
   // Burn the used code.
   await sb(env, `partner_codes?code=eq.${encodeURIComponent(code)}`, { method: 'DELETE' });
   return json({ partnerId });
@@ -154,6 +163,10 @@ async function getSnapshot(env: PartnerEnv, me: string): Promise<Response> {
 }
 
 async function putSnapshot(req: Request, env: PartnerEnv, me: string): Promise<Response> {
+  // Memory-DoS guard (audit #38).
+  if (exceedsContentLength(req, MAX_SNAPSHOT_BODY_BYTES)) {
+    return payloadTooLarge('body_too_large');
+  }
   let body: Partial<Snapshot>;
   try {
     body = (await req.json()) as Partial<Snapshot>;
@@ -162,8 +175,13 @@ async function putSnapshot(req: Request, env: PartnerEnv, me: string): Promise<R
   }
   const row = {
     user_id: me,
+    // audit #154: cap EACH phrase to MAX_PHRASE_LEN (not just the count) so the
+    // partner never receives ≤5 arbitrarily large strings.
     phrases: Array.isArray(body.phrases)
-      ? body.phrases.filter((p): p is string => typeof p === 'string').slice(0, 5)
+      ? body.phrases
+          .filter((p): p is string => typeof p === 'string')
+          .slice(0, MAX_PHRASES)
+          .map((p) => p.slice(0, MAX_PHRASE_LEN))
       : [],
     self_word: typeof body.self_word === 'string' ? body.self_word.slice(0, 40) : null,
     crisis: body.crisis === true,
@@ -175,7 +193,7 @@ async function putSnapshot(req: Request, env: PartnerEnv, me: string): Promise<R
     body: JSON.stringify(row),
     prefer: 'return=minimal,resolution=merge-duplicates',
   });
-  if (!res.ok) return json({ error: 'snapshot_failed', detail: (await res.text()).slice(0, 200) }, 502);
+  if (!res.ok) return upstreamError('snapshot_failed', 502, await res.text(), { endpoint: 'partner' });
   return json({ ok: true });
 }
 

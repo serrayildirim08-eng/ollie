@@ -11,7 +11,19 @@ settingGroups:
   app:
     base:
       PRODUCT_NAME: Ollie
-      PRODUCT_BUNDLE_IDENTIFIER: com.ollie.app
+      PRODUCT_BUNDLE_IDENTIFIER: app.ollie.ollie
+      DEVELOPMENT_TEAM: LA5J9BSPKL
+    configs:
+      # debug = automatic development signing so `tauri ios dev` can sideload
+      # directly onto a registered device (dev profile has get-task-allow=true).
+      debug:
+        CODE_SIGN_STYLE: Automatic
+      # release = manual App Store distribution signing for the TestFlight build
+      # (unchanged — keeps docs/RELEASE.md recipe intact).
+      release:
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: Apple Distribution
+        PROVISIONING_PROFILE_SPECIFIER: Ollie iOS App Store
 targetTemplates:
   app:
     type: application
@@ -31,6 +43,7 @@ targets:
       - path: Sources
       - path: Assets.xcassets
       - path: Externals
+        buildPhase: none
       - path: native_iOS
       - path: assets
         buildPhase: resources
@@ -41,6 +54,27 @@ targets:
       properties:
         LSRequiresIPhoneOS: true
         UILaunchStoryboardName: LaunchScreen
+        # Allow the WKWebView to load the cleartext-HTTP dev server over the LAN
+        # during `tauri ios dev` (e.g. http://192.168.1.x:1420). Without this,
+        # iOS App Transport Security blocks the load → blank white screen.
+        # NSAllowsLocalNetworking covers private ranges (10/8, 172.16/12,
+        # 192.168/16) only — release builds load bundled assets, not HTTP, so
+        # this is App-Store-friendly (NOT NSAllowsArbitraryLoads).
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+          # WKWebView (the app's embedded browser) needs its OWN exception to
+          # load the cleartext-HTTP dev server — NSAllowsLocalNetworking alone
+          # is not honored for web-view content loads. This key permits insecure
+          # loads ONLY inside web views, not the rest of the app. Dev-only effect
+          # (release loads bundled assets, never HTTP).
+          NSAllowsArbitraryLoadsInWebContent: true
+        # ollie:// custom URL scheme (A2 deep links). iOS registers schemes via
+        # Info.plist (the deep-link plugin's mobile config is for universal
+        # links only); xcodegen keeps this across regenerations.
+        CFBundleURLTypes:
+          - CFBundleURLName: app.ollie.ollie
+            CFBundleURLSchemes:
+              - ollie
         UIRequiredDeviceCapabilities: [arm64, metal]
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
@@ -51,8 +85,8 @@ targets:
           - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
-        CFBundleShortVersionString: 0.1.0
-        CFBundleVersion: "0.1.0"
+        CFBundleShortVersionString: 1.1.0
+        CFBundleVersion: "1.1.0"
     entitlements:
       path: native_iOS/native_iOS.entitlements
     scheme:

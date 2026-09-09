@@ -7,6 +7,7 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
+    "./util": "./src/util/index.ts",
     "./cycle": "./src/cycle/index.ts",
     "./pets": "./src/pets/index.ts",
     "./grocery": "./src/grocery/index.ts",
@@ -18,7 +19,6 @@
     "./goals": "./src/goals/index.ts",
     "./admin": "./src/admin/index.ts",
     "./journal": "./src/journal/index.ts",
-    "./astrology": "./src/astrology/index.ts",
     "./patterns": "./src/patterns/index.ts",
     "./crisis": "./src/crisis/index.ts",
     "./dissection": "./src/dissection/index.ts",

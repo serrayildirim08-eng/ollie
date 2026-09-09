@@ -29,6 +29,12 @@ import "./store";
 import { installNotifyListener } from "./notify/systemNotify";
 installNotifyListener();
 
+// Retention telemetry (installed / session_started / dN_returned). Fire-and-
+// forget: consent-gated, queues until Clerk sign-in wires the bearer (see
+// AnalyticsBridge in navigation/Router), and never blocks boot.
+import { initAnalytics } from "./api/analytics";
+initAnalytics();
+
 // Replenishment push scanner — wakes every 30 minutes while the app is open
 // and fires `ollie:notify` for any pantry item that's predicted-out within
 // the next 24h, gated on the per-item `remind_me` flag. The scanner is a
@@ -91,7 +97,7 @@ function SignInGate() {
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
     <ClerkProvider publishableKey={PUBLISHABLE_KEY}>
-      <ThemeProvider>
+      <ThemeProvider forceMode="light">
         <Gate />
       </ThemeProvider>
     </ClerkProvider>

@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>ollie — ≡ life list</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,ital,wght@9..144,0,340;9..144,0,420;9..144,0,500;9..144,1,420&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#F4F0E9; --paper-raised:#FBF8F2; --paper-sunk:#EDE7DC;
+    --ink:#2B2723; --ink-soft:#6E665C; --ink-faint:#A49B8D;
+    --rule:rgba(43,39,35,0.08);
+    --accent:#B5613B; --accent-soft:rgba(181,97,59,0.10);
+    --shadow:0 1px 2px rgba(43,39,35,0.04), 0 8px 24px rgba(43,39,35,0.05);
+    --sans:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",system-ui,sans-serif;
+    --serif:"Fraunces",Georgia,serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;}
+  body{ background:#D9D1C4; font-family:var(--sans); color:var(--ink);
+    display:flex; align-items:center; justify-content:center; min-height:100vh; padding:32px 0;
+    -webkit-font-smoothing:antialiased; }
+
+  .phone{ width:430px; height:932px; background:var(--paper); border-radius:54px;
+    box-shadow:0 40px 80px rgba(0,0,0,0.22), 0 0 0 11px #1a1714, 0 0 0 12px #2c2824;
+    overflow:hidden; position:relative; display:flex; flex-direction:column; }
+  @media (max-width:480px){ body{background:var(--paper);padding:0;} .phone{width:100vw;height:100vh;border-radius:0;box-shadow:none;} }
+
+  /* dimmed home behind the overlay */
+  .scrim{ position:absolute; inset:0; background:rgba(43,39,35,0.28); backdrop-filter:blur(2px); }
+
+  .safe-top{ height:54px; flex:none; }
+  .safe-bottom{ height:34px; flex:none; }
+
+  .overlay{
+    position:absolute; left:0; right:0; bottom:0; top:0;
+    background:var(--paper);
+    display:flex; flex-direction:column;
+    animation:slidein .42s cubic-bezier(.2,.8,.2,1);
+  }
+  @keyframes slidein{ from{transform:translateY(24px);opacity:0;} to{transform:none;opacity:1;} }
+
+  .ohead{ padding:0 30px; display:flex; align-items:center; justify-content:space-between; margin-bottom:30px; }
+  .ohead .t{ font-family:var(--serif); font-weight:340; font-size:26px; letter-spacing:-0.015em; }
+  .close{ width:40px; height:40px; border:none; background:var(--paper-sunk); border-radius:13px;
+    display:flex; align-items:center; justify-content:center; color:var(--ink-soft); }
+  .close svg{ width:19px; height:19px; }
+
+  .list{ flex:1; overflow-y:auto; padding:0 22px 20px; }
+
+  /* bugün — the absorbed to-do, set apart */
+  .today{
+    background:var(--paper-raised); border-radius:20px; padding:20px 22px;
+    box-shadow:var(--shadow); margin:0 8px 26px; display:flex; align-items:center; gap:16px;
+  }
+  .today .ring{ width:42px; height:42px; flex:none; border-radius:13px; background:var(--accent-soft);
+    color:var(--accent); display:flex; align-items:center; justify-content:center; }
+  .today .ring svg{ width:23px; height:23px; }
+  .today .b{ flex:1; }
+  .today .ttl{ font-family:var(--serif); font-weight:420; font-size:19px; letter-spacing:-0.01em; }
+  .today .sub{ font-size:13px; color:var(--ink-faint); margin-top:2px; }
+  .today .chev{ color:var(--ink-faint); }
+  .today .chev svg{ width:18px; height:18px; }
+
+  .seclabel{ font-size:12.5px; color:var(--ink-faint); padding:0 18px; margin-bottom:6px; letter-spacing:0.02em; }
+
+  .mod{ display:flex; align-items:center; gap:16px; padding:15px 18px; border-radius:14px; }
+  .mod:active{ background:var(--paper-sunk); }
+  .mod .g{ width:28px; height:28px; flex:none; color:var(--ink-soft); display:flex; align-items:center; justify-content:center; }
+  .mod .g svg{ width:21px; height:21px; }
+  .mod .n{ flex:1; font-size:16px; font-weight:450; color:var(--ink); letter-spacing:-0.003em; }
+  .mod .w{ font-size:13px; color:var(--ink-faint); }     /* quiet whisper, optional */
+  .mod .dot{ width:6px; height:6px; border-radius:50%; background:var(--accent); flex:none; }  /* needs-attention, no number */
+  .sep{ height:1px; background:var(--rule); margin:10px 26px; }
+</style>
+</head>
+<body>
+  <div class="phone">
+    <!-- faint home underneath -->
+    <div class="scrim"></div>
+
+    <div class="overlay">
+      <div class="safe-top"></div>
+
+      <div class="ohead">
+        <div class="t">hayatın</div>
+        <button class="close" aria-label="kapat">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+        </button>
+      </div>
+
+      <div class="list">
+
+        <!-- bugün — absorbed to-do at top -->
+        <div class="today">
+          <div class="ring">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8 12 2.5 2.5L16 9"/></svg>
+          </div>
+          <div class="b">
+            <div class="ttl">bugün</div>
+            <div class="sub">3 şey gözüne çarptı</div>
+          </div>
+          <div class="chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></div>
+        </div>
+
+        <div class="seclabel">alanlar</div>
+
+        <!-- 13 modules -->
+        <div class="mod"><div class="g"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8h12l-1 11H7L6 8Z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg></div><span class="n">market</span><span class="dot"></span></div>
+        <div class="mod"><div class="g"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V9l8-5 8 5v10"/><path d="M9 19v-6h6v6"/></svg></div><span class="n">ev</span></div>
+        <div class="mod"><div class="g"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M7 6V4.5A1.5 1.5 0 0 1 8.5 3h7A1.5 1.5 0 0 1 17 4.5V6"/></svg></div><span class="n">iş · dosyalar</span><span class="dot"></span></div>
+        <div class="mod"><div class="g"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div><span class="n">hedefler</span></div>
+        <div class="mod"><div class="g"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h4l2-7 4 14 2-7h4"/></svg></div><span class="n">alışkanlıklar</span></div>
+        <div class="mod"><div class="g"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-4.5-9.5-9A5.2 5.2 0 0 1 12 6a5.2 5.2 0 0 1 9.5 6c-2.5 4.5-9.5 9-9.5 9Z"/></svg></div><span class="n">sağlık</span></div>
+        <div class="mod"><div class="g"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-4 10.5c.6.6 1 1.4 1 2.3V17h6v-1.2c0-.9.4-1.7 1-2.3A6 6 0 0 0 12 3Z"/><path d="M9 21h6"/></svg></div><span class="n">ruh hâli</span><span class="w">sakin</span></div>
+        <div class="mod"><div class="g"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7Z"/><circle cx="12" cy="9" r="2.5"/></svg></div><span class="n">döngü</span></div>
+        <div class="mod"><div class="g"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17a8 8 0 0 1 4-7M21 17a8 8 0 0 0-4-7M7 10a5 5 0 0 1 10 0"/><path d="M9 21h6"/></svg></div><span class="n">uyku</span></div>
+        <div class="mod"><div class="g"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M3 12h18M3 18h12"/><circle cx="19" cy="18" r="2"/></svg></div><span class="n">para</span></div>
+        <div class="mod"><div class="g"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M16 5.5a3 3 0 0 1 0 5M18 20c0-2.2-.9-4.2-2.3-5.6"/></svg></div><span class="n">insanlar</span></div>
+        <div class="mod"><div class="g"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 9.5a3.5 3.5 0 0 1 5-3 3.5 3.5 0 0 1 5 0 3.5 3.5 0 0 1 3 5.5c-1 2-5.5 6-7.5 7.5-2-1.5-6.5-5.5-7.5-7.5a3.5 3.5 0 0 1-.5-2.5Z"/><path d="M14 9.5l2 2"/></svg></div><span class="n">evcil</span></div>
+        <div class="mod"><div class="g"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h11l3 3v13H5z"/><path d="M9 9h6M9 13h6M9 17h3"/></svg></div><span class="n">notlar</span></div>
+
+      </div>
+      <div class="safe-bottom"></div>
+    </div>
+  </div>
+</body>
+</html>

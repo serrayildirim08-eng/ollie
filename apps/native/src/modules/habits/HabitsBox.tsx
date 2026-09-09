@@ -19,9 +19,11 @@
  * streak count + streak-break event log.
  */
 
-import { useCallback, useEffect, useState, type CSSProperties } from 'react';
-import { Stack, Row } from '../../layout';
+import { useCallback, useState, type CSSProperties } from 'react';
+import { Stack, Row, Box } from '../../layout';
 import { Text } from '../../ui';
+import { colors } from '../../theme/tokens';
+import { useModuleData } from '../../lib/useModuleData';
 import { PatternCards } from '../../patterns/PatternCards';
 import { migrateHabits } from './migrate';
 import { registry, completions, events } from './repo';
@@ -40,8 +42,6 @@ const SMCP_STYLE: CSSProperties = {
   letterSpacing: '0.08em',
 };
 
-const POLL_MS = 6000;
-
 interface HabitRowVM {
   habit: Habit;
   doneToday: boolean;
@@ -51,7 +51,6 @@ export function HabitsBox(): JSX.Element {
   const [rows, setRows] = useState<HabitRowVM[]>([]);
   const [todayCompletions, setTodayCompletions] = useState<Habit[]>([]);
   const [identityEvents, setIdentityEvents] = useState<HabitEvent[]>([]);
-  const [ready, setReady] = useState(false);
   const [newName, setNewName] = useState('');
   const [newCue, setNewCue] = useState<HabitCue>('anytime');
 
@@ -67,29 +66,11 @@ export function HabitsBox(): JSX.Element {
     setIdentityEvents(identity);
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      await migrateHabits();
-      if (cancelled) return;
-      await refresh();
-      if (cancelled) return;
-      setReady(true);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [refresh]);
-
-  useEffect(() => {
-    const t = setInterval(() => void refresh(), POLL_MS);
-    const onFocus = () => void refresh();
-    window.addEventListener('focus', onFocus);
-    return () => {
-      clearInterval(t);
-      window.removeEventListener('focus', onFocus);
-    };
-  }, [refresh]);
+  const { ready } = useModuleData({
+    migrationKey: 'habits',
+    migrate: migrateHabits,
+    refresh,
+  });
 
   const handleCheck = useCallback(
     async (habitId: string) => {
@@ -135,32 +116,65 @@ export function HabitsBox(): JSX.Element {
   return (
     <Stack gap={56}>
       <Stack gap={12}>
-        <Text scale="caption" color="var(--ollie-color-ink-faint)" style={SMCP_STYLE}>
+        <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
           box · habits
         </Text>
-        <Text scale="display">Habits</Text>
-        <Text scale="body" color="var(--ollie-color-ink-soft)" style={{ maxWidth: 460 }}>
+        <Text
+          scale="title"
+          color={colors.ink}
+          style={{
+            fontFamily: 'var(--ollie-font-sans)',
+            fontSize: '26px',
+            fontWeight: 700,
+            lineHeight: 1.15,
+            letterSpacing: '-0.01em',
+          }}
+        >
+          habits
+        </Text>
+        <Text scale="body" color={colors.inkSoft} style={{ maxWidth: 460 }}>
           a quiet list of what you do. no streaks, no scoring.
         </Text>
       </Stack>
 
       {!ready ? (
-        <Text scale="caption" color="var(--ollie-color-ink-faint)">
+        <Text scale="caption" color={colors.inkFaint}>
           loading…
         </Text>
       ) : (
         <Stack gap={48}>
           <Section label="today">
             {todayCompletions.length === 0 ? (
-              <Text scale="body" color="var(--ollie-color-ink-faint)">
+              <Text scale="body" color={colors.inkFaint}>
                 nothing yet today.
               </Text>
             ) : (
-              <Stack gap={4}>
+              <Stack gap={12}>
                 {todayCompletions.map((h) => (
-                  <Row key={h.id} gap={12} align="baseline" style={{ padding: '8px 0' }}>
-                    <Text scale="body">{h.name}</Text>
-                  </Row>
+                  <Box
+                    key={h.id}
+                    bg="cream"
+                    radius="card"
+                    shadow="raised"
+                    style={{ padding: '16px 18px' }}
+                  >
+                    <Row gap={12} align="center">
+                      <span
+                        aria-hidden="true"
+                        style={{
+                          width: 24,
+                          height: 24,
+                          borderRadius: '50%',
+                          background: colors.sageDeep,
+                          boxShadow:
+                            'inset 3px 3px 6px rgba(120,140,122,0.55), inset -3px -3px 6px rgba(255,255,255,0.85)',
+                          display: 'inline-block',
+                          flexShrink: 0,
+                        }}
+                      />
+                      <Text scale="body">{h.name}</Text>
+                    </Row>
+                  </Box>
                 ))}
               </Stack>
             )}
@@ -192,7 +206,7 @@ export function HabitsBox(): JSX.Element {
                   disabled={newName.trim().length === 0}
                   style={{
                     ...buttonStyle,
-                    color: newName.trim() ? 'var(--ollie-color-ink)' : 'var(--ollie-color-ink-faint)',
+                    color: newName.trim() ? colors.ink : colors.inkFaint,
                   }}
                   aria-label="add habit"
                 >
@@ -202,42 +216,50 @@ export function HabitsBox(): JSX.Element {
             </Stack>
 
             {rows.length === 0 ? (
-              <Text scale="body" color="var(--ollie-color-ink-faint)">
+              <Text scale="body" color={colors.inkFaint}>
                 no habits yet — add one above, or dump &lsquo;did yoga&rsquo;.
               </Text>
             ) : (
-              <Stack gap={4}>
+              <Stack gap={12}>
                 {rows.map((r) => (
-                  <Stack key={r.habit.id} gap={6} style={{ padding: '10px 0' }}>
-                    <Row gap={12} align="baseline" justify="space-between">
-                      <Text scale="body">{r.habit.name}</Text>
-                      <Row gap={12} align="baseline">
-                        {!r.doneToday && (
+                  <Box
+                    key={r.habit.id}
+                    bg="cream"
+                    radius="card"
+                    shadow="raised"
+                    style={{ padding: '16px 18px' }}
+                  >
+                    <Stack gap={10}>
+                      <Row gap={12} align="baseline" justify="space-between">
+                        <Text scale="body">{r.habit.name}</Text>
+                        <Row gap={12} align="baseline">
+                          {!r.doneToday && (
+                            <button
+                              type="button"
+                              onClick={() => void handleCheck(r.habit.id)}
+                              style={buttonStyle}
+                              aria-label={`mark ${r.habit.name} done`}
+                            >
+                              mark done
+                            </button>
+                          )}
                           <button
                             type="button"
-                            onClick={() => void handleCheck(r.habit.id)}
+                            onClick={() => void handleRemoveHabit(r.habit.id)}
                             style={buttonStyle}
-                            aria-label={`mark ${r.habit.name} done`}
+                            aria-label={`remove ${r.habit.name}`}
                           >
-                            mark done
+                            remove
                           </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => void handleRemoveHabit(r.habit.id)}
-                          style={buttonStyle}
-                          aria-label={`remove ${r.habit.name}`}
-                        >
-                          remove
-                        </button>
+                        </Row>
                       </Row>
-                    </Row>
-                    <CueChooser
-                      value={r.habit.cue}
-                      onChange={(c) => void handleSetCue(r.habit.id, c)}
-                      ariaPrefix={`${r.habit.name} cue`}
-                    />
-                  </Stack>
+                      <CueChooser
+                        value={r.habit.cue}
+                        onChange={(c) => void handleSetCue(r.habit.id, c)}
+                        ariaPrefix={`${r.habit.name} cue`}
+                      />
+                    </Stack>
+                  </Box>
                 ))}
               </Stack>
             )}
@@ -245,30 +267,32 @@ export function HabitsBox(): JSX.Element {
 
           <Section label="identity notes">
             {identityEvents.length === 0 ? (
-              <Text scale="body" color="var(--ollie-color-ink-faint)">
+              <Text scale="body" color={colors.inkFaint}>
                 nothing yet — try dumping &lsquo;i am someone who walks every
                 morning&rsquo;.
               </Text>
             ) : (
-              <Stack gap={4}>
+              <Stack gap={12}>
                 {identityEvents.map((ev) => (
-                  <Row
+                  <Box
                     key={ev.id}
-                    gap={12}
-                    align="baseline"
-                    justify="space-between"
-                    style={{ padding: '10px 0' }}
+                    bg="cream"
+                    radius="card"
+                    shadow="raised"
+                    style={{ padding: '16px 18px' }}
                   >
-                    <Text scale="body">{parseIdentity(ev.data)}</Text>
-                    <button
-                      type="button"
-                      onClick={() => void handleRemoveIdentity(ev.id)}
-                      style={buttonStyle}
-                      aria-label="remove identity note"
-                    >
-                      remove
-                    </button>
-                  </Row>
+                    <Row gap={12} align="baseline" justify="space-between">
+                      <Text scale="body">{parseIdentity(ev.data)}</Text>
+                      <button
+                        type="button"
+                        onClick={() => void handleRemoveIdentity(ev.id)}
+                        style={buttonStyle}
+                        aria-label="remove identity note"
+                      >
+                        remove
+                      </button>
+                    </Row>
+                  </Box>
                 ))}
               </Stack>
             )}
@@ -308,7 +332,7 @@ function CueChooser({
         return (
           <Row key={cue} gap={10} align="baseline">
             {i > 0 && (
-              <Text scale="caption" color="var(--ollie-color-ink-faint)" aria-hidden>
+              <Text scale="caption" color={colors.inkFaint} aria-hidden>
                 ·
               </Text>
             )}
@@ -320,7 +344,7 @@ function CueChooser({
               onClick={() => onChange(cue)}
               style={{
                 ...segmentStyle,
-                color: active ? 'var(--ollie-color-sage-deep)' : 'var(--ollie-color-ink-faint)',
+                color: active ? colors.sageDeep : colors.inkFaint,
               }}
             >
               {cue}
@@ -335,7 +359,7 @@ function CueChooser({
 function Section({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <Stack gap={16}>
-      <Text scale="lede" color="var(--ollie-color-ink)">
+      <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
         {label}
       </Text>
       {children}
@@ -347,7 +371,7 @@ const buttonStyle: CSSProperties = {
   background: 'none',
   border: 'none',
   padding: '4px 8px',
-  color: 'var(--ollie-color-ink-faint)',
+  color: colors.inkFaint,
   cursor: 'pointer',
   fontVariantCaps: 'all-small-caps',
   letterSpacing: '0.08em',
@@ -365,11 +389,13 @@ const segmentStyle: CSSProperties = {
 };
 
 const inputStyle: CSSProperties = {
-  background: 'none',
+  background: colors.cream,
   border: 'none',
-  borderBottom: `1px solid var(--ollie-color-hairline)`,
-  padding: '6px 0',
-  color: 'var(--ollie-color-ink)',
+  borderRadius: 10,
+  boxShadow:
+    'inset 5px 5px 12px rgba(120,140,122,0.40), inset -5px -5px 12px rgba(255,255,255,0.78)',
+  padding: '12px 16px',
+  color: colors.ink,
   fontSize: 16,
   outline: 'none',
   width: '100%',

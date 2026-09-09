@@ -24,8 +24,8 @@
  * Dependency: T1 migration that creates `routing_cache` (pgvector) table.
  */
 
-import { json, upstreamError } from '@ollie/worker-http';
-import { scrubPII } from '../pii';
+import { json, upstreamError, exceedsContentLength, payloadTooLarge } from '@ollie/worker-http';
+import { scrubPII } from '@ollie/pii-scrub';
 import { groceryConfig, type ModuleConfig } from '../modules/grocery.config';
 import {
   adminConfig,
@@ -40,11 +40,23 @@ import {
   BODY_ESCALATE_THRESHOLD,
 } from '../modules/body.config';
 import {
+  choresConfig,
+  CHORES_MODEL_FAST,
+  CHORES_MODEL_ACCURATE,
+  CHORES_ESCALATE_THRESHOLD,
+} from '../modules/chores.config';
+import {
   cycleConfig,
   CYCLE_MODEL_FAST,
   CYCLE_MODEL_ACCURATE,
   CYCLE_ESCALATE_THRESHOLD,
 } from '../modules/cycle.config';
+import {
+  moodConfig,
+  MOOD_MODEL_FAST,
+  MOOD_MODEL_ACCURATE,
+  MOOD_ESCALATE_THRESHOLD,
+} from '../modules/mood.config';
 import {
   financeConfig,
   FINANCE_MODEL_FAST,
@@ -88,6 +100,7 @@ import {
   WORK_ESCALATE_THRESHOLD,
 } from '../modules/work.config';
 import { verifyClerkJwt } from '../clerk-verify';
+import { deriveUserHash } from '../telemetry';
 import { groqChat } from '../groq';
 
 // ─── env ─────────────────────────────────────────────────────────────────────
@@ -105,11 +118,26 @@ export interface RouteEnv {
    */
   T0_JWT_ENFORCED?: string;
   /**
+   * Cloudflare environment name ("production" in prod). A production deploy
+   * enforces auth even if T0_JWT_ENFORCED is ever misconfigured to '0', matching
+   * the belt-and-suspenders guard in feed-me / purchase / replenishment (S4e).
+   */
+  ENVIRONMENT?: string;
+  /**
    * Clerk issuer URL — e.g. https://faithful-stag-15.clerk.accounts.dev.
    * Required when T0_JWT_ENFORCED === '1'. Mirrors the shape used by
    * `invites.verifyJwt`.
    */
   CLERK_ISSUER?: string;
+  /**
+   * Server-side salt for deriving the per-user `user_hash` that namespaces the
+   * routing_cache (S2 cross-user-leakage fix). Same secret + derivation as the
+   * telemetry tables (telemetry.ts deriveUserHash) — every user-keyed Supabase
+   * row in this project is keyed by salted SHA-256 user_hash, never the raw
+   * Clerk id. Optional: when unset the hash is still server-derived (unsalted),
+   * so isolation still holds — it just isn't salted (warned in deriveUserHash).
+   */
+  USER_HASH_SALT?: string;
 }
 
 // ─── module registry ──────────────────────────────────────────────────────────
@@ -119,11 +147,13 @@ const MODULE_CONFIGS: Record<string, ModuleConfig<any, any>> = {
   admin: adminConfig,
   grocery: groceryConfig,
   body: bodyConfig,
+  chores: choresConfig,
   cycle: cycleConfig,
   finance: financeConfig,
   goals: goalsConfig,
   habits: habitsConfig,
   medication: medicationConfig,
+  mood: moodConfig,
   pets: petsConfig,
   sleep: sleepConfig,
   work: workConfig,
@@ -154,9 +184,17 @@ const MODULE_TIERS: Record<string, TierConfig> = {
     models: [BODY_MODEL_FAST, BODY_MODEL_ACCURATE],
     threshold: BODY_ESCALATE_THRESHOLD,
   },
+  chores: {
+    models: [CHORES_MODEL_FAST, CHORES_MODEL_ACCURATE],
+    threshold: CHORES_ESCALATE_THRESHOLD,
+  },
   cycle: {
     models: [CYCLE_MODEL_FAST, CYCLE_MODEL_ACCURATE],
     threshold: CYCLE_ESCALATE_THRESHOLD,
+  },
+  mood: {
+    models: [MOOD_MODEL_FAST, MOOD_MODEL_ACCURATE],
+    threshold: MOOD_ESCALATE_THRESHOLD,
   },
   finance: {
     models: [FINANCE_MODEL_FAST, FINANCE_MODEL_ACCURATE],
@@ -202,6 +240,11 @@ export interface RouteResponse {
 // ─── constants ────────────────────────────────────────────────────────────────
 
 const COSINE_THRESHOLD = 0.85;
+/** Memory-DoS bounds for /route/:module (audit #38). The body carries a short
+ *  command plus optional list-state `context`; 256KB is far above any real
+ *  payload, and `text` itself is capped at 10k chars (same as a dump). */
+const MAX_BODY_BYTES = 256 * 1024;
+const MAX_TEXT_CHARS = 10_000;
 const VOYAGE_MODEL = 'voyage-multilingual-2';
 const VOYAGE_EMBED_DIM = 1024;
 
@@ -218,16 +261,32 @@ export async function handleRoute(
   // against the Clerk JWKS unless T0_JWT_ENFORCED is explicitly set to
   // '0' (local dev only). A missing/unset flag therefore enforces auth,
   // so a misdeploy can never leave this endpoint open.
-  if (env.T0_JWT_ENFORCED !== '0') {
+  //
+  // The verified user identity is no longer discarded: it namespaces the
+  // routing_cache (S2 — without a user dimension two users with similar text
+  // matched each other's cached classifications). We derive a salted
+  // `user_hash` from it (same derivation as the telemetry tables) and thread
+  // it through every cache lookup + write so a lookup can ONLY match the
+  // caller's own prior entries.
+  let userId: string;
+  if (env.T0_JWT_ENFORCED !== '0' || env.ENVIRONMENT === 'production') {
     const auth = req.headers.get('authorization');
     if (!auth || !auth.startsWith('Bearer ')) {
       return json({ error: 'unauthorized' }, 401);
     }
-    const userId = await verifyClerkJwt(auth.slice('Bearer '.length), env);
-    if (!userId) {
+    const verified = await verifyClerkJwt(auth.slice('Bearer '.length), env);
+    if (!verified) {
       return json({ error: 'invalid_jwt' }, 401);
     }
+    userId = verified;
+  } else {
+    // Local dev only (T0_JWT_ENFORCED==='0', never set in prod). No JWT to
+    // verify, so the user dimension comes from the x-user-id header the dev
+    // client already sends for rate-limiting; fall back to a fixed sentinel so
+    // the cache still partitions deterministically when the header is absent.
+    userId = req.headers.get('x-user-id') || 'dev-anon';
   }
+  const userHash = await deriveUserHash(userId, env.USER_HASH_SALT);
 
   // Module lookup
   const config = MODULE_CONFIGS[module];
@@ -243,6 +302,12 @@ export async function handleRoute(
   // intentionally module-agnostic at the route layer — each config decides
   // how to render it into the system prompt (groceryConfig appends a
   // CURRENT SHOPPING LIST / CURRENT PANTRY block).
+  // Memory-DoS guard (audit #38): reject oversized bodies on the declared
+  // Content-Length before buffering via req.json().
+  if (exceedsContentLength(req, MAX_BODY_BYTES)) {
+    return payloadTooLarge('body_too_large');
+  }
+
   let body: { text: string; dumpId?: string; context?: unknown };
   try {
     body = (await req.json()) as { text: string; dumpId?: string; context?: unknown };
@@ -252,9 +317,26 @@ export async function handleRoute(
   if (!body || typeof body.text !== 'string' || body.text.trim().length === 0) {
     return json({ error: 'missing_text' }, 400);
   }
+  // Cap the parsed text (audit #38): Content-Length can be omitted/understated,
+  // so bound the field the segmenter/embedder/AI cascade actually consume.
+  if (body.text.length > MAX_TEXT_CHARS) {
+    return payloadTooLarge('text_too_large');
+  }
 
-  // 1. PII scrub
-  const { scrubbed } = scrubPII(body.text);
+  // 1. PII scrub — IDENTITY ONLY (sensitiveCategories: false).
+  //
+  // This is the functional Layer-2 module router. The classifier's whole job
+  // is to extract the domain term — the symptom for /route/body ("asthma"),
+  // the drug for /route/medication ("Zoloft"), the item for /route/grocery
+  // ("melatonin"). Scrubbing those to [MEDICAL]/[MEDICATION] would destroy
+  // the feature (and break body/medication route tests that pin this). So we
+  // strip identity PII (names/email/phone/address/GPS/URL/numeric) — now
+  // multilingual + locale-aware via @ollie/pii-scrub, closing the TR/ES-name
+  // leak the worker-local scrubber had — while letting the domain term reach
+  // the classifier. No `locale` field on this route; 'tr' is the app default
+  // and the regex layer is locale-agnostic, so identity scrubbing is full
+  // strength regardless (locale only tunes the name wordlist).
+  const { scrubbed } = scrubPII(body.text, 'tr', { sensitiveCategories: false });
   const cleanText = scrubbed.trim();
 
   // 2. Voyage embed
@@ -269,7 +351,7 @@ export async function handleRoute(
   // 3. pgvector cache lookup
   let cacheRow: CacheRow | null;
   try {
-    cacheRow = await cacheLookup(embedding, module, env);
+    cacheRow = await cacheLookup(embedding, module, userHash, env);
   } catch (err) {
     // Cache read failure is non-fatal — fall through to Gemini
     console.error('[route] cache lookup failed, falling through to groq', err);
@@ -297,12 +379,13 @@ export async function handleRoute(
   // List context (when provided) is passed through to the config's prompt
   // builder so groceryConfig can append the CURRENT SHOPPING LIST / PANTRY
   // disambiguation block. Context is NOT factored into the cache key — the
-  // text-only embed remains the cache key so identical phrases share cache
-  // rows across users with different lists. Trade-off: a mutation cache hit
-  // returns the model's interpretation against an *empty* context, which
-  // means the downstream applier still has to fuzzy-match against the live
-  // list. That's acceptable because the applier already has a matchItem
-  // fallback for exactly this case.
+  // text-only embed is the cache key, scoped to THIS user's user_hash (S2).
+  // The cache is per-user, so identical phrases from different users no longer
+  // share rows — a lookup can only match the caller's own prior entries.
+  // Trade-off: a mutation cache hit returns the model's interpretation against
+  // an *empty* context, which means the downstream applier still has to
+  // fuzzy-match against the live list. That's acceptable because the applier
+  // already has a matchItem fallback for exactly this case.
   let classification: unknown;
   let language = 'en';
   try {
@@ -321,9 +404,10 @@ export async function handleRoute(
     return upstreamError('groq_classify_failed', 502, detail, { module });
   }
 
-  // 5. Cache write (fire-and-forget)
-  void cacheWrite(module, cleanText, embedding, classification, language, env).catch((e) =>
-    console.error('[route] cache write failed', e),
+  // 5. Cache write (fire-and-forget) — tagged with this user's user_hash so it
+  //    can only ever be returned to the same user (S2 per-user isolation).
+  void cacheWrite(module, cleanText, embedding, classification, language, userHash, env).catch(
+    (e) => console.error('[route] cache write failed', e),
   );
 
   const totalLatencyMs = Date.now() - t0;
@@ -380,13 +464,16 @@ interface CacheRow {
 async function cacheLookup(
   embedding: number[],
   module: string,
+  userHash: string,
   env: RouteEnv,
 ): Promise<CacheRow | null> {
-  // Supabase PostgREST RPC for pgvector cosine similarity lookup.
-  // T1 migration creates the `routing_cache_lookup` SQL function:
+  // Supabase PostgREST RPC for pgvector cosine similarity lookup, scoped to
+  // THIS user (S2 — the cache is per-user, so a lookup can only match the
+  // caller's own prior rows). The migration creates the `routing_cache_lookup`
+  // SQL function:
   //   SELECT id, classification, language
   //   FROM routing_cache
-  //   WHERE module = $1
+  //   WHERE module = $1 AND user_hash = $4
   //     AND 1 - (embedding <=> $2::vector) > $3
   //   ORDER BY embedding <=> $2::vector
   //   LIMIT 1
@@ -402,11 +489,14 @@ async function cacheLookup(
       p_module: module,
       p_embedding: embedding,
       p_threshold: COSINE_THRESHOLD,
+      p_user_hash: userHash,
     }),
   });
 
   if (!res.ok) {
-    // 404 = table/function doesn't exist yet (T1 not yet deployed) — not an error
+    // 404 = function signature not deployed yet (per-user migration not yet
+    // applied — the 4-arg overload doesn't exist) → treat as no hit. Cache
+    // stays cold but NEVER returns a cross-user row. Same tolerance as before.
     if (res.status === 404) return null;
     const detail = await res.text().catch(() => '');
     throw new Error(`routing_cache_lookup ${res.status}: ${detail.slice(0, 200)}`);
@@ -419,20 +509,26 @@ async function cacheLookup(
 }
 
 async function cacheHitUpdate(id: string, env: RouteEnv): Promise<void> {
-  const url = `${env.SUPABASE_URL.replace(/\/$/, '')}/rest/v1/routing_cache?id=eq.${encodeURIComponent(id)}`;
-  await fetch(url, {
-    method: 'PATCH',
+  // PostgREST does NOT support `{ increment: 1 }` in a PATCH body — it coerced
+  // hit_count to a JSON object and the request silently failed, so the
+  // popularity counter never moved (audit S2 · fix 2). Use an atomic SQL RPC
+  // instead (single round-trip, race-free). 404 = RPC not yet applied in this
+  // env → treat as a no-op (same tolerance as routing_cache_lookup).
+  const url = `${env.SUPABASE_URL.replace(/\/$/, '')}/rest/v1/rpc/routing_cache_increment`;
+  const res = await fetch(url, {
+    method: 'POST',
     headers: {
       'content-type': 'application/json',
       apikey: env.SUPABASE_SERVICE_ROLE,
       authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE}`,
       prefer: 'return=minimal',
     },
-    body: JSON.stringify({
-      hit_count: { increment: 1 },
-      last_hit_at: new Date().toISOString(),
-    }),
+    body: JSON.stringify({ p_id: id }),
   });
+  if (!res.ok && res.status !== 404) {
+    const detail = await res.text().catch(() => '');
+    throw new Error(`routing_cache_increment ${res.status}: ${detail.slice(0, 200)}`);
+  }
 }
 
 async function cacheWrite(
@@ -441,6 +537,7 @@ async function cacheWrite(
   embedding: number[],
   classification: unknown,
   language: string,
+  userHash: string,
   env: RouteEnv,
 ): Promise<void> {
   const url = `${env.SUPABASE_URL.replace(/\/$/, '')}/rest/v1/routing_cache`;
@@ -454,6 +551,9 @@ async function cacheWrite(
     },
     body: JSON.stringify({
       module,
+      // Per-user namespace (S2). A row written by user A carries A's user_hash
+      // and the lookup RPC filters on it, so it can never be returned to user B.
+      user_hash: userHash,
       text_sample: text.slice(0, 500),
       embedding,
       classification,

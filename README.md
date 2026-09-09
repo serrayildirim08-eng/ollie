@@ -1,57 +1,123 @@
 # ollie
 
-Life operating system for ADHD brains. Monorepo migrated from the single-file `void-app.html` codebase.
+Life operating system for ADHD brains. You brain-dump in one box; Ollie
+classifies the dump and updates the right life module (grocery, finance,
+cycle, work, meds, …), then quietly surfaces what matters.
 
-## Structure
+Mobile + desktop only — **there is no public web app.** (Do not deploy the
+frontend to Pages or anywhere public.)
+
+## Architecture
+
+Two layers, by design (the "Brain vs. Body" split):
+
+- **Layer 1 — the Brain (`workers/ai-proxy`).** A Cloudflare Worker that
+  routes a raw brain-dump (`POST /route/dump`) and enriches events. It
+  classifies with a tiered LLM stack (Groq, Google Gemini, OpenRouter,
+  Cloudflare Workers AI) plus Voyage embeddings for caching. Deployed as
+  `ollie-ai-proxy`. It also serves grocery/recipe/shelf-life, transcription,
+  and invite endpoints.
+- **Layer 2 — the Body (the native app).** Deterministic module logic that
+  applies routed results locally and watches for patterns. No LLM decides
+  state transitions, retries, or scheduling.
+
+### Components
+
+| Component | What it is | Where |
+|---|---|---|
+| Native app | Tauri (Rust `src-tauri`) shell hosting a React 18 + TypeScript + Vite frontend in a WKWebView. Ships to **iOS** and **macOS**. | `apps/native` |
+| `ai-proxy` worker | Dump router / "brain" + AI enrichment. Deployed `ollie-ai-proxy`. | `workers/ai-proxy` |
+| `apns-push` worker | Apple Push Notification send path. Deployed `ollie-apns-push`. | `workers/apns-push` |
+| `cron` worker | Scheduled/background jobs. Deployed `ollie-cron`. | `workers/cron` |
+| `sentry-tunnel` worker | Sentry ingest tunnel (bypasses DPI that blocks Sentry). Deployed `ollie-sentry-tunnel`. | `workers/sentry-tunnel` |
+| API worker | APNs token register/send + account deletion. Deployed `ollie-notifications`. | `apps/api` |
+| Supabase | Postgres backing store. Per-user state is stored **encrypted** in `encrypted_state` (AES-GCM-256, PBKDF2 passphrase-derived). | `supabase/` |
+| Clerk | Auth. Workers verify Clerk-issued JWTs. | — |
+
+State sync: the native app encrypts each module's state client-side
+(`@ollie/crypto`) and syncs it to Supabase `encrypted_state` via the API
+worker (`@ollie/sync`). The server never sees plaintext module data.
+
+### Repo layout
 
 ```
 ollie/
 ├── apps/
-│   ├── web/          React 18 + Vite + TypeScript — the app
-│   ├── desktop/      Electron wrapper (loads apps/web/dist)
-│   └── ios/          Capacitor iOS shell (loads apps/web/dist)
-└── packages/
-    ├── store/        localStorage wrapper + reactive subs + migrations
-    ├── events/       typed event bus (102 registered events)
-    ├── logic/        pure functional core — 19 sub-namespaces:
-    │                 cycle, products, corrections, ritual, patterns,
-    │                 prompts, consumption, finance, pets, admin, work,
-    │                 grocery, sleep, predict, body, habits, goals,
-    │                 journal, astrology, dissection
-    └── orchestrator/ reactive glue (cycle, pets, body, grocery, sleep,
-                      finance, patterns wired)
+│   ├── native/        Tauri + React + TS app (iOS + macOS)
+│   │   ├── src/       React frontend (dump, modules, rooms, sync, …)
+│   │   └── src-tauri/ Rust shell (tauri.conf.json, iOS/macOS config)
+│   └── api/           Cloudflare Worker: APNs + account-delete (ollie-notifications)
+├── workers/
+│   ├── ai-proxy/      dump router / brain (ollie-ai-proxy)
+│   ├── apns-push/     APNs send (ollie-apns-push)
+│   ├── cron/          scheduled jobs (ollie-cron)
+│   └── sentry-tunnel/ Sentry tunnel (ollie-sentry-tunnel)
+├── packages/          @ollie/* workspace libraries (see below)
+├── supabase/          SQL migrations + rollbacks
+└── tools/             lint plugins + banned-phrase scanners
 ```
+
+### `@ollie/*` packages
+
+| Package | Purpose |
+|---|---|
+| `logic` | Pure functional module cores (cycle, pets, grocery, finance, habits, sleep, work, body, goals, admin, journal, patterns, crisis, medication, brain, …). Subpath exports per module. |
+| `orchestrator` | Reactive glue that wires module logic to the store/events. |
+| `store` | Local state store facade + reactive subscriptions. |
+| `sync` | Encrypted state sync to Supabase `encrypted_state` (pull-on-boot, batched upsert). |
+| `crypto` | AES-GCM-256 + PBKDF2 (600k iters) passphrase-derived encryption primitives. |
+| `api` | Client for the API worker / Supabase REST. |
+| `auth` | Auth helpers (Clerk). |
+| `events` | Typed event bus. |
+| `consent` | Consent state (necessary + marketing). |
+| `pii-scrub` | PII scrubbing before data reaches the AI / research stream. |
+| `crisis-lexicon` | Multilingual crisis-detection lexicon (EN/ES/TR). |
+| `cadence` | Reminder/notification cadence logic. |
+| `notifications` | Notification spec + delivery types. |
+| `apns-jwt` | ES256-signed APNs JWT generation. |
+| `worker-http` | Shared HTTP helpers for the Cloudflare Workers. |
+| `research-stream` | Opt-in anonymized event stream. |
 
 ## Dev
 
 ```bash
 pnpm install
-pnpm dev                 # web (Vite at localhost:5173)
-pnpm electron:dev        # desktop (Electron, after a `pnpm build`)
-pnpm ios:open            # iOS (Capacitor, after `xcode-select --install`)
+
+# Native app (desktop dev via Tauri — the default `pnpm dev`)
+pnpm dev                                   # == pnpm --filter native tauri dev
+pnpm --filter native dev                   # frontend only (Vite, no shell)
+
+# Workers (each is its own package)
+pnpm --filter @ollie/worker-ai-proxy dev   # wrangler dev
 ```
 
-## Test
+## Build
 
 ```bash
-pnpm -r test             # all packages, vitest
-pnpm -r typecheck        # all packages, tsc --noEmit
-pnpm build               # production web build
+# Desktop (macOS)
+pnpm --filter native tauri build
+
+# iOS — build the installable app (serves bundled dist over localhost)
+pnpm --filter native tauri ios build       # NOT `ios dev` (dev = white screen)
 ```
 
-## Migration status
+## Test / check
 
-Phase 1–7 complete. The single-file `void-app.html` (47k lines) has been
-ported to this monorepo with 815+ passing tests. The legacy repo lives at
-`~/void` as a historical fallback.
+```bash
+pnpm -r test         # vitest across all packages (pretest runs banned-phrase scans)
+pnpm -r typecheck    # tsc --noEmit across all packages
+pnpm lint            # eslint (custom @ollie eslint plugin in tools/)
+```
 
-Native shells in `apps/desktop` and `apps/ios` are scaffolded; both load
-`apps/web/dist/`. Run `pnpm --filter @ollie/ios add` once Xcode is set up
-to initialize the iOS project.
+## Deploy
 
-## Outstanding follow-ups
+```bash
+# Each worker deploys independently with Wrangler
+pnpm --filter @ollie/worker-ai-proxy deploy      # -> ollie-ai-proxy
+pnpm --filter @ollie/worker-apns-push deploy     # -> ollie-apns-push
+pnpm --filter @ollie/worker-cron deploy          # -> ollie-cron
+pnpm --filter @ollie/worker-sentry-tunnel deploy # -> ollie-sentry-tunnel
+pnpm --filter @ollie/api-worker deploy           # -> ollie-notifications
+```
 
-- Bundle code-splitting (Vite chunk-size warning above 500KB)
-- Real backend (NestJS + Postgres + accounts) — separate track
-- E2E tests across the full screen state machine
-- Live deploy of the Cloudflare Worker telemetry pipe (see ~/void/D1_TELEMETRY_TODO.md)
+See `DEPLOY_TODO.md` for secrets and one-time deploy steps.

@@ -83,6 +83,39 @@ describe('gatherCandidates', () => {
     expect(ids).toContain('work:shared_one');
     expect(ids).toContain('harm:missed:renewal:r1');
   });
+
+  it('carries wave-2 ARRAY + NUMERIC offer facts through factsOf (the risky plumbing)', async () => {
+    const store = createStore(createMemoryAdapter());
+    const fireAt = NOW + 7 * DAY;
+    store.set('admin', 'patterns', [
+      {
+        pattern: 'paperwork-pile',
+        category: 'paperwork_piling',
+        copy: '3 admin things stalled',
+        actionKind: 'surface_tasks',
+        taskIds: ['p1', 'p2', 'p3'],
+      },
+      {
+        pattern: 'renewal-cluster:2026-07',
+        category: 'renewal-cluster',
+        copy: '2 renewals same month',
+        actionKind: 'batch_block',
+        batchLabel: 'renewals: passport, license',
+        batchFireAtMs: fireAt,
+        renewalIds: ['c1', 'c2'],
+      },
+    ]);
+
+    const cands = await gatherCandidates(store);
+    const pile = cands.find((c) => c.id === 'admin:paperwork-pile');
+    expect(pile?.facts?.taskIds).toEqual(['p1', 'p2', 'p3']);
+    expect(pile?.facts?.actionKind).toBe('surface_tasks');
+
+    const cluster = cands.find((c) => c.id === 'admin:renewal-cluster:2026-07');
+    expect(cluster?.facts?.renewalIds).toEqual(['c1', 'c2']);
+    expect(cluster?.facts?.batchFireAtMs).toBe(fireAt);
+    expect(cluster?.facts?.batchLabel).toBe('renewals: passport, license');
+  });
 });
 
 describe('selectTodaysNoticings · Decision 1 (top 2–3)', () => {

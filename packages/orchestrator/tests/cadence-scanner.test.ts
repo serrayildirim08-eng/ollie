@@ -231,6 +231,69 @@ describe('@ollie/orchestrator · CadenceScanner', () => {
     expect(calls).toHaveLength(2);
   });
 
+  it('does NOT double-fire across the midnight boundary (audit #43, ~1h apart)', async () => {
+    const { backend, calls } = makeBackend();
+    installBackend(backend);
+    const store = createStore(createMemoryAdapter());
+    installNotificationStore(store);
+
+    // 23:30 local — choose a time near end of day. Use a fixed UTC instant;
+    // the gate is day-independent so timezone doesn't matter for this test.
+    const late = new Date('2026-05-09T23:30:00Z').getTime();
+    let clock = late;
+    const scanner = createCadenceScanner(store, { now: () => clock });
+    scanner.registerSource('grocery', () => [
+      {
+        module: 'grocery',
+        key: 'coffee',
+        label: 'coffee',
+        estimate: makeOverdueEstimate(7 * DAY_MS, clock, 2 * DAY_MS),
+      },
+    ]);
+
+    const first = await scanner.scanNow();
+    expect(first.fired).toHaveLength(1);
+
+    // Advance ~1h, crossing midnight into the next calendar day. The day
+    // suffix on the dedupe key rotates, but the min-interval gate must still
+    // suppress the fire.
+    clock = late + 60 * 60 * 1000; // 00:30 next day
+    const second = await scanner.scanNow();
+    expect(second.fired).toHaveLength(0);
+    expect(second.skippedDedupe.length).toBe(1);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(calls).toHaveLength(1);
+  });
+
+  it('suppresses across a reload when only ~1h passed across midnight (audit #43)', async () => {
+    const { backend, calls } = makeBackend();
+    installBackend(backend);
+    const store = createStore(createMemoryAdapter());
+    installNotificationStore(store);
+
+    const late = new Date('2026-05-09T23:30:00Z').getTime();
+    let clock = late;
+    const s1 = createCadenceScanner(store, { now: () => clock });
+    s1.registerSource('grocery', () => [
+      { module: 'grocery', key: 'coffee', label: 'coffee', estimate: makeOverdueEstimate(7 * DAY_MS, clock, 2 * DAY_MS) },
+    ]);
+    const first = await s1.scanNow();
+    expect(first.fired).toHaveLength(1);
+
+    // New scanner instance (fresh in-process map) reading the same store —
+    // simulates a reload. Persisted item key + min-interval must suppress.
+    clock = late + 60 * 60 * 1000;
+    const s2 = createCadenceScanner(store, { now: () => clock });
+    s2.registerSource('grocery', () => [
+      { module: 'grocery', key: 'coffee', label: 'coffee', estimate: makeOverdueEstimate(7 * DAY_MS, clock, 2 * DAY_MS) },
+    ]);
+    const second = await s2.scanNow();
+    expect(second.fired).toHaveLength(0);
+    await Promise.resolve();
+    expect(calls).toHaveLength(1);
+  });
+
   it('picks the right copy template per module', async () => {
     const { backend, calls } = makeBackend();
     installBackend(backend);

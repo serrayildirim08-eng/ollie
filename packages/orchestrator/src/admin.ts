@@ -57,9 +57,77 @@ import type {
   RecurringPatternSignal,
 } from '@ollie/logic/admin';
 import type { Orchestrator } from './types';
+import { appendCapped } from './dedup-store';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type AdminPattern = { signal: string; pattern: string; ts: number } & Record<string, any>;
+
+// ── C-model offer detectors (renewal + stale decision) ───────────────────────
+const DAY_MS = 86_400_000;
+/** A recurring decision counts as "stale" once it's been open this many days. */
+const STALE_DECISION_DAYS = 14;
+
+// ── Wave 2 · renewal 3-tier escalation thresholds ────────────────────────────
+// One renewal climbs through three tiers as its due date nears. Each tier fires
+// AT MOST ONCE (gated on prevKeys / a persisted marker on the native side), so a
+// re-run of recompute never re-notifies or re-adds.
+//   • ≤ 90d (~3 months) → a calm CARD noticing only (the wave-1 add-to-todo
+//     offer). No push. [tier 'card']
+//   • ≤ 30d (~1 month)  → emit admin:renewal_notify_due so the native consumer
+//     schedules a real app-closed LOCAL notification (EVENT path). [tier 'notify']
+//   • ≤  7d (~1 week)   → emit admin:renewal_autotodo_due so the native consumer
+//     AUTO-adds the renewal to /todo — no offer, no tap (the one place we go D,
+//     because a week-out ID/legal renewal is too important to wait on). [tier 'auto']
+const RENEWAL_TIER_CARD_DAYS = 90;
+const RENEWAL_TIER_NOTIFY_DAYS = 30;
+const RENEWAL_TIER_AUTO_DAYS = 7;
+
+// ── Wave 2 · paperwork piling (offer) ────────────────────────────────────────
+/** A paperwork task counts as "stalled" once untouched this many days. */
+const PAPERWORK_PILE_DAYS = 14;
+/** Pile only fires once this many paperwork tasks have stalled together. */
+const PAPERWORK_PILE_MIN = 3;
+
+// ── Wave 2 · renewal cluster (offer) ─────────────────────────────────────────
+/** Cluster fires once this many renewals land in the same calendar month. */
+const RENEWAL_CLUSTER_MIN = 2;
+/** Only cluster renewals whose due date is within this horizon. */
+const RENEWAL_CLUSTER_HORIZON_DAYS = 90;
+
+// NOTE — CHRONIC DEFERRAL (break_down_task offer) is detected NATIVE-side, not
+// here. Its true signal is the per-noticing postpone count in the native SQLite
+// brain_deferral_events table (defer_count is never persisted on admin rows, and
+// the orchestrator can't read native SQLite). See
+// apps/native/src/modules/brain/noticings.ts (appendChronicDeferrals).
+
+/** Minimal renewal shape mirrored to admin.renewals by the native bridge. */
+interface StoreRenewal {
+  id: string;
+  renewalType: string;
+  /** ISO yyyy-mm-dd or null. */
+  dueDate: string | null;
+  addedAt: number;
+}
+
+/** Minimal recurring-decision shape mirrored to admin.decisions by the bridge. */
+interface StoreDecision {
+  id: string;
+  what: string;
+  createdAt: number;
+}
+
+/**
+ * Whole-day difference between an ISO yyyy-mm-dd due date and `now`. Negative =
+ * overdue, null = no/invalid date. Local copy of the native admin `daysUntil`
+ * (not exported from @ollie/logic/admin) to keep the orchestrator free of a
+ * native dependency. Compares at local-midnight granularity.
+ */
+function daysUntilDue(dueDate: string | null, now: number): number | null {
+  if (!dueDate) return null;
+  const due = Date.parse(dueDate);
+  if (Number.isNaN(due)) return null;
+  return Math.floor(due / DAY_MS) - Math.floor(now / DAY_MS);
+}
 
 /**
  * One entry in the admin "handle by phone" cluster. Append-only — written by
@@ -461,6 +529,237 @@ export function createAdminOrchestrator(
       }
     }
 
+    // ── C-model · renewal 3-TIER escalation (wave 2) ────────────────────────
+    // Replaces the wave-1 single renewal offer. For each open renewal with a
+    // valid due date, escalate by proximity (each tier fires once):
+    //
+    //   • ≤ 90d → a calm CARD noticing carrying the add_admin_task offer
+    //     ("renew X — add it to your to-do?"). No push. Stable pattern id keyed
+    //     on the renewal id so snooze/dismiss persists. This is the wave-1
+    //     surface, now stamped with tier:'card'.
+    //   • ≤ 30d → ALSO emit admin:renewal_notify_due so the native consumer
+    //     schedules a real app-closed local notification (the EVENT path, never
+    //     invoke). The orchestrator itself can't notify (no native dep), so it
+    //     only emits; the native side performs + dedupes.
+    //   • ≤ 7d  → emit admin:renewal_autotodo_due so the native consumer AUTO-
+    //     adds the renewal to /todo (no card, no offer — the one tier-D place).
+    //
+    // The card horizon stays at ≤ 90d INCLUSIVE of the nearer tiers so the user
+    // always has the calm card visible while the notify/auto side-effects fire.
+    // Reads the bridge-mirrored admin.renewals input (raw rows). The two new
+    // signals are gated on prevKeys here AND a persisted marker on the native
+    // side, so re-running recompute never double-notifies or double-adds.
+    const adminRenewals = store.get<StoreRenewal[]>('admin', 'renewals', []) ?? [];
+    for (const r of adminRenewals) {
+      if (!r || typeof r.id !== 'string') continue;
+      const d = daysUntilDue(r.dueDate, now);
+      if (d == null || d < 0 || d > RENEWAL_TIER_CARD_DAYS) continue;
+
+      // Tier C/auto — ≤ 7d: automatic /todo add (no card). Native consumer owns
+      // the side effect + its own "already added" marker; we just emit once.
+      if (d <= RENEWAL_TIER_AUTO_DAYS) {
+        const autoP = toPattern(
+          {
+            signal: 'admin_renewal_autotodo',
+            pattern: `renewal-autotodo:${r.id}`,
+            ts: now,
+          },
+          now,
+        );
+        if (!prevKeys.has(signalKey(autoP))) {
+          events.emit('admin:renewal_autotodo_due', {
+            renewal_id: r.id,
+            renewalType: r.renewalType,
+            dueDate: r.dueDate,
+            ts: now,
+          });
+        }
+        // Track the auto tier in `next` (no copy → not a surfaced noticing) so
+        // signalKey dedupe persists across recomputes.
+        next.push(autoP);
+        continue; // a week-out renewal is handled by the auto-add, not a card.
+      }
+
+      // Tier 'notify' — ≤ 30d: emit so the native consumer schedules a real
+      // app-closed local notification. Gated once via a no-copy marker pattern.
+      const tier: 'card' | 'notify' = d <= RENEWAL_TIER_NOTIFY_DAYS ? 'notify' : 'card';
+      if (tier === 'notify') {
+        const notifyP = toPattern(
+          {
+            signal: 'admin_renewal_notify',
+            pattern: `renewal-notify:${r.id}`,
+            ts: now,
+          },
+          now,
+        );
+        if (!prevKeys.has(signalKey(notifyP))) {
+          events.emit('admin:renewal_notify_due', {
+            renewal_id: r.id,
+            renewalType: r.renewalType,
+            dueDate: r.dueDate,
+            days_left: d,
+            ts: now,
+          });
+        }
+        next.push(notifyP);
+      }
+
+      // Tier 'card' surface — always shown ≤ 90d (including the notify band):
+      // the calm add-to-todo offer.
+      const months = Math.max(1, Math.round(d / 30));
+      const p = toPattern(
+        {
+          signal: 'admin_renewal_offer',
+          pattern: `renewal-offer:${r.id}`,
+          category: 'renewal_due',
+          tier,
+          copy: `${r.renewalType} renews in ~${months} month${months === 1 ? '' : 's'} — add it to your to-do?`,
+          actionKind: 'add_admin_task',
+          taskText: `renew ${r.renewalType}`,
+          dueDate: r.dueDate,
+          urgencyAt: Date.parse(r.dueDate ?? '') || now,
+        },
+        now,
+      );
+      next.push(p);
+      if (!prevKeys.has(signalKey(p))) {
+        events.emit('admin:renewal_offer', { renewal_id: r.id, days_left: d, tier, ts: now });
+      }
+    }
+
+    // ── C-model offer · paperwork piling → surface_tasks (wave 2) ───────────
+    // ≥3 open admin tasks of kind 'paperwork' each untouched ~2 weeks (by
+    // last_transition_at, falling back to created_at) → ONE calm offer to bring
+    // them to today's focus. Accept → native executeAction surface_tasks dates
+    // each to today so they lead /todo. taskIds is an ARRAY offer fact (new
+    // plumbing in noticings.ts factsOf). Stable pattern id (category-keyed) so
+    // the offer persists across recomputes until acted on.
+    const stalledPaperwork: string[] = [];
+    for (const t of history.tasks ?? []) {
+      if (!t || typeof t.id !== 'string') continue;
+      if (t.kind !== 'paperwork') continue;
+      if (t.state === 'done' || t.state === 'closed') continue;
+      const touchedAt = typeof t.last_transition_at === 'number'
+        ? t.last_transition_at
+        : (typeof t.done_at === 'number' ? t.done_at : now);
+      const ageDays = (now - touchedAt) / DAY_MS;
+      if (ageDays >= PAPERWORK_PILE_DAYS) stalledPaperwork.push(t.id);
+    }
+    if (stalledPaperwork.length >= PAPERWORK_PILE_MIN) {
+      const others = stalledPaperwork.length - 1;
+      const p = toPattern(
+        {
+          signal: 'admin_paperwork_pile',
+          pattern: 'paperwork-pile',
+          category: 'paperwork_piling',
+          copy: `${stalledPaperwork.length} admin things haven't moved in a while — bring them to today's focus?`,
+          actionKind: 'surface_tasks',
+          taskIds: stalledPaperwork,
+          // carried so the copy fallback can say "N admin things" via otherCount.
+          items: stalledPaperwork.map(() => ({ name: 'paperwork', count: others })),
+        },
+        now,
+      );
+      next.push(p);
+      if (!prevKeys.has(signalKey(p))) {
+        events.emit('admin:paperwork_pile', { count: stalledPaperwork.length, ts: now });
+      }
+    }
+
+    // ── C-model offer · renewal cluster → batch_block (wave 2) ──────────────
+    // 2+ open renewals whose due dates fall in the SAME calendar month (within
+    // ~3 months) → ONE calm offer to batch them one day + schedule an app-closed
+    // reminder. Accept → native executeAction batch_block creates a dated block
+    // task AND schedules the local notification via the EVENT path. renewalIds
+    // is an ARRAY offer fact + batchFireAtMs a NUMERIC offer fact (new plumbing).
+    // Stable pattern id keyed on the month bucket. Grouped from the same
+    // adminRenewals already read above.
+    const byMonth = new Map<string, StoreRenewal[]>();
+    for (const r of adminRenewals) {
+      if (!r || typeof r.id !== 'string' || !r.dueDate) continue;
+      const d = daysUntilDue(r.dueDate, now);
+      if (d == null || d < 0 || d > RENEWAL_CLUSTER_HORIZON_DAYS) continue;
+      const monthKey = r.dueDate.slice(0, 7); // yyyy-mm
+      if (!/^\d{4}-\d{2}$/.test(monthKey)) continue;
+      const bucket = byMonth.get(monthKey) ?? [];
+      bucket.push(r);
+      byMonth.set(monthKey, bucket);
+    }
+    for (const [monthKey, group] of byMonth) {
+      if (group.length < RENEWAL_CLUSTER_MIN) continue;
+      // Fire the reminder a week before the EARLIEST renewal in the month, but
+      // never in the past — scheduleAt clamps anyway, and a same-day fire is a
+      // valid (if tight) batch reminder.
+      const earliestDue = group
+        .map((r) => Date.parse(r.dueDate ?? ''))
+        .filter((n) => Number.isFinite(n))
+        .sort((a, b) => a - b)[0];
+      const fireAt = Number.isFinite(earliestDue)
+        ? Math.max(now, earliestDue - 7 * DAY_MS)
+        : now;
+      const types = group.map((r) => r.renewalType).filter(Boolean);
+      const batchLabel = `renewals: ${types.join(', ')}`;
+      const p = toPattern(
+        {
+          signal: 'admin_renewal_cluster',
+          pattern: `renewal-cluster:${monthKey}`,
+          category: 'renewal-cluster',
+          copy: `${group.length} renewals land around the same time — batch them one day?`,
+          actionKind: 'batch_block',
+          batchLabel,
+          batchFireAtMs: fireAt,
+          renewalIds: group.map((r) => r.id),
+        },
+        now,
+      );
+      next.push(p);
+      if (!prevKeys.has(signalKey(p))) {
+        events.emit('admin:renewal_cluster', {
+          month: monthKey,
+          count: group.length,
+          ts: now,
+        });
+      }
+    }
+
+    // ── CHRONIC DEFERRAL → break_down_task is detected NATIVE-side ──────────
+    // Its honest signal is the per-noticing POSTPONE count (the user actively
+    // putting a noticing off), logged in the native SQLite brain_deferral_events
+    // table — defer_count is never persisted on admin rows, and the orchestrator
+    // can't read native SQLite. So the chronic-deferral offer is synthesized in
+    // apps/native/src/modules/brain/noticings.ts (appendChronicDeferrals), which
+    // attaches actionKind:'break_down_task'. Nothing to emit here.
+
+    // ── C-model offer · stale recurring decision → surface_decision ─────────
+    // For each open decision left untouched > ~14 days, surface ONE calm offer:
+    // "the X decision has been open ~2 weeks — bring it to today?". Accepting it
+    // un-snoozes the decision (native executeAction → surface_decision) so it
+    // leads /todo. Reads the bridge-mirrored admin.decisions input. No urgencyAt
+    // (deferrable judgement, not time-critical); the selector scores it via
+    // deferability. category 'pending_decision' → copyKindOf maps to 'decision'.
+    const adminDecisions = store.get<StoreDecision[]>('admin', 'decisions', []) ?? [];
+    for (const row of adminDecisions) {
+      if (!row || typeof row.id !== 'string' || typeof row.createdAt !== 'number') continue;
+      const ageDays = (now - row.createdAt) / DAY_MS;
+      if (ageDays <= STALE_DECISION_DAYS) continue;
+      const p = toPattern(
+        {
+          signal: 'admin_decision_stale',
+          pattern: `decision-stale:${row.id}`,
+          category: 'pending_decision',
+          copy: `the ${row.what} decision has been open ~2 weeks — bring it to today?`,
+          actionKind: 'surface_decision',
+          decisionId: row.id,
+          decisionWhat: row.what,
+        },
+        now,
+      );
+      next.push(p);
+      if (!prevKeys.has(signalKey(p))) {
+        events.emit('admin:decision_stale', { decision_id: row.id, ts: now });
+      }
+    }
+
     store.set('admin', 'patterns', next);
     store.set('admin', 'patternsLastComputedAt', now);
   }
@@ -503,7 +802,7 @@ export function createAdminOrchestrator(
       newlyFired.push(t.id);
     }
     if (newlyFired.length) {
-      store.set('admin', '_appointmentCompletedIds', [...seen, ...newlyFired]);
+      store.set('admin', '_appointmentCompletedIds', appendCapped([...seen], newlyFired));
     }
   }
 
@@ -559,6 +858,10 @@ export function createAdminOrchestrator(
       catch (err) { console.error('[orchestrator/admin] appointment transition failed', err); }
     }));
     unsubs.push(store.subscribeKey('dump', 'items', () => schedule()));
+    // C-model offer inputs — recompute when the bridge mirrors fresh renewals
+    // or recurring decisions so the renewal / stale-decision offers stay live.
+    unsubs.push(store.subscribeKey('admin', 'renewals', () => schedule()));
+    unsubs.push(store.subscribeKey('admin', 'decisions', () => schedule()));
     unsubs.push(events.on('void:braindump:submitted', onBraindump));
     unsubs.push(events.on('admin:phone_task_detected', onPhoneTaskDetected));
 

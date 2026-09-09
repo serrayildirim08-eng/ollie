@@ -34,18 +34,29 @@ function store() {
   return storePromise;
 }
 
+// One corrupt value must not throw on every read of that key forever:
+// a malformed payload is treated as absent (null) rather than a hard error.
+function safeParse<T>(raw: string, key: string): T | null {
+  try {
+    return JSON.parse(raw) as T;
+  } catch (err) {
+    console.warn(`[kv] corrupt JSON for "${key}", treating as empty`, err);
+    return null;
+  }
+}
+
 export const kv = {
   async get<T = unknown>(key: string): Promise<T | null> {
     const s = await store();
     if (s) {
       const raw = (await s.get(key)) as string | undefined | null;
       if (raw == null) return null;
-      return JSON.parse(raw) as T;
+      return safeParse<T>(raw, key);
     }
     // localStorage fallback
     const raw = localStorage.getItem(key);
     if (raw == null) return null;
-    return JSON.parse(raw) as T;
+    return safeParse<T>(raw, key);
   },
 
   async set<T = unknown>(key: string, val: T): Promise<void> {

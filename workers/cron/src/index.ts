@@ -33,7 +33,6 @@ import { flushNotificationQueue, type FlushEnv } from './flush-notifications';
 export interface Env extends DrainEnv, FlushEnv {
   SUPABASE_URL: string;
   SUPABASE_SERVICE_ROLE: string;
-  SUPABASE_SERVICE_ROLE_KEY: string;
   AI_PROXY: Fetcher;
   CACHE_KV: KVNamespace;
 

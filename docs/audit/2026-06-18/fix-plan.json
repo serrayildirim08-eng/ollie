@@ -1,0 +1,1682 @@
+[
+  {
+    "id": "1",
+    "stream": "sync-wire",
+    "phase": "P1",
+    "title": "Encrypted sync sends base64 into bytea columns; IV octet_length=12 CHECK rejects every write",
+    "effort": "M",
+    "risk": "high",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": "Wire-format fork: base64->\\x hex on the client (keeps bytea + 12-byte IV CHECK), OR retype columns to text+base64 (simpler client, drops guard, needs prod migration).",
+    "approach": "Per decision 2A: on the CLIENT, convert the base64 ciphertext/iv to Postgres bytea hex literal (\\x + hex) before upsert in packages/sync/src/index.ts + finance.ts. Keep bytea columns + the 12-byte IV octet_length CHECK. No DB migration. Add a round-trip test that asserts the wire value is \\x-hex, not base64."
+  },
+  {
+    "id": "23",
+    "stream": "sync-wire",
+    "phase": "P1",
+    "title": "encrypted_state upsert omits on_conflict -> every 2nd+ push per module 409s and retries forever",
+    "effort": "S",
+    "risk": "medium",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "22",
+    "stream": "identity-rls",
+    "phase": "P1",
+    "title": "Dual identity model: 6 core tables use uuid/auth.users + auth.uid() RLS but app sends Clerk text id",
+    "effort": "XL",
+    "risk": "high",
+    "dependsOn": [],
+    "executability": "manual-or-prod",
+    "needsDecision": "Canonical identity model: (A) Clerk text id everywhere (retype 6 legacy tables, drop auth.users FK, service_role-only); or (B) keep Supabase uuid via a Clerk->Supabase JWT template."
+  },
+  {
+    "id": "67",
+    "stream": "identity-rls",
+    "phase": "P1",
+    "title": "Native Supabase client never carries the user JWT \u2014 all SDK reads hit RLS as anon",
+    "effort": "S",
+    "risk": "medium",
+    "dependsOn": [
+      "22"
+    ],
+    "executability": "assisted",
+    "needsDecision": ""
+  },
+  {
+    "id": "68",
+    "stream": "identity-rls",
+    "phase": "P1",
+    "title": "push_tokens.user_id is uuid but worker writes Clerk text \u2014 insert fails, cron->APNs path has no tokens",
+    "effort": "M",
+    "risk": "medium",
+    "dependsOn": [
+      "22"
+    ],
+    "executability": "manual-or-prod",
+    "needsDecision": ""
+  },
+  {
+    "id": "2",
+    "stream": "ai-cost-validation",
+    "phase": "P1",
+    "title": "AI-cost endpoints /route/dump + /route/:module + /brain-copy have NO rate limit",
+    "effort": "M",
+    "risk": "medium",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "24",
+    "stream": "ai-cost-validation",
+    "phase": "P1",
+    "title": "/route/:module cache fully dead: routing_cache_lookup RPC missing + text_sample column missing",
+    "effort": "M",
+    "risk": "medium",
+    "dependsOn": [],
+    "executability": "manual-or-prod",
+    "needsDecision": "Apply new routing_cache_lookup migration to prod, OR retire SQL cache and route through Vectorize?"
+  },
+  {
+    "id": "3",
+    "stream": "dump-flow",
+    "phase": "P1",
+    "title": "No client dumpId -> timed-out-but-succeeded dump double-routes & double-writes every fragment",
+    "effort": "M",
+    "risk": "medium",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "30",
+    "stream": "security-privacy",
+    "phase": "P1",
+    "title": "Sensitive health/finance/mood data plaintext at rest in SQLite (+ localStorage mirror); native sync/crypto never wired",
+    "effort": "XL",
+    "risk": "high",
+    "dependsOn": [],
+    "executability": "manual-or-prod",
+    "needsDecision": "SQLCipher full-DB encryption vs field-level column encryption? Where the at-rest key lives when app-lock is off. Core at-rest architecture fork."
+  },
+  {
+    "id": "108",
+    "stream": "security-privacy",
+    "phase": "P1",
+    "title": "All local SQLite plaintext on disk \u2014 cycle/medication/mood/finance/raw-dump text unencrypted (duplicate framing of #30)",
+    "effort": "XL",
+    "risk": "high",
+    "dependsOn": [
+      "30"
+    ],
+    "executability": "manual-or-prod",
+    "needsDecision": ""
+  },
+  {
+    "id": "73",
+    "stream": "sync-wire",
+    "phase": "P1",
+    "title": "Per-device random salt blocks multi-device decryption of synced data",
+    "effort": "L",
+    "risk": "high",
+    "dependsOn": [],
+    "executability": "manual-or-prod",
+    "needsDecision": "Multi-device crypto: (a) server-side per-account salt fetched on new-device unlock via profile_recovery, or (b) ship single-device only for alpha and gate the multi-device claim."
+  },
+  {
+    "id": "4",
+    "stream": "store-data",
+    "phase": "P2",
+    "title": "Module migration caches a rejected promise forever \u2014 one transient failure bricks the module for the session",
+    "effort": "M",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "5",
+    "stream": "sync-wire",
+    "phase": "P2",
+    "title": "Finance sync cursor advances past rows that failed to decrypt -> permanent silent data loss",
+    "effort": "M",
+    "risk": "medium",
+    "dependsOn": [
+      "1"
+    ],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "6",
+    "stream": "sync-wire",
+    "phase": "P2",
+    "title": "Finance keyset cursor uses strict gt. on non-unique updated_at -> rows sharing the boundary timestamp skipped",
+    "effort": "L",
+    "risk": "medium",
+    "dependsOn": [
+      "5"
+    ],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "7",
+    "stream": "sync-wire",
+    "phase": "P2",
+    "title": "Module-blob syncIn echoes every inbound apply back out and corrupts the LWW watermark (re-upload ping-pong)",
+    "effort": "M",
+    "risk": "medium",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "78",
+    "stream": "sync-wire",
+    "phase": "P2",
+    "title": "LWW compares device wall-clock localTs against server-clamped remoteTs -> fast clock always wins (lost updates)",
+    "effort": "L",
+    "risk": "high",
+    "dependsOn": [
+      "7"
+    ],
+    "executability": "assisted",
+    "needsDecision": ""
+  },
+  {
+    "id": "117",
+    "stream": "sync-wire",
+    "phase": "P2",
+    "title": "Finance outbound LWW timestamp source diverges from inbound LWW comparison",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "118",
+    "stream": "sync-wire",
+    "phase": "P2",
+    "title": "Module-blob upsert dedupe key (module, updated_at) not unique -> same-ms collision drops a newer pending entry",
+    "effort": "M",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "120",
+    "stream": "sync-wire",
+    "phase": "P2",
+    "title": "_inspect().queueDepth reports pre-coalesce length; cross-tab _ filter is dead for sync bookkeeping",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "10",
+    "stream": "modules-validation",
+    "phase": "P2",
+    "title": "Every handler blind-casts router payload with no runtime validation of required fields",
+    "effort": "L",
+    "risk": "medium",
+    "dependsOn": [],
+    "executability": "assisted",
+    "needsDecision": ""
+  },
+  {
+    "id": "28",
+    "stream": "modules-validation",
+    "phase": "P2",
+    "title": "Body Layer-2 re-route adopts unvalidated AI JSON, invalid action throws on exhaustive() breaking own fallback",
+    "effort": "M",
+    "risk": "medium",
+    "dependsOn": [
+      "10"
+    ],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "36",
+    "stream": "modules-validation",
+    "phase": "P2",
+    "title": "Sleep Layer-2 / handler JSON written to typed action with no shape validation (companion to #28)",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [
+      "10",
+      "28"
+    ],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "69",
+    "stream": "modules-validation",
+    "phase": "P2",
+    "title": "goals.ensure() bypasses the active-goal cap so a dump can create unlimited goals skipping required fields",
+    "effort": "M",
+    "risk": "medium",
+    "dependsOn": [],
+    "executability": "assisted",
+    "needsDecision": "When a create_goal dump arrives at ACTIVE_GOAL_CAP (5): silently drop, file to unassigned bucket, or surface a refusal card?"
+  },
+  {
+    "id": "91",
+    "stream": "modules-validation",
+    "phase": "P2",
+    "title": "body.log_movement cross-module pets mirror leaks an orphan pets row on undo",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "135",
+    "stream": "modules-validation",
+    "phase": "P2",
+    "title": "finance renewal_for whitelist drifts from schema enum",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "26",
+    "stream": "modules-validation",
+    "phase": "P2",
+    "title": "Dumped mood valence/energy silently discarded via as-unknown-as double cast",
+    "effort": "M",
+    "risk": "medium",
+    "dependsOn": [
+      "10"
+    ],
+    "executability": "manual-or-prod",
+    "needsDecision": "Mood not in router/schema.ts ActionPayload (Serra owns it). Actual mood payload shape + numeric mapping?"
+  },
+  {
+    "id": "29",
+    "stream": "modules-validation",
+    "phase": "P2",
+    "title": "Grocery handler reads payload fields absent/mistyped vs schema (quantity string->number, phantom unit)",
+    "effort": "M",
+    "risk": "medium",
+    "dependsOn": [
+      "10"
+    ],
+    "executability": "manual-or-prod",
+    "needsDecision": "Grocery quantity stay free-text string (current schema) or become parsed number + explicit unit field?"
+  },
+  {
+    "id": "33",
+    "stream": "dump-flow",
+    "phase": "P2",
+    "title": "No concurrent-submit guard in submit() \u2014 Cmd/Ctrl+Enter & voice paths bypass disabled button -> double-dispatch",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "53",
+    "stream": "dump-flow",
+    "phase": "P2",
+    "title": "Draft-confirm keep/undo have no in-flight guard -> double-tap applies the fragment twice",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "64",
+    "stream": "dump-flow",
+    "phase": "P2",
+    "title": "store.set has no deep-equal check despite 3 comment blocks claiming it no-ops -> every dump's all-module sweep notifies every subscriber",
+    "effort": "M",
+    "risk": "medium",
+    "dependsOn": [],
+    "executability": "assisted",
+    "needsDecision": ""
+  },
+  {
+    "id": "86",
+    "stream": "dump-flow",
+    "phase": "P2",
+    "title": "Dump archive write is fire-and-forget and races the store mirror it feeds -> current dump missing this cycle",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "88",
+    "stream": "dump-flow",
+    "phase": "P2",
+    "title": "Local crisis false-positive swallows the ack with no banner -> dump gives zero feedback (reads as dropped)",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "89",
+    "stream": "dump-flow",
+    "phase": "P2",
+    "title": "shared.actionLog mirror is a read-modify-write that races across overlapping dump syncs -> rows dropped",
+    "effort": "M",
+    "risk": "medium",
+    "dependsOn": [
+      "64"
+    ],
+    "executability": "assisted",
+    "needsDecision": ""
+  },
+  {
+    "id": "90",
+    "stream": "dump-flow",
+    "phase": "P2",
+    "title": "onResult (the entire dispatch) fired without await -> loading clears before handlers write; sync throw becomes unhandled rejection",
+    "effort": "M",
+    "risk": "medium",
+    "dependsOn": [],
+    "executability": "assisted",
+    "needsDecision": ""
+  },
+  {
+    "id": "98",
+    "stream": "dump-flow",
+    "phase": "P2",
+    "title": "Batched classify is all-or-nothing: one count mismatch fails the whole dump, no partial salvage",
+    "effort": "M",
+    "risk": "medium",
+    "dependsOn": [],
+    "executability": "assisted",
+    "needsDecision": "Salvage path multiplies Groq token cost on free tier; acceptable as rare fallback, or cap fragment count and degrade?"
+  },
+  {
+    "id": "127",
+    "stream": "dump-flow",
+    "phase": "P2",
+    "title": "Module-scope mutable _ackTick is shared global state that never resets (leaks across HMR/instances)",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "130",
+    "stream": "dump-flow",
+    "phase": "P2",
+    "title": "worker<->native module drift drops a fragment to ok:false with only console.error \u2014 no telemetry, not resurfaced",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "134",
+    "stream": "dump-flow",
+    "phase": "P2",
+    "title": "GroceryBox auto-archive effect can re-fire on transient poll snapshots -> duplicate archive() calls",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "87",
+    "stream": "dump-flow",
+    "phase": "P2",
+    "title": "Multiple create_goal fragments in one dump: only the first gets a modal, the rest silently dropped",
+    "effort": "M",
+    "risk": "medium",
+    "dependsOn": [],
+    "executability": "assisted",
+    "needsDecision": "Is multiple-goals-in-one-dump worth supporting for alpha, or is single-goal-per-dump acceptable?"
+  },
+  {
+    "id": "128",
+    "stream": "dump-flow",
+    "phase": "P2",
+    "title": "Goal-intent dump can be silently abandoned with no ack and no record of the goal",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [
+      "87"
+    ],
+    "executability": "manual-or-prod",
+    "needsDecision": "On modal dismiss: quiet ack, or actually file an unassigned goal note?"
+  },
+  {
+    "id": "8",
+    "stream": "orchestrator-notify",
+    "phase": "P2",
+    "title": "Time-windowed work/goals cues never fire on a timer (only on store-key change)",
+    "effort": "M",
+    "risk": "medium",
+    "dependsOn": [
+      "96"
+    ],
+    "executability": "assisted",
+    "needsDecision": ""
+  },
+  {
+    "id": "27",
+    "stream": "orchestrator-notify",
+    "phase": "P2",
+    "title": "scheduleAt cancel() races the async native-schedule path -> notification can't be cancelled",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "41",
+    "stream": "orchestrator-notify",
+    "phase": "P2",
+    "title": "enriched_signals INSERT not idempotent -> crash/retry after raw_dumps upsert duplicates signal rows",
+    "effort": "M",
+    "risk": "medium",
+    "dependsOn": [],
+    "executability": "manual-or-prod",
+    "needsDecision": "Can a UNIQUE(dump_id) migration be applied to prod enriched_signals (may hold dup dump_id rows to de-dup first)?"
+  },
+  {
+    "id": "42",
+    "stream": "orchestrator-notify",
+    "phase": "P2",
+    "title": "Enrich drain BATCH_CAP consumed by retry-counter keys (prefix overlap)",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "43",
+    "stream": "orchestrator-notify",
+    "phase": "P2",
+    "title": "cadence-scanner day-scoped dedup vs notify()'s rolling-24h dedup -> double push ~1h apart across midnight",
+    "effort": "M",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "47",
+    "stream": "orchestrator-notify",
+    "phase": "P2",
+    "title": "Snooze reschedule loses durable server-push, drops category/extra, uses placeholder title",
+    "effort": "M",
+    "risk": "medium",
+    "dependsOn": [],
+    "executability": "assisted",
+    "needsDecision": ""
+  },
+  {
+    "id": "48",
+    "stream": "orchestrator-notify",
+    "phase": "P2",
+    "title": "scheduleSystemNotification arms an unbounded, untracked setTimeout (overflow >24.8d fires immediately; not torn down)",
+    "effort": "M",
+    "risk": "medium",
+    "dependsOn": [
+      "71"
+    ],
+    "executability": "assisted",
+    "needsDecision": ""
+  },
+  {
+    "id": "57",
+    "stream": "orchestrator-notify",
+    "phase": "P2",
+    "title": "cadence-scanner in-process sessionFired Set grows unbounded over a long-lived session",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "70",
+    "stream": "orchestrator-notify",
+    "phase": "P2",
+    "title": "resumeScheduled re-fires notifications the native backend already delivered (reintroduces NC6 duplicate)",
+    "effort": "S",
+    "risk": "medium",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "71",
+    "stream": "orchestrator-notify",
+    "phase": "P2",
+    "title": "Orchestrator/finance notifications use bare setTimeout: >24.8d fires immediately + multi-day timers lost on quit",
+    "effort": "M",
+    "risk": "medium",
+    "dependsOn": [
+      "48"
+    ],
+    "executability": "assisted",
+    "needsDecision": ""
+  },
+  {
+    "id": "72",
+    "stream": "orchestrator-notify",
+    "phase": "P2",
+    "title": "cycle prediction cues only emit on item change, not on the 60s clock tick -> narrow open windows missed",
+    "effort": "M",
+    "risk": "medium",
+    "dependsOn": [],
+    "executability": "assisted",
+    "needsDecision": ""
+  },
+  {
+    "id": "92",
+    "stream": "orchestrator-notify",
+    "phase": "P2",
+    "title": "scheduleAt trusts worker-supplied scheduledAtMs with no sanity bounds -> past timestamp fires immediately",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "93",
+    "stream": "orchestrator-notify",
+    "phase": "P2",
+    "title": "scheduleWeeklyReview/scheduleBodyCorrelationPass can busy-re-arm if a setTimeout fires early",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "96",
+    "stream": "orchestrator-notify",
+    "phase": "P2",
+    "title": "work/goals scanCues dedup is in-memory only; system-notification path ignores dedupe_key -> cues re-fire on every restart",
+    "effort": "M",
+    "risk": "medium",
+    "dependsOn": [],
+    "executability": "assisted",
+    "needsDecision": "Route work/goals scanCues through notify() (gains budget/cap/24h-dedupe but counts against daily cap) or keep direct slot and only persist fired keys?"
+  },
+  {
+    "id": "100",
+    "stream": "orchestrator-notify",
+    "phase": "P2",
+    "title": "flush daily-budget cap racy across overlapping ticks / multi-device -> can overshoot ~2x",
+    "effort": "M",
+    "risk": "medium",
+    "dependsOn": [],
+    "executability": "manual-or-prod",
+    "needsDecision": "Is a single cron tick the only writer in prod now, or must we defend against two concurrent flush runs?"
+  },
+  {
+    "id": "101",
+    "stream": "orchestrator-notify",
+    "phase": "P2",
+    "title": "No retry backoff/jitter on KV-scan enrich drain -> failing dumps retry every 5 min flat during outage",
+    "effort": "M",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "manual-or-prod",
+    "needsDecision": "Fix the KV-scan backoff, or commit to the Cloudflare Queues path and delete the KV-scan drain entirely?"
+  },
+  {
+    "id": "157",
+    "stream": "orchestrator-notify",
+    "phase": "P2",
+    "title": "Multiple persisted dedup arrays grow unbounded (audit-#8 leak at missed sites)",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "158",
+    "stream": "orchestrator-notify",
+    "phase": "P2",
+    "title": "body hourly tick offset from clock hours -> a fixed-time reminder window can be skipped",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "159",
+    "stream": "orchestrator-notify",
+    "phase": "P2",
+    "title": "work four_blocks_today can fire on a single re-logged session (no dedupe on entry identity)",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "160",
+    "stream": "orchestrator-notify",
+    "phase": "P2",
+    "title": "flush no-token path double-counts stats (no_token + retried/failed)",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "161",
+    "stream": "orchestrator-notify",
+    "phase": "P2",
+    "title": "flush doesn't distinguish permanent token failures (410/BadDeviceToken) from transient -> retried to max, never pruned",
+    "effort": "M",
+    "risk": "medium",
+    "dependsOn": [],
+    "executability": "assisted",
+    "needsDecision": ""
+  },
+  {
+    "id": "167",
+    "stream": "orchestrator-notify",
+    "phase": "P2",
+    "title": "Aggregated digest notifications bypass the daily-cap budget check",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "168",
+    "stream": "orchestrator-notify",
+    "phase": "P2",
+    "title": "Notification daily-cap counts local-day-of-now, disagrees with cron-side cap definition -> cap exceeded on travel/DST",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "manual-or-prod",
+    "needsDecision": "Unify client + cron cap on a single UTC day window, or accept both as independent best-effort soft caps and document it?"
+  },
+  {
+    "id": "39",
+    "stream": "ai-cost-validation",
+    "phase": "P3",
+    "title": "clerk-verify omits azp/aud audience check -> token from another app on same Clerk instance accepted",
+    "effort": "S",
+    "risk": "medium",
+    "dependsOn": [],
+    "executability": "assisted",
+    "needsDecision": "Confirm exact azp/origin value(s) Clerk emits for the Ollie native app (localhost:9527 + app.ollie.ollie)."
+  },
+  {
+    "id": "40",
+    "stream": "ai-cost-validation",
+    "phase": "P3",
+    "title": "/validate-invite + /claim-invite unauthenticated/under-protected, no rate limit -> enumeration oracle",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "assisted",
+    "needsDecision": "Can the landing page lose specific used vs expired messages (collapse to boolean), or keep reason codes?"
+  },
+  {
+    "id": "66",
+    "stream": "ai-cost-validation",
+    "phase": "P3",
+    "title": "/brain-copy is an open LLM proxy \u2014 client-supplied system+user prompt forwarded verbatim to Groq",
+    "effort": "M",
+    "risk": "medium",
+    "dependsOn": [
+      "2"
+    ],
+    "executability": "manual-or-prod",
+    "needsDecision": "Own the {noticing,day,lang}->prompt template server-side, or remove /brain-copy entirely since the client has a trilingual static fallback?"
+  },
+  {
+    "id": "85",
+    "stream": "ai-cost-validation",
+    "phase": "P3",
+    "title": "/generate-invite + /claim-invite trust client-supplied user hashes instead of verified JWT (IDOR attribution poisoning)",
+    "effort": "S",
+    "risk": "medium",
+    "dependsOn": [],
+    "executability": "assisted",
+    "needsDecision": "Confirm salt + hashing scheme matches what invite-funnel views/telemetry already key on."
+  },
+  {
+    "id": "84",
+    "stream": "ai-cost-validation",
+    "phase": "P3",
+    "title": "enrich-dump does not bound raw_text length before scrubbing + queuing",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "155",
+    "stream": "ai-cost-validation",
+    "phase": "P3",
+    "title": "ingest-event forwards arbitrary client row keys to Supabase REST (relies entirely on DB constraints)",
+    "effort": "M",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "assisted",
+    "needsDecision": "Confirm authoritative column set per telemetry table so the whitelist doesn't drop legitimate fields."
+  },
+  {
+    "id": "38",
+    "stream": "ai-cost-validation",
+    "phase": "P3",
+    "title": "Handlers/route.ts read req.json() with no body-size guard; /route/:module has no text length cap",
+    "effort": "M",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "56",
+    "stream": "security-privacy",
+    "phase": "P3",
+    "title": "Sentry tunnel is an unauthenticated open relay (CORS *, no auth, no body-size cap) -> quota burn / forged errors",
+    "effort": "M",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "165",
+    "stream": "security-privacy",
+    "phase": "P3",
+    "title": "Sentry tunnel upstream fetch has no try/catch or timeout -> hangs/uncaught 500",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [
+      "56"
+    ],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "54",
+    "stream": "security-privacy",
+    "phase": "P3",
+    "title": "Tauri app-command event channel reachable by any webview JS; CSP disabled (csp:null); notification handlers don't bound title/body",
+    "effort": "M",
+    "risk": "medium",
+    "dependsOn": [],
+    "executability": "assisted",
+    "needsDecision": "Full set of origins the webview talks to (Clerk frontend API, ai-proxy/apns/sentry workers, Supabase) before locking CSP."
+  },
+  {
+    "id": "103",
+    "stream": "security-privacy",
+    "phase": "P3",
+    "title": "iOS ATS fully relaxed (NSAllowsArbitraryLoadsInWebContent=true) in a CSP-less remote-origin webview",
+    "effort": "M",
+    "risk": "medium",
+    "dependsOn": [
+      "54"
+    ],
+    "executability": "assisted",
+    "needsDecision": "Which exact domains the iOS webview must reach over HTTPS; confirm where the generator reads ATS so the edit survives regen."
+  },
+  {
+    "id": "132",
+    "stream": "store-data",
+    "phase": "P3",
+    "title": "Notification category_id/extra_json piped webview->OS userInfo with no validation/length cap",
+    "effort": "M",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "assisted",
+    "needsDecision": ""
+  },
+  {
+    "id": "55",
+    "stream": "security-privacy",
+    "phase": "P3",
+    "title": "App Group snapshot writes finance + pantry PII plaintext into a shared container readable without app unlock",
+    "effort": "S",
+    "risk": "medium",
+    "dependsOn": [],
+    "executability": "manual-or-prod",
+    "needsDecision": "What is the minimum the widget/Siri intent actually needs? Widget value vs at-rest exposure."
+  },
+  {
+    "id": "76",
+    "stream": "security-privacy",
+    "phase": "P3",
+    "title": "Turkish dotted-\u00c4\u00b0 names bypass the PII name wordlist -> common TR names emitted unredacted to research corpus",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "77",
+    "stream": "security-privacy",
+    "phase": "P3",
+    "title": "Crisis raw text leaks to client in CrisisSignal.matches[].line despite zero-storage invariant",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "assisted",
+    "needsDecision": ""
+  },
+  {
+    "id": "166",
+    "stream": "security-privacy",
+    "phase": "P3",
+    "title": "Crisis exclusion guard suppresses ALL tier-1 matches on any exclusion substring (over-suppression)",
+    "effort": "M",
+    "risk": "medium",
+    "dependsOn": [],
+    "executability": "assisted",
+    "needsDecision": ""
+  },
+  {
+    "id": "171",
+    "stream": "security-privacy",
+    "phase": "P3",
+    "title": "PII numeric scrub preserves any 4-digit number 1900-2099 as 'a year' -> leaks PINs/codes",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "assisted",
+    "needsDecision": "Drop the year exemption entirely (safest) vs add year-context detection (keeps signal)?"
+  },
+  {
+    "id": "172",
+    "stream": "security-privacy",
+    "phase": "P3",
+    "title": "Dead code: ADDRESS_NAME_STOPWORDS can never match an ADDRESS_REGEX result",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "170",
+    "stream": "security-privacy",
+    "phase": "P3",
+    "title": "research-stream device_id fallback UUID throws if crypto.getRandomValues unavailable (violates never-throw contract)",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "154",
+    "stream": "security-privacy",
+    "phase": "P3",
+    "title": "Partner snapshot phrases not length-capped per entry (only sliced to 5) -> 5 arbitrarily large strings to partner",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "162",
+    "stream": "security-privacy",
+    "phase": "P3",
+    "title": "apns-push has zero test coverage despite holding the Apple p8 + ES256 signing + auth + rate limiter",
+    "effort": "M",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "75",
+    "stream": "identity-rls",
+    "phase": "P3",
+    "title": "routing_cache shared across ALL users (no user column) \u2014 first utterance pins classification for everyone within 0.85 cosine",
+    "effort": "M",
+    "risk": "medium",
+    "dependsOn": [
+      "24"
+    ],
+    "executability": "assisted",
+    "needsDecision": "Per-user routing_cache (add user_hash, lose cross-user savings) or shared but restricted to modules where shared classification is safe?"
+  },
+  {
+    "id": "102",
+    "stream": "identity-rls",
+    "phase": "P3",
+    "title": "invite_funnel views not security_invoker \u2014 definer-rights views bypass RLS on telemetry tables",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "109",
+    "stream": "identity-rls",
+    "phase": "P3",
+    "title": "Dual identity model \u2014 no single source of truth; GDPR-erasure by uuid misses Clerk-keyed tables",
+    "effort": "M",
+    "risk": "low",
+    "dependsOn": [
+      "22"
+    ],
+    "executability": "assisted",
+    "needsDecision": ""
+  },
+  {
+    "id": "110",
+    "stream": "identity-rls",
+    "phase": "P3",
+    "title": "Migration history drift: recent migrations partially-applied / applied manually to prod, .sql not a reliable mirror",
+    "effort": "M",
+    "risk": "medium",
+    "dependsOn": [],
+    "executability": "manual-or-prod",
+    "needsDecision": ""
+  },
+  {
+    "id": "111",
+    "stream": "identity-rls",
+    "phase": "P3",
+    "title": "Six worker tables shipped ENABLE not FORCE RLS (~1mo owner-bypass window); closed only by recent unconfirmed-live migrations",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [
+      "110"
+    ],
+    "executability": "assisted",
+    "needsDecision": ""
+  },
+  {
+    "id": "112",
+    "stream": "identity-rls",
+    "phase": "P3",
+    "title": "partner_snapshots/dump_inbox cross-user safety depends entirely on worker code, not the DB",
+    "effort": "M",
+    "risk": "low",
+    "dependsOn": [
+      "22"
+    ],
+    "executability": "assisted",
+    "needsDecision": ""
+  },
+  {
+    "id": "113",
+    "stream": "identity-rls",
+    "phase": "P3",
+    "title": "Dead authenticated RLS policy on grocery_purchase_history (auth.uid()::text = user_id can never match Clerk id)",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [
+      "22"
+    ],
+    "executability": "assisted",
+    "needsDecision": ""
+  },
+  {
+    "id": "114",
+    "stream": "identity-rls",
+    "phase": "P3",
+    "title": "Four worker tables created without IF NOT EXISTS (non-idempotent migrations)",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "63",
+    "stream": "identity-rls",
+    "phase": "P3",
+    "title": "apps/api account-delete keys on Supabase uuid while identity is Clerk text \u2014 GDPR false-positive if deployed",
+    "effort": "M",
+    "risk": "medium",
+    "dependsOn": [
+      "22",
+      "109"
+    ],
+    "executability": "manual-or-prod",
+    "needsDecision": ""
+  },
+  {
+    "id": "21",
+    "stream": "logic-stats",
+    "phase": "P4",
+    "title": "bootstrapCI default RNG seed coupled to iters, not data",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "52",
+    "stream": "logic-stats",
+    "phase": "P4",
+    "title": "computeMonthlyOutflow month arithmetic skips short months on 29-31st",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "58",
+    "stream": "logic-stats",
+    "phase": "P4",
+    "title": "friction-signature day-of-week rate >1 + valley picks zero-data weekday",
+    "effort": "M",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "107",
+    "stream": "logic-stats",
+    "phase": "P4",
+    "title": "Luteal-spending correlation injects structural-zero days, biasing Spearman",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "136",
+    "stream": "logic-stats",
+    "phase": "P4",
+    "title": "Cycle-day counter divides absolute ms by 86400000, off-by-one across DST",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "141",
+    "stream": "logic-stats",
+    "phase": "P4",
+    "title": "detectChangePoint fires on any nonzero delta when pooledSd=0",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "143",
+    "stream": "logic-stats",
+    "phase": "P4",
+    "title": "detectSavingsTransfers labels any same-day same-amount pair high-confidence + auto_apply",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "assisted",
+    "needsDecision": "Should a matched amount-pair WITHOUT any savings keyword surface at all (as medium/needs-confirm) or be dropped?"
+  },
+  {
+    "id": "144",
+    "stream": "logic-stats",
+    "phase": "P4",
+    "title": "detectSavingsTransfers reads Date.now() for IDs, breaking purity/determinism",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "145",
+    "stream": "logic-stats",
+    "phase": "P4",
+    "title": "Sleep-debt window cutoff mixes local-midnight parse against epoch cutoff",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "146",
+    "stream": "logic-stats",
+    "phase": "P4",
+    "title": "Two divergent isoWeekKey impls (local vs UTC) used as cross-module dedupe keys",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "51",
+    "stream": "logic-stats",
+    "phase": "P4",
+    "title": "Three conflicting cycle-phase boundary definitions",
+    "effort": "M",
+    "risk": "medium",
+    "dependsOn": [],
+    "executability": "assisted",
+    "needsDecision": "Clinically intended boundary table \u2014 follicular cutoff avgCycle-17 vs -18, inclusive vs strict edges?"
+  },
+  {
+    "id": "138",
+    "stream": "logic-stats",
+    "phase": "P4",
+    "title": "computePhaseForDate has no upper day bound, returns luteal forever",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [
+      "51"
+    ],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "106",
+    "stream": "logic-stats",
+    "phase": "P4",
+    "title": "Cold-start change-point window split + missing pooledSd guard + body tick drift",
+    "effort": "M",
+    "risk": "medium",
+    "dependsOn": [
+      "141"
+    ],
+    "executability": "assisted",
+    "needsDecision": ""
+  },
+  {
+    "id": "104",
+    "stream": "logic-stats",
+    "phase": "P4",
+    "title": "MAD scaling convention contradictory across finance writers/readers",
+    "effort": "M",
+    "risk": "medium",
+    "dependsOn": [],
+    "executability": "assisted",
+    "needsDecision": "Intended band semantics \u2014 both modified-z (0.6745) or both robust-sigma (1.4826)?"
+  },
+  {
+    "id": "105",
+    "stream": "logic-stats",
+    "phase": "P4",
+    "title": "Peak-|rho| over 7 lags then single bootstrap CI is post-selection biased",
+    "effort": "M",
+    "risk": "medium",
+    "dependsOn": [],
+    "executability": "assisted",
+    "needsDecision": "Correction method \u2014 BH-FDR across lags vs bootstrap-the-max statistic?"
+  },
+  {
+    "id": "139",
+    "stream": "logic-stats",
+    "phase": "P4",
+    "title": "detectHabitRebirthLegacy counts cadence-driven gaps as restarts",
+    "effort": "M",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "assisted",
+    "needsDecision": ""
+  },
+  {
+    "id": "142",
+    "stream": "logic-stats",
+    "phase": "P4",
+    "title": "detectLutealCollapse denominator uses current habit count for whole window",
+    "effort": "M",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "assisted",
+    "needsDecision": ""
+  },
+  {
+    "id": "140",
+    "stream": "logic-stats",
+    "phase": "P4",
+    "title": "Fixed 24h day-stepping with local dayKey skips/double-counts a day across DST",
+    "effort": "L",
+    "risk": "medium",
+    "dependsOn": [],
+    "executability": "assisted",
+    "needsDecision": ""
+  },
+  {
+    "id": "13",
+    "stream": "clean-code-wheels-ui",
+    "phase": "P5",
+    "title": "scheduleReminderIfPresent duplicated near-verbatim between admin and work handlers",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "14",
+    "stream": "clean-code-wheels-ui",
+    "phase": "P5",
+    "title": "start_timer uses in-process setTimeout \u2014 lost on app reload/quit/background",
+    "effort": "M",
+    "risk": "medium",
+    "dependsOn": [
+      "13"
+    ],
+    "executability": "assisted",
+    "needsDecision": "Is the macOS-desktop 'scheduled notification fires immediately' behavior still real on current Tauri?"
+  },
+  {
+    "id": "15",
+    "stream": "clean-code-wheels-ui",
+    "phase": "P5",
+    "title": "newId() duplicated verbatim in 12-13 module repos",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "17",
+    "stream": "clean-code-wheels-ui",
+    "phase": "P5",
+    "title": "RemoveButton reimplemented ~11-12x across module Boxes (already drifting)",
+    "effort": "M",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "assisted",
+    "needsDecision": ""
+  },
+  {
+    "id": "18",
+    "stream": "clean-code-wheels-ui",
+    "phase": "P5",
+    "title": "formatDays day-count formatter defined identically in 9-10 files",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "19",
+    "stream": "clean-code-wheels-ui",
+    "phase": "P5",
+    "title": "apns-push worker hand-rolls ES256 JWT signing instead of @ollie/apns-jwt",
+    "effort": "S",
+    "risk": "medium",
+    "dependsOn": [],
+    "executability": "assisted",
+    "needsDecision": ""
+  },
+  {
+    "id": "20",
+    "stream": "clean-code-wheels-ui",
+    "phase": "P5",
+    "title": "apns-push KV rate limit is non-atomic read-modify-write (5/s ceiling not enforced under burst)",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "assisted",
+    "needsDecision": "Is apns-push reachable by anything other than the cron service binding? Determines DO atomic counter vs best-effort comment."
+  },
+  {
+    "id": "126",
+    "stream": "clean-code-wheels-ui",
+    "phase": "P5",
+    "title": "FocusTimer brown-noise Audio element created but never released (leaks decoded loop buffers)",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "137",
+    "stream": "clean-code-wheels-ui",
+    "phase": "P5",
+    "title": "medications_events declares a FOREIGN KEY SQLite never enforces (PRAGMA off) \u2014 misleading",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "assisted",
+    "needsDecision": "Remove the unenforced FK clause (minimal/safe), or enable PRAGMA foreign_keys globally and audit cascade deletes?"
+  },
+  {
+    "id": "175",
+    "stream": "clean-code-wheels-ui",
+    "phase": "P5",
+    "title": "Dead env var SUPABASE_SERVICE_ROLE_KEY declared + documented but never read in cron (second copy of the most powerful key)",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "assisted",
+    "needsDecision": ""
+  },
+  {
+    "id": "177",
+    "stream": "clean-code-wheels-ui",
+    "phase": "P5",
+    "title": "Dead layout primitives: Container (0 importers), Spacer (0 importers), Box (1 importer) \u2014 ~312 lines unadopted",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "178",
+    "stream": "clean-code-wheels-ui",
+    "phase": "P5",
+    "title": "Hand-listed module registry: 14 imports + 14 routes maintained by hand in Router.tsx",
+    "effort": "M",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "181",
+    "stream": "clean-code-wheels-ui",
+    "phase": "P5",
+    "title": "useBearer auth wrapper re-implemented in 4 places, drifting on the null/empty fallback",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "16",
+    "stream": "store-data",
+    "phase": "P5",
+    "title": "Deep-link box/:id navigates to any string with no allowlist against the module registry",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "12",
+    "stream": "store-data",
+    "phase": "P5",
+    "title": "encryptedKv envelope omits PBKDF2 iteration count -> future iteration bump makes all prior values undecryptable",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "94",
+    "stream": "store-data",
+    "phase": "P5",
+    "title": "Cross-tab invalidation never fires per-key (subscribeKey) listeners -> cache invalidated but no re-render",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "95",
+    "stream": "store-data",
+    "phase": "P5",
+    "title": "store.set hands subscribers and getModule callers a live reference to the internal cache object",
+    "effort": "S",
+    "risk": "medium",
+    "dependsOn": [],
+    "executability": "assisted",
+    "needsDecision": ""
+  },
+  {
+    "id": "121",
+    "stream": "store-data",
+    "phase": "P5",
+    "title": "useStoreSlice shows stale value when mod/key prop changes (initializer runs only on mount)",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "122",
+    "stream": "store-data",
+    "phase": "P5",
+    "title": "useStoreSlice returns a new (unmemoized) setter each render -> defeats memoized children / re-runs effects",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [
+      "121"
+    ],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "123",
+    "stream": "store-data",
+    "phase": "P5",
+    "title": "cross-tab sync ignores module names starting with _ (broad filter)",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "124",
+    "stream": "store-data",
+    "phase": "P5",
+    "title": "kv.get does unguarded JSON.parse -> one corrupt value throws on every read of that key forever",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "125",
+    "stream": "store-data",
+    "phase": "P5",
+    "title": "Migration snapshot pruning relies on ms-unique Date.now() keys -> same-ms collision overwrites a snapshot",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "131",
+    "stream": "store-data",
+    "phase": "P5",
+    "title": "Cold-start deep link guarded only per hook-instance, not per process -> remount re-navigates to launch deep link",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "auto",
+    "needsDecision": ""
+  },
+  {
+    "id": "133",
+    "stream": "store-data",
+    "phase": "P5",
+    "title": "Box load effects run a migration on every mount (no module-level guard; StrictMode/route flips re-invoke)",
+    "effort": "M",
+    "risk": "low",
+    "dependsOn": [
+      "4"
+    ],
+    "executability": "assisted",
+    "needsDecision": "Run all module migrations once at boot (migrateAll/runMigrations) vs keep per-Box migrate gated behind a session flag?"
+  },
+  {
+    "id": "35",
+    "stream": "clean-code-wheels-ui",
+    "phase": "P5",
+    "title": "Box lifecycle scaffold (migrate->refresh->setReady + 6s poll + focus refresh) copy-pasted across 12-13 modules; POLL_MS=6000 redeclared 12x",
+    "effort": "L",
+    "risk": "medium",
+    "dependsOn": [],
+    "executability": "assisted",
+    "needsDecision": ""
+  },
+  {
+    "id": "61",
+    "stream": "clean-code-wheels-ui",
+    "phase": "P5",
+    "title": "Ledger-backed SQLite migration runner is dead code; 13-14 modules reinvent the PRAGMA-probe-then-ALTER it replaces",
+    "effort": "L",
+    "risk": "medium",
+    "dependsOn": [],
+    "executability": "manual-or-prod",
+    "needsDecision": "Adopt the ledger runMigrations() across all modules (also fixes #4), OR delete the ledger runner and bless the per-module pattern?"
+  },
+  {
+    "id": "31",
+    "stream": "clean-code-wheels-ui",
+    "phase": "P5",
+    "title": "Dark mode half-wired: static light-only colors alias; useTokens()/useTheme has zero module consumers",
+    "effort": "L",
+    "risk": "medium",
+    "dependsOn": [],
+    "executability": "manual-or-prod",
+    "needsDecision": "Is dark mode in scope for alpha? Wire useTokens through all Boxes (large) vs delete the dark machinery."
+  },
+  {
+    "id": "32",
+    "stream": "clean-code-wheels-ui",
+    "phase": "P5",
+    "title": "Design-system Button/Input primitives bypassed by ~68 raw <button> / ~10 raw <input>",
+    "effort": "XL",
+    "risk": "medium",
+    "dependsOn": [
+      "17"
+    ],
+    "executability": "assisted",
+    "needsDecision": ""
+  },
+  {
+    "id": "59",
+    "stream": "clean-code-wheels-ui",
+    "phase": "P5",
+    "title": "SMCP small-caps label style re-declared 15-19x (and 0.08em disagrees with token 0.10em)",
+    "effort": "M",
+    "risk": "low",
+    "dependsOn": [],
+    "executability": "assisted",
+    "needsDecision": "Canonical small-caps letter-spacing \u2014 0.08em, 0.10em (current token), or 0.13em?"
+  },
+  {
+    "id": "60",
+    "stream": "clean-code-wheels-ui",
+    "phase": "P5",
+    "title": "Oversized monolithic Box god-files (Grocery 1349, Finance 1268, Medication 1082, Work 1005, Goals 998 lines)",
+    "effort": "XL",
+    "risk": "medium",
+    "dependsOn": [
+      "17",
+      "18",
+      "32",
+      "35"
+    ],
+    "executability": "assisted",
+    "needsDecision": ""
+  },
+  {
+    "id": "176",
+    "stream": "clean-code-wheels-ui",
+    "phase": "P5",
+    "title": "Type-scale Text primitive bypassed by ~157 raw inline fontSize + ~88 inline fontFamily",
+    "effort": "XL",
+    "risk": "medium",
+    "dependsOn": [
+      "32"
+    ],
+    "executability": "assisted",
+    "needsDecision": ""
+  },
+  {
+    "id": "179",
+    "stream": "clean-code-wheels-ui",
+    "phase": "P5",
+    "title": "GroceryNow introduces a third hardcoded-hex color source diverging from theme tokens",
+    "effort": "S",
+    "risk": "low",
+    "dependsOn": [
+      "31"
+    ],
+    "executability": "manual-or-prod",
+    "needsDecision": "Is GroceryNow's redesign palette the future direction (promote to tokens) or a throwaway spike (leave, track)?"
+  },
+  {
+    "id": "180",
+    "stream": "clean-code-wheels-ui",
+    "phase": "P5",
+    "title": "Layout primitives (Stack/Row/Box) coexist with hand-rolled inline flex (8-13x per file)",
+    "effort": "L",
+    "risk": "medium",
+    "dependsOn": [
+      "60"
+    ],
+    "executability": "assisted",
+    "needsDecision": ""
+  },
+  {
+    "id": "62",
+    "stream": "clean-code-wheels-ui",
+    "phase": "P5",
+    "title": "@ollie/research-stream is consent-gated on necessary (true for all bootable users) and has zero production call sites",
+    "effort": "M",
+    "risk": "medium",
+    "dependsOn": [],
+    "executability": "manual-or-prod",
+    "needsDecision": "Is research-stream behavioral telemetry shipping in alpha, and on which consent flag \u2014 necessary (everyone) or a separate research_optin?"
+  },
+  {
+    "id": "44",
+    "stream": "ops-config-tests",
+    "phase": "P5",
+    "title": "Queues blocks LIVE but header comments claim COMMENTED OUT (deploy-breaking contradiction) + SERVICE_ROLE env-name drift",
+    "effort": "M",
+    "risk": "medium",
+    "dependsOn": [],
+    "executability": "manual-or-prod",
+    "needsDecision": "Are the ollie-enrich-queue/ollie-enrich-dlq queues actually provisioned in CF? Re-comment the blocks if not, delete the stale banners if so."
+  }
+]
