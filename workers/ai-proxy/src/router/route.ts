@@ -118,6 +118,12 @@ export interface RouteEnv {
    */
   T0_JWT_ENFORCED?: string;
   /**
+   * Cloudflare environment name ("production" in prod). A production deploy
+   * enforces auth even if T0_JWT_ENFORCED is ever misconfigured to '0', matching
+   * the belt-and-suspenders guard in feed-me / purchase / replenishment (S4e).
+   */
+  ENVIRONMENT?: string;
+  /**
    * Clerk issuer URL — e.g. https://faithful-stag-15.clerk.accounts.dev.
    * Required when T0_JWT_ENFORCED === '1'. Mirrors the shape used by
    * `invites.verifyJwt`.
@@ -263,7 +269,7 @@ export async function handleRoute(
   // it through every cache lookup + write so a lookup can ONLY match the
   // caller's own prior entries.
   let userId: string;
-  if (env.T0_JWT_ENFORCED !== '0') {
+  if (env.T0_JWT_ENFORCED !== '0' || env.ENVIRONMENT === 'production') {
     const auth = req.headers.get('authorization');
     if (!auth || !auth.startsWith('Bearer ')) {
       return json({ error: 'unauthorized' }, 401);
