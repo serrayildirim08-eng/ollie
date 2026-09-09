@@ -21,8 +21,16 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 // ─── env validation ───────────────────────────────────────────────────────────
 
-function requireEnv(key: string): string {
-  const val = import.meta.env[key] as string | undefined;
+// Static allowlist — dynamic `import.meta.env[key]` access makes Vite
+// serialize the ENTIRE env object into the shipped bundle (every VITE_ var,
+// secrets included). Literal property access inlines only these two values.
+const SUPABASE_ENV = {
+  VITE_SUPABASE_URL: import.meta.env.VITE_SUPABASE_URL as string | undefined,
+  VITE_SUPABASE_ANON_KEY: import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined,
+} as const;
+
+function requireEnv(key: keyof typeof SUPABASE_ENV): string {
+  const val = SUPABASE_ENV[key];
   if (!val) {
     throw new Error(
       `[ollie/native] Missing required env var: ${key}. ` +
