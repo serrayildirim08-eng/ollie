@@ -18,7 +18,7 @@ jobs:
       TZ: UTC
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -37,7 +37,7 @@ jobs:
         working-directory: workers/ai-proxy
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -62,7 +62,7 @@ jobs:
         working-directory: workers/cron
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -84,7 +84,7 @@ jobs:
         working-directory: workers/apns-push
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -106,7 +106,7 @@ jobs:
         working-directory: workers/sentry-tunnel
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
