@@ -41,7 +41,8 @@ export async function startDatelessLadderFor(input: StartLadderInput): Promise<v
 
 /**
  * Single chokepoint for "a task was completed" — cancels every remaining ladder
- * notification for the row and forgets its ladder state. Call from BOTH the
+ * notification for the row, forgets its ladder state, and cancels the row's
+ * timed `reminder:<taskId>` notification. Call from BOTH the
  * notification "Got it ✓" path AND every in-app completion (todo check-off, box
  * toggles). Idempotent + best-effort: harmless for a task that never had a
  * ladder (cancelLadder no-ops when no entry / no scheduled tier exists).
@@ -55,5 +56,12 @@ export async function onTaskCompleted(module: LadderModule, taskId: string): Pro
     ladder.cancelLadder(module, taskId, store);
   } catch (err) {
     console.error('[ladder] onTaskCompleted failed (non-fatal):', err);
+  }
+  // Done early → the timed reminder for this row must not fire anymore.
+  try {
+    const { cancelScheduledById } = await import('./systemNotify');
+    cancelScheduledById(`reminder:${taskId}`);
+  } catch (err) {
+    console.error('[ladder] reminder cancel failed (non-fatal):', err);
   }
 }
