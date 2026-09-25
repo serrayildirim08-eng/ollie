@@ -103,15 +103,17 @@ function hhmm(d: Date): string {
 }
 
 /**
- * The quiet left-column label for a row: "14:00" today, "tue 14:00" this
- * week, "12 oct" this month; "overdue" when a day-only item is in the past.
+ * The quiet right-column label for a row: "14:00" today, "tue 14:00" this
+ * week, "12 oct" this month; "overdue" when a day-only item is in the past,
+ * nothing for a day-only item due today.
  */
 export function whenLabel(item: UpcomingItem, horizon: HorizonId, now: number = Date.now()): string {
   if (item.at === null) return '';
   const d = new Date(item.at);
   if (horizon === 'today') {
     if (item.hasTime) return hhmm(d);
-    return item.at < startOfDay(now) ? 'overdue' : 'today';
+    // The section header already says "today" — only flag the overdue ones.
+    return item.at < startOfDay(now) ? 'overdue' : '';
   }
   if (horizon === 'thisWeek') {
     const day = WEEKDAYS[d.getDay()];

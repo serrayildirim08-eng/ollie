@@ -92,6 +92,11 @@ describe('whenLabel', () => {
     expect(whenLabel(h!.items[0]!, 'thisMonth', NOW)).toBe('25 sep 14:05');
   });
 
+  it('leaves day-only items due today unlabeled', () => {
+    const [h] = buildUpcoming([todo('now', { date: '2026-09-23' })], new Map(), NOW);
+    expect(whenLabel(h!.items[0]!, 'today', NOW)).toBe('');
+  });
+
   it('marks past day-only items overdue', () => {
     const [h] = buildUpcoming([todo('old', { date: '2026-09-20' })], new Map(), NOW);
     expect(whenLabel(h!.items[0]!, 'today', NOW)).toBe('overdue');
