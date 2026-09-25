@@ -73,3 +73,13 @@
     opacity: 1;
   }
 }
+
+/* variant="dock" — the chat box pinned to the bottom of the scrolling home
+   column, over a fade so rows scroll under it cleanly. */
+.dock {
+  position: sticky;
+  bottom: 0;
+  padding: 16px 0 calc(12px + env(safe-area-inset-bottom));
+  background: linear-gradient(to bottom, transparent, var(--ollie-color-cream) 24px);
+  z-index: 5;
+}

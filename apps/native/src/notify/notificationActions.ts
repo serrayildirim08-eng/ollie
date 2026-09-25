@@ -20,6 +20,7 @@
  */
 
 import { scheduleAt } from './systemNotify';
+import { recordReminder } from './reminderLedger';
 
 export const OLLIE_REMINDER_CATEGORY = 'OLLIE_REMINDER';
 export const ACTION_COMPLETE = 'complete';
@@ -99,7 +100,9 @@ function handleAction(actionId: string | undefined, extra: Partial<ReminderActio
   if (routed.op === 'complete') {
     void _completeFn?.(routed.meta);
   } else {
-    scheduleAt(Date.now() + SNOOZE_MS, { title: title ?? 'reminder', body }, `reminder:${routed.meta.refId}`);
+    const fireAt = Date.now() + SNOOZE_MS;
+    scheduleAt(fireAt, { title: title ?? 'reminder', body }, `reminder:${routed.meta.refId}`);
+    recordReminder(routed.meta.refId, title ?? 'reminder', body ?? '', fireAt);
   }
 }
 

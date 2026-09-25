@@ -146,3 +146,65 @@ export function Layout(): JSX.Element {
     </>
   );
 }
+
+/**
+ * SimpleLayout — the reminder-first shell: no tab bar, one centered column,
+ * safe-area padding. HomeScreen pins its own chat box, so no bottom padding
+ * for a nav bar here.
+ */
+const simpleCss = `
+  html, body, #root { height: 100%; margin: 0; }
+  .ollie-simple-root { height: 100dvh; overflow: hidden; }
+  .ollie-simple-main {
+    height: 100%;
+    box-sizing: border-box;
+    padding: calc(8px + env(safe-area-inset-top)) 20px 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+  }
+`;
+
+export function SimpleLayout(): JSX.Element {
+  const location = useLocation();
+  const onHome = location.pathname === "/" || location.pathname === "";
+  return (
+    <>
+      <style>{simpleCss}</style>
+      <Box
+        className="ollie-simple-root"
+        style={{ background: colors.cream, color: colors.ink }}
+      >
+        <Box as="main" className="ollie-simple-main">
+          {!onHome && <HomeLink />}
+          <Profiler id={location.pathname} onRender={onScreenRender}>
+            <Outlet />
+          </Profiler>
+        </Box>
+      </Box>
+    </>
+  );
+}
+
+function HomeLink(): JSX.Element {
+  const navigate = useNavigate();
+  return (
+    <button
+      type="button"
+      onClick={() => navigate("/")}
+      aria-label="back"
+      style={{
+        background: "none",
+        border: "none",
+        padding: "16px 0",
+        color: colors.inkFaint,
+        cursor: "pointer",
+        fontSize: 13,
+        fontFamily: "inherit",
+        ...SMCP,
+      }}
+    >
+      ← back
+    </button>
+  );
+}

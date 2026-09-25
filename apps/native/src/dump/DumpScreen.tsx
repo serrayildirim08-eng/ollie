@@ -103,7 +103,14 @@ function buildRouteLabel(entry: DispatchEntry): string {
   return action ? `${module} · ${action}` : module;
 }
 
-export function DumpScreen(): JSX.Element {
+export interface DumpScreenProps {
+  /** 'dock' = the reminder-first home: no header / pulse / first-run guide,
+   *  and the input is pinned to the bottom like a chat box. */
+  variant?: 'classic' | 'dock';
+}
+
+export function DumpScreen({ variant = 'classic' }: DumpScreenProps = {}): JSX.Element {
+  const dock = variant === 'dock';
   const { getToken } = useAuth();
   const [ackKey, setAckKey] = useState<number | null>(null);
   // Monotonic tick that forces the <Ack> to remount so its CSS animation
@@ -363,9 +370,19 @@ export function DumpScreen(): JSX.Element {
     setCrisis(signal);
   }, []);
 
+  const input = (
+    <BrainDumpInput
+      getBearer={getBearer}
+      onSubmitted={onSubmitted}
+      onResult={onResult}
+      onCrisis={onCrisis}
+      seed={seed}
+    />
+  );
+
   return (
-    <Stack gap={32}>
-      <Stack gap={6}>
+    <Stack gap={dock ? 16 : 32}>
+      {!dock && <Stack gap={6}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
           <svg width={18} height={18} viewBox="0 0 24 24" aria-hidden>
             <path
@@ -393,21 +410,15 @@ export function DumpScreen(): JSX.Element {
         >
           what's on your mind?
         </Text>
-      </Stack>
+      </Stack>}
 
-      <BrainDumpInput
-        getBearer={getBearer}
-        onSubmitted={onSubmitted}
-        onResult={onResult}
-        onCrisis={onCrisis}
-        seed={seed}
-      />
+      {!dock && input}
 
-      {!crisis && showGuide && <FirstRunGuide onPick={onPickExample} />}
+      {!dock && !crisis && showGuide && <FirstRunGuide onPick={onPickExample} />}
 
       {/* One calm orientation line — "today's clear." / "a few things for
           today." Hidden during first-run (the guide speaks then) and on crisis. */}
-      {!crisis && !showGuide && <TodayPulse />}
+      {!dock && !crisis && !showGuide && <TodayPulse />}
 
       {/* The cross-life "today" surface — the PRIMARY brain surface (Sprint 2).
           Replaces the old per-module dump card here: the selection discipline
@@ -476,6 +487,8 @@ export function DumpScreen(): JSX.Element {
           ))}
         </Stack>
       )}
+
+      {dock && <div className={styles.dock}>{input}</div>}
     </Stack>
   );
 }
