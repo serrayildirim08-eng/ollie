@@ -46,6 +46,7 @@ import { migrateSleep } from '../modules/sleep/migrate';
 import { migrateWork } from '../modules/work/migrate';
 import { renderAnswer } from './copy';
 import { answer } from './engine';
+import { resolveScrubbedNames } from './names';
 import { parseAskQuery, type AskQuery } from './query';
 
 // Wednesday 23 September 2026, 10:00 local. This week = Mon 21 – Sun 27 Sep.
@@ -239,6 +240,26 @@ describe('tasks and home', () => {
     expect(await answer(q({ shape: 'when_last', area: 'chores', filter: { item: 'laundry' } }), NOW)).toEqual({ kind: 'last', at: at(20, 11) });
     expect(await answer(q({ shape: 'how_many', area: 'habits', period: 'this_month', filter: { item: 'run' } }), NOW)).toMatchObject({ n: 4 });
     expect(await answer(q({ shape: 'list', area: 'goals' }), NOW)).toMatchObject({ items: [{ label: 'Save for a trip' }] });
+  });
+});
+
+describe('names the AI never saw', () => {
+  it('puts back a scrubbed pet name from what was typed, then answers for that pet only', async () => {
+    const scrubbed = q({ shape: 'when_last', area: 'pets', filter: { pet: '[NAME]', item: 'vet' } });
+    const resolved = await resolveScrubbedNames(scrubbed, 'when was Luna last at the vet?');
+    expect(resolved?.filter).toEqual({ pet: 'Luna', item: 'vet' });
+    expect(await answer(resolved as AskQuery, NOW)).toEqual({ kind: 'last', at: at(10) });
+  });
+  it('puts back a person and a medication', async () => {
+    expect((await resolveScrubbedNames(q({ shape: 'when_last', area: 'work', filter: { person: '[NAME]' } }), 'when did I last meet ana?'))?.filter).toEqual({ person: 'Ana' });
+    expect((await resolveScrubbedNames(q({ shape: 'when_last', area: 'medication', filter: { item: '[MEDICATION]' } }), 'last sertraline?'))?.filter).toEqual({ item: 'Sertraline' });
+  });
+  it('gives up rather than guess when the name is not in the records', async () => {
+    expect(await resolveScrubbedNames(q({ shape: 'when_last', area: 'pets', filter: { pet: '[NAME]' } }), 'when did Bella see the vet?')).toBeNull();
+  });
+  it('leaves an unscrubbed query as it is', async () => {
+    const plain = q({ shape: 'how_much', area: 'finance', filter: { merchant: 'Shell' } });
+    expect(await resolveScrubbedNames(plain, 'how much at shell?')).toEqual(plain);
   });
 });
 
