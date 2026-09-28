@@ -60,10 +60,25 @@ export interface RouterOutput {
   language: FragmentLanguage;
   crisis?: CrisisSignal;
   fragments: Fragment[];
+  /** Ask Ollie: fragments that were questions, taken out of `fragments`. The phone answers them. */
+  questions?: Question[];
   summary: RoutingSummary;
   /** True when the dump was augmented by Gemini Flash 2.5 vision extraction.
    *  Client surfaces a subtle "from photo" badge on the resulting cards. */
   visionUsed?: boolean;
+}
+
+/** A question found in a dump. `query` null = a question v1 cannot answer (the phone says so). */
+export interface Question {
+  /** The PII-scrubbed fragment ("[NAME]" for a name); the phone resolves names from the raw dump. */
+  text: string;
+  lang: 'en' | 'nl' | 'other';
+  query: {
+    shape: string;
+    area: string;
+    filter: Record<string, string>;
+    period: string | null;
+  } | null;
 }
 
 export interface Fragment {
