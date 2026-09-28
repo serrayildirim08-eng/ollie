@@ -16,6 +16,25 @@ export interface ChatMessage {
   readonly from: 'me' | 'ollie';
   readonly text: string;
   readonly ts: number;
+  /** Ask Ollie answer card: the big number, when the answer has one. */
+  readonly headline?: string | null;
+  /** Ask Ollie: tappable example questions (the "can't answer yet" reply). */
+  readonly examples?: readonly string[];
+  /** Ask Ollie: the quiet "worked out on your phone" line — only ever on the first answer. */
+  readonly note?: string;
+}
+
+const NOTE_KEY = 'ask_note_shown_v1';
+
+/** True exactly once: the first time Ollie answers a question from the person's data. */
+export async function takeFirstAnswerNote(): Promise<boolean> {
+  try {
+    if (await kv.get<boolean>(NOTE_KEY)) return false;
+    await kv.set(NOTE_KEY, true);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export async function loadChat(): Promise<ChatMessage[]> {

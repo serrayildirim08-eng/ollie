@@ -21,7 +21,7 @@ import { dumpArchive } from './archive';
 import { tagDumpMood } from './mood-lexicon';
 import { dispatchRouterOutput, applyFragment } from '../modules';
 import type { DispatchEntry } from '../modules';
-import type { CrisisSignal, RouterOutput } from '../router/schema';
+import type { CrisisSignal, RouterOutput, RouterQuestion } from '../router/schema';
 import { useAppLang } from '../settings/appLang';
 import { useFeature } from '../settings/features';
 import { crisisBannerCopy } from './crisisCopy';
@@ -109,6 +109,8 @@ export interface TurnDone {
   askedWhen: boolean;
   needsConfirm: number;
   crisis: boolean;
+  /** Ask Ollie: the questions in this message; the chat answers them from the phone's data. */
+  questions: RouterQuestion[];
 }
 
 /** Chat hooks for the dock variant: one turn = submit → route → dispatch. */
@@ -276,7 +278,9 @@ export function DumpScreen({ variant = 'classic', turn, seed: parentSeed }: Dump
     // see it until the NEXT dump triggers another sweep). Awaiting first
     // guarantees the row is on disk before the sweep reads it. record() never
     // throws, so this can't break the dump flow.
-    if (!output.crisis) {
+    // A message that is only a question files nothing, so it is not a dump to resurface later.
+    const onlyQuestions = output.fragments.length === 0 && (output.questions?.length ?? 0) > 0;
+    if (!output.crisis && !onlyQuestions) {
       await dumpArchive.record({
         id: output.dumpId,
         text: output.originalDump,
@@ -290,7 +294,7 @@ export function DumpScreen({ variant = 'classic', turn, seed: parentSeed }: Dump
     // we do not render them. The user goes to the module to see the change.
     const dispatched = await dispatchRouterOutput(dispatchOutput);
     if (dispatched.crisisSkipped) {
-      turnRef.current?.done({ receipt: null, askedWhen: false, needsConfirm: 0, crisis: true });
+      turnRef.current?.done({ receipt: null, askedWhen: false, needsConfirm: 0, crisis: true, questions: [] });
       return;
     }
 
@@ -380,6 +384,7 @@ export function DumpScreen({ variant = 'classic', turn, seed: parentSeed }: Dump
       askedWhen: reminders.length > 0,
       needsConfirm: cards.length,
       crisis: false,
+      questions: output.questions ?? [],
     });
     if (receiptText !== null && !turnRef.current) {
       receiptTickRef.current += 1;
@@ -400,7 +405,7 @@ export function DumpScreen({ variant = 'classic', turn, seed: parentSeed }: Dump
     // A crisis dump writes nothing and must never look "saved".
     setReceipt(null);
     setCrisis(signal);
-    turnRef.current?.done({ receipt: null, askedWhen: false, needsConfirm: 0, crisis: true });
+    turnRef.current?.done({ receipt: null, askedWhen: false, needsConfirm: 0, crisis: true, questions: [] });
   }, []);
 
   const input = (
@@ -412,7 +417,7 @@ export function DumpScreen({ variant = 'classic', turn, seed: parentSeed }: Dump
       onCrisis={onCrisis}
       seed={parentSeed ?? seed}
       variant={dock ? 'pill' : 'classic'}
-      placeholder={dock ? 'Tell Ollie…' : undefined}
+      placeholder={dock ? "What's up?" : undefined}
     />
   );
 

@@ -27,7 +27,8 @@ import { loadLedger } from '../notify/reminderLedger';
 import { REMINDER_SCHEDULED_EVENT, type ReminderScheduledDetail } from '../notify/taskReminder';
 import { buildUpcoming, whenLabel, type Horizon, type HorizonId, type UpcomingItem } from './upcoming';
 import { EXAMPLES, INTRO, buildReply, greeting, hello, whenPhrase } from './copy';
-import { chatId, loadChat, needsStamp, saveChat, stampLabel, type ChatMessage } from './chat';
+import { replyTo } from '../ask/reply';
+import { chatId, loadChat, needsStamp, saveChat, stampLabel, takeFirstAnswerNote, type ChatMessage } from './chat';
 import styles from './HomeScreen.module.css';
 
 const POLL_MS = 6000;
@@ -104,6 +105,7 @@ export function HomeScreen(): JSX.Element {
 
   // Reminders the harness armed during the current turn (null = no turn open).
   const turnReminders = useRef<number[] | null>(null);
+  const turnText = useRef('');
 
   // ── plan ──
   const refresh = useCallback(async () => {
@@ -170,6 +172,19 @@ export function HomeScreen(): JSX.Element {
     setMessages((m) => [...m, { id: chatId(), from, text, ts: Date.now() }]);
   }, []);
 
+  // Ask Ollie: each question answered on the phone, from the phone's own data. Names the AI never
+  // saw are resolved from what was typed (`typed`), which never leaves the device.
+  const answerQuestions = useCallback(async (questions: TurnDone['questions'], typed: string) => {
+    for (const q of questions) {
+      const reply = await replyTo(q, typed);
+      const note = reply.computed && (await takeFirstAnswerNote()) ? reply.note : undefined;
+      setMessages((m) => [
+        ...m,
+        { id: chatId(), from: 'ollie', text: reply.text, ts: Date.now(), headline: reply.headline, examples: reply.examples, note },
+      ]);
+    }
+  }, []);
+
   // Every reminder the harness arms: buffered into the open turn's reply, or —
   // outside a turn (e.g. a time picked on the "when?" card) — its own bubble.
   useEffect(() => {
@@ -189,6 +204,7 @@ export function HomeScreen(): JSX.Element {
 
   const turn: TurnCallbacks = {
     start: (text) => {
+      turnText.current = text;
       turnReminders.current = [];
       say('me', text);
       setThinking(true);
@@ -200,7 +216,13 @@ export function HomeScreen(): JSX.Element {
       setThinking(false);
       // Crisis: the crisis banner speaks; Ollie must not chirp "saved".
       if (!outcome.crisis) {
-        say('ollie', buildReply({ ...outcome, reminders }, Date.now()));
+        // A message that was only a question gets its answer, not a "Noted.".
+        const loggedNothing =
+          !outcome.receipt && reminders.length === 0 && !outcome.askedWhen && outcome.needsConfirm === 0;
+        if (!(outcome.questions.length > 0 && loggedNothing)) {
+          say('ollie', buildReply({ ...outcome, reminders }, Date.now()));
+        }
+        if (outcome.questions.length > 0) void answerQuestions(outcome.questions, turnText.current);
       }
       void refresh();
     },
@@ -292,8 +314,21 @@ export function HomeScreen(): JSX.Element {
                 {needsStamp(messages[i - 1], m) && <p className={styles.stamp}>{stampLabel(m.ts)}</p>}
                 <p className={m.from === 'me' ? styles.me : styles.ollie}>
                   {m.from === 'ollie' && <span className={styles.mini} aria-hidden />}
-                  <span>{m.text}</span>
+                  <span>
+                    {m.headline && <span className={styles.big}>{m.headline}</span>}
+                    {m.text}
+                    {m.note && <span className={styles.note}>{m.note}</span>}
+                  </span>
                 </p>
+                {m.examples && m.examples.length > 0 && (
+                  <div className={styles.chips}>
+                    {m.examples.map((ex) => (
+                      <button key={ex} type="button" className={styles.chip} onClick={() => setSeed((s) => ({ text: ex, nonce: s.nonce + 1 }))}>
+                        {ex}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
             {thinking && (
