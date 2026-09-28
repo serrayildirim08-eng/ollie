@@ -103,14 +103,34 @@ function buildRouteLabel(entry: DispatchEntry): string {
   return action ? `${module} · ${action}` : module;
 }
 
-export interface DumpScreenProps {
-  /** 'dock' = the reminder-first home: no header / pulse / first-run guide,
-   *  and the input is pinned to the bottom like a chat box. */
-  variant?: 'classic' | 'dock';
+/** What a finished dump did — the chat turns this into Ollie's reply. */
+export interface TurnDone {
+  receipt: string | null;
+  askedWhen: boolean;
+  needsConfirm: number;
+  crisis: boolean;
 }
 
-export function DumpScreen({ variant = 'classic' }: DumpScreenProps = {}): JSX.Element {
+/** Chat hooks for the dock variant: one turn = submit → route → dispatch. */
+export interface TurnCallbacks {
+  start: (text: string) => void;
+  done: (outcome: TurnDone) => void;
+  error: (message: string) => void;
+}
+
+export interface DumpScreenProps {
+  /** 'dock' = the reminder-first home: no header / pulse / first-run guide /
+   *  full-screen ack / receipt line, and the input is the pill chat composer.
+   *  The parent renders the conversation from `turn`. */
+  variant?: 'classic' | 'dock';
+  turn?: TurnCallbacks;
+}
+
+export function DumpScreen({ variant = 'classic', turn }: DumpScreenProps = {}): JSX.Element {
   const dock = variant === 'dock';
+  // Latest callbacks without re-creating the memoized dump handlers.
+  const turnRef = useRef(turn);
+  turnRef.current = turn;
   const { getToken } = useAuth();
   const [ackKey, setAckKey] = useState<number | null>(null);
   // Monotonic tick that forces the <Ack> to remount so its CSS animation
@@ -198,8 +218,9 @@ export function DumpScreen({ variant = 'classic' }: DumpScreenProps = {}): JSX.E
   // dump is submitted, before the cloud route. Perceived latency ~0. We retract
   // it post-route in onResult/onCrisis for the two cases that can't ack yet
   // (goal-intent waits for the modal save; crisis must never ack).
-  const onSubmitted = useCallback(() => {
-    fireAck();
+  const onSubmitted = useCallback((text: string) => {
+    if (turnRef.current) turnRef.current.start(text);
+    else fireAck();
     // First dump submitted → the guide's job is done; the silent default takes
     // over from here.
     setShowGuide(false);
@@ -266,7 +287,10 @@ export function DumpScreen({ variant = 'classic' }: DumpScreenProps = {}): JSX.E
     // Dispatch is silent: the result entries update module-local state but
     // we do not render them. The user goes to the module to see the change.
     const dispatched = await dispatchRouterOutput(dispatchOutput);
-    if (dispatched.crisisSkipped) return;
+    if (dispatched.crisisSkipped) {
+      turnRef.current?.done({ receipt: null, askedWhen: false, needsConfirm: 0, crisis: true });
+      return;
+    }
 
     // Surface a confirm card for each uncertain fragment. Both the fragment-
     // level flag (set by the router before dispatch) and the handler result
@@ -349,7 +373,13 @@ export function DumpScreen({ variant = 'classic' }: DumpScreenProps = {}): JSX.E
       .filter((e) => e.result.draft !== true)
       .map((e) => e.fragment.module);
     const receiptText = buildReceiptText(writtenModules);
-    if (receiptText !== null) {
+    turnRef.current?.done({
+      receipt: receiptText,
+      askedWhen: reminders.length > 0,
+      needsConfirm: cards.length,
+      crisis: false,
+    });
+    if (receiptText !== null && !turnRef.current) {
       receiptTickRef.current += 1;
       setReceipt({ id: receiptTickRef.current, text: receiptText });
     }
@@ -368,15 +398,19 @@ export function DumpScreen({ variant = 'classic' }: DumpScreenProps = {}): JSX.E
     // A crisis dump writes nothing and must never look "saved".
     setReceipt(null);
     setCrisis(signal);
+    turnRef.current?.done({ receipt: null, askedWhen: false, needsConfirm: 0, crisis: true });
   }, []);
 
   const input = (
     <BrainDumpInput
       getBearer={getBearer}
       onSubmitted={onSubmitted}
+      onError={(message) => turnRef.current?.error(message)}
       onResult={onResult}
       onCrisis={onCrisis}
       seed={seed}
+      variant={dock ? 'pill' : 'classic'}
+      placeholder={dock ? 'Tell Ollie…' : undefined}
     />
   );
 

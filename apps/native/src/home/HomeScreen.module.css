@@ -1,96 +1,212 @@
-/* HomeScreen — one column: dot, what's coming, chat box at the bottom. */
+/* HomeScreen v2 — "Paper" by day, "Night orb" by night (follows the phone's
+   light/dark setting). Theme lives in --home-* vars on the shell root so the
+   full-bleed background and the composer (BrainDumpInput pill) share them. */
+
+:global(.ollie-simple-root.is-home) {
+  --home-bg: #f6f1e7;
+  --home-ink: #1d1b17;
+  --home-soft: #5f584b;
+  --home-faint: #a39a88;
+  --home-line: #e6dece;
+  --home-accent: #3f8f4f;
+  --home-me: #1d1b17;
+  --home-me-ink: #f6f1e7;
+  --home-ollie: #ece4d4;
+  --home-ollie-ink: #1d1b17;
+  --home-field: #fffdf8;
+  --home-field-line: #e3dac8;
+  --home-send: #1d1b17;
+  --home-send-ink: #f6f1e7;
+  background: var(--home-bg);
+  color: var(--home-ink);
+  /* Re-point the app-wide tokens at the home theme so shared pieces rendered
+     here (notification prompt, "when?" / confirm cards, crisis banner) match
+     day and night without their own dark-mode code. */
+  --ollie-color-ink: var(--home-ink);
+  --ollie-color-ink-soft: var(--home-soft);
+  --ollie-color-ink-faint: var(--home-faint);
+  --ollie-color-sage-deep: var(--home-accent);
+  --ollie-color-sage: var(--home-accent);
+  --ollie-color-hairline: var(--home-line);
+  --ollie-color-paper: var(--home-ollie);
+  --ollie-color-cream: var(--home-bg);
+}
+
+@media (prefers-color-scheme: dark) {
+  :global(.ollie-simple-root.is-home) {
+    --home-bg: #0f1411;
+    --home-ink: #e9eee9;
+    --home-soft: #b7c4ba;
+    --home-faint: #6f8475;
+    --home-line: #1f2922;
+    --home-accent: #4ade80;
+    --home-me: #2b3a30;
+    --home-me-ink: #e9eee9;
+    --home-ollie: #161d18;
+    --home-ollie-ink: #d8e2da;
+    --home-field: #1b231e;
+    --home-field-line: #2a352e;
+    --home-send: #4ade80;
+    --home-send-ink: #0f1411;
+    background: radial-gradient(120% 45% at 50% 0%, #1f2a22 0%, #0f1411 60%);
+  }
+}
 
 .screen {
   display: flex;
   flex-direction: column;
-  min-height: 100%;
+  height: 100%;
   max-width: 560px;
   margin: 0 auto;
-  width: 100%;
+  font-family: var(--ollie-font-sans, system-ui, sans-serif);
 }
 
-.top {
+.scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  padding: 0 4px 16px;
+  scrollbar-width: none;
+}
+
+.scroll::-webkit-scrollbar { display: none; }
+
+/* ─── header ─────────────────────────────────────────────────────────── */
+
+.header {
   position: relative;
-  display: flex;
-  justify-content: center;
-  padding: 28px 0 36px;
+  padding-top: 18px;
 }
 
-.gear {
+.settings {
   position: absolute;
+  top: 18px;
   right: 0;
-  top: 32px;
-  font-size: 13px;
-  color: var(--ollie-color-ink-faint);
-  text-decoration: none;
+  padding: 6px;
+  color: var(--home-faint);
+  display: flex;
 }
 
-/* ─── the breathing dot ─────────────────────────────────────────────── */
+.date {
+  margin: 0;
+  padding-right: 40px;
+  font-family: var(--ollie-font-serif, Georgia, serif);
+  font-weight: 400;
+  font-size: 34px;
+  line-height: 1.08;
+  letter-spacing: -0.01em;
+}
 
-.dotWrap {
-  position: relative;
-  width: 56px;
-  height: 56px;
+.status {
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: 9px;
+  margin: 14px 0 0;
+  font-size: 13px;
+  color: var(--home-faint);
 }
 
-.dot {
-  width: 18px;
-  height: 18px;
+.greet {
+  margin: 10px 0 0;
+  font-size: 16px;
+  line-height: 1.45;
+  color: var(--home-soft);
+}
+
+/* the dot (day) and the orb (night) — same states, different scale */
+.dot,
+.orb {
+  position: relative;
+  flex: none;
   border-radius: 50%;
-  background: #4f9d5d;
-  box-shadow: 0 0 12px rgba(79, 157, 93, 0.55);
-  animation: ollie-dot-breathe 2.8s ease-in-out infinite;
+  background: var(--home-accent);
 }
 
-.dotHalo {
+.dot { width: 9px; height: 9px; }
+
+.dot::before,
+.orb::before {
+  content: "";
   position: absolute;
   inset: 0;
-  margin: auto;
-  width: 18px;
-  height: 18px;
   border-radius: 50%;
-  background: rgba(79, 157, 93, 0.35);
-  animation: ollie-dot-halo 2.8s ease-out infinite;
+  background: inherit;
+  animation: halo 2.8s ease-out infinite;
 }
 
-@keyframes ollie-dot-breathe {
-  0%, 100% { transform: scale(1); opacity: 0.9; }
-  50% { transform: scale(1.12); opacity: 1; }
+.dot,
+.orb {
+  animation: breathe 2.8s ease-in-out infinite;
 }
 
-@keyframes ollie-dot-halo {
-  0% { transform: scale(1); opacity: 0.6; }
+.orbWrap { display: none; }
+
+@keyframes breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.14); }
+}
+
+@keyframes halo {
+  0% { transform: scale(1); opacity: 0.5; }
   100% { transform: scale(3); opacity: 0; }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .dot, .dotHalo { animation: none; }
+/* Thinking: a quick shiver, faster pulse. */
+.dot.thinking,
+.orb.thinking {
+  animation: shiver 0.5s ease-in-out infinite;
 }
 
-/* ─── list ──────────────────────────────────────────────────────────── */
+@keyframes shiver {
+  0%, 100% { transform: translateX(0) scale(1.05); }
+  25% { transform: translateX(-1.5px) scale(1); }
+  75% { transform: translateX(1.5px) scale(1.1); }
+}
+
+@media (prefers-color-scheme: dark) {
+  .date { display: none; }
+  .orbWrap {
+    display: grid;
+    place-items: center;
+    padding: 22px 0 4px;
+  }
+  .orb {
+    width: 26px;
+    height: 26px;
+    box-shadow: 0 0 34px 8px rgba(74, 222, 128, 0.42);
+  }
+  .status .dot { display: none; }
+  .status,
+  .greet { justify-content: center; text-align: center; }
+  .status { margin-top: 26px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dot, .orb, .dot::before, .orb::before { animation: none; }
+}
+
+/* ─── plan ───────────────────────────────────────────────────────────── */
+
+.section { margin-top: 26px; }
 
 .heading {
-  margin: 0 0 6px;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--ollie-color-ink-soft);
+  margin: 0 0 2px;
+  font-family: var(--ollie-font-serif, Georgia, serif);
+  font-weight: 400;
+  font-size: 19px;
 }
 
-.list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
+.list { list-style: none; margin: 0; padding: 0; }
 
 .row {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 0;
-  border-bottom: 1px solid rgba(47, 61, 49, 0.12);
+  padding: 11px 0;
+  border-top: 1px solid var(--home-line);
+  transition: opacity 250ms ease;
 }
 
 .check,
@@ -99,42 +215,143 @@
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  border: 1.5px solid var(--ollie-color-ink-faint);
+  border: 1.5px solid var(--home-faint);
   background: none;
   padding: 0;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--home-bg);
   cursor: pointer;
 }
 
-.checkGhost {
-  border-style: dashed;
-  cursor: default;
-}
+.checkGhost { border-style: dashed; cursor: default; }
 
-.text {
+.what {
   flex: 1;
   min-width: 0;
   font-size: 16px;
   line-height: 1.35;
-  color: var(--ollie-color-ink);
   overflow-wrap: anywhere;
 }
 
 .when {
   flex: none;
-  font-family: var(--ollie-font-mono);
   font-size: 13px;
-  color: var(--ollie-color-ink-soft);
+  color: var(--home-faint);
+  white-space: nowrap;
+}
+
+.whenTimed { color: var(--home-accent); }
+.overdue { color: #c0533a; }
+
+.rowDone .check { background: var(--home-accent); border-color: var(--home-accent); }
+.rowDone .what { text-decoration: line-through; opacity: 0.45; }
+.rowDone .when { opacity: 0.45; }
+
+@media (prefers-color-scheme: dark) {
+  .heading {
+    font-family: inherit;
+    font-size: 11.5px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--home-faint);
+    margin-bottom: 4px;
+  }
+  .row { border-top-color: transparent; padding: 9px 0; }
+  .when { font-family: var(--ollie-font-mono, ui-monospace, monospace); font-size: 12.5px; }
 }
 
 .empty {
-  margin: 24px 0 0;
-  text-align: center;
+  margin: 34px 0 0;
   font-size: 15px;
-  line-height: 1.6;
-  color: var(--ollie-color-ink-soft);
+  line-height: 1.55;
+  color: var(--home-faint);
 }
 
-.spacer {
-  flex: 1;
-  min-height: 24px;
+/* ─── chat ───────────────────────────────────────────────────────────── */
+
+.chat {
+  margin-top: 30px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.turn { display: flex; flex-direction: column; }
+
+.stamp {
+  margin: 8px 0 6px;
+  text-align: center;
+  font-size: 11.5px;
+  color: var(--home-faint);
+}
+
+.me,
+.ollie {
+  margin: 0;
+  max-width: 82%;
+  padding: 9px 13px;
+  font-size: 15px;
+  line-height: 1.4;
+  border-radius: 18px;
+  overflow-wrap: anywhere;
+}
+
+.me {
+  align-self: flex-end;
+  border-bottom-right-radius: 6px;
+  background: var(--home-me);
+  color: var(--home-me-ink);
+}
+
+.ollie {
+  align-self: flex-start;
+  display: flex;
+  gap: 8px;
+  border-bottom-left-radius: 6px;
+  background: var(--home-ollie);
+  color: var(--home-ollie-ink);
+}
+
+@media (prefers-color-scheme: dark) {
+  .ollie { border: 1px solid #243028; }
+}
+
+.mini {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  margin-top: 7px;
+  border-radius: 50%;
+  background: var(--home-accent);
+}
+
+.typing { align-items: center; }
+
+.dots { display: inline-flex; gap: 4px; padding: 6px 0; }
+
+.dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--home-faint);
+  animation: blink 1.2s ease-in-out infinite;
+}
+
+.dots i:nth-child(2) { animation-delay: 0.15s; }
+.dots i:nth-child(3) { animation-delay: 0.3s; }
+
+@keyframes blink {
+  0%, 60%, 100% { opacity: 0.3; transform: translateY(0); }
+  30% { opacity: 1; transform: translateY(-2px); }
+}
+
+/* ─── composer ───────────────────────────────────────────────────────── */
+
+.composer {
+  flex: none;
+  padding: 8px 0 calc(12px + env(safe-area-inset-bottom));
 }

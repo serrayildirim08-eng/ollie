@@ -158,7 +158,7 @@ const simpleCss = `
   .ollie-simple-main {
     height: 100%;
     box-sizing: border-box;
-    padding: calc(8px + env(safe-area-inset-top)) 20px 0;
+    padding: env(safe-area-inset-top) 20px 0;
     overflow-y: auto;
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
@@ -172,8 +172,8 @@ export function SimpleLayout(): JSX.Element {
     <>
       <style>{simpleCss}</style>
       <Box
-        className="ollie-simple-root"
-        style={{ background: colors.cream, color: colors.ink }}
+        className={`ollie-simple-root${onHome ? " is-home" : ""}`}
+        style={onHome ? undefined : { background: colors.cream, color: colors.ink }}
       >
         <Box as="main" className="ollie-simple-main">
           {!onHome && <HomeLink />}

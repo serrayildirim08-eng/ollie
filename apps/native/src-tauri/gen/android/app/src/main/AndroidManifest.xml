@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Voice notes: the webview's getUserMedia({audio}) is granted by wry's
+         RustWebChromeClient only when the app itself holds RECORD_AUDIO. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <!-- Reminders are the core feature: fire at the exact minute, even in Doze.
          USE_EXACT_ALARM is auto-granted on Android 13+; SCHEDULE_EXACT_ALARM
          covers Android 12. Without either the plugin falls back to inexact. -->

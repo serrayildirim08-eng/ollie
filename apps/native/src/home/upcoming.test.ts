@@ -87,9 +87,9 @@ describe('whenLabel', () => {
       ledger([['t', new Date(2026, 8, 25, 14, 5).getTime()]]),
       NOW,
     );
-    expect(whenLabel(h!.items[0]!, 'thisWeek', NOW)).toBe('fri 14:05');
+    expect(whenLabel(h!.items[0]!, 'thisWeek', NOW)).toBe('Fri 14:05');
     expect(whenLabel(h!.items[0]!, 'today', NOW)).toBe('14:05');
-    expect(whenLabel(h!.items[0]!, 'thisMonth', NOW)).toBe('25 sep 14:05');
+    expect(whenLabel(h!.items[0]!, 'thisMonth', NOW)).toBe('25 Sep 14:05');
   });
 
   it('leaves day-only items due today unlabeled', () => {

@@ -13,7 +13,6 @@
 import { useRef, useState, type CSSProperties } from 'react';
 import { Stack, Row } from '../layout';
 import { Text } from '../ui';
-import { colors } from '../theme/tokens';
 import { WHEN_PRESETS } from '../notify/reminderCascade';
 
 const SMCP_STYLE: CSSProperties = {
@@ -55,18 +54,18 @@ export function ReminderWhenCard({
       style={{
         padding: '14px 18px',
         borderRadius: 10,
-        background: colors.paper,
-        border: `1px solid ${colors.hairline}`,
+        background: 'var(--ollie-color-paper)',
+        border: `1px solid ${'var(--ollie-color-hairline)'}`,
       }}
     >
       <Stack gap={10}>
         {/* kicker */}
-        <Text scale="caption" color={colors.inkFaint} style={SMCP_STYLE}>
+        <Text scale="caption" color={'var(--ollie-color-ink-faint)'} style={SMCP_STYLE}>
           remind me to · when?
         </Text>
 
         {/* the reminder text */}
-        <Text scale="body" color={colors.ink} style={{ fontStyle: 'italic' }}>
+        <Text scale="body" color={'var(--ollie-color-ink)'} style={{ fontStyle: 'italic' }}>
           &ldquo;{reminderText}&rdquo;
         </Text>
 
@@ -88,7 +87,7 @@ export function ReminderWhenCard({
                 fontSize: 13,
                 fontWeight: 600,
                 letterSpacing: '0.04em',
-                color: colors.sage,
+                color: 'var(--ollie-color-sage)',
               }}
             >
               {preset.label}
@@ -108,7 +107,7 @@ export function ReminderWhenCard({
               fontSize: 13,
               fontWeight: 500,
               letterSpacing: '0.04em',
-              color: colors.inkFaint,
+              color: 'var(--ollie-color-ink-faint)',
             }}
           >
             not now

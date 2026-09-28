@@ -74,6 +74,15 @@ export function resolveReminderFireAt(remindIn: RemindIn): number | null {
   return fireAt;
 }
 
+/** window event fired every time scheduleReminderAt arms a reminder. */
+export const REMINDER_SCHEDULED_EVENT = 'ollie:reminder-scheduled';
+
+export interface ReminderScheduledDetail {
+  taskId: string;
+  fireAt: number;
+  body: string;
+}
+
 export interface TaskReminderOptions {
   title: string;
   body: string;
@@ -113,6 +122,15 @@ export function scheduleReminderAt(
   const id = `reminder:${taskId}`;
   // Mirror the fire time locally so the home screen can show the clock time.
   recordReminder(taskId, title, body, fireAt);
+  // Tell the chat what was actually scheduled, so Ollie's reply states the
+  // real fire time (never a guessed one).
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent<ReminderScheduledDetail>(REMINDER_SCHEDULED_EVENT, {
+        detail: { taskId, fireAt, body },
+      }),
+    );
+  }
   // actionTypeId + extra → "Got it ✓ / Snooze" buttons (A3); extra tells
   // onAction which row to complete.
   scheduleAt(

@@ -1,73 +1,86 @@
 /**
- * HomeScreen — the reminder-first shell.
+ * HomeScreen — the reminder-first shell (design v2, 2026-09-28).
  *
- *   ● (breathing green dot — "I'm here, listening")
- *   today / this week / this month / anytime  — open to-dos with their times
- *   [ chat box pinned at the bottom ]
+ *   day (light phone)  "Paper": big serif date, small status dot
+ *   night (dark phone) "Night orb": big glowing green orb, centered
  *
- * The list is read-only over the existing module repos + the reminder ledger
- * (no new source of truth). Tapping the circle completes the row through the
- * same path the /todo screen uses, which also cancels its pending reminder.
- * Polls like TodoScreen does, since SQLite has no change feed yet.
+ *   status line   the dot tells the truth: "Ollie is here" idle, "Thinking…"
+ *                 while a message is being handled. ("I'm listening" lives only
+ *                 on the mic's full-screen overlay, when the mic is really on.)
+ *   greeting      "Good afternoon, Serra. Two things left today."
+ *   plan          today / this week / this month — check · task · time
+ *   chat          what you said + what Ollie did, with the real reminder time
+ *   composer      pill: text, mic, send
+ *
+ * The plan is read-only over the module repos + reminder ledger; the chat is
+ * a local log. Ollie's replies are built by the harness from what actually
+ * happened (copy.ts) — no LLM writes them.
  */
 
-import { useCallback, useEffect, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
-import { Stack } from '../layout';
-import { colors } from '../theme/tokens';
-import { DumpScreen } from '../dump';
+import { useUser } from '@clerk/clerk-react';
+import { DumpScreen, type TurnCallbacks, type TurnDone } from '../dump/DumpScreen';
 import { loadTodayTodos } from '../todo/loadTodos';
 import { markComplete } from '../todo/TodoScreen';
 import { loadLedger } from '../notify/reminderLedger';
+import { REMINDER_SCHEDULED_EVENT, type ReminderScheduledDetail } from '../notify/taskReminder';
 import { buildUpcoming, whenLabel, type Horizon, type HorizonId, type UpcomingItem } from './upcoming';
+import { buildReply, greeting, whenPhrase } from './copy';
+import { chatId, loadChat, needsStamp, saveChat, stampLabel, type ChatMessage } from './chat';
 import styles from './HomeScreen.module.css';
 
 const POLL_MS = 6000;
+const DONE_LINGER_MS = 700;
 
 const HORIZON_LABEL: Record<HorizonId, string> = {
-  today: 'today',
-  thisWeek: 'this week',
-  thisMonth: 'this month',
-  anytime: 'anytime',
+  today: 'Today',
+  thisWeek: 'This week',
+  thisMonth: 'This month',
+  anytime: 'Anytime',
 };
 
-const SMCP: CSSProperties = { fontVariantCaps: 'all-small-caps', letterSpacing: '0.08em' };
-
-function ListeningDot(): JSX.Element {
-  return (
-    <div className={styles.dotWrap} role="img" aria-label="ollie is listening">
-      <span className={styles.dotHalo} />
-      <span className={styles.dot} />
-    </div>
-  );
+function formatDate(d: Date): { weekday: string; date: string } {
+  return {
+    weekday: d.toLocaleDateString('en-GB', { weekday: 'long' }),
+    date: d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long' }),
+  };
 }
 
-function Row({
+// ─── plan rows ────────────────────────────────────────────────────────────
+
+function PlanRow({
   item,
   horizon,
+  done,
   onDone,
 }: {
   item: UpcomingItem;
   horizon: HorizonId;
+  done: boolean;
   onDone: (item: UpcomingItem) => void;
 }): JSX.Element {
   const checkable = item.todo.kind === 'task';
   const when = whenLabel(item, horizon);
   return (
-    <li className={styles.row}>
+    <li className={`${styles.row} ${done ? styles.rowDone : ''}`}>
       {checkable ? (
         <button
           type="button"
           className={styles.check}
-          aria-label={`done: ${item.text}`}
+          aria-label={`mark done: ${item.text}`}
+          aria-pressed={done}
+          disabled={done}
           onClick={() => onDone(item)}
-        />
+        >
+          {done && '✓'}
+        </button>
       ) : (
         <span className={styles.checkGhost} aria-hidden />
       )}
-      <span className={styles.text}>{item.text}</span>
+      <span className={styles.what}>{item.text}</span>
       {when && (
-        <span className={styles.when} style={when === 'overdue' ? { color: colors.rubric } : undefined}>
+        <span className={`${styles.when} ${item.hasTime ? styles.whenTimed : ''} ${when === 'overdue' ? styles.overdue : ''}`}>
           {when}
         </span>
       )}
@@ -75,10 +88,23 @@ function Row({
   );
 }
 
-export function HomeScreen(): JSX.Element {
-  const [horizons, setHorizons] = useState<Horizon[] | null>(null);
-  const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set());
+// ─── screen ───────────────────────────────────────────────────────────────
 
+export function HomeScreen(): JSX.Element {
+  const { user } = useUser();
+  const [horizons, setHorizons] = useState<Horizon[] | null>(null);
+  const [doneIds, setDoneIds] = useState<ReadonlySet<string>>(new Set());
+  const [hiddenIds, setHiddenIds] = useState<ReadonlySet<string>>(new Set());
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [thinking, setThinking] = useState(false);
+  const [now, setNow] = useState(() => new Date());
+  const chatLoaded = useRef(false);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  // Reminders the harness armed during the current turn (null = no turn open).
+  const turnReminders = useRef<number[] | null>(null);
+
+  // ── plan ──
   const refresh = useCallback(async () => {
     try {
       const [todos, ledger] = await Promise.all([loadTodayTodos(), loadLedger()]);
@@ -87,6 +113,7 @@ export function HomeScreen(): JSX.Element {
       console.warn('[home] load failed', err);
       setHorizons((prev) => prev ?? []);
     }
+    setNow(new Date());
   }, []);
 
   useEffect(() => {
@@ -104,59 +131,166 @@ export function HomeScreen(): JSX.Element {
 
   const onDone = useCallback(
     (item: UpcomingItem) => {
-      // Optimistic: hide now, write, then re-read.
-      setHidden((s) => new Set(s).add(item.id));
+      // Tick + strike through first, then fold the row away.
+      setDoneIds((s) => new Set(s).add(item.id));
+      setTimeout(() => setHiddenIds((s) => new Set(s).add(item.id)), DONE_LINGER_MS);
       void markComplete(item.todo)
         .catch((err) => {
           console.warn('[home] complete failed', err);
-          setHidden((s) => {
+          const drop = (s: ReadonlySet<string>) => {
             const n = new Set(s);
             n.delete(item.id);
             return n;
-          });
+          };
+          setDoneIds(drop);
+          setHiddenIds(drop);
         })
         .finally(() => void refresh());
     },
     [refresh],
   );
 
+  // ── chat ──
+  useEffect(() => {
+    void loadChat().then((stored) => {
+      chatLoaded.current = true;
+      setMessages((live) => [...stored, ...live]);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (chatLoaded.current) saveChat(messages);
+    // Keep the newest message in view.
+    const el = scrollRef.current;
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+  }, [messages, thinking]);
+
+  const say = useCallback((from: ChatMessage['from'], text: string) => {
+    setMessages((m) => [...m, { id: chatId(), from, text, ts: Date.now() }]);
+  }, []);
+
+  // Every reminder the harness arms: buffered into the open turn's reply, or —
+  // outside a turn (e.g. a time picked on the "when?" card) — its own bubble.
+  useEffect(() => {
+    const onScheduled = (ev: Event): void => {
+      const detail = (ev as CustomEvent<ReminderScheduledDetail>).detail;
+      if (!detail) return;
+      if (turnReminders.current) {
+        turnReminders.current.push(detail.fireAt);
+      } else {
+        say('ollie', `Okay — I'll remind you ${whenPhrase(detail.fireAt, Date.now())}.`);
+      }
+      void refresh();
+    };
+    window.addEventListener(REMINDER_SCHEDULED_EVENT, onScheduled);
+    return () => window.removeEventListener(REMINDER_SCHEDULED_EVENT, onScheduled);
+  }, [say, refresh]);
+
+  const turn: TurnCallbacks = {
+    start: (text) => {
+      turnReminders.current = [];
+      say('me', text);
+      setThinking(true);
+    },
+    done: (outcome: TurnDone) => {
+      const reminders = turnReminders.current;
+      if (reminders === null) return; // already closed (crisis fires twice)
+      turnReminders.current = null;
+      setThinking(false);
+      // Crisis: the crisis banner speaks; Ollie must not chirp "saved".
+      if (!outcome.crisis) {
+        say('ollie', buildReply({ ...outcome, reminders }, Date.now()));
+      }
+      void refresh();
+    },
+    error: (message) => {
+      turnReminders.current = null;
+      setThinking(false);
+      say('ollie', `I couldn't take that in — ${message}.`);
+    },
+  };
+
+  // ── derived ──
   const visible = (horizons ?? [])
-    .map((h) => ({ ...h, items: h.items.filter((i) => !hidden.has(i.id)) }))
+    .map((h) => ({ ...h, items: h.items.filter((i) => !hiddenIds.has(i.id)) }))
     .filter((h) => h.items.length > 0);
+  const openToday =
+    visible.find((h) => h.id === 'today')?.items.filter((i) => !doneIds.has(i.id)).length ?? 0;
+  const { weekday, date } = formatDate(now);
+  const status = thinking ? 'Thinking…' : 'Ollie is here';
 
   return (
     <div className={styles.screen}>
-      <header className={styles.top}>
-        <ListeningDot />
-        <Link to="/settings" className={styles.gear} aria-label="settings" style={SMCP}>
-          settings
-        </Link>
-      </header>
+      <div className={styles.scroll} ref={scrollRef}>
+        <header className={styles.header}>
+          <Link to="/settings" className={styles.settings} aria-label="settings">
+            <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" aria-hidden>
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
+            </svg>
+          </Link>
 
-      <Stack gap={28}>
-        {horizons !== null && visible.length === 0 && (
-          <p className={styles.empty}>
-            nothing coming up.
-            <br />
-            tell me what to remember — "call mom tomorrow at 3".
+          {/* night: the orb is the hero */}
+          <div className={styles.orbWrap}>
+            <span className={`${styles.orb} ${thinking ? styles.thinking : ''}`} />
+          </div>
+
+          {/* day: the date is the hero */}
+          <h1 className={styles.date}>
+            {weekday},<br />
+            {date}
+          </h1>
+
+          <p className={styles.status} aria-live="polite">
+            <span className={`${styles.dot} ${thinking ? styles.thinking : ''}`} />
+            {status}
           </p>
+          <p className={styles.greet}>{greeting(now, user?.firstName, openToday)}</p>
+        </header>
+
+        {horizons !== null && visible.length === 0 && (
+          <p className={styles.empty}>Nothing coming up. Tell me what to remember — “call mom tomorrow at 3”.</p>
         )}
+
         {visible.map((h) => (
-          <section key={h.id}>
-            <h2 className={styles.heading} style={SMCP}>
-              {HORIZON_LABEL[h.id]}
-            </h2>
+          <section key={h.id} className={styles.section}>
+            <h2 className={styles.heading}>{HORIZON_LABEL[h.id]}</h2>
             <ul className={styles.list}>
               {h.items.map((item) => (
-                <Row key={item.id} item={item} horizon={h.id} onDone={onDone} />
+                <PlanRow key={item.id} item={item} horizon={h.id} done={doneIds.has(item.id)} onDone={onDone} />
               ))}
             </ul>
           </section>
         ))}
-      </Stack>
 
-      <div className={styles.spacer} />
-      <DumpScreen variant="dock" />
+        {(messages.length > 0 || thinking) && (
+          <div className={styles.chat}>
+            {messages.map((m, i) => (
+              <div key={m.id} className={styles.turn}>
+                {needsStamp(messages[i - 1], m) && <p className={styles.stamp}>{stampLabel(m.ts)}</p>}
+                <p className={m.from === 'me' ? styles.me : styles.ollie}>
+                  {m.from === 'ollie' && <span className={styles.mini} aria-hidden />}
+                  <span>{m.text}</span>
+                </p>
+              </div>
+            ))}
+            {thinking && (
+              <p className={`${styles.ollie} ${styles.typing}`} aria-label="Ollie is thinking">
+                <span className={styles.mini} aria-hidden />
+                <span className={styles.dots}>
+                  <i />
+                  <i />
+                  <i />
+                </span>
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className={styles.composer}>
+        <DumpScreen variant="dock" turn={turn} />
+      </div>
     </div>
   );
 }
