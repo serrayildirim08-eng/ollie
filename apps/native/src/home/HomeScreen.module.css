@@ -17,6 +17,8 @@
   --home-field-line: #e3dac8;
   --home-send: #1d1b17;
   --home-send-ink: #f6f1e7;
+  --home-chip: #fbf8f2;
+  --home-chip-line: #d9cfbb;
   background: var(--home-bg);
   color: var(--home-ink);
   /* Re-point the app-wide tokens at the home theme so shared pieces rendered
@@ -48,6 +50,8 @@
     --home-field-line: #2a352e;
     --home-send: #4ade80;
     --home-send-ink: #0f1411;
+    --home-chip: #141b16;
+    --home-chip-line: #2a352e;
     background: radial-gradient(120% 45% at 50% 0%, #1f2a22 0%, #0f1411 60%);
   }
 }
@@ -64,6 +68,8 @@
 .scroll {
   flex: 1;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
   overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
@@ -126,15 +132,6 @@
 
 .dot { width: 9px; height: 9px; }
 
-.dot::before,
-.orb::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  background: inherit;
-  animation: halo 2.8s ease-out infinite;
-}
 
 .dot,
 .orb {
@@ -148,10 +145,6 @@
   50% { transform: scale(1.14); }
 }
 
-@keyframes halo {
-  0% { transform: scale(1); opacity: 0.5; }
-  100% { transform: scale(3); opacity: 0; }
-}
 
 /* Thinking: a quick shiver, faster pulse. */
 .dot.thinking,
@@ -184,7 +177,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .dot, .orb, .dot::before, .orb::before { animation: none; }
+  .dot, .orb { animation: none; }
 }
 
 /* ─── plan ───────────────────────────────────────────────────────────── */
@@ -264,11 +257,33 @@
   .when { font-family: var(--ollie-font-mono, ui-monospace, monospace); font-size: 12.5px; }
 }
 
-.empty {
-  margin: 34px 0 0;
-  font-size: 15px;
-  line-height: 1.55;
-  color: var(--home-faint);
+/* first open: intro bubble + example chips, sitting just above the composer */
+.intro {
+  margin-top: auto;
+  padding-top: 32px;
+  display: flex;
+  flex-direction: column;
+}
+
+.intro .ollie { max-width: 88%; padding: 12px 14px; line-height: 1.45; }
+
+.chips {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 12px 0 4px;
+}
+
+.chip {
+  padding: 9px 14px;
+  border-radius: 18px;
+  border: 1px solid var(--home-chip-line);
+  background: var(--home-chip);
+  color: var(--home-soft);
+  font: inherit;
+  font-size: 14.5px;
+  cursor: pointer;
 }
 
 /* ─── chat ───────────────────────────────────────────────────────────── */
@@ -353,5 +368,7 @@
 
 .composer {
   flex: none;
-  padding: 8px 0 calc(12px + env(safe-area-inset-bottom));
+  /* Android draws edge-to-edge and reports no inset → keep clear of the
+     gesture bar ourselves. */
+  padding: 8px 0 max(28px, calc(12px + env(safe-area-inset-bottom)));
 }

@@ -124,9 +124,11 @@ export interface DumpScreenProps {
    *  The parent renders the conversation from `turn`. */
   variant?: 'classic' | 'dock';
   turn?: TurnCallbacks;
+  /** Parent-driven re-seed of the composer (e.g. an example chip). */
+  seed?: { text: string; nonce: number };
 }
 
-export function DumpScreen({ variant = 'classic', turn }: DumpScreenProps = {}): JSX.Element {
+export function DumpScreen({ variant = 'classic', turn, seed: parentSeed }: DumpScreenProps = {}): JSX.Element {
   const dock = variant === 'dock';
   // Latest callbacks without re-creating the memoized dump handlers.
   const turnRef = useRef(turn);
@@ -408,7 +410,7 @@ export function DumpScreen({ variant = 'classic', turn }: DumpScreenProps = {}):
       onError={(message) => turnRef.current?.error(message)}
       onResult={onResult}
       onCrisis={onCrisis}
-      seed={seed}
+      seed={parentSeed ?? seed}
       variant={dock ? 'pill' : 'classic'}
       placeholder={dock ? 'Tell Ollie…' : undefined}
     />

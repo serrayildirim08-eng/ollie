@@ -18,12 +18,17 @@ function partOfDay(hour: number): string {
   return 'Hi';
 }
 
-export function greeting(now: Date, firstName: string | null | undefined, openToday: number): string {
+/** Just the salutation: "Good afternoon, Serra." — used alone on first open. */
+export function hello(now: Date, firstName: string | null | undefined): string {
   const name = firstName?.trim();
-  const hello = name ? `${partOfDay(now.getHours())}, ${name}.` : `${partOfDay(now.getHours())}.`;
-  if (openToday <= 0) return `${hello} Nothing left for today.`;
+  return name ? `${partOfDay(now.getHours())}, ${name}.` : `${partOfDay(now.getHours())}.`;
+}
+
+export function greeting(now: Date, firstName: string | null | undefined, openToday: number): string {
+  const hi = hello(now, firstName);
+  if (openToday <= 0) return `${hi} Nothing left for today.`;
   const n = NUMBER_WORDS[openToday] ?? String(openToday);
-  return `${hello} ${n} ${openToday === 1 ? 'thing' : 'things'} left today.`;
+  return `${hi} ${n} ${openToday === 1 ? 'thing' : 'things'} left today.`;
 }
 
 // ─── reply ────────────────────────────────────────────────────────────────
@@ -65,6 +70,11 @@ export interface TurnOutcome {
   /** Fragments waiting on a keep/undo card. */
   readonly needsConfirm: number;
 }
+
+/** First-open intro + example chips (tap → fills the composer). */
+export const INTRO =
+  "Hi, I'm Ollie. Tell me anything you need to remember — I'll keep the list and ping you on time.";
+export const EXAMPLES = ['Call mom at 6', 'Pay rent on the 1st', 'Dentist Wednesday 2:30'] as const;
 
 export function buildReply(o: TurnOutcome, now: number): string {
   const parts: string[] = [];

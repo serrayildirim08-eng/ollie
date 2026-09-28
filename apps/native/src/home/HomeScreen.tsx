@@ -26,7 +26,7 @@ import { markComplete } from '../todo/TodoScreen';
 import { loadLedger } from '../notify/reminderLedger';
 import { REMINDER_SCHEDULED_EVENT, type ReminderScheduledDetail } from '../notify/taskReminder';
 import { buildUpcoming, whenLabel, type Horizon, type HorizonId, type UpcomingItem } from './upcoming';
-import { buildReply, greeting, whenPhrase } from './copy';
+import { EXAMPLES, INTRO, buildReply, greeting, hello, whenPhrase } from './copy';
 import { chatId, loadChat, needsStamp, saveChat, stampLabel, type ChatMessage } from './chat';
 import styles from './HomeScreen.module.css';
 
@@ -98,6 +98,7 @@ export function HomeScreen(): JSX.Element {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [thinking, setThinking] = useState(false);
   const [now, setNow] = useState(() => new Date());
+  const [seed, setSeed] = useState<{ text: string; nonce: number }>({ text: '', nonce: 0 });
   const chatLoaded = useRef(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -218,6 +219,8 @@ export function HomeScreen(): JSX.Element {
     visible.find((h) => h.id === 'today')?.items.filter((i) => !doneIds.has(i.id)).length ?? 0;
   const { weekday, date } = formatDate(now);
   const status = thinking ? 'Thinking…' : 'Ollie is here';
+  // First open: nothing planned and nothing said yet → Ollie introduces itself.
+  const firstOpen = horizons !== null && visible.length === 0 && messages.length === 0 && !thinking;
 
   return (
     <div className={styles.screen}>
@@ -245,11 +248,30 @@ export function HomeScreen(): JSX.Element {
             <span className={`${styles.dot} ${thinking ? styles.thinking : ''}`} />
             {status}
           </p>
-          <p className={styles.greet}>{greeting(now, user?.firstName, openToday)}</p>
+          <p className={styles.greet}>
+            {firstOpen ? hello(now, user?.firstName) : greeting(now, user?.firstName, openToday)}
+          </p>
         </header>
 
-        {horizons !== null && visible.length === 0 && (
-          <p className={styles.empty}>Nothing coming up. Tell me what to remember — “call mom tomorrow at 3”.</p>
+        {firstOpen && (
+          <div className={styles.intro}>
+            <p className={styles.ollie}>
+              <span className={styles.mini} aria-hidden />
+              <span>{INTRO}</span>
+            </p>
+            <div className={styles.chips}>
+              {EXAMPLES.map((ex) => (
+                <button
+                  key={ex}
+                  type="button"
+                  className={styles.chip}
+                  onClick={() => setSeed((s) => ({ text: ex, nonce: s.nonce + 1 }))}
+                >
+                  {ex}
+                </button>
+              ))}
+            </div>
+          </div>
         )}
 
         {visible.map((h) => (
@@ -289,7 +311,7 @@ export function HomeScreen(): JSX.Element {
       </div>
 
       <div className={styles.composer}>
-        <DumpScreen variant="dock" turn={turn} />
+        <DumpScreen variant="dock" turn={turn} seed={seed} />
       </div>
     </div>
   );

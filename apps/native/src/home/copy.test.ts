@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildReply, greeting, whenPhrase } from './copy';
+import { buildReply, greeting, hello, whenPhrase } from './copy';
 
 // Mon 2026-09-28 13:00 local
 const NOW = new Date(2026, 8, 28, 13, 0).getTime();
@@ -11,6 +11,13 @@ describe('greeting', () => {
     expect(greeting(new Date(2026, 8, 28, 8), 'Serra', 1)).toBe('Good morning, Serra. One thing left today.');
     expect(greeting(new Date(2026, 8, 28, 19), null, 0)).toBe('Evening. Nothing left for today.');
     expect(greeting(new Date(2026, 8, 28, 23), 'Serra', 12)).toBe('Hi, Serra. 12 things left today.');
+  });
+});
+
+describe('hello', () => {
+  it('is the salutation alone', () => {
+    expect(hello(new Date(NOW), 'Serra')).toBe('Good afternoon, Serra.');
+    expect(hello(new Date(NOW), '')).toBe('Good afternoon.');
   });
 });
 
