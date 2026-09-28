@@ -130,3 +130,23 @@ export function renderAnswer(result: AskResult, lang: AskLang, now: number = Dat
     }
   }
 }
+
+/**
+ * The big number on the answer card (Serra, 28 Sep 2026: kept for money and sleep/water), or
+ * null when the answer has no single headline figure.
+ */
+export function headline(result: AskResult, lang: AskLang): string | null {
+  if (result.kind === 'money' && result.count > 0 && result.totals.length === 1) {
+    return money(result.totals[0], lang);
+  }
+  if (result.kind === 'quantity' && result.count > 0) {
+    return result.unit === 'ml'
+      ? `${number(result.total, lang)} ml`
+      : `${number(result.total, lang, 1)} ${lang === 'nl' ? 'uur' : 'hours'}`;
+  }
+  return null;
+}
+
+/** The reply to a question in a language v1 does not answer. English and Dutch both, so it reads either way. */
+export const OTHER_LANGUAGE_REPLY =
+  "I can answer questions in English or Dutch for now. / Ik beantwoord vragen voorlopig in het Engels of Nederlands.";

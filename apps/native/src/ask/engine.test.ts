@@ -44,7 +44,8 @@ import { migrateMood } from '../modules/mood/migrate';
 import { migratePets } from '../modules/pets/migrate';
 import { migrateSleep } from '../modules/sleep/migrate';
 import { migrateWork } from '../modules/work/migrate';
-import { renderAnswer } from './copy';
+import { OTHER_LANGUAGE_REPLY, renderAnswer } from './copy';
+import { replyTo } from './reply';
 import { answer } from './engine';
 import { resolveScrubbedNames } from './names';
 import { parseAskQuery, type AskQuery } from './query';
@@ -295,5 +296,53 @@ describe('what Ollie says, in English and Dutch', () => {
     }
     process.stdout.write(`\n${lines.join('\n')}\n`);
     expect(lines.join('\n')).toContain('uitgegeven');
+  });
+});
+
+describe('replyTo: what the home chat shows', () => {
+  const question = (query: Record<string, unknown> | null, lang: 'en' | 'nl' | 'other' = 'en') => ({
+    text: 'q',
+    lang,
+    query: query as never,
+  });
+
+  it('money: sentence plus the big number, computed from the phone', async () => {
+    const reply = await replyTo(
+      question({ shape: 'how_much', area: 'finance', filter: {}, period: 'this_week' }),
+      'how much did I spend this week?',
+      NOW,
+    );
+    expect(reply.text).toContain('This week you spent');
+    expect(reply.headline).toMatch(/€/);
+    expect(reply.examples).toEqual([]);
+    expect(reply.computed).toBe(true);
+  });
+
+  it('a scrubbed pet name comes back from the typed text', async () => {
+    const reply = await replyTo(
+      question({ shape: 'when_last', area: 'pets', filter: { pet: '[NAME]', item: 'vet' }, period: null }, 'nl'),
+      'wanneer was Luna voor het laatst bij de dierenarts?',
+      NOW,
+    );
+    expect(reply.text).toMatch(/^De laatste keer was/);
+    expect(reply.headline).toBeNull();
+  });
+
+  it('a name it cannot find, an off-contract query, or no query: the fallback with examples, never a guess', async () => {
+    for (const q of [
+      question({ shape: 'when_last', area: 'pets', filter: { pet: '[NAME]' }, period: null }),
+      question({ shape: 'why', area: 'feelings', filter: {}, period: null }),
+      question(null),
+    ]) {
+      const reply = await replyTo(q, 'when was Bella last at the vet?', NOW);
+      expect(reply.text).toMatch(/^I can't answer that one yet/);
+      expect(reply.examples).toHaveLength(2);
+      expect(reply.computed).toBe(false);
+    }
+  });
+
+  it('another language gets the polite English-or-Dutch reply', async () => {
+    const reply = await replyTo(question({ shape: 'how_much', area: 'finance', filter: {}, period: null }, 'other'), 'bu hafta ne harcadım?', NOW);
+    expect(reply.text).toBe(OTHER_LANGUAGE_REPLY);
   });
 });
