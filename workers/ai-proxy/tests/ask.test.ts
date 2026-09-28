@@ -84,6 +84,14 @@ describe('findQuestions', () => {
     });
   });
 
+  it('reads "low" as a bad day or night for mood and sleep, never as running low', async () => {
+    const [question] = await run(
+      { fragments: [{ i: 0, kind: 'question', lang: 'en', shape: 'how_many', area: 'mood', filter: { status: 'low' }, period: 'this_month' }] },
+      ['how many low days did I have this month?'],
+    );
+    expect(question?.query?.filter).toEqual({ status: 'bad' });
+  });
+
   it('ignores indexes that are not fragments', async () => {
     const questions = await run(
       { fragments: [{ i: 5, kind: 'question', lang: 'en', shape: 'list', area: 'goals' }, { i: -1, kind: 'question' }] },

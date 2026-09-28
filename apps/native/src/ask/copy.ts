@@ -150,3 +150,9 @@ export function headline(result: AskResult, lang: AskLang): string | null {
 /** The reply to a question in a language v1 does not answer. English and Dutch both, so it reads either way. */
 export const OTHER_LANGUAGE_REPLY =
   "I can answer questions in English or Dutch for now. / Ik beantwoord vragen voorlopig in het Engels of Nederlands.";
+
+/** The quiet line under the first answer Ollie ever gives. */
+export const COMPUTED_NOTE: Record<AskLang, string> = {
+  en: 'Worked out on your phone from what you told me.',
+  nl: 'Uitgerekend op je telefoon, uit wat je me vertelde.',
+};

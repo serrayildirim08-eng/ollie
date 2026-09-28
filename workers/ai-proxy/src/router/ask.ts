@@ -58,6 +58,9 @@ For a QUESTION (or "both") give:
 - period: today | this_week | last_week | this_month | last_month | null when none is named
 - lang: en | nl | other (the language of the fragment)
 If a question fits none of these, still mark it QUESTION with shape null.
+Names are hidden as "[NAME]". A [NAME] after "at", "to", "bij", "naar (de)" or "in" is usually a shop: area finance, filter merchant. Going to a shop, spending or paying = finance.
+Meeting or seeing someone for work ("meet", "meeting", "afspraak met") = work, filter person. Cooking or eating a dish = grocery, filter item. Running, reading, meditating = habits, filter item.
+For mood and sleep, a low, bad or rough day or night is status "bad"; "low" is only for things running out.
 
 Return JSON only: {"fragments":[{"i":0,"kind":"log"},{"i":1,"kind":"question","lang":"en","shape":"how_much","area":"finance","filter":{"merchant":"Albert Heijn"},"period":"this_week"}]}
 
@@ -70,6 +73,9 @@ Examples:
 "wat staat er op mijn boodschappenlijst?" -> question nl list grocery {} null
 "what's running low?" -> question en list grocery {"status":"low"} null
 "what do I have to do this week" -> question en list admin {} this_week
+"how many times did I go to [NAME] [NAME] last week?" -> question en how_many finance {"merchant":"[NAME] [NAME]"} last_week
+"when did I last see [NAME] for work?" -> question en when_last work {"person":"[NAME]"} null
+"when did I last go for a run?" -> question en when_last habits {"item":"run"} null
 "am I sleeping enough?" -> question en shape null
 "paid 40 for gas, how much this week?" -> both, log "paid 40 for gas", en how_much finance {} this_week
 "drank 2 glasses of water" -> log
@@ -94,6 +100,8 @@ function toQuestion(raw: Record<string, unknown>, index: number): AskedQuestion 
       }
     }
   }
+  // Harness rule, not a model judgment: for mood and sleep "low" means a bad day or night.
+  if (filter.status === 'low' && (raw.area === 'mood' || raw.area === 'sleep')) filter.status = 'bad';
   const period = isOneOf(ASK_PERIODS, raw.period) ? raw.period : null;
   return { index, lang, query: { shape: raw.shape, area: raw.area, filter, period } };
 }

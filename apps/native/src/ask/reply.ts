@@ -5,7 +5,7 @@
  * or a database error all become the "can't answer that one yet" reply with example questions.
  */
 import type { RouterQuestion } from '../router/schema';
-import { EXAMPLES, headline, OTHER_LANGUAGE_REPLY, renderAnswer } from './copy';
+import { COMPUTED_NOTE, EXAMPLES, headline, OTHER_LANGUAGE_REPLY, renderAnswer } from './copy';
 import { answer, type AskResult } from './engine';
 import { resolveScrubbedNames } from './names';
 import { parseAskQuery, type AskLang } from './query';
@@ -19,6 +19,8 @@ export interface AskReply {
   readonly examples: readonly string[];
   /** True when the answer was computed from the person's data (the "worked out on your phone" note may show). */
   readonly computed: boolean;
+  /** That note, in the asker's language. */
+  readonly note: string;
 }
 
 const FALLBACK: AskResult = { kind: 'fallback' };
@@ -29,6 +31,7 @@ function toReply(result: AskResult, lang: AskLang, now: number): AskReply {
     headline: headline(result, lang),
     examples: result.kind === 'fallback' ? EXAMPLES[lang] : [],
     computed: result.kind !== 'fallback',
+    note: COMPUTED_NOTE[lang],
   };
 }
 
@@ -38,7 +41,7 @@ function toReply(result: AskResult, lang: AskLang, now: number): AskReply {
  */
 export async function replyTo(question: RouterQuestion, rawText: string, now: number = Date.now()): Promise<AskReply> {
   if (question.lang === 'other') {
-    return { text: OTHER_LANGUAGE_REPLY, headline: null, examples: [], computed: false };
+    return { text: OTHER_LANGUAGE_REPLY, headline: null, examples: [], computed: false, note: '' };
   }
   const lang = question.lang;
   const parsed = question.query ? parseAskQuery({ ...question.query, lang }) : null;

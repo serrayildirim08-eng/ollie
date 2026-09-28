@@ -205,6 +205,8 @@ describe('medication, cycle, pets', () => {
     expect(await answer(q({ shape: 'when_last', area: 'medication' }), NOW)).toEqual({ kind: 'last', at: at(23, 8) });
     expect(await answer(q({ shape: 'when_last', area: 'medication', filter: { item: 'sertraline' } }), NOW)).toEqual({ kind: 'last', at: at(23, 8) });
     expect(await answer(q({ shape: 'how_many', area: 'medication', period: 'this_week', filter: { status: 'missed' } }), NOW)).toMatchObject({ n: 1 });
+    // The model sometimes adds item "dose": a general word, not a medication name.
+    expect(await answer(q({ shape: 'how_many', area: 'medication', period: 'this_week', filter: { status: 'missed', item: 'dose' } }), NOW)).toMatchObject({ n: 1 });
     expect(await answer(q({ shape: 'list', area: 'medication' }), NOW)).toEqual({ kind: 'list', items: [{ label: 'Inhaler', due: null }] });
   });
   it('last period start', async () => {

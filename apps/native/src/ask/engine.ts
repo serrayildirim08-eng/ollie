@@ -202,9 +202,12 @@ const mood: Partial<Record<Shape, Handler>> = {
 
 // ─── medication ───────────────────────────────────────────────────────────
 
+/** Words that mean "my meds" in general, not one medication: filtering on them would find nothing. */
+const GENERIC_MED = /^(doses?|dosis|doseringen|meds?|medications?|medicines?|medicijn(en)?|pills?|pil(len)?|tablets?|tabletten)$/i;
+
 function medWhere(f: AskFilter): { clause: string; params: unknown[] } {
   const kind = f.status === 'missed' ? 'missed' : 'dose';
-  const item = f.item;
+  const item = f.item && !GENERIC_MED.test(f.item.trim()) ? f.item : undefined;
   if (!item) return { clause: 'e.kind = ?', params: [kind] };
   return { clause: 'e.kind = ? AND LOWER(r.name) LIKE ?', params: [kind, like(item)] };
 }
