@@ -216,41 +216,40 @@ fn get_or_create_key_pragma<R: Runtime>(_app: &AppHandle<R>) -> Result<String, S
     Ok(format!("x'{hex}'"))
 }
 
-/// Android: `keyring` has no Android backend (it silently falls back to an
-/// in-memory mock, which would mint a new key every launch and lock the user
-/// out of their own DB on the second open). Instead the key lives in a file in
-/// the app-private data dir: no other app can read it, and Android file-based
-/// encryption protects it at rest. Weaker than a hardware keystore (root /
-/// backup extraction could read it) — acceptable for dogfood; the upgrade path
-/// is wrapping this key with an Android Keystore key.
+/// Android: `keyring` has no Android backend, so the key is held by
+/// `DbKeyVault` (gen/android/.../DbKeyVault.kt): wrapped by a non-exportable
+/// Android Keystore AES key, unwrapped in MainActivity before Rust starts, and
+/// handed over in a process env var that we read ONCE and remove here.
+///
+/// Fallback: if the vault couldn't run but a legacy plain-text key file from
+/// builds <= 1.1.3 is still present (its migration didn't finish), use that so
+/// the user isn't locked out; the vault retries the migration next launch.
+/// With neither, fail closed — never mint a fresh key here, which would orphan
+/// an existing database.
 #[cfg(target_os = "android")]
 fn get_or_create_key_pragma<R: Runtime>(app: &AppHandle<R>) -> Result<String, String> {
     use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
+
+    const ENV_VAR: &str = "OLLIE_DB_KEY_HEX";
+    if let Ok(hex) = std::env::var(ENV_VAR) {
+        std::env::remove_var(ENV_VAR);
+        let hex = hex.trim().to_ascii_lowercase();
+        if hex.len() != 64 || !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return Err("keystore handed over a malformed key".into());
+        }
+        return Ok(format!("x'{hex}'"));
+    }
 
     let dir = app
         .path()
         .app_data_dir()
         .map_err(|e| format!("app data dir: {e}"))?;
-    std::fs::create_dir_all(&dir).map_err(|e| format!("create data dir: {e}"))?;
-    let key_file = dir.join(".ollie_db_key");
-
-    let key_bytes: Vec<u8> = match std::fs::read_to_string(&key_file) {
-        Ok(b64) => B64
-            .decode(b64.trim().as_bytes())
-            .map_err(|e| format!("key file decode: {e}"))?,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            let mut buf = [0u8; 32];
-            getrandom::getrandom(&mut buf).map_err(|e| format!("getrandom: {e}"))?;
-            // Write-then-rename so a crash mid-write can never leave a
-            // truncated key that would brick the DB.
-            let tmp = dir.join(".ollie_db_key.tmp");
-            std::fs::write(&tmp, B64.encode(buf)).map_err(|e| format!("key write: {e}"))?;
-            std::fs::rename(&tmp, &key_file).map_err(|e| format!("key rename: {e}"))?;
-            buf.to_vec()
-        }
-        Err(e) => return Err(format!("key file read: {e}")),
-    };
-
+    let legacy = dir.join(".ollie_db_key");
+    let b64 = std::fs::read_to_string(&legacy)
+        .map_err(|_| "android keystore unavailable and no legacy key — refusing to start".to_string())?;
+    let key_bytes = B64
+        .decode(b64.trim().as_bytes())
+        .map_err(|e| format!("legacy key decode: {e}"))?;
     if key_bytes.len() != 32 {
         return Err(format!("unexpected key length {}", key_bytes.len()));
     }
