@@ -35,6 +35,7 @@ import { scheduleAt } from './systemNotify';
 import { scheduleServerReminder } from './serverReminder';
 import { OLLIE_REMINDER_CATEGORY } from './notificationActions';
 import { resolveTimeOfDayFireAt } from './reminderCascade';
+import { recordReminder } from './reminderLedger';
 
 /** No reminder should ever be scheduled more than this far out — a
  *  "remind me" hint that resolves beyond a year is almost certainly a clock
@@ -71,6 +72,15 @@ export function resolveReminderFireAt(remindIn: RemindIn): number | null {
   if (fireAt <= now) return null;
   if (fireAt - now > MAX_REMINDER_HORIZON_MS) return null;
   return fireAt;
+}
+
+/** window event fired every time scheduleReminderAt arms a reminder. */
+export const REMINDER_SCHEDULED_EVENT = 'ollie:reminder-scheduled';
+
+export interface ReminderScheduledDetail {
+  taskId: string;
+  fireAt: number;
+  body: string;
 }
 
 export interface TaskReminderOptions {
@@ -110,6 +120,17 @@ export function scheduleReminderAt(
   // Same stable id across all three paths (OS local notification, in-process
   // timer, server-push job) so the dispatcher / cron dedupe to one ping.
   const id = `reminder:${taskId}`;
+  // Mirror the fire time locally so the home screen can show the clock time.
+  recordReminder(taskId, title, body, fireAt);
+  // Tell the chat what was actually scheduled, so Ollie's reply states the
+  // real fire time (never a guessed one).
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent<ReminderScheduledDetail>(REMINDER_SCHEDULED_EVENT, {
+        detail: { taskId, fireAt, body },
+      }),
+    );
+  }
   // actionTypeId + extra → "Got it ✓ / Snooze" buttons (A3); extra tells
   // onAction which row to complete.
   scheduleAt(

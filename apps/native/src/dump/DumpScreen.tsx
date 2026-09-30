@@ -21,7 +21,7 @@ import { dumpArchive } from './archive';
 import { tagDumpMood } from './mood-lexicon';
 import { dispatchRouterOutput, applyFragment } from '../modules';
 import type { DispatchEntry } from '../modules';
-import type { CrisisSignal, RouterOutput } from '../router/schema';
+import type { CrisisSignal, RouterOutput, RouterQuestion } from '../router/schema';
 import { useAppLang } from '../settings/appLang';
 import { useFeature } from '../settings/features';
 import { crisisBannerCopy } from './crisisCopy';
@@ -103,7 +103,38 @@ function buildRouteLabel(entry: DispatchEntry): string {
   return action ? `${module} · ${action}` : module;
 }
 
-export function DumpScreen(): JSX.Element {
+/** What a finished dump did — the chat turns this into Ollie's reply. */
+export interface TurnDone {
+  receipt: string | null;
+  askedWhen: boolean;
+  needsConfirm: number;
+  crisis: boolean;
+  /** Ask Ollie: the questions in this message; the chat answers them from the phone's data. */
+  questions: RouterQuestion[];
+}
+
+/** Chat hooks for the dock variant: one turn = submit → route → dispatch. */
+export interface TurnCallbacks {
+  start: (text: string) => void;
+  done: (outcome: TurnDone) => void;
+  error: (message: string) => void;
+}
+
+export interface DumpScreenProps {
+  /** 'dock' = the reminder-first home: no header / pulse / first-run guide /
+   *  full-screen ack / receipt line, and the input is the pill chat composer.
+   *  The parent renders the conversation from `turn`. */
+  variant?: 'classic' | 'dock';
+  turn?: TurnCallbacks;
+  /** Parent-driven re-seed of the composer (e.g. an example chip). */
+  seed?: { text: string; nonce: number };
+}
+
+export function DumpScreen({ variant = 'classic', turn, seed: parentSeed }: DumpScreenProps = {}): JSX.Element {
+  const dock = variant === 'dock';
+  // Latest callbacks without re-creating the memoized dump handlers.
+  const turnRef = useRef(turn);
+  turnRef.current = turn;
   const { getToken } = useAuth();
   const [ackKey, setAckKey] = useState<number | null>(null);
   // Monotonic tick that forces the <Ack> to remount so its CSS animation
@@ -191,8 +222,9 @@ export function DumpScreen(): JSX.Element {
   // dump is submitted, before the cloud route. Perceived latency ~0. We retract
   // it post-route in onResult/onCrisis for the two cases that can't ack yet
   // (goal-intent waits for the modal save; crisis must never ack).
-  const onSubmitted = useCallback(() => {
-    fireAck();
+  const onSubmitted = useCallback((text: string) => {
+    if (turnRef.current) turnRef.current.start(text);
+    else fireAck();
     // First dump submitted → the guide's job is done; the silent default takes
     // over from here.
     setShowGuide(false);
@@ -246,7 +278,9 @@ export function DumpScreen(): JSX.Element {
     // see it until the NEXT dump triggers another sweep). Awaiting first
     // guarantees the row is on disk before the sweep reads it. record() never
     // throws, so this can't break the dump flow.
-    if (!output.crisis) {
+    // A message that is only a question files nothing, so it is not a dump to resurface later.
+    const onlyQuestions = output.fragments.length === 0 && (output.questions?.length ?? 0) > 0;
+    if (!output.crisis && !onlyQuestions) {
       await dumpArchive.record({
         id: output.dumpId,
         text: output.originalDump,
@@ -259,7 +293,10 @@ export function DumpScreen(): JSX.Element {
     // Dispatch is silent: the result entries update module-local state but
     // we do not render them. The user goes to the module to see the change.
     const dispatched = await dispatchRouterOutput(dispatchOutput);
-    if (dispatched.crisisSkipped) return;
+    if (dispatched.crisisSkipped) {
+      turnRef.current?.done({ receipt: null, askedWhen: false, needsConfirm: 0, crisis: true, questions: [] });
+      return;
+    }
 
     // Surface a confirm card for each uncertain fragment. Both the fragment-
     // level flag (set by the router before dispatch) and the handler result
@@ -342,7 +379,14 @@ export function DumpScreen(): JSX.Element {
       .filter((e) => e.result.draft !== true)
       .map((e) => e.fragment.module);
     const receiptText = buildReceiptText(writtenModules);
-    if (receiptText !== null) {
+    turnRef.current?.done({
+      receipt: receiptText,
+      askedWhen: reminders.length > 0,
+      needsConfirm: cards.length,
+      crisis: false,
+      questions: output.questions ?? [],
+    });
+    if (receiptText !== null && !turnRef.current) {
       receiptTickRef.current += 1;
       setReceipt({ id: receiptTickRef.current, text: receiptText });
     }
@@ -361,11 +405,25 @@ export function DumpScreen(): JSX.Element {
     // A crisis dump writes nothing and must never look "saved".
     setReceipt(null);
     setCrisis(signal);
+    turnRef.current?.done({ receipt: null, askedWhen: false, needsConfirm: 0, crisis: true, questions: [] });
   }, []);
 
+  const input = (
+    <BrainDumpInput
+      getBearer={getBearer}
+      onSubmitted={onSubmitted}
+      onError={(message) => turnRef.current?.error(message)}
+      onResult={onResult}
+      onCrisis={onCrisis}
+      seed={parentSeed ?? seed}
+      variant={dock ? 'pill' : 'classic'}
+      placeholder={dock ? "What's up?" : undefined}
+    />
+  );
+
   return (
-    <Stack gap={32}>
-      <Stack gap={6}>
+    <Stack gap={dock ? 16 : 32}>
+      {!dock && <Stack gap={6}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
           <svg width={18} height={18} viewBox="0 0 24 24" aria-hidden>
             <path
@@ -393,21 +451,15 @@ export function DumpScreen(): JSX.Element {
         >
           what's on your mind?
         </Text>
-      </Stack>
+      </Stack>}
 
-      <BrainDumpInput
-        getBearer={getBearer}
-        onSubmitted={onSubmitted}
-        onResult={onResult}
-        onCrisis={onCrisis}
-        seed={seed}
-      />
+      {!dock && input}
 
-      {!crisis && showGuide && <FirstRunGuide onPick={onPickExample} />}
+      {!dock && !crisis && showGuide && <FirstRunGuide onPick={onPickExample} />}
 
       {/* One calm orientation line — "today's clear." / "a few things for
           today." Hidden during first-run (the guide speaks then) and on crisis. */}
-      {!crisis && !showGuide && <TodayPulse />}
+      {!dock && !crisis && !showGuide && <TodayPulse />}
 
       {/* The cross-life "today" surface — the PRIMARY brain surface (Sprint 2).
           Replaces the old per-module dump card here: the selection discipline
@@ -476,6 +528,8 @@ export function DumpScreen(): JSX.Element {
           ))}
         </Stack>
       )}
+
+      {dock && <div className={styles.dock}>{input}</div>}
     </Stack>
   );
 }

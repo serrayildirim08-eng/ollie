@@ -205,8 +205,12 @@ export function MicButton({
           aria-label="Stop recording"
           onClick={stop}
         >
-          <div className={styles.circle} />
-          <span className={styles.label}>listening… just pause when you’re done</span>
+          <div className={styles.orb}>
+            <span className={styles.ring} />
+            <span className={styles.circle} />
+          </div>
+          <span className={styles.label}>I’m listening</span>
+          <span className={styles.hint}>pause when you’re done · tap to stop</span>
         </div>
       )}
 

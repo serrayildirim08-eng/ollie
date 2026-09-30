@@ -375,6 +375,24 @@ export function scheduleAt(
   };
 }
 
+/**
+ * Cancel an OS-scheduled notification by its stable id without holding the
+ * handle scheduleAt returned — e.g. a task completed in-app before its
+ * `reminder:<taskId>` fires. Idempotent (the Rust cancel no-ops on an unknown
+ * id); no-op off Tauri. Never throws.
+ */
+export function cancelScheduledById(id: string): void {
+  void loadNotificationPlugin().then(async (plugin) => {
+    if (!plugin) return;
+    try {
+      const { emit } = await import('@tauri-apps/api/event');
+      await emit('ollie-cancel-notif', id);
+    } catch (err) {
+      console.warn('[systemNotify] cancel-by-id emit failed', err);
+    }
+  });
+}
+
 // ─── event listener ────────────────────────────────────────────────────────
 
 /**

@@ -181,7 +181,8 @@ fn marker_path(db: &PathBuf) -> PathBuf {
 /// `x'<hex>'` PRAGMA argument. Generated once; thereafter read back. Any
 /// failure is surfaced (Err) — we fail closed rather than fall back to
 /// plaintext.
-fn get_or_create_key_pragma() -> Result<String, String> {
+#[cfg(not(target_os = "android"))]
+fn get_or_create_key_pragma<R: Runtime>(_app: &AppHandle<R>) -> Result<String, String> {
     use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
 
     let entry = keyring::Entry::new(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT)
@@ -208,6 +209,51 @@ fn get_or_create_key_pragma() -> Result<String, String> {
     }
 
     // Hex-encode → raw-key PRAGMA form  x'....'  (64 hex chars).
+    let mut hex = String::with_capacity(64);
+    for b in &key_bytes {
+        hex.push_str(&format!("{b:02x}"));
+    }
+    Ok(format!("x'{hex}'"))
+}
+
+/// Android: `keyring` has no Android backend (it silently falls back to an
+/// in-memory mock, which would mint a new key every launch and lock the user
+/// out of their own DB on the second open). Instead the key lives in a file in
+/// the app-private data dir: no other app can read it, and Android file-based
+/// encryption protects it at rest. Weaker than a hardware keystore (root /
+/// backup extraction could read it) — acceptable for dogfood; the upgrade path
+/// is wrapping this key with an Android Keystore key.
+#[cfg(target_os = "android")]
+fn get_or_create_key_pragma<R: Runtime>(app: &AppHandle<R>) -> Result<String, String> {
+    use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
+
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("app data dir: {e}"))?;
+    std::fs::create_dir_all(&dir).map_err(|e| format!("create data dir: {e}"))?;
+    let key_file = dir.join(".ollie_db_key");
+
+    let key_bytes: Vec<u8> = match std::fs::read_to_string(&key_file) {
+        Ok(b64) => B64
+            .decode(b64.trim().as_bytes())
+            .map_err(|e| format!("key file decode: {e}"))?,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            let mut buf = [0u8; 32];
+            getrandom::getrandom(&mut buf).map_err(|e| format!("getrandom: {e}"))?;
+            // Write-then-rename so a crash mid-write can never leave a
+            // truncated key that would brick the DB.
+            let tmp = dir.join(".ollie_db_key.tmp");
+            std::fs::write(&tmp, B64.encode(buf)).map_err(|e| format!("key write: {e}"))?;
+            std::fs::rename(&tmp, &key_file).map_err(|e| format!("key rename: {e}"))?;
+            buf.to_vec()
+        }
+        Err(e) => return Err(format!("key file read: {e}")),
+    };
+
+    if key_bytes.len() != 32 {
+        return Err(format!("unexpected key length {}", key_bytes.len()));
+    }
     let mut hex = String::with_capacity(64);
     for b in &key_bytes {
         hex.push_str(&format!("{b:02x}"));
@@ -332,7 +378,7 @@ pub fn install<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
     // no-op, so a fresh install would otherwise run on plaintext undetected.
     assert_sqlcipher_engine()?;
 
-    let key_pragma = get_or_create_key_pragma()?;
+    let key_pragma = get_or_create_key_pragma(app)?;
 
     if let Some(db) = db_path(app) {
         // Ensure the parent dir exists (mirrors the plugin's create_dir_all).

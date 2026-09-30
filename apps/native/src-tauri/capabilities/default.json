@@ -22,7 +22,6 @@
     "notification:allow-notify",
     "notification:allow-is-permission-granted",
     "notification:allow-request-permission",
-    "deep-link:default",
-    "mobile-push:default"
+    "deep-link:default"
   ]
 }

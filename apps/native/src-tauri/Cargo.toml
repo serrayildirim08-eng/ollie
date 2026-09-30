@@ -28,7 +28,6 @@ tauri-plugin-store = "2"
 tauri-plugin-notification = "2"
 tauri-plugin-localhost = "2"
 tauri-plugin-deep-link = "2"
-tauri-plugin-mobile-push = "0.1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
@@ -41,12 +40,23 @@ serde_json = "1"
 #      / sqlite3_exec) used by secure_db.rs to key every connection and to run
 #      the one-shot plaintext->encrypted migration.
 rusqlite = { version = "0.32", features = ["bundled-sqlcipher-vendored-openssl"] }
-# DB key lives in the OS keychain (macOS Security.framework / iOS Keychain
-# Services) -- never a plaintext file. iOS needs the keychain-access-group
-# entitlement (Entitlements.plist) for this to succeed on device.
-keyring = { version = "3", features = ["apple-native"] }
 getrandom = "0.2"
 base64 = "0.22"
+
+# DB key lives in the OS keychain (macOS Security.framework / iOS Keychain
+# Services) -- never a plaintext file. iOS needs the keychain-access-group
+# entitlement (Entitlements.plist) for this to succeed on device. keyring has no
+# Android backend, so Android keeps the key in app-private storage (secure_db.rs).
+[target.'cfg(not(target_os = "android"))'.dependencies]
+keyring = { version = "3", features = ["apple-native"] }
+# Remote push (APNs). Its Android side needs Firebase, which Ollie doesn't
+# configure — reminders on Android use local AlarmManager notifications instead.
+tauri-plugin-mobile-push = "0.1"
+
+# Android: AlarmManager scheduling goes through tauri-plugin-notification's
+# Schedule::At, which takes a time::OffsetDateTime.
+[target.'cfg(target_os = "android")'.dependencies]
+time = "0.3"
 
 # Apple-only: typed bindings to UNUserNotificationCenter for OS-level local
 # notifications that survive the app being quit (macOS 10.14+ and iOS).

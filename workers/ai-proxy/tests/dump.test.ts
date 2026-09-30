@@ -15,6 +15,8 @@ import { handleDumpRoute, type DumpRouteEnv } from '../src/router/dump';
 import type { VectorizeIndex } from '../src/router/vectorize';
 
 // Stub the Clerk verifier so the test doesn't need a real JWKS round-trip.
+// Ask Ollie's question detection has its own tests (ask.test.ts); here every fragment is a log.
+vi.mock('../src/router/ask', () => ({ findQuestions: vi.fn(async () => []) }));
 vi.mock('../src/clerk-verify', () => ({
   verifyClerkJwt: vi.fn(async () => 'user_smoke_test'),
 }));
@@ -146,7 +148,8 @@ describe('/route/dump — smoke', () => {
 
     expect(body.summary.moduleCount.grocery).toBe(1);
     expect(body.summary.cacheHitRate).toBe(0);
-    expect(body.summary.aiCalls).toBe(1);
+    // The question-detection call plus the one batched classification.
+    expect(body.summary.aiCalls).toBe(2);
     expect(body.crisis).toBeUndefined();
   });
 
