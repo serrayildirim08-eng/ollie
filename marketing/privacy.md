@@ -1,7 +1,7 @@
 # privacy policy
 
 **effective date:** 2026-05-14
-**last updated:** 2026-05-14
+**last updated:** 2026-10-14
 
 ollie is an adhd-built personal tool for tracking finance, health, habits, journals, and life admin. this policy explains what data ollie collects, how it is stored, and what choices you have.
 
@@ -12,6 +12,7 @@ we wrote this in plain sentences. if anything is unclear, write to support@ollie
 ## tl;dr
 
 - most of your data lives on your device, in an encrypted database whose key is held in your device's secure keychain (protected by your device lock — face id, touch id, or passcode).
+- to sort a brain dump into your modules, ollie sends it to ollie's ai service. before any outside ai model sees it, names, contact details, id-like numbers and sensitive health, mental-health, medication and sexual content are removed. the scrubbed text is then processed by the ai providers listed below. if a dump contains crisis language, ollie stops all ai processing for it.
 - ollie collects crash reports and session replays so the app stays usable. you cannot turn this off and still use the app.
 - ollie collects anonymized text contributions for research **only if you opt in**. the default is off.
 - if you opt in and later change your mind, future contributions stop. past contributions are already anonymized and remain in the research corpus.
@@ -47,15 +48,21 @@ all of this is stored on your device. cloud sync of module content is not enable
 
 ### 2. brain dumps
 
-ollie's "brain dump" surface accepts free-form text. brain dump entries live on your device.
+ollie's "brain dump" surface accepts free-form text, voice notes and photos. the entries you keep live on your device, but **to sort a dump into the right modules, ollie sends it to its own ai service** (running on cloudflare). this happens for every dump, whether or not research opt-in is on. see "how ollie's ai handles your text" below for exactly what is sent where.
 
-if you have **research opt-in** turned on, ollie will:
+if you have **research opt-in** turned on, ollie will also:
 
-1. run brain dumps through the local pii-scrub module to remove names, emails, phone numbers, and street addresses;
-2. send the scrubbed text to ollie's research corpus;
-3. label the corpus with anthropic's claude api to tag patterns.
+1. send the scrubbed text to ollie's research corpus;
+2. label the corpus with anthropic's claude api to tag patterns.
 
-if research opt-in is off, brain dumps never leave your device.
+### how ollie's ai handles your text
+
+1. **scrub first.** before any outside ai model sees a dump, `@ollie/pii-scrub` removes, in this order: mental-health, medical, medication and sexual content; urls, email addresses, gps coordinates, postal addresses and phone numbers; long numbers that look like account or id numbers (money amounts are kept); and first and last names.
+2. **crisis check.** if the dump contains crisis language (english, turkish or spanish), ollie stops: nothing is sent to an ai model, nothing is stored or logged as text, and the app shows support information instead.
+3. **sorting.** the scrubbed text is split into items. each item is turned into a numeric "embedding" by **voyage ai** so ollie can recognise things you have said before; these embeddings and the module they were sorted into are kept in a cache that only matches your own earlier inputs. items ollie has not seen before are classified by **groq**, with **cloudflare workers ai**, **google gemini** and **openrouter** as fallbacks if groq is unavailable. ollie keeps a short-lived copy of the result for one hour so a repeated request does not run twice.
+4. **filing an item into a module.** when an item is filed into a module (for example medication or sleep), that single item is sent to the model so it can read the domain term — such as a symptom or a medication name.
+5. **photos and voice.** a photo you attach is described by **google gemini** first; the scrub then runs on the description together with your text. a voice note is transcribed by **groq** (whisper) before the same steps run.
+6. the raw, unscrubbed text is returned only to your own device. ollie's ai service logs lengths and structure, never the text itself.
 
 ### 3. crash analytics and session replay
 
@@ -69,7 +76,7 @@ ollie may resolve your approximate location from your ip address (bigdatacloud) 
 
 ### 5. account credentials
 
-your email is stored on ollie's server so you can sign in across devices. the key that encrypts your on-device data is generated on your device and held in its operating-system keychain — it **never leaves your device** and ollie never sees it.
+your email is stored by **clerk**, ollie's sign-in provider, so you can sign in across devices. if you allow notifications, your device's push token is stored so ollie can send them through **apple push notification service**. the key that encrypts your on-device data is generated on your device and held in its operating-system keychain — it **never leaves your device** and ollie never sees it.
 
 ---
 
@@ -79,11 +86,18 @@ ollie relies on the following third-party providers. each has its own privacy po
 
 | provider | purpose | data shared |
 |---|---|---|
+| cloudflare | hosts ollie's ai service, short-lived request cache, embedding cache, scheduled jobs | brain dump text in transit; scrubbed embeddings and module labels; request metadata |
+| voyage ai | embeddings for sorting | scrubbed brain dump items |
+| groq | sorting and module filing (main model); voice transcription | scrubbed brain dump items; single items being filed; voice notes |
+| google gemini | fallback sorting; photo description | scrubbed items (fallback); photos you attach |
+| openrouter | last-resort fallback sorting | scrubbed brain dump items |
+| anthropic claude | research corpus labeling and enrichment (only if you opt in) | pii-scrubbed brain dump text |
+| clerk | sign-in and account identity | email, sign-in data |
+| apple push notification service | notifications (only if you allow them) | device push token, notification content |
 | sentry | crash analytics, session replay | error stacks, sanitized session interactions, device + browser metadata |
 | bigdatacloud | ip → approximate city | your ip at request time |
 | open-meteo | weather | resolved city coordinates |
-| anthropic claude | research corpus labeling (only if you opt in) | pii-scrubbed brain dump text |
-| supabase | auth, account storage, research corpus | email, account + consent metadata, (opt-in) anonymized research rows |
+| supabase | database for account metadata, consent records, hashed usage telemetry, optional encrypted sync, research corpus | account + consent metadata, telemetry keyed by a hashed id, encrypted sync data (if you turn sync on), (opt-in) anonymized research rows |
 
 ollie does not sell your data. ollie does not use advertising networks.
 
@@ -97,7 +111,7 @@ modules are stored locally in an encrypted sqlite database (sqlcipher, aes-256).
 
 ### on ollie's server
 
-cloud sync of your module content is not enabled in this version — your logged entries, brain dumps, and notes stay on your device. ollie's server (supabase postgres) stores only your email, account metadata, and consent state, plus — if you opt in — anonymized research contributions (see below).
+cloud sync is optional and **off by default**. if you turn it on, your module data is encrypted on your device (aes-gcm-256, with a key derived from your passphrase) before upload, and ollie's server stores only the encrypted copy. ollie's server (supabase postgres) otherwise stores your account metadata and consent state, usage telemetry keyed by a hashed identifier (never your email or the text you write), and — if you opt in — anonymized research contributions (see below). the text of your brain dumps is not stored on ollie's server, except as the scrubbed embeddings and module labels described above.
 
 note: this is **not** a zero-knowledge system. ollie's server operators have technical access to the database holding your email, account metadata, and consent state.
 
@@ -136,15 +150,15 @@ ollie cannot retroactively scrub the research corpus of your past contributions 
 
 ## pii scrub
 
-before any text is sent to the research corpus, ollie runs it through `@ollie/pii-scrub`, which removes:
+before any text is sent to an outside ai model or to the research corpus, ollie runs it through `@ollie/pii-scrub`, which removes:
 
+- mental-health, medical, medication and sexual content
+- urls, email addresses, gps coordinates and street addresses
+- phone numbers (us, turkish, dutch and spanish formats)
+- long numbers that look like account, card or id numbers
 - first and last names
-- email addresses
-- phone numbers
-- street addresses
-- common credit card patterns
 
-the scrub is heuristic, not perfect. if you mention something sensitive in a way the scrub does not catch, it may be transmitted. for that reason, ollie recommends not writing sensitive identifying details into brain dumps if you are opted in to research.
+the scrub is heuristic, not perfect. if you mention something sensitive in a way the scrub does not catch, it may be transmitted. for that reason, ollie recommends not writing sensitive identifying details into brain dumps.
 
 ---
 
@@ -199,7 +213,7 @@ contact support@ollie.app.
 
 ## data breach notification
 
-if ollie discovers a breach affecting your personal data, you will be notified by email within **30 days** of confirmed discovery, along with what was affected and what steps to take.
+if ollie discovers a breach affecting your personal data, ollie will notify the competent data protection authority within 72 hours where the law requires it, and will notify you by email **without undue delay** when the breach is likely to put your rights at high risk, explaining what was affected and what steps to take.
 
 ---
 
