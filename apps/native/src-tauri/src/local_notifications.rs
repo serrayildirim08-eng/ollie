@@ -304,7 +304,69 @@ mod imp {
     }
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "ios")))]
+/// Android: hand the reminder to tauri-plugin-notification, whose Android side
+/// arms an AlarmManager alarm (setExactAndAllowWhileIdle when exact alarms are
+/// permitted) and restores pending alarms after reboot. Survives app-quit, like
+/// the Apple path. The plugin keys notifications by i32, so the stable string id
+/// (`reminder:<taskId>`) is hashed deterministically — schedule and cancel of the
+/// same id always hit the same alarm.
+#[cfg(target_os = "android")]
+mod imp {
+    use std::sync::OnceLock;
+    use tauri::AppHandle;
+    use tauri_plugin_notification::{NotificationExt, Schedule};
+
+    static APP: OnceLock<AppHandle> = OnceLock::new();
+
+    /// FNV-1a 32-bit, masked positive (Android notification ids are ints; keep
+    /// them > 0 to stay clear of any sentinel handling).
+    pub(super) fn android_id(id: &str) -> i32 {
+        let mut h: u32 = 0x811c_9dc5;
+        for b in id.as_bytes() {
+            h ^= u32::from(*b);
+            h = h.wrapping_mul(0x0100_0193);
+        }
+        let v = (h & 0x7fff_ffff) as i32;
+        if v == 0 { 1 } else { v }
+    }
+
+    pub fn schedule(
+        id: String,
+        title: String,
+        body: Option<String>,
+        fire_at_ms: f64,
+        _category_id: Option<String>,
+        _extra_json: Option<String>,
+    ) -> Result<(), String> {
+        let app = APP.get().ok_or("notifications not installed")?;
+        let nanos = (fire_at_ms as i128) * 1_000_000;
+        let date = time::OffsetDateTime::from_unix_timestamp_nanos(nanos)
+            .map_err(|e| format!("bad fire time: {e}"))?;
+        let mut b = app
+            .notification()
+            .builder()
+            .id(android_id(&id))
+            .title(title)
+            .schedule(Schedule::At { date, repeating: false, allow_while_idle: true });
+        if let Some(body) = body {
+            b = b.body(body);
+        }
+        b.show().map_err(|e| e.to_string())
+    }
+
+    pub fn cancel(id: String) -> Result<(), String> {
+        let app = APP.get().ok_or("notifications not installed")?;
+        app.notification()
+            .cancel(vec![android_id(&id)])
+            .map_err(|e| e.to_string())
+    }
+
+    pub fn install_actions(app: tauri::AppHandle) {
+        let _ = APP.set(app);
+    }
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "android")))]
 mod imp {
     pub fn schedule(
         _id: String,

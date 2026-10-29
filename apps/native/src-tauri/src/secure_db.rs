@@ -181,7 +181,8 @@ fn marker_path(db: &PathBuf) -> PathBuf {
 /// `x'<hex>'` PRAGMA argument. Generated once; thereafter read back. Any
 /// failure is surfaced (Err) — we fail closed rather than fall back to
 /// plaintext.
-fn get_or_create_key_pragma() -> Result<String, String> {
+#[cfg(not(target_os = "android"))]
+fn get_or_create_key_pragma<R: Runtime>(_app: &AppHandle<R>) -> Result<String, String> {
     use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
 
     let entry = keyring::Entry::new(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT)
@@ -208,6 +209,50 @@ fn get_or_create_key_pragma() -> Result<String, String> {
     }
 
     // Hex-encode → raw-key PRAGMA form  x'....'  (64 hex chars).
+    let mut hex = String::with_capacity(64);
+    for b in &key_bytes {
+        hex.push_str(&format!("{b:02x}"));
+    }
+    Ok(format!("x'{hex}'"))
+}
+
+/// Android: `keyring` has no Android backend, so the key is held by
+/// `DbKeyVault` (gen/android/.../DbKeyVault.kt): wrapped by a non-exportable
+/// Android Keystore AES key, unwrapped in MainActivity before Rust starts, and
+/// handed over in a process env var that we read ONCE and remove here.
+///
+/// Fallback: if the vault couldn't run but a legacy plain-text key file from
+/// builds <= 1.1.3 is still present (its migration didn't finish), use that so
+/// the user isn't locked out; the vault retries the migration next launch.
+/// With neither, fail closed — never mint a fresh key here, which would orphan
+/// an existing database.
+#[cfg(target_os = "android")]
+fn get_or_create_key_pragma<R: Runtime>(app: &AppHandle<R>) -> Result<String, String> {
+    use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
+
+    const ENV_VAR: &str = "OLLIE_DB_KEY_HEX";
+    if let Ok(hex) = std::env::var(ENV_VAR) {
+        std::env::remove_var(ENV_VAR);
+        let hex = hex.trim().to_ascii_lowercase();
+        if hex.len() != 64 || !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return Err("keystore handed over a malformed key".into());
+        }
+        return Ok(format!("x'{hex}'"));
+    }
+
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("app data dir: {e}"))?;
+    let legacy = dir.join(".ollie_db_key");
+    let b64 = std::fs::read_to_string(&legacy)
+        .map_err(|_| "android keystore unavailable and no legacy key — refusing to start".to_string())?;
+    let key_bytes = B64
+        .decode(b64.trim().as_bytes())
+        .map_err(|e| format!("legacy key decode: {e}"))?;
+    if key_bytes.len() != 32 {
+        return Err(format!("unexpected key length {}", key_bytes.len()));
+    }
     let mut hex = String::with_capacity(64);
     for b in &key_bytes {
         hex.push_str(&format!("{b:02x}"));
@@ -332,7 +377,7 @@ pub fn install<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
     // no-op, so a fresh install would otherwise run on plaintext undetected.
     assert_sqlcipher_engine()?;
 
-    let key_pragma = get_or_create_key_pragma()?;
+    let key_pragma = get_or_create_key_pragma(app)?;
 
     if let Some(db) = db_path(app) {
         // Ensure the parent dir exists (mirrors the plugin's create_dir_all).

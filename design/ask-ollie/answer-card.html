@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ask Ollie — answer card mock</title>
+<style>
+  /* Colours copied from apps/native/src/home/HomeScreen.module.css (design v2). */
+  :root { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+  body { margin: 0; padding: 32px 24px 64px; background: #e9e5dc; color: #1d1b17; }
+  h1 { font: 600 20px/1.3 system-ui; margin: 0 0 6px; }
+  .lede { margin: 0 0 28px; color: #5f584b; max-width: 760px; line-height: 1.5; }
+  .row { display: flex; gap: 32px; flex-wrap: wrap; align-items: flex-start; }
+  figure { margin: 0; }
+  figcaption { font-size: 13px; color: #5f584b; margin: 10px 4px 0; max-width: 360px; }
+
+  .phone { width: 360px; height: 740px; border-radius: 40px; overflow: hidden; position: relative;
+           box-shadow: 0 0 0 10px #1d1b17, 0 18px 40px rgba(0,0,0,.25); display: flex; flex-direction: column; }
+  .day   { --bg:#f6f1e7; --ink:#1d1b17; --soft:#5f584b; --faint:#a39a88; --line:#e6dece; --accent:#3f8f4f;
+           --me:#1d1b17; --me-ink:#f6f1e7; --ollie:#ece4d4; --ollie-ink:#1d1b17; --field:#fffdf8; --field-line:#e3dac8;
+           --send:#1d1b17; --send-ink:#f6f1e7; background: var(--bg); color: var(--ink); }
+  .night { --bg:#0f1411; --ink:#e9eee9; --soft:#b7c4ba; --faint:#6f8475; --line:#1f2922; --accent:#4ade80;
+           --me:#2b3a30; --me-ink:#e9eee9; --ollie:#161d18; --ollie-ink:#d8e2da; --field:#1b231e; --field-line:#2a352e;
+           --send:#4ade80; --send-ink:#0f1411; color: var(--ink);
+           background: radial-gradient(120% 45% at 50% 0%, #1f2a22 0%, #0f1411 60%); }
+
+  .scroll { flex: 1; overflow: auto; padding: 44px 22px 8px; scrollbar-width: none; }
+  .date { font-family: Georgia, serif; font-size: 30px; margin: 10px 0 2px; }
+  .night .date { font-family: inherit; font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--faint); }
+  .status { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--faint); }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); }
+  .greet { margin: 14px 0 0; color: var(--soft); font-size: 15px; }
+  .heading { margin: 22px 0 2px; font-family: Georgia, serif; font-size: 19px; }
+  .night .heading { font-family: inherit; font-size: 11.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--faint); }
+  .item { display: flex; align-items: center; gap: 12px; padding: 11px 0; border-top: 1px solid var(--line); }
+  .night .item { border-top-color: transparent; padding: 9px 0; }
+  .check { width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid var(--faint); flex: none; }
+  .what { flex: 1; font-size: 16px; }
+  .when { font-size: 13px; color: var(--accent); }
+
+  .chat { margin-top: 26px; display: flex; flex-direction: column; gap: 8px; }
+  .me, .ollie { max-width: 84%; padding: 9px 13px; font-size: 15px; line-height: 1.4; border-radius: 18px; }
+  .me { align-self: flex-end; border-bottom-right-radius: 6px; background: var(--me); color: var(--me-ink); }
+  .ollie { align-self: flex-start; border-bottom-left-radius: 6px; background: var(--ollie); color: var(--ollie-ink);
+           display: flex; gap: 8px; }
+  .night .ollie { border: 1px solid #243028; }
+  .mini { flex: none; width: 7px; height: 7px; margin-top: 7px; border-radius: 50%; background: var(--accent); }
+  .ollie ul { margin: 4px 0 0; padding: 0 0 0 16px; }
+  .ollie li { margin: 1px 0; }
+  .big { display: block; font-size: 24px; font-weight: 600; letter-spacing: -.01em; margin: 2px 0 1px; }
+  .note { display: block; margin-top: 6px; font-size: 12px; color: var(--faint); }
+  .try { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chip { font-size: 13px; padding: 5px 10px; border-radius: 999px; border: 1px solid var(--field-line); background: var(--field); color: var(--ink); }
+
+  .composer { padding: 8px 14px 22px; }
+  .pill { display: flex; align-items: center; gap: 8px; padding: 6px 6px 6px 16px; border-radius: 999px;
+          background: var(--field); border: 1px solid var(--field-line); color: var(--faint); font-size: 15px; }
+  .pill span { flex: 1; }
+  .mic, .send { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font-size: 15px; }
+  .mic { color: var(--soft); }
+  .send { background: var(--send); color: var(--send-ink); }
+
+  .notes { margin-top: 36px; max-width: 760px; line-height: 1.55; color: #3f3a31; }
+  .notes h2 { font: 600 16px/1.3 system-ui; margin: 0 0 6px; }
+  .notes li { margin: 4px 0; }
+</style>
+</head>
+<body>
+<h1>Ask Ollie — the answer card</h1>
+<p class="lede">You ask in the same box you tell Ollie things in. The answer arrives as Ollie's reply in the conversation:
+the number big enough to read at a glance, one plain sentence, and a quiet line that says where it came from.
+Every answer on these screens is the real output of the answer engine on its test data; the to-do rows above them are only there for context.</p>
+
+<div class="row">
+  <figure>
+    <div class="phone day">
+      <div class="scroll">
+        <div class="status"><span class="dot"></span>Ollie is here</div>
+        <div class="date">Wednesday 23</div>
+        <p class="greet">Good morning, Serra. Two things left today.</p>
+        <div class="heading">Today</div>
+        <div class="item"><span class="check"></span><span class="what">call the dentist</span><span class="when">15:00</span></div>
+        <div class="item"><span class="check"></span><span class="what">send the deck</span><span class="when">overdue</span></div>
+
+        <div class="chat">
+          <p class="me">how much did I spend this week?</p>
+          <div class="ollie"><span class="mini"></span><span>
+            <span class="big">€116.70</span>
+            This week you spent €116.70 (3 payments).
+            <span class="note">Worked out on your phone from what you told me.</span>
+          </span></div>
+
+          <p class="me">what's on my shopping list?</p>
+          <div class="ollie"><span class="mini"></span><span>
+            Here's what I have:
+            <ul><li>milk</li><li>bread</li></ul>
+          </span></div>
+
+          <p class="me">am I sleeping enough?</p>
+          <div class="ollie"><span class="mini"></span><span>
+            I can't answer that one yet. You can ask things like:
+            <span class="try"><span class="chip">how much did I sleep this week?</span><span class="chip">when did I last sleep badly?</span></span>
+          </span></div>
+        </div>
+      </div>
+      <div class="composer"><div class="pill"><span>What's up?</span><span class="mic">●</span><span class="send">↑</span></div></div>
+    </div>
+    <figcaption>Day, English. Money gets the big number; a list is a list; a question it can't answer yet gets two tappable questions it can.</figcaption>
+  </figure>
+
+  <figure>
+    <div class="phone night">
+      <div class="scroll">
+        <div class="status"><span class="dot"></span>Ollie is here</div>
+        <div class="date">woensdag 23 september</div>
+        <p class="greet">Goedemorgen, Serra.</p>
+
+        <div class="chat">
+          <p class="me">hoeveel heb ik deze week bij albert heijn uitgegeven?</p>
+          <div class="ollie"><span class="mini"></span><span>
+            <span class="big">€ 76,70</span>
+            Deze week heb je € 76,70 uitgegeven (2 betalingen).
+            <span class="note">Uitgerekend op je telefoon, uit wat je me vertelde.</span>
+          </span></div>
+
+          <p class="me">wanneer heb ik mijn medicijnen voor het laatst genomen?</p>
+          <div class="ollie"><span class="mini"></span><span>
+            De laatste keer was woensdag 23 september om 08:00.
+          </span></div>
+
+          <p class="me">hoeveel heb ik deze week geslapen?</p>
+          <div class="ollie"><span class="mini"></span><span>
+            <span class="big">20,5 uur</span>
+            Deze week heb je 20,5 uur geslapen in 3 nachten, gemiddeld 6,8 uur per nacht.
+          </span></div>
+        </div>
+      </div>
+      <div class="composer"><div class="pill"><span>Wat speelt er?</span><span class="mic">●</span><span class="send">↑</span></div></div>
+    </div>
+    <figcaption>Night, Dutch. Same card; numbers in Dutch format (€ 76,70 · 20,5 uur).</figcaption>
+  </figure>
+</div>
+
+<div class="notes">
+  <h2>Decided (Serra, 28 Sep 2026)</h2>
+  <ol>
+    <li>Big number on money and sleep answers: kept.</li>
+    <li>"Worked out on your phone" line: only on the very first answer Ollie ever gives.</li>
+    <li>Tappable example questions in the "can't answer yet" reply: kept.</li>
+    <li>Box placeholder: "What's up?" (Dutch: "Wat speelt er?").</li>
+  </ol>
+</div>
+</body>
+</html>

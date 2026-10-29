@@ -69,7 +69,15 @@ export interface BrainDumpInputProps {
    * retract the optimistic ack post-route for crisis / goal-intent dumps (only
    * discoverable from the RouterOutput) — see onResult / onCrisis.
    */
-  onSubmitted?: () => void;
+  onSubmitted?: (text: string) => void;
+
+  /** Fired when a submit fails (auth / network / server). The words stay in
+   *  the box and on disk; `message` is the same one-liner shown inline. */
+  onError?: (message: string) => void;
+
+  /** 'pill' = one-line chat composer (home screen): mic + round send, Enter
+   *  sends. 'classic' = the multi-line box with photo intake. */
+  variant?: 'classic' | 'pill';
 
   /** Fired on a successful classification. */
   onResult?: (output: RouterOutput) => void;
@@ -120,8 +128,10 @@ function newDumpId(): string {
 export function BrainDumpInput({
   getBearer,
   onSubmitted,
+  onError,
   onResult,
   onCrisis,
+  variant = 'classic',
   placeholder = DEFAULT_PLACEHOLDER,
   initialValue = '',
   clearOnSuccess = true,
@@ -235,17 +245,20 @@ export function BrainDumpInput({
     // instant ack entirely and let the post-route crisis path own the screen;
     // image-only dumps (no text) can't be screened so they ack as normal.
     const localCrisis = hasText && detectCrisis(trimmed).match;
-    if (onSubmitted && !localCrisis) onSubmitted();
+    if (onSubmitted && !localCrisis) onSubmitted(trimmed);
 
     let bearer: string;
     try {
       bearer = await getBearer();
     } catch (err) {
-      setState({ kind: 'error', message: (err as Error).message || 'auth failed' });
+      const message = (err as Error).message || 'auth failed';
+      setState({ kind: 'error', message });
+      onError?.(message);
       return;
     }
     if (!bearer) {
       setState({ kind: 'error', message: 'sign in to dump' });
+      onError?.('sign in to dump');
       return;
     }
 
@@ -323,6 +336,7 @@ export function BrainDumpInput({
         code === 'http' ? `server hiccup (${res.error.status ?? '?'}) — your words are saved` :
         'something went wrong — your words are saved';
       setState({ kind: 'error', message });
+      onError?.(message);
       return;
     }
 
@@ -344,7 +358,7 @@ export function BrainDumpInput({
     // response and reads the dump as dropped. Fire the ack now (the real-crisis
     // branch below never reaches here for an acked dump because onCrisis hides
     // the ack reactively).
-    if (localCrisis && !res.data.crisis && onSubmitted) onSubmitted();
+    if (localCrisis && !res.data.crisis && onSubmitted) onSubmitted(trimmed);
 
     // Crisis short-circuit BEFORE module result — parent decides whether to
     // pause downstream side-effects, but in v1 both callbacks fire so a
@@ -361,7 +375,7 @@ export function BrainDumpInput({
       // submit running right now".
       inFlightRef.current = false;
     }
-  }, [text, state.kind, photo, getBearer, onSubmitted, onResult, onCrisis, clearOnSuccess]);
+  }, [text, state.kind, photo, getBearer, onSubmitted, onError, onResult, onCrisis, clearOnSuccess]);
 
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -369,9 +383,15 @@ export function BrainDumpInput({
       if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
         void submit();
+        return;
+      }
+      // Chat composer: plain Enter sends, Shift+Enter is a newline.
+      if (variant === 'pill' && e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+        e.preventDefault();
+        void submit();
       }
     },
-    [submit],
+    [submit, variant],
   );
 
   const isLoading = state.kind === 'loading';
@@ -381,6 +401,53 @@ export function BrainDumpInput({
   // flow as typed dumps.
   const disabled =
     isLoading || (text.trim().length === 0 && photo.image === null);
+
+  const onVoice = (t: string): void => {
+    // Voice auto-sends: fold the transcript into any typed text and submit
+    // straight to the modules — no extra tap.
+    const combined = text.trim().length > 0 ? `${text.trim()} ${t}` : t;
+    setText(combined);
+    void submit(combined);
+  };
+
+  if (variant === 'pill') {
+    return (
+      <div className={styles.pillWrap}>
+        <NotifyPrimeLine />
+        {error && <p className={styles.pillError}>{error}</p>}
+        <div className={styles.pill}>
+          <textarea
+            id={DUMP_INPUT_ID}
+            className={styles.pillInput}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={onKeyDown}
+            placeholder={placeholder}
+            aria-label="Tell Ollie"
+            rows={1}
+            enterKeyHint="send"
+          />
+          <span className={styles.pillMic}>
+            <MicButton getBearer={getBearer} disabled={isLoading} onTranscript={onVoice} />
+          </span>
+          <button
+            type="button"
+            className={styles.pillSend}
+            aria-label="send"
+            disabled={disabled}
+            onClick={() => void submit()}
+          >
+            <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M12 19V5M5 12l7-7 7 7" />
+            </svg>
+          </button>
+        </div>
+        {whisper && (
+          <FirstDumpWhisper module={whisper.module} extraCount={whisper.extra} onDone={() => setWhisper(null)} />
+        )}
+      </div>
+    );
+  }
 
   // Drag/paste handlers attach to a host wrapper around the Stack — Stack
   // is a token-only flex primitive and doesn't forward DOM events. The
@@ -423,13 +490,7 @@ export function BrainDumpInput({
             <MicButton
               getBearer={getBearer}
               disabled={isLoading}
-              onTranscript={(t) => {
-                // Voice auto-sends: fold the transcript into any typed text and
-                // submit straight to the modules — no extra tap.
-                const combined = text.trim().length > 0 ? `${text.trim()} ${t}` : t;
-                setText(combined);
-                void submit(combined);
-              }}
+              onTranscript={onVoice}
             />
             <Text scale="caption">
               {isLoading

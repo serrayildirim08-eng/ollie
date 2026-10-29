@@ -41,6 +41,7 @@ import { pass2SplitFragments } from './segmentation-llm';
 import { detectFragmentLanguage } from './lang-detect';
 import { classifyBatch, type ClassifyResult } from './dump-classify';
 import { injectScheduledAt } from './remindIn';
+import { findQuestions } from './ask';
 import { writeInbox } from './server-apply';
 import {
   type Fragment,
@@ -48,6 +49,7 @@ import {
   type Module,
   type RouterOutput,
   applyConfidencePolicy,
+  type Question,
 } from './dump-schema';
 import {
   cacheHitBump,
@@ -317,14 +319,37 @@ export async function handleDumpRoute(
     } satisfies RouterOutput);
   }
 
+  // 5b. Ask Ollie: questions come out BEFORE the embedding cache, which could
+  // otherwise match "how much water did I drink?" to a cached "drank water" log.
+  // Questions skip the cache, the classifier and the inbox; the phone answers
+  // them from its own data. On failure every fragment stays a log (as before).
+  const askProviders = {
+    groq: env.GROQ_API_KEY,
+    gemini: env.GEMINI_API_KEY,
+    cfAI: env.AI,
+    openrouter: env.OPENROUTER_API_KEY,
+  };
+  const asked = await findQuestions(fragmentsText, askProviders);
+  const askedIdx = new Set(asked.map((q) => q.index));
+  const questions: Question[] = asked.map((q) => ({
+    text: fragmentsText[q.index] ?? '',
+    lang: q.lang,
+    query: q.query,
+  }));
+  // A fragment that was only a question leaves the log path; one that was both keeps its log part.
+  const logPartOf = new Map(asked.filter((q) => q.logText).map((q) => [q.index, q.logText as string]));
+  const logTexts = fragmentsText.flatMap((text, i) =>
+    !askedIdx.has(i) ? [text] : logPartOf.has(i) ? [logPartOf.get(i) as string] : [],
+  );
+
   // 6. Per-fragment classification.
   //    Pass A: embed + Vectorize cache lookup for every fragment.
   //    Pass B: ONE batched Groq classify for all cache misses — the ~4k-token
   //    classifier prompt is sent once per dump rather than once per fragment,
   //    which keeps multi-fragment dumps under Groq's free-tier 8k tokens/min
   //    rate limit (a 3-fragment dump drops from ~12k tokens to ~4.5k).
-  const slots: Array<Fragment | null> = new Array(fragmentsText.length).fill(null);
-  let aiCalls = 0;
+  const slots: Array<Fragment | null> = new Array(logTexts.length).fill(null);
+  let aiCalls = 1; // the ask detection call above
   let cacheHits = 0;
 
   interface Miss {
@@ -341,12 +366,12 @@ export async function handleDumpRoute(
   // with Promise.all. A multi-fragment dump's Pass-A latency drops from O(N)
   // round-trips to O(1) — the user-visible "sort out" delay on long dumps.
   const uid = userId; // non-null past the 401 guard; pin as const for the closures
-  const languages = fragmentsText.map((t) => detectFragmentLanguage(t));
+  const languages = logTexts.map((t) => detectFragmentLanguage(t));
 
   let embeddings: number[][] = [];
-  if (fragmentsText.length > 0) {
+  if (logTexts.length > 0) {
     try {
-      embeddings = await voyageEmbedBatch(fragmentsText, env.VOYAGE_API_KEY);
+      embeddings = await voyageEmbedBatch(logTexts, env.VOYAGE_API_KEY);
     } catch (err) {
       return upstreamError('voyage_embed_failed', 502, err, { dumpId });
     }
@@ -361,8 +386,8 @@ export async function handleDumpRoute(
     ),
   );
 
-  for (let i = 0; i < fragmentsText.length; i++) {
-    const text = fragmentsText[i];
+  for (let i = 0; i < logTexts.length; i++) {
+    const text = logTexts[i];
     const language = languages[i];
     const embedding = embeddings[i];
     const cacheRow = cacheRows[i];
@@ -403,7 +428,7 @@ export async function handleDumpRoute(
 
   // ── Pass B — single batched Groq classify for all misses ──
   if (misses.length > 0) {
-    aiCalls = 1; // one upstream call regardless of how many fragments missed
+    aiCalls += 1; // one upstream call regardless of how many fragments missed
     let results: ClassifyResult[];
     try {
       results = await classifyBatch(
@@ -500,6 +525,7 @@ export async function handleDumpRoute(
     ...(visionUsed ? { visionUsed: true } : {}),
     crisis,
     fragments,
+    ...(questions.length > 0 ? { questions } : {}),
     summary: {
       moduleCount,
       cacheHitRate: fragments.length === 0 ? 0 : cacheHits / fragments.length,

@@ -54,6 +54,12 @@ export interface RouterOutput {
   // Routed fragments — one input can split into N
   fragments: Fragment[];
 
+  /**
+   * Ask Ollie: fragments that were questions, taken out of `fragments`. The phone answers them
+   * from its own data (src/ask). Mirrors the worker's dump-schema.ts `Question` by hand.
+   */
+  questions?: RouterQuestion[];
+
   // Routing telemetry for UI + analytics
   summary: RoutingSummary;
 
@@ -64,6 +70,20 @@ export interface RouterOutput {
    * text-only responses simply omit this field.
    */
   visionUsed?: boolean;
+}
+
+/** A question found in a dump. `query` null = a question v1 cannot answer (the phone says so). */
+export interface RouterQuestion {
+  /** The PII-scrubbed fragment ("[NAME]" for a name); names are resolved from the raw dump. */
+  text: string;
+  lang: 'en' | 'nl' | 'other';
+  /** Untrusted until `parseAskQuery` has checked it. */
+  query: {
+    shape: string;
+    area: string;
+    filter: Record<string, string>;
+    period: string | null;
+  } | null;
 }
 
 // ─────────────────────────────────────────────────────────────────────

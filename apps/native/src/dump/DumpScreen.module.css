@@ -73,3 +73,8 @@
     opacity: 1;
   }
 }
+
+/* variant="dock" — the home composer; the home screen owns layout + theme. */
+.dock {
+  width: 100%;
+}

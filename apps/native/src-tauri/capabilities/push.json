@@ -1,0 +1,20 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "push",
+  "description": "Remote push (APNs) \u2014 Apple only; Android has no Firebase setup, so the plugin is not compiled there",
+  "windows": [
+    "main"
+  ],
+  "platforms": [
+    "iOS",
+    "macOS"
+  ],
+  "remote": {
+    "urls": [
+      "http://localhost:9527"
+    ]
+  },
+  "permissions": [
+    "mobile-push:default"
+  ]
+}

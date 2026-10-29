@@ -13,7 +13,7 @@
 import { useEffect } from "react";
 import { BrowserRouter, Link, Route, Routes } from "react-router";
 import { useAuth } from "@clerk/clerk-react";
-import { Layout } from "./Layout";
+import { Layout, SimpleLayout } from "./Layout";
 import { useDeepLinks } from "./useDeepLinks";
 import {
   registerOllieNotificationActions,
@@ -38,7 +38,7 @@ const TITLE_STYLE: React.CSSProperties = {
   letterSpacing: "-0.01em",
 };
 import { colors } from "../theme/tokens";
-import { DumpScreen } from "../dump";
+import { HomeScreen } from "../home/HomeScreen";
 import { MODULE_MANIFEST, MODULE_GROUP_META } from "./moduleRegistry";
 import { HouseholdRoom } from "../rooms/HouseholdRoom";
 import { HealthRoom } from "../rooms/HealthRoom";
@@ -124,8 +124,15 @@ export function Router() {
       <GrocerySyncBridge />
       <AnalyticsBridge />
       <Routes>
+        {/* Reminder-first shell (dogfood 2026-09): one screen — listening dot,
+            what's coming this week / month, chat box. No tab bar, no rooms;
+            settings is the only other page. */}
+        <Route element={<SimpleLayout />}>
+          <Route index element={<HomeScreen />} />
+          <Route path="settings" element={<SettingsScreen />} />
+        </Route>
+        {/* Legacy room/module screens stay reachable by deep link only. */}
         <Route element={<Layout />}>
-          <Route index element={<DumpScreen />} />
           {MODULE_MANIFEST.filter(flagOn).map(({ id, Component }) => (
             <Route key={id} path={`box/${id}`} element={<Component />} />
           ))}
@@ -135,7 +142,6 @@ export function Router() {
           <Route path="room/responsibilities" element={<ResponsibilitiesRoom />} />
           <Route path="room/money" element={<MoneyRoom />} />
           <Route path="todo" element={<TodoScreen />} />
-          <Route path="settings" element={<SettingsScreen />} />
           <Route path="box/:id" element={<BoxPlaceholder />} />
           <Route path="*" element={<NotFoundPlaceholder />} />
         </Route>

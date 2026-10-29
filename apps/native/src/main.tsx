@@ -5,6 +5,7 @@ import {
   SignedIn,
   SignedOut,
   SignIn,
+  SignUp,
 } from "@clerk/clerk-react";
 import "@fontsource/dm-serif-display/400.css";
 import "@fontsource/dm-serif-display/400-italic.css";
@@ -64,6 +65,16 @@ if (!PUBLISHABLE_KEY) {
   );
 }
 
+// Email-code only. Google/Apple/Facebook OAuth opens the provider's page
+// inside the app's webview with no way back (and Google blocks embedded
+// webviews outright), so the social buttons + "or" divider are hidden.
+const CLERK_APPEARANCE = {
+  elements: {
+    socialButtonsRoot: { display: "none" },
+    dividerRow: { display: "none" },
+  },
+};
+
 function Gate() {
   return (
     <>
@@ -77,7 +88,20 @@ function Gate() {
   );
 }
 
+/** The hash route Clerk's "Sign up" link targets (see signUpUrl below). */
+function useIsSignUpRoute(): boolean {
+  const read = () => window.location.hash.startsWith("#/sign-up");
+  const [isSignUp, setIsSignUp] = React.useState(read);
+  React.useEffect(() => {
+    const onHash = () => setIsSignUp(read());
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+  return isSignUp;
+}
+
 function SignInGate() {
+  const isSignUp = useIsSignUpRoute();
   return (
     <main
       style={{
@@ -89,14 +113,18 @@ function SignInGate() {
         padding: 24,
       }}
     >
-      <SignIn routing="hash" signUpUrl="#/sign-up" />
+      {isSignUp ? (
+        <SignUp routing="hash" signInUrl="#/" />
+      ) : (
+        <SignIn routing="hash" signUpUrl="#/sign-up" />
+      )}
     </main>
   );
 }
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
-    <ClerkProvider publishableKey={PUBLISHABLE_KEY}>
+    <ClerkProvider publishableKey={PUBLISHABLE_KEY} appearance={CLERK_APPEARANCE}>
       <ThemeProvider forceMode="light">
         <Gate />
       </ThemeProvider>

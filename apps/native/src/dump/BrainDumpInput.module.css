@@ -5,3 +5,74 @@
   max-width: 720px;
   margin: 0 auto;
 }
+
+/* ─── variant="pill" — the home chat composer ───────────────────────────
+   Colours come from the home theme (--home-*), with light fallbacks. */
+
+.pillWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pill {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  padding: 6px 6px 6px 16px;
+  border-radius: 26px;
+  background: var(--home-field, #fffdf8);
+  border: 1px solid var(--home-field-line, #e3dac8);
+}
+
+.pillInput {
+  flex: 1;
+  min-width: 0;
+  max-height: 120px;
+  field-sizing: content;
+  resize: none;
+  border: none;
+  outline: none;
+  background: transparent;
+  padding: 9px 0;
+  font: inherit;
+  font-size: 16px; /* ≥16px so mobile browsers don't zoom on focus */
+  line-height: 1.35;
+  color: var(--home-ink, #1d1b17);
+}
+
+.pillInput::placeholder {
+  color: var(--home-faint, #a39a88);
+}
+
+.pillMic {
+  display: flex;
+  align-items: center;
+  height: 36px;
+  color: var(--home-faint, #a39a88);
+}
+
+.pillSend {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  display: grid;
+  place-items: center;
+  background: var(--home-send, #1d1b17);
+  color: var(--home-send-ink, #f6f1e7);
+  cursor: pointer;
+  transition: opacity 150ms ease;
+}
+
+.pillSend:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.pillError {
+  margin: 0 8px;
+  font-size: 13px;
+  color: var(--home-faint, #a39a88);
+}

@@ -24,7 +24,11 @@ pub fn run() {
     // Turnstile captcha) only trust http(s) origins; the custom scheme makes the
     // dev instance reject sign-in. Matches the window `url` in tauri.conf.json.
     const LOCALHOST_PORT: u16 = 9527;
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    // Remote push is Apple-only (see Cargo.toml).
+    #[cfg(not(target_os = "android"))]
+    let builder = builder.plugin(tauri_plugin_mobile_push::init());
+    builder
         .plugin(tauri_plugin_localhost::Builder::new(LOCALHOST_PORT).build())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_sql::Builder::default().build())
@@ -34,7 +38,6 @@ pub fn run() {
         // scheme is registered via Info.plist (patched from tauri.conf plugins);
         // on desktop register_all() wires the runtime listener at startup.
         .plugin(tauri_plugin_deep_link::init())
-        .plugin(tauri_plugin_mobile_push::init())
         .setup(|app| {
             // Device-encryption (alpha blocker #3): get-or-create the SQLCipher
             // key in the OS keychain, run the one-shot plaintext→encrypted

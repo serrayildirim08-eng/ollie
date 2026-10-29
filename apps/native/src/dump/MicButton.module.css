@@ -1,6 +1,6 @@
-/* Recording overlay for the brain-dump mic. A calm sage wash over the whole
-   screen with a single breathing circle — unmistakable "I'm listening" state,
-   tap anywhere to stop. */
+/* Recording overlay for the voice mic — full screen, dark, one big glowing
+   green orb that pulses while the mic is ACTUALLY open. "I'm listening" is only
+   ever shown here, never while the mic is off. Tap anywhere to stop. */
 
 .overlay {
   position: fixed;
@@ -10,49 +10,65 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 28px;
+  gap: 40px;
   cursor: pointer;
-  /* sage wash — token with an alpha fallback to the brand sage */
-  background: color-mix(in srgb, var(--ollie-color-sage, #6f8f7a) 22%, transparent);
-  backdrop-filter: blur(2px);
+  background: radial-gradient(90% 60% at 50% 45%, #1f2a22 0%, #0b100d 70%);
   animation: overlayIn 220ms cubic-bezier(0.18, 0, 0.22, 1);
 }
 
 @keyframes overlayIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.orb {
+  position: relative;
+  width: 132px;
+  height: 132px;
+}
+
+.circle,
+.ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: #4ade80;
 }
 
 .circle {
-  width: 120px;
-  height: 120px;
-  border-radius: 50%;
-  background: var(--ollie-color-sage, #6f8f7a);
-  animation: pulse 1.5s ease-in-out infinite;
+  box-shadow: 0 0 60px 18px rgba(74, 222, 128, 0.45);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.ring {
+  opacity: 0.4;
+  animation: ring 1.4s ease-out infinite;
 }
 
 @keyframes pulse {
-  0% {
-    transform: scale(0.85);
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--ollie-color-sage, #6f8f7a) 45%, transparent);
-  }
-  70% {
-    transform: scale(1);
-    box-shadow: 0 0 0 36px color-mix(in srgb, var(--ollie-color-sage, #6f8f7a) 0%, transparent);
-  }
-  100% {
-    transform: scale(0.85);
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--ollie-color-sage, #6f8f7a) 0%, transparent);
-  }
+  0%, 100% { transform: scale(0.9); }
+  50% { transform: scale(1.04); }
+}
+
+@keyframes ring {
+  0% { transform: scale(1); opacity: 0.45; }
+  100% { transform: scale(2.1); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .circle, .ring { animation: none; }
 }
 
 .label {
-  font-size: 15px;
+  font-size: 22px;
   font-weight: 500;
   letter-spacing: -0.01em;
-  color: var(--ollie-color-ink, #2a2a26);
+  color: #e9eee9;
+}
+
+.hint {
+  position: absolute;
+  bottom: calc(40px + env(safe-area-inset-bottom));
+  font-size: 13px;
+  color: #6f8475;
 }

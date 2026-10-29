@@ -12,6 +12,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleDumpRoute, type DumpRouteEnv } from '../src/router/dump';
 import type { VectorizeIndex } from '../src/router/vectorize';
 
+// Ask Ollie's question detection has its own tests (ask.test.ts); here every fragment is a log.
+vi.mock('../src/router/ask', () => ({ findQuestions: vi.fn(async () => []) }));
 vi.mock('../src/clerk-verify', () => ({
   verifyClerkJwt: vi.fn(async () => 'user_vision_test'),
 }));

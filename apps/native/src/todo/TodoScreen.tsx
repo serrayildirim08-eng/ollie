@@ -79,7 +79,7 @@ const FADE_OUT_MS = 200;
 // Decision rows don't use markComplete — they use the decision handlers
 // below. The source guards here only fire for 'task' kind rows.
 
-async function markComplete(item: TodoItem): Promise<void> {
+export async function markComplete(item: TodoItem): Promise<void> {
   if (item.source === 'admin') {
     if (item.action === 'log_renewal') {
       await adminRenewalsRepo.markComplete(item.rowId);
